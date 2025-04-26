@@ -18,7 +18,7 @@
     "format:diff": "prettier --config .prettierrc --list-different \"**/*.{js,jsx,ts,tsx,md,mdx}\""
   },
   "dependencies": {
-    "@babel/traverse": "^7.23.2",
+    "@babel/traverse": "^7.27.0",
     "@braintree/sanitize-url": "^6.0.1",
     "@docusaurus/core": "2.1.0",
     "@docusaurus/preset-classic": "2.1.0",
