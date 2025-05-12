@@ -18,37 +18,64 @@
 
 #include <thrift/compiler/whisker/ast.h>
 #include <thrift/compiler/whisker/diagnostic.h>
+#include <thrift/compiler/whisker/expected.h>
 #include <thrift/compiler/whisker/object.h>
 #include <thrift/compiler/whisker/source_location.h>
 
 #include <iosfwd>
-#include <memory>
 
 namespace whisker {
 
 /**
- * A resolver of parsed AST by name, primarily used for macro applications:
- *   "{{> path/to/macro }}".
+ * A resolver of parsed AST by name. This is used to resolve import statements:
+ *   {{#import "path/to/file" as foo}}
  *
- * This class allows macros to be lazily loaded and parsed only when they are
- * used.
+ * Macros are also resolved using this class:
+ *   {{> path/to/macro }}.
  */
-class template_resolver {
+class source_resolver {
  public:
-  virtual ~template_resolver() noexcept = default;
+  virtual ~source_resolver() noexcept = default;
 
+  struct parsing_error {};
+  using resolve_import_result =
+      whisker::expected<const ast::root*, parsing_error>;
+  /**
+   * Resolves a Whisker source that is the target of an import statement:
+   *   {{#import "path/to/file" as foo}}
+   *
+   * The returned object must be kept alive by the implementation for the
+   * duration of rendering.
+   *
+   * For multiple calls to the same path, or if two paths refer to the same
+   * underlying file, the same object (pointer) should be returned. This is used
+   * by the renderer for caching.
+   *
+   * If the path is not known then this function returns nullptr.
+   *
+   * If parsing fails, then parsing_error is returned. Any error or warning
+   * messages should be attached to the provided diagnostics_engine.
+   */
+  virtual resolve_import_result resolve_import(
+      std::string_view path,
+      source_location include_from,
+      diagnostics_engine&) = 0;
+
+  using resolve_macro_result = resolve_import_result;
   /**
    * Given a lookup path (corresponding to ast::macro_lookup), this function
    * tries to resolve it to a parsed AST node.
    *
-   * If the path is not known, or if parsing fails, then this function returns
-   * std::nullopt. Errors or warnings should be attached to the provided
-   * diagnostics_engine.
+   * The returned object must satisfy the same requirements as
+   * resolve_import(...).
+   *
+   * The default implementation delegates to resolve_import(...) with the
+   * provided path joined using "/" as a delimiter.
    */
-  virtual std::optional<ast::root> resolve(
+  virtual resolve_macro_result resolve_macro(
       const std::vector<std::string>& path,
       source_location include_from,
-      diagnostics_engine&) = 0;
+      diagnostics_engine&);
 };
 
 struct render_options {
@@ -70,9 +97,6 @@ struct render_options {
    *     - ±0.0, NaN (f64)
    *     - empty string
    *     - empty array
-   *     - native_object which is...
-   *       - array-like with size of 0
-   *       - neither map-like nor array-like
    *   - All other values are considered "truthy".
    *
    * This *mostly* matches "falsy" values in JavaScript for the subset of its
@@ -112,7 +136,6 @@ struct render_options {
    * The following types are never printable:
    *   - array
    *   - map
-   *   - native_object
    *   - native_function
    *   - native_handle
    */
@@ -151,14 +174,14 @@ struct render_options {
    *
    * If this is not set, then all macro applications will fail.
    */
-  std::shared_ptr<template_resolver> macro_resolver = nullptr;
+  std::shared_ptr<source_resolver> src_resolver = nullptr;
 
   /**
    * A map of identifiers to objects that will be injected as global bindings,
    * before even the root scope. These names will be available in the search
    * path for every lookup.
    */
-  map globals;
+  map::raw globals;
 };
 
 /**

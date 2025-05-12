@@ -13,8 +13,8 @@ use std::slice::Iter;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use bstr::BString;
 use bstr::B;
+use bstr::BString;
 use bumpalo::Bump;
 use escaper::*;
 use hash::HashMap;
@@ -31,9 +31,9 @@ use naming_special_names_rust::special_functions;
 use naming_special_names_rust::special_idents;
 use naming_special_names_rust::typehints as special_typehints;
 use naming_special_names_rust::user_attributes as special_attrs;
+use ocaml_helper::ParseIntError;
 use ocaml_helper::int_of_string_opt;
 use ocaml_helper::parse_int;
-use ocaml_helper::ParseIntError;
 use oxidized::aast;
 use oxidized::aast::Binop;
 use oxidized::aast_defs::ClassName;
@@ -1106,6 +1106,8 @@ fn p_hint_<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<ast::Hint_> {
         LikeTypeSpecifier(c) => Ok(Hlike(p_hint(&c.type_, env)?)),
         SoftTypeSpecifier(c) => Ok(Hsoft(p_hint(&c.type_, env)?)),
         ClosureTypeSpecifier(c) => {
+            let tparams = p_hint_tparam_l(&c.type_parameters, env)?;
+
             let (param_list, variadic_hints): (Vec<S<'a>>, Vec<S<'a>>) = c
                 .parameter_list
                 .syntax_node_to_list_skip_separator()
@@ -1151,6 +1153,7 @@ fn p_hint_<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<ast::Hint_> {
             Ok(Hfun(ast::HintFun {
                 is_readonly: map_optional(&c.readonly_keyword, env, p_readonly)?,
                 param_tys: type_hints,
+                tparams,
                 param_info: info,
                 variadic_ty: variadic_hints.into_iter().next().unwrap_or(None),
                 ctxs,
@@ -2348,6 +2351,7 @@ fn p_prefixed_code_expr<'a>(
 ) -> Result<Expr_> {
     let mut clear_et_class_at_end = false;
     let missing = c.prefix.is_missing();
+    let is_nested = env.expression_tree_class.is_some();
     let nested_id = match (pos_name(&c.prefix, env), &env.expression_tree_class) {
         (Ok(nested_id), Some(enclosing_id)) => {
             if !missing {
@@ -2415,7 +2419,7 @@ fn p_prefixed_code_expr<'a>(
         });
         ast::Expr::new((), pos, expr)
     };
-    let desugar_result = desugar(&nested_id, src_expr, env);
+    let desugar_result = desugar(&nested_id, src_expr, env, is_nested);
     for (pos, msg) in desugar_result.errors {
         raise_parsing_error_pos(&pos, env, &msg);
     }
@@ -2437,17 +2441,53 @@ fn p_et_splice_expr<'a>(expr: S<'a>, env: &mut Env<'a>, location: ExprLocation) 
     let inner_pos = p_pos(expr, env);
     let inner_expr_ = p_expr_recurse(location, expr, env, None)?;
     let spliced_expr = ast::Expr::new((), inner_pos, inner_expr_);
+    let mut macro_vars = ETVars::default();
+    let _ = macro_vars.visit_expr(&mut (), &spliced_expr);
+    let macro_variables = if macro_vars.vars.is_empty() {
+        None
+    } else {
+        Some(macro_vars.vars)
+    };
     let contains_await = env.found_await;
     env.found_await |= old_found_await;
     // Since splices can't directly nest, we don't need to restore the old value,
     // it must be true
     env.in_expr_tree = true;
-    Ok(Expr_::ETSplice(Box::new(aast::EtSplice {
+    Ok(Expr_::mk_etsplice(aast::EtSplice {
         spliced_expr,
         contains_await,
         extract_client_type: true,
-        macro_variables: None,
-    })))
+        macro_variables,
+        temp_lid: (0, "".to_string()), // This gets replaced during expression tree desugaring
+    }))
+}
+
+// visitor to collect all of the free variables from sub-expressions
+// that are expression trees
+#[derive(Default)]
+struct ETVars {
+    vars: Vec<aast::Lid>,
+}
+
+impl<'ast> Visitor<'ast> for ETVars {
+    type Params = AstParams<(), ()>;
+
+    fn object(&mut self) -> &mut dyn Visitor<'ast, Params = Self::Params> {
+        self
+    }
+
+    fn visit_expression_tree(
+        &mut self,
+        _env: &mut (),
+        et: &'ast aast::ExpressionTree<(), ()>,
+    ) -> Result<(), ()> {
+        if let Some(free_vars) = &et.free_vars {
+            for v in free_vars.iter() {
+                self.vars.push(v.clone());
+            }
+        }
+        Ok(())
+    }
 }
 
 fn p_conditional_expr<'a>(
@@ -2626,6 +2666,7 @@ fn p_anonymous_function<'a>(
         fun,
         use_,
         closure_class_name: None,
+        is_expr_tree_virtual_expr: false,
     }))
 }
 
@@ -3650,6 +3691,9 @@ fn p_modifiers<'a, F: Fn(R, modifier::Kind) -> R, R>(
             }
         }
     }
+    if kind_set.has(modifier::PROTECTED) && kind_set.has(modifier::INTERNAL) {
+        init = on_kind(init, modifier::PROTECTED_INTERNAL);
+    }
     (kind_set, init)
 }
 
@@ -3785,17 +3829,6 @@ fn has_any_policied_or_defaults_context(contexts: Option<&ast::Contexts>) -> boo
     }
 }
 
-fn has_any_context(haystack: Option<&ast::Contexts>, needles: Vec<&str>) -> bool {
-    if let Some(ast::Contexts(_, ref context_hints)) = haystack {
-        context_hints.iter().any(|hint| match &*hint.1 {
-            ast::Hint_::Happly(ast::Id(_, id), _) => needles.iter().any(|&context| id == context),
-            _ => false,
-        })
-    } else {
-        true
-    }
-}
-
 fn contexts_cannot_access_ic(haystack: Option<&ast::Contexts>) -> bool {
     if let Some(ast::Contexts(_, ref context_hints)) = haystack {
         context_hints.iter().all(|hint| match &*hint.1 {
@@ -3871,14 +3904,14 @@ fn rewrite_effect_polymorphism<'a>(
     contexts: Option<&ast::Contexts>,
     where_constraints: &mut Vec<ast::WhereConstraintHint>,
 ) {
-    use ast::Hint;
-    use ast::Hint_;
-    use ast::ReifyKind;
-    use ast::Variance;
     use Hint_::Haccess;
     use Hint_::Happly;
     use Hint_::HfunContext;
     use Hint_::Hvar;
+    use ast::Hint;
+    use ast::Hint_;
+    use ast::ReifyKind;
+    use ast::Variance;
 
     if !has_polymorphic_context(env, contexts) {
         return;
@@ -4268,6 +4301,66 @@ fn p_tparam_l<'a>(is_class: bool, node: S<'a>, env: &mut Env<'a>) -> Result<Vec<
     }
 }
 
+fn p_hint_tparam<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<ast::HintTparam> {
+    match &node.children {
+        TypeParameter(TypeParameterChildren {
+            attribute_spec,
+            reified,
+            variance,
+            name,
+            param_params,
+            constraints,
+        }) => {
+            // HKTs, user attributes with parameters, reified generics and
+            // variance annotations are all disallowed
+            if !reified.is_missing() {
+                raise_parsing_error(node, env, &syntax_error::polymorphic_function_hint_reified);
+            }
+            if !variance.is_missing() {
+                raise_parsing_error(node, env, &syntax_error::polymorphic_function_hint_variance);
+            }
+            if !param_params.is_missing() {
+                raise_parsing_error(node, env, &syntax_error::polymorphic_function_hint_hkt);
+            }
+
+            let type_name = text(name, env);
+            // this is incorrect for type aliases, but it doesn't affect any check
+            env.fn_generics_mut().insert(type_name, false);
+
+            let uas = p_user_attributes(attribute_spec, env);
+            let user_attributes = uas
+                .0
+                .into_iter()
+                .map(|attr| {
+                    if !attr.params.is_empty() {
+                        raise_parsing_error(
+                            node,
+                            env,
+                            &syntax_error::polymorphic_function_hint_attribute_spec,
+                        );
+                    }
+                    attr.name
+                })
+                .collect();
+
+            Ok(ast::HintTparam {
+                name: pos_name(name, env)?,
+                constraints: could_map(constraints, env, p_tconstraint)?,
+                user_attributes,
+            })
+        }
+        _ => missing_syntax("type parameter", node, env),
+    }
+}
+
+fn p_hint_tparam_l<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<Vec<ast::HintTparam>> {
+    match &node.children {
+        Missing => Ok(vec![]),
+        TypeParameters(c) => could_map(&c.parameters, env, |n, e| p_hint_tparam(n, e)),
+        _ => missing_syntax("type parameter", node, env),
+    }
+}
+
 /// Lowers multiple constraints into a hint pair (lower_bound, upper_bound)
 fn p_ctx_constraints<'a>(
     node: S<'a>,
@@ -4533,8 +4626,8 @@ fn mk_suspension_kind_(has_async: bool) -> SuspensionKind {
 }
 
 fn mk_fun_kind(suspension_kind: SuspensionKind, yield_: bool) -> ast::FunKind {
-    use ast::FunKind::*;
     use SuspensionKind::*;
+    use ast::FunKind::*;
     match (suspension_kind, yield_) {
         (SKSync, true) => FGenerator,
         (SKAsync, true) => FAsyncGenerator,
@@ -4550,8 +4643,12 @@ fn process_attribute_constructor_call<'a>(
     env: &mut Env<'a>,
 ) -> Result<ast::UserAttribute> {
     let name = pos_name(constructor_call_type, env)?;
-    let mut params = could_map(constructor_call_argument_list, env, |n, e| {
-        is_valid_attribute_arg(n, e, &name.1);
+    let params = could_map(constructor_call_argument_list, env, |n, e| {
+        // Skip validation for __SimpliHack attributes as they may contain expressions not normally
+        // accepted in attributes.
+        if !sn::user_attributes::is_simplihack(&name.1) {
+            is_valid_attribute_arg(n, e, &name.1)
+        };
         p_expr(n, e)
     })?;
     if name.1.eq_ignore_ascii_case("__reified") || name.1.eq_ignore_ascii_case("__hasreifiedparent")
@@ -4577,26 +4674,6 @@ fn process_attribute_constructor_call<'a>(
                     &syntax_error::memoize_requires_label(&name.1),
                 );
             }
-        }
-
-        // If TreatNonAnnotatedMemoizeAsKBIC was supplied by config, add that to empty __Memoize
-        if env.parser_options.treat_non_annotated_memoize_as_kbic && params.is_empty() {
-            params.push(ast::Expr::new(
-                (),
-                env.mk_none_pos(),
-                ast::Expr_::EnumClassLabel(Box::new((
-                    None,
-                    sn::memoize_option::KEYED_BY_IC.to_string(),
-                ))),
-            ));
-        } else if env.parser_options.disallow_non_annotated_memoize && params.is_empty() {
-            // if DisallowNonAnnotatedMemoize was supplied by config, plain <<__Memoize>>
-            // are not allowed. This only matters if TreatNonAnnotatedMemoizeAsKBIC was not supplied
-            raise_parsing_error(
-                node,
-                env,
-                &syntax_error::memoize_without_annotation_disabled(&name.1),
-            );
         }
 
         if list.len() > 1 {
@@ -4706,7 +4783,16 @@ fn p_user_attribute<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<ast::UserAttri
 
 fn p_user_attributes<'a>(node: S<'a>, env: &mut Env<'a>) -> ast::UserAttributes {
     let attributes = could_map_emit_error(node, env, p_user_attribute);
-    attributes.into_iter().flatten().collect()
+    let attributes = attributes.into_iter().flatten();
+
+    // Drop SimpliHack attributes when generating code
+    if env.is_codegen() {
+        attributes
+            .filter(|attr| !sn::user_attributes::is_simplihack(&attr.name.1))
+            .collect()
+    } else {
+        attributes.collect()
+    }
 }
 
 /// Extract the URL in `<<__Docs("http://example.com")>>` if the __Docs attribute
@@ -5383,8 +5469,11 @@ fn p_class_elt<'a>(class: &mut ast::Class_, node: S<'a>, env: &mut Env<'a>) {
             *env.in_static_method() = false;
             let is_abstract = kinds.has(modifier::ABSTRACT);
             let is_external = !is_abstract && c.function_body.is_external();
-            let user_attributes = p_user_attributes(&c.attribute, env);
+            let fun_kind = mk_fun_kind(hdr.suspension_kind, body_has_yield);
+            let mut user_attributes = p_user_attributes(&c.attribute, env);
+            populate_memoize_default(hdr.contexts.as_ref(), &mut user_attributes, env);
             check_effect_memoized(hdr.contexts.as_ref(), &user_attributes, "method", env);
+            check_asio_lowpri(fun_kind, &user_attributes, env);
             let method = ast::Method_ {
                 span: p_fun_pos(node, env),
                 annotation: (),
@@ -5400,7 +5489,7 @@ fn p_class_elt<'a>(class: &mut ast::Class_, node: S<'a>, env: &mut Env<'a>) {
                 ctxs: hdr.contexts,
                 unsafe_ctxs: hdr.unsafe_contexts,
                 body: ast::FuncBody { fb_ast: body },
-                fun_kind: mk_fun_kind(hdr.suspension_kind, body_has_yield),
+                fun_kind,
                 user_attributes,
                 readonly_ret: hdr.readonly_return,
                 ret: ast::TypeHint((), hdr.return_type),
@@ -5629,6 +5718,31 @@ fn is_memoize_attribute_with_flavor(u: &aast::UserAttribute<(), ()>, flavor: Opt
         })
 }
 
+fn populate_memoize_default<'a>(
+    contexts: Option<&ast::Contexts>,
+    user_attributes: &mut aast::UserAttributes<(), ()>,
+    env: &mut Env<'a>,
+) {
+    // If TreatNonAnnotatedMemoizeAsKBIC was supplied by config, add that to empty __Memoize
+    if env.parser_options.treat_non_annotated_memoize_as_kbic {
+        if let Some(u) = user_attributes
+            .iter_mut()
+            .find(|u| sn::user_attributes::is_memoized(&u.name.1))
+        {
+            if u.params.is_empty() && !contexts_cannot_access_ic(contexts) {
+                u.params.push(ast::Expr::new(
+                    (),
+                    env.mk_none_pos(),
+                    ast::Expr_::EnumClassLabel(Box::new((
+                        None,
+                        sn::memoize_option::KEYED_BY_IC.to_string(),
+                    ))),
+                ));
+            }
+        }
+    }
+}
+
 fn check_effect_memoized<'a>(
     contexts: Option<&ast::Contexts>,
     user_attributes: &[aast::UserAttribute<(), ()>],
@@ -5674,46 +5788,33 @@ fn check_effect_memoized<'a>(
             )
         }
     }
-    if let Some(u) = user_attributes.iter().find(|u| {
-        is_memoize_attribute_with_flavor(u, Some(sn::memoize_option::MAKE_IC_INACCESSSIBLE))
-            || is_memoize_attribute_with_flavor(
-                u,
-                Some(sn::memoize_option::IC_INACCESSSIBLE_SPECIAL_CASE),
-            )
-    }) {
-        if !has_any_context(
-            contexts,
-            vec![
-                sn::coeffects::DEFAULTS,
-                sn::coeffects::LEAK_SAFE_LOCAL,
-                sn::coeffects::LEAK_SAFE_SHALLOW,
-            ],
-        ) {
-            raise_parsing_error_pos(
-                &u.name.0,
-                env,
-                &syntax_error::memoize_make_ic_inaccessible_without_defaults(
-                    kind,
-                    is_memoize_attribute_with_flavor(
-                        u,
-                        Some(sn::memoize_option::IC_INACCESSSIBLE_SPECIAL_CASE),
-                    ),
-                ),
-            )
-        }
-    }
-    // functions whose contexts prevent getting the IC (effectively <= [leak_safe, globals])
-    // cannot pass a memoize argument
-    if contexts_cannot_access_ic(contexts) {
-        if let Some(u) = user_attributes
-            .iter()
-            .find(|u| sn::user_attributes::is_memoized(&u.name.1) && !u.params.is_empty())
+
+    if let Some(u) = user_attributes
+        .iter()
+        .find(|u| sn::user_attributes::is_memoized(&u.name.1))
+    {
+        if contexts_cannot_access_ic(contexts) {
+            // functions whose contexts prevent getting the IC (effectively <= [leak_safe, globals])
+            // cannot pass a memoize argument
+            if !u.params.is_empty() {
+                raise_parsing_error_pos(
+                    &u.name.0,
+                    env,
+                    &syntax_error::memoize_category_without_implicit_policy_capability(kind),
+                )
+            }
+        } else if env.parser_options.disallow_non_annotated_memoize
+            && !env.parser_options.treat_non_annotated_memoize_as_kbic
+            && u.params.is_empty()
         {
+            // if DisallowNonAnnotatedMemoize was supplied by config and coeffects allow
+            // <<__Memoize>> to be categorized, then plain <<__Memoize>> are not allowed.
+            // This only matters if TreatNonAnnotatedMemoizeAsKBIC was not supplied
             raise_parsing_error_pos(
                 &u.name.0,
                 env,
-                &syntax_error::memoize_category_without_implicit_policy_capability(kind),
-            )
+                &syntax_error::memoize_without_annotation_disabled(&u.name.1),
+            );
         }
     }
 }
@@ -5757,6 +5858,22 @@ fn check_effect_polymorphic_reification<'a>(
             },
             _ => {}
         });
+    }
+}
+
+fn check_asio_lowpri<'a>(
+    fun_kind: ast::FunKind,
+    user_attributes: &[aast::UserAttribute<(), ()>],
+    env: &mut Env<'a>,
+) {
+    // asio low pri attributes are only valid on non-generator async functions
+    if let Some(u) = user_attributes
+        .iter()
+        .find(|u| sn::user_attributes::is_asio_low_pri(&u.name.1))
+    {
+        if fun_kind != ast::FunKind::FAsync {
+            raise_parsing_error_pos(&u.name.0, env, &syntax_error::asio_low_pri_check)
+        }
     }
 }
 
@@ -5810,9 +5927,12 @@ fn p_def<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<Vec<ast::Def>> {
             } else {
                 env.reset_for_function_body(body, hdr.suspension_kind, p_function_body)?
             };
-            let user_attributes = p_user_attributes(attribute_spec, env);
+            let fun_kind = mk_fun_kind(hdr.suspension_kind, yield_);
+            let mut user_attributes = p_user_attributes(attribute_spec, env);
+            populate_memoize_default(hdr.contexts.as_ref(), &mut user_attributes, env);
             check_effect_memoized(hdr.contexts.as_ref(), &user_attributes, "function", env);
             check_context_has_this(hdr.contexts.as_ref(), env);
+            check_asio_lowpri(fun_kind, &user_attributes, env);
             let ret = ast::TypeHint((), hdr.return_type);
 
             let fun = ast::Fun_ {
@@ -5825,7 +5945,7 @@ fn p_def<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<Vec<ast::Def>> {
                 ctxs: hdr.contexts,
                 unsafe_ctxs: hdr.unsafe_contexts,
                 body: ast::FuncBody { fb_ast: block },
-                fun_kind: mk_fun_kind(hdr.suspension_kind, yield_),
+                fun_kind,
                 user_attributes,
                 external: is_external,
                 doc_comment: doc_comment_opt,
@@ -5954,9 +6074,22 @@ fn p_def<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<Vec<ast::Def>> {
             let tparams = p_tparam_l(false, &c.generic_parameter, env)?;
             let kinds = p_kinds(&c.modifiers, env);
             let is_module_newtype = !c.module_kw_opt.is_missing();
+            let vis = match token_kind(&c.keyword) {
+                Some(TK::Type) => ast::TypedefVisibility::Transparent,
+                Some(TK::Newtype) if is_module_newtype => ast::TypedefVisibility::OpaqueModule,
+                Some(TK::Newtype) => ast::TypedefVisibility::Opaque,
+                _ => missing_syntax("kind", &c.keyword, env)?,
+            };
             for tparam in tparams.iter() {
                 if tparam.reified != ast::ReifyKind::Erased {
                     raise_parsing_error(node, env, &syntax_error::invalid_reified)
+                }
+                if vis == ast::TypedefVisibility::Transparent && !tparam.constraints.is_empty() {
+                    raise_parsing_error(
+                        node,
+                        env,
+                        &syntax_error::bound_on_transparent_type_alias_generic,
+                    )
                 }
             }
             let user_attributes = itertools::concat(
@@ -5981,12 +6114,6 @@ fn p_def<'a>(node: S<'a>, env: &mut Env<'a>) -> Result<Vec<ast::Def>> {
             };
             let as_constraint = require_one("as", as_constraints);
             let super_constraint = require_one("super", super_constraints);
-            let vis = match token_kind(&c.keyword) {
-                Some(TK::Type) => ast::TypedefVisibility::Transparent,
-                Some(TK::Newtype) if is_module_newtype => ast::TypedefVisibility::OpaqueModule,
-                Some(TK::Newtype) => ast::TypedefVisibility::Opaque,
-                _ => missing_syntax("kind", &c.keyword, env)?,
-            };
             let hint = p_hint(&c.type_, env)?;
             let runtime_type = hint.clone();
             Ok(vec![ast::Def::mk_typedef(ast::Typedef {

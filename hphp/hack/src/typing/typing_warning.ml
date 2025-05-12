@@ -16,6 +16,20 @@ type quickfix = {
   replacement_pos: Pos.t;
 }
 
+module Safe_abstract = struct
+  type kind =
+    | Call_abstract of { method_: string }
+    | Call_needs_concrete of { method_: string }
+    | Const_access_abstract of { const: string }
+    | New_abstract
+
+  type t = {
+    kind: kind;
+    class_: string;
+    reason: Typing_reason.t option;
+  }
+end
+
 module Is_as_always = struct
   type kind =
     | Is_is_always_true
@@ -92,6 +106,7 @@ end
 module Equality_check = struct
   type kind =
     | Equality of bool
+    | Switch
     | Contains
     | Contains_key
 
@@ -118,8 +133,29 @@ module Class_pointer_to_string = struct
   }
 end
 
+module No_disjoint_union_check = struct
+  type t = {
+    disjuncts: (Pos_or_decl.t * string) list Lazy.t;
+    tparam_pos: Pos_or_decl.t;
+  }
+end
+
+module Switch_redundancy = struct
+  type t =
+    | SwitchHasRedundancy of {
+        positions: Pos.t list Lazy.t;
+        redundancy_size: int;
+      }  (** Primary position on the switch *)
+    | DuplicatedCase of {
+        first_occurrence: Pos.t;
+        case: string Lazy.t;
+      }  (** Primary position is on the duplicate occurrence of the case *)
+    | RedundantDefault  (** Primary position on the default *)
+end
+
 type (_, _) kind =
   | Sketchy_equality : (Sketchy_equality.t, warn) kind
+  | Safe_abstract : (Safe_abstract.t, warn) kind
   | Is_as_always : (Is_as_always.t, migrated) kind
   | Sketchy_null_check : (Sketchy_null_check.t, migrated) kind
   | Non_disjoint_check : (Non_disjoint_check.t, migrated) kind
@@ -128,5 +164,7 @@ type (_, _) kind =
   | Equality_check : (Equality_check.t, migrated) kind
   | Duplicate_properties : (Duplicate_properties.t, migrated) kind
   | Class_pointer_to_string : (Class_pointer_to_string.t, warn) kind
+  | No_disjoint_union_check : (No_disjoint_union_check.t, warn) kind
+  | Switch_redundancy : (Switch_redundancy.t, warn) kind
 
 type ('x, 'a) t = Pos.t * ('x, 'a) kind * 'x

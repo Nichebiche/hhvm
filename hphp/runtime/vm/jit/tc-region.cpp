@@ -22,7 +22,6 @@
 #include "hphp/runtime/vm/jit/tc-record.h"
 
 #include "hphp/runtime/base/perf-warning.h"
-#include "hphp/runtime/vm/jit/align.h"
 #include "hphp/runtime/vm/jit/cfg.h"
 #include "hphp/runtime/vm/jit/cg-meta.h"
 #include "hphp/runtime/vm/jit/code-cache.h"
@@ -40,23 +39,18 @@
 #include "hphp/runtime/vm/jit/trans-db.h"
 #include "hphp/runtime/vm/jit/trans-rec.h"
 #include "hphp/runtime/vm/jit/translate-region.h"
-#include "hphp/runtime/vm/jit/vasm-emit.h"
 #include "hphp/runtime/vm/jit/vasm-gen.h"
-#include "hphp/runtime/vm/jit/vm-protect.h"
 #include "hphp/runtime/vm/jit/vtune-jit.h"
-#include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/treadmill.h"
 
 #include "hphp/util/boot-stats.h"
 #include "hphp/util/configs/codecache.h"
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/hardware-counter.h"
-#include "hphp/util/service-data.h"
 #include "hphp/util/struct-log.h"
-#include "hphp/util/timer.h"
 #include "hphp/util/trace.h"
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 namespace HPHP::jit::tc {
 
@@ -374,7 +368,7 @@ void smashOptBinds(CGMeta& meta,
   // inProgressTailJumps as it has already been smashed.
   GrowableVector<IncomingBranch> newTailJumps;
   for (auto& jump : meta.inProgressTailJumps) {
-    if (smashed.count(jump.toSmash()) == 0) {
+    if (!smashed.contains(jump.toSmash())) {
       newTailJumps.push_back(jump);
     } else {
       FTRACE(3, "smashOptBinds: removing {} from inProgressTailJumps\n",
@@ -466,7 +460,7 @@ std::string show(const SrcKeyTransMap& map) {
 void checkPublishedAddr(TCA tca, const jit::hash_set<TCA>& publishedSet) {
   always_assert_flog(code().inMainOrColdOrFrozen(tca),
                      "srcKeyTrans has address not in hot/main: {}", tca);
-  always_assert_flog(publishedSet.count(tca),
+  always_assert_flog(publishedSet.contains(tca),
                      "srcKeyTrans has unpublished translation @ {}", tca);
 }
 

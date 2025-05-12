@@ -13,6 +13,8 @@ libmcrouter_a_SOURCES = \
   AuxiliaryIOThreadPool.h \
   AuxiliaryIOThreadPool.cpp \
   CacheClientStats.h \
+  CallbackPool-inl.h \
+  CallbackPool.h \
   Ch3HashFunc.h \
   Clocks.cpp \
   Clocks.h \
@@ -39,6 +41,8 @@ libmcrouter_a_SOURCES = \
   MessageQueue.cpp \
   MessageQueue.h \
   McResUtil.h \
+  Observable-inl.h \
+  Observable.h \
   Operation.h \
   PoolContext.h \
   Ref.h \
@@ -48,13 +52,13 @@ libmcrouter_a_SOURCES = \
   RendezvousHashHelper.h \
   Reply.h \
   RouteHandleTraverser.h \
+  RuntimeVarsData.cpp \
+  RuntimeVarsData.h \
   SelectionRouteFactory.h \
   StatsReply.cpp \
   StatsReply.h \
   WeightedCh3HashFunc.cpp \
   WeightedCh3HashFunc.h \
-  WeightedCh4HashFunc.cpp \
-  WeightedCh4HashFunc.h \
   WeightedChHashFuncBase.cpp \
   WeightedChHashFuncBase.h \
   WeightedRendezvousHashFunc.cpp \

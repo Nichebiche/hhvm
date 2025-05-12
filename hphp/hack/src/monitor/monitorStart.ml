@@ -69,7 +69,6 @@ let monitor_daemon_main
       ~silent:false
       ~from:(ServerArgs.from options)
       ~cli_config_overrides:(ServerArgs.config options)
-      ~ai_options:None
   in
   if not (Sys_utils.enable_telemetry ()) then
     EventLogger.init_fake ()

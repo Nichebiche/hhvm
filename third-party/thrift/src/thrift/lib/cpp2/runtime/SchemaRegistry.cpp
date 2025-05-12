@@ -16,60 +16,25 @@
 
 #include <thrift/lib/cpp2/runtime/SchemaRegistry.h>
 
+#ifdef THRIFT_SCHEMA_AVAILABLE
+
 #include <folly/Indestructible.h>
-#include <folly/compression/Compression.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <thrift/lib/cpp2/schema/SyntaxGraph.h>
+#include <thrift/lib/cpp2/schema/detail/Merge.h>
 
 namespace apache::thrift {
+
+SchemaRegistry::SchemaRegistry(BaseSchemaRegistry& base) : base_(base) {
+  auto resolver = std::make_unique<schema::detail::IncrementalResolver>();
+  resolver_ = resolver.get();
+  syntaxGraph_ = std::make_unique<schema::SyntaxGraph>(std::move(resolver));
+}
+SchemaRegistry::~SchemaRegistry() = default;
 
 SchemaRegistry& SchemaRegistry::get() {
   static folly::Indestructible<SchemaRegistry> self(BaseSchemaRegistry::get());
   return *self;
 }
-
-namespace {
-void mergeInto(
-    type::Schema& dst,
-    type::Schema&& src,
-    std::unordered_set<type::ProgramId>& includedPrograms,
-    bool allowDuplicateDefinitionKeys) {
-  for (auto& program : *src.programs()) {
-    auto id = *program.id();
-    if (!includedPrograms.insert(id).second) {
-      // We checked during registration that the program ids are unique,
-      // so this file was already included by another program bundle.
-      continue;
-    }
-    dst.programs()->push_back(std::move(program));
-  }
-
-  // This deduplicates common values.
-  dst.valuesMap()->insert(
-      std::make_move_iterator(src.valuesMap()->begin()),
-      std::make_move_iterator(src.valuesMap()->end()));
-
-  auto ndefs = dst.definitionsMap()->size();
-  dst.definitionsMap()->insert(
-      std::make_move_iterator(src.definitionsMap()->begin()),
-      std::make_move_iterator(src.definitionsMap()->end()));
-  if (!allowDuplicateDefinitionKeys &&
-      dst.definitionsMap()->size() != ndefs + src.definitionsMap()->size()) {
-    throw std::runtime_error("DefinitionKey collision");
-  }
-}
-
-std::optional<type::Schema> readSchema(std::string_view data) {
-  if (data.empty()) {
-    // This program's schema wasn't found under the expected path, e.g. due to
-    // use of relative includes.
-    return std::nullopt;
-  }
-  auto decompressed =
-      folly::compression::getCodec(folly::compression::CodecType::ZSTD)
-          ->uncompress(data);
-  return CompactSerializer::deserialize<type::Schema>(decompressed);
-}
-} // namespace
 
 SchemaRegistry::Ptr SchemaRegistry::getMergedSchema() {
   std::shared_lock rlock(base_.mutex_);
@@ -87,8 +52,8 @@ SchemaRegistry::Ptr SchemaRegistry::getMergedSchema() {
 
   mergedSchema_ = std::make_shared<type::Schema>();
   for (auto& [name, data] : base_.rawSchemas_) {
-    if (auto schema = readSchema(data.data)) {
-      mergeInto(
+    if (auto schema = schema::detail::readSchema(data.data)) {
+      schema::detail::mergeInto(
           *mergedSchema_,
           std::move(*schema),
           includedPrograms_,
@@ -104,8 +69,8 @@ SchemaRegistry::Ptr SchemaRegistry::getMergedSchema() {
       mergedSchema_ = std::make_shared<type::Schema>(*mergedSchema_);
     }
 
-    if (auto schema = readSchema(data)) {
-      mergeInto(
+    if (auto schema = schema::detail::readSchema(data)) {
+      schema::detail::mergeInto(
           *mergedSchema_,
           std::move(*schema),
           includedPrograms_,
@@ -117,44 +82,6 @@ SchemaRegistry::Ptr SchemaRegistry::getMergedSchema() {
   return mergedSchema_;
 }
 
-type::Schema SchemaRegistry::mergeSchemas(
-    folly::Range<const std::string_view*> schemas) {
-  type::Schema mergedSchema;
-  std::unordered_set<type::ProgramId> includedPrograms;
-
-  for (const auto& data : schemas) {
-    if (auto schema = readSchema(data)) {
-      mergeInto(
-          mergedSchema,
-          std::move(*schema),
-          includedPrograms,
-          /*allowDuplicateDefinitionKeys*/ false);
-    }
-  }
-
-  return mergedSchema;
-}
-
-type::Schema SchemaRegistry::mergeSchemas(std::vector<type::Schema>&& schemas) {
-  type::Schema mergedSchema;
-  std::unordered_set<type::ProgramId> includedPrograms;
-
-  for (auto& schema : schemas) {
-    /*
-     * allowDuplicateDefinitionKeys is true here because this is called by
-     * MultiplexAsyncProcessor, which may hold services with a shared base
-     * service.
-     * Additionally, since this function accepts deserialized schemas
-     * those schemas were probably already checked for duplicates earlier.
-     */
-    mergeInto(
-        mergedSchema,
-        std::move(schema),
-        includedPrograms,
-        /*allowDuplicateDefinitionKeys*/ true);
-  }
-
-  return mergedSchema;
-}
-
 } // namespace apache::thrift
+
+#endif

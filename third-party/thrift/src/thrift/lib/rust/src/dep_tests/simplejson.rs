@@ -18,13 +18,15 @@ use std::collections::BTreeMap;
 use std::io::Cursor;
 
 use anyhow::Result;
+use approx::assert_relative_eq;
+use fbthrift::Deserialize;
+use fbthrift::simplejson_protocol::SimpleJsonProtocolDeserializer;
 use fbthrift::simplejson_protocol::deserialize;
 use fbthrift::simplejson_protocol::serialize;
-use fbthrift::simplejson_protocol::SimpleJsonProtocolDeserializer;
-use fbthrift::Deserialize;
 use fbthrift_test_if::Basic;
 use fbthrift_test_if::Containers;
 use fbthrift_test_if::En;
+use fbthrift_test_if::FloatingPoint;
 use fbthrift_test_if::MainStruct;
 use fbthrift_test_if::MainStructNoBinary;
 use fbthrift_test_if::Small;
@@ -32,6 +34,7 @@ use fbthrift_test_if::SubStruct;
 use fbthrift_test_if::Un;
 use fbthrift_test_if::UnOne;
 use proptest::prelude::*;
+use rstest::*;
 
 use crate::proptest::gen_main_struct;
 
@@ -312,7 +315,7 @@ fn test_deprecated_null_stuff_deser() -> Result<()> {
         ..Default::default()
     };
 
-    let inputs = &["{}", r#"{"optDef": null}"#];
+    let inputs = &["{}", r#"{ "optDef": null}"#];
     for input in inputs {
         // Make sure everything is skipped properly
         let res = deserialize(*input);
@@ -509,8 +512,8 @@ fn test_multiple_deser() -> Result<()> {
 
     let mut deserializer = SimpleJsonProtocolDeserializer::new(Cursor::new(to_check.as_bytes()));
     // Assert that deserialize builts the exact same struct
-    assert_eq!(b1, Basic::read(&mut deserializer)?);
-    assert_eq!(b2, Basic::read(&mut deserializer)?);
+    assert_eq!(b1, Basic::rs_thrift_read(&mut deserializer)?);
+    assert_eq!(b2, Basic::rs_thrift_read(&mut deserializer)?);
 
     Ok(())
 }
@@ -536,11 +539,11 @@ fn test_not_enough() -> Result<()> {
 
     let mut deserializer = SimpleJsonProtocolDeserializer::new(Cursor::new(
         // 6 should cover the } and a `true` value
-        &to_check.as_bytes()[..to_check.as_bytes().len() - 6],
+        &to_check[..to_check.len() - 6],
     ));
     // Assert that deserialize builts the exact same struct
-    assert_eq!(b1, Basic::read(&mut deserializer)?);
-    assert!(Basic::read(&mut deserializer).is_err());
+    assert_eq!(b1, Basic::rs_thrift_read(&mut deserializer)?);
+    assert!(Basic::rs_thrift_read(&mut deserializer).is_err());
 
     Ok(())
 }
@@ -580,6 +583,137 @@ fn test_unknown_union() -> Result<()> {
     assert_eq!(u, deserialize(old_output).unwrap());
 
     Ok(())
+}
+
+#[rstest]
+#[case(r#"{ "one": "1 }"#)]
+#[case(r#"{ "one": "1 ,", ":null}"#)]
+fn test_invalid_json(#[case] json: &str) {
+    let res: Result<UnOne> = deserialize(json);
+    assert!(res.is_err(), "Expected error, got {:?}", res);
+}
+
+#[rstest]
+#[case::zero(0.0, r#"{"f32":0.0,"f64":0.0}"#)]
+#[case::negative_zero(-0.0, r#"{"f32":-0.0,"f64":0.0}"#)]
+#[case::one(1.0, r#"{"f32":1.0,"f64":0.0}"#)]
+#[case::min_positive(f32::MIN_POSITIVE, r#"{"f32":1.1754944e-38,"f64":0.0}"#)]
+#[case::negative_one(-1.0, r#"{"f32":-1.0,"f64":0.0}"#)]
+#[case::min(f32::MIN, r#"{"f32":-3.4028235e38,"f64":0.0}"#)]
+#[case::max(f32::MAX, r#"{"f32":3.4028235e38,"f64":0.0}"#)]
+#[case::infinity(f32::INFINITY, r#"{"f32":"Infinity","f64":0.0}"#)]
+#[case::negative_infinity(f32::NEG_INFINITY, r#"{"f32":"-Infinity","f64":0.0}"#)]
+#[case::nan(f32::NAN, r#"{"f32":"NaN","f64":0.0}"#)]
+#[case::negative_nan(-f32::NAN, r#"{"f32":"NaN","f64":0.0}"#)]
+fn test_f32_round_trip(#[case] value: f32, #[case] expected_json: &str) -> Result<()> {
+    let fp = FloatingPoint {
+        f32: value,
+        ..Default::default()
+    };
+
+    let s = String::from_utf8(serialize(&fp).to_vec()).unwrap();
+    assert_eq!(s, expected_json);
+    let d: FloatingPoint = deserialize(s).unwrap();
+
+    if value.is_nan() {
+        assert!(d.f32.is_nan(), "value: {}", d.f32);
+    } else {
+        assert_relative_eq!(d.f32, fp.f32);
+    }
+
+    Ok(())
+}
+
+#[rstest]
+#[case::nan(r#"{ "f32": "NaN" }"#, f32::NAN)]
+#[case::negative_nan(r#"{ "f32": "-NaN" }"#, -f32::NAN)]
+#[case::infinity(r#"{ "f32": "Infinity" }"#, f32::INFINITY)]
+#[case::negative_infinity(r#"{ "f32": "-Infinity" }"#, f32::NEG_INFINITY)]
+#[case::ryu_nan(r#"{ "f32": "5.1042355e38" }"#, f32::NAN)]
+#[case::ryu_negative_nan(r#"{ "f32": "-5.1042355e38" }"#, -f32::NAN)]
+#[case::ryu_infinity(r#"{ "f32": "3.4028237e38" }"#, f32::INFINITY)]
+#[case::ryu_negative_infinity(r#"{ "f32": "-3.4028237e38" }"#, f32::NEG_INFINITY)]
+#[case::f64_infinity(r#"{ "f32": "1.797693134862316e308" }"#, f32::NAN)]
+#[case::f64_negative_infinity(r#"{ "f32": "-1.797693134862316e308" }"#, f32::NAN)]
+fn test_f32_deserialize(#[case] json: &str, #[case] expected_value: f32) -> Result<()> {
+    let d: FloatingPoint = deserialize(json).unwrap();
+    if expected_value.is_nan() {
+        assert!(d.f32.is_nan(), "value: {}", d.f32);
+    } else {
+        assert_relative_eq!(d.f32, expected_value);
+    }
+
+    Ok(())
+}
+
+#[rstest]
+#[case::zero(0.0, r#"{"f32":0.0,"f64":0.0}"#)]
+#[case::negative_zero(-0.0, r#"{"f32":0.0,"f64":-0.0}"#)]
+#[case::one(1.0, r#"{"f32":0.0,"f64":1.0}"#)]
+#[case::negative_one(-1.0, r#"{"f32":0.0,"f64":-1.0}"#)]
+#[case::min_positive(f64::MIN_POSITIVE, r#"{"f32":0.0,"f64":2.2250738585072014e-308}"#)]
+#[case::f32_nan(5.1042355e38, r#"{"f32":0.0,"f64":5.1042355e38}"#)]
+#[case::f32_negative_nan(-5.1042355e38, r#"{"f32":0.0,"f64":-5.1042355e38}"#)]
+#[case::f32_infinity(3.4028237e38, r#"{"f32":0.0,"f64":3.4028237e38}"#)]
+#[case::f32_negative_infinity(-3.4028237e38, r#"{"f32":0.0,"f64":-3.4028237e38}"#)]
+#[case::min(f64::MIN, r#"{"f32":0.0,"f64":-1.7976931348623157e308}"#)]
+#[case::max(f64::MAX, r#"{"f32":0.0,"f64":1.7976931348623157e308}"#)]
+#[case::infinity(f64::INFINITY, r#"{"f32":0.0,"f64":"Infinity"}"#)]
+#[case::negative_infinity(f64::NEG_INFINITY, r#"{"f32":0.0,"f64":"-Infinity"}"#)]
+#[case::nan(f64::NAN, r#"{"f32":0.0,"f64":"NaN"}"#)]
+#[case::negative_nan(-f64::NAN, r#"{"f32":0.0,"f64":"NaN"}"#)]
+fn test_f64_round_trip(#[case] value: f64, #[case] expected_json: &str) -> Result<()> {
+    let fp = FloatingPoint {
+        f64: value,
+        ..Default::default()
+    };
+
+    let s = String::from_utf8(serialize(&fp).to_vec()).unwrap();
+    assert_eq!(s, expected_json);
+    let d: FloatingPoint = deserialize(s).unwrap();
+
+    if value.is_nan() {
+        assert!(d.f64.is_nan(), "value: {}", d.f64);
+    } else {
+        assert_relative_eq!(d.f64, fp.f64);
+    }
+
+    Ok(())
+}
+
+#[rstest]
+#[case::nan(r#"{ "f64": "NaN" }"#, f64::NAN)]
+#[case::negative_nan(r#"{ "f64": "-NaN" }"#, -f64::NAN)]
+#[case::infinity(r#"{ "f64": "Infinity" }"#, f64::INFINITY)]
+#[case::negative_infinity(r#"{ "f64": "-Infinity" }"#, f64::NEG_INFINITY)]
+#[case::ryu_nan(r#"{ "f64": "2.696539702293474e308" }"#, f64::NAN)]
+#[case::ryu_negative_nan(r#"{ "f64": "-2.696539702293474e308" }"#, -f64::NAN)]
+#[case::ryu_infinity(r#"{ "f64": "1.797693134862316e308" }"#, f64::INFINITY)]
+#[case::ryu_negative_infinity(r#"{ "f64": "-1.797693134862316e308" }"#, f64::NEG_INFINITY)]
+fn test_f64_deserialize(#[case] json: &str, #[case] expected_value: f64) -> Result<()> {
+    let d: FloatingPoint = deserialize(json).unwrap();
+
+    if expected_value.is_nan() {
+        assert!(d.f64.is_nan(), "value: {}", d.f64);
+    } else {
+        assert_relative_eq!(d.f64, expected_value);
+    }
+
+    Ok(())
+}
+
+#[rstest]
+#[case::unqoted_nan_f32(r#"{"f32":NaN}"#)]
+#[case::unqoted_nan_f64(r#"{"f64":NaN}"#)]
+#[case::unqoted_negative_nan_f32(r#"{"f32":-NaN}"#)]
+#[case::unqoted_negative_nan_f64(r#"{"f64":-NaN}"#)]
+#[case::unqoted_infinity_f32(r#"{"f32":Infinity}"#)]
+#[case::unqoted_infinity_f64(r#"{"f64":Infinity}"#)]
+#[case::unqoted_negative_infinity_f32(r#"{"f32":-Infinity}"#)]
+#[case::unqoted_negative_infinity_f64(r#"{"f64":-Infinity}"#)]
+fn test_invalid_floating_point(#[case] json: &str) {
+    let res: Result<FloatingPoint> = deserialize(json);
+    assert!(res.is_err(), "Expected error, got {:?}", res);
 }
 
 proptest! {

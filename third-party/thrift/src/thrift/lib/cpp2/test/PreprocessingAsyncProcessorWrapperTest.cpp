@@ -15,8 +15,8 @@
  */
 
 #include <type_traits>
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp/TProcessorEventHandler.h>
 #include <thrift/lib/cpp2/async/PreprocessingAsyncProcessorWrapper.h>
 

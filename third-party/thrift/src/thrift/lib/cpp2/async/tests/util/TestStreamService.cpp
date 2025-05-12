@@ -17,8 +17,8 @@
 #include <thrift/lib/cpp2/async/tests/util/TestStreamService.h>
 #include <thrift/lib/cpp2/transport/rocket/server/RocketStreamClientCallback.h>
 
+#include <gtest/gtest.h>
 #include <folly/coro/AsyncScope.h>
-#include <folly/portability/GTest.h>
 
 namespace apache::thrift::detail::test {
 
@@ -253,6 +253,11 @@ ServerStream<int32_t> TestStreamMultiPublisherWithHeaderService::rangeThrow(
 ServerStream<int32_t> TestStreamMultiPublisherWithHeaderService::rangeThrowUDE(
     int32_t from, int32_t to) {
   return range(from, to, false, UserDefinedException());
+}
+
+ServerStream<int32_t>
+TestStreamMultiPublisherWithHeaderService::rangePassiveSubscription() {
+  return multipub_.addStream([] {});
 }
 
 ServerStream<int32_t>

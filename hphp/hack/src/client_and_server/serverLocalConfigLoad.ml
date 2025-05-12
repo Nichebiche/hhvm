@@ -102,10 +102,11 @@ let default =
     dump_tasts = [];
     lsp_sticky_quarantine = false;
     lsp_invalidation = false;
-    invalidate_all_folded_decls_upon_file_change = false;
     autocomplete_sort_text = false;
     hack_warnings = true;
     warnings_default_all = false;
+    warnings_in_sandcastle = true;
+    use_oxidized_by_ref_decls = true;
   }
 
 let system_config_path =
@@ -797,12 +798,6 @@ let load_
   let lsp_invalidation =
     bool_ "lsp_invalidation" ~default:default.lsp_invalidation config
   in
-  let invalidate_all_folded_decls_upon_file_change =
-    bool_
-      "invalidate_all_folded_decls_upon_file_change"
-      ~default:default.invalidate_all_folded_decls_upon_file_change
-      config
-  in
   let autocomplete_sort_text =
     bool_
       "autocomplete_sort_text"
@@ -821,6 +816,18 @@ let load_
   in
   let warnings_default_all =
     bool_ "warnings_default_all" ~default:default.warnings_default_all config
+  in
+  let warnings_in_sandcastle =
+    bool_
+      "warnings_in_sandcastle"
+      ~default:default.warnings_in_sandcastle
+      config
+  in
+  let use_oxidized_by_ref_decls =
+    bool_
+      "use_oxidized_by_ref_decls"
+      ~default:default.use_oxidized_by_ref_decls
+      config
   in
   {
     saved_state =
@@ -927,10 +934,11 @@ let load_
     dump_tasts;
     lsp_sticky_quarantine;
     lsp_invalidation;
-    invalidate_all_folded_decls_upon_file_change;
     autocomplete_sort_text;
     hack_warnings;
     warnings_default_all;
+    warnings_in_sandcastle;
+    use_oxidized_by_ref_decls;
   }
 
 let load :
@@ -974,8 +982,7 @@ let to_rollout_flags (options : t) : HackEventLogger.rollout_flags =
         GlobalOptions.(options.saved_state.loading.zstd_decompress_by_file);
       lsp_sticky_quarantine = options.lsp_sticky_quarantine;
       lsp_invalidation = options.lsp_invalidation;
-      invalidate_all_folded_decls_upon_file_change =
-        options.invalidate_all_folded_decls_upon_file_change;
       autocomplete_sort_text = options.autocomplete_sort_text;
       warnings_default_all = options.warnings_default_all;
+      use_oxidized_by_ref_decls = options.use_oxidized_by_ref_decls;
     }

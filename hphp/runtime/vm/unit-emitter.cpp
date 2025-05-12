@@ -16,28 +16,20 @@
 
 #include "hphp/runtime/vm/unit-emitter.h"
 
-#include "hphp/system/systemlib.h"
-
 #include "hphp/runtime/base/array-data.h"
-#include "hphp/runtime/base/attr.h"
-#include "hphp/runtime/base/file-util.h"
 #include "hphp/runtime/base/location.h"
 #include "hphp/runtime/base/repo-auth-type.h"
 #include "hphp/runtime/base/static-string-table.h"
 #include "hphp/runtime/base/typed-value.h"
 #include "hphp/runtime/base/unit-cache.h"
-#include "hphp/runtime/base/variable-serializer.h"
-#include "hphp/runtime/base/variable-unserializer.h"
 
 #include "hphp/runtime/ext/extension.h"
 #include "hphp/runtime/ext/extension-registry.h"
-#include "hphp/runtime/ext/std/ext_std_variable.h"
 
 #include "hphp/runtime/vm/disas.h"
 #include "hphp/runtime/vm/func.h"
 #include "hphp/runtime/vm/func-emitter.h"
 #include "hphp/runtime/vm/jit/perf-counters.h"
-#include "hphp/runtime/vm/native.h"
 #include "hphp/runtime/vm/preclass.h"
 #include "hphp/runtime/vm/preclass-emitter.h"
 #include "hphp/runtime/vm/repo-autoload-map-builder.h"
@@ -45,12 +37,10 @@
 #include "hphp/runtime/vm/unit.h"
 #include "hphp/runtime/vm/verifier/check.h"
 
-#include "hphp/util/alloc.h"
 #include "hphp/util/blob-encoder.h"
 #include "hphp/util/configs/debugger.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/logger.h"
-#include "hphp/util/read-only-arena.h"
 #include "hphp/util/sha1.h"
 #include "hphp/util/trace.h"
 
@@ -69,7 +59,7 @@
 namespace HPHP {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhbc);
+TRACE_SET_MOD(hhbc)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -89,7 +79,7 @@ UnitEmitter::~UnitEmitter() {
 ///////////////////////////////////////////////////////////////////////////////
 // Litstrs and Arrays.
 
-const StringData* UnitEmitter::lookupLitstr(Id id) const {
+const StringData* UnitEmitter::lookupLitstrId(Id id) const {
   assertx(id >= 0 && id < m_litstrs.size());
   auto& elem = m_litstrs[id];
   auto wrapper = elem.copy();
@@ -109,7 +99,7 @@ const StringData* UnitEmitter::lookupLitstr(Id id) const {
   return str;
 }
 
-const ArrayData* UnitEmitter::lookupArray(Id id) const {
+const ArrayData* UnitEmitter::lookupArrayId(Id id) const {
   assertx(id >= 0 && id < m_arrays.size());
   auto& elem = m_arrays[id];
   auto wrapper = elem.copy();
@@ -181,7 +171,7 @@ const RepoAuthType::Array* UnitEmitter::lookupRATArray(Id id) const {
   return array;
 }
 
-String UnitEmitter::lookupLitstrCopy(Id id) const {
+String UnitEmitter::lookupLitstrIdCopy(Id id) const {
   assertx(id >= 0 && id < m_litstrs.size());
   auto& elem = m_litstrs[id];
   auto wrapper = elem.copy();
@@ -195,7 +185,7 @@ String UnitEmitter::lookupLitstrCopy(Id id) const {
   return String::attach(const_cast<StringData*>(str));
 }
 
-Array UnitEmitter::lookupArrayCopy(Id id) const {
+Array UnitEmitter::lookupArrayIdCopy(Id id) const {
   assertx(id >= 0 && id < m_arrays.size());
   auto& elem = m_arrays[id];
   auto wrapper = elem.copy();
@@ -427,7 +417,7 @@ FuncEmitter* UnitEmitter::newFuncEmitter(const StringData* name, int64_t sn) {
   if (sn == -1) {
     sn = m_nextFuncSn++;
   }
-  auto fe = std::make_unique<FuncEmitter>(*this, sn, m_fes.size(), name);
+  auto fe = std::make_unique<FuncEmitter>(sn, m_fes.size(), name);
   m_fes.push_back(std::move(fe));
   return m_fes.back().get();
 }
@@ -437,23 +427,8 @@ FuncEmitter* UnitEmitter::newMethodEmitter(const StringData* name,
   if (sn == -1) {
     sn = m_nextFuncSn++;
   }
-  return new FuncEmitter(*this, sn, name, pce);
+  return new FuncEmitter(sn, name, pce);
 }
-
-Func* UnitEmitter::newFunc(const FuncEmitter* fe, Unit& unit,
-                           const StringData* name, Attr attrs,
-                           int numParams) {
-  Func *func = nullptr;
-  if (attrs & AttrIsMethCaller) {
-    auto const pair = Func::getMethCallerNames(name);
-    func = new (Func::allocFuncMem(numParams)) Func(
-      unit, name, attrs, pair.first, pair.second);
-  } else {
-    func = new (Func::allocFuncMem(numParams)) Func(unit, name, attrs);
-  }
-  return func;
-}
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // PreClassEmitters.
@@ -461,7 +436,8 @@ Func* UnitEmitter::newFunc(const FuncEmitter* fe, Unit& unit,
 PreClassEmitter* UnitEmitter::newPreClassEmitter(
   const std::string& name
 ) {
-  auto pce = new PreClassEmitter(*this, name);
+  auto n = makeStaticString(name);
+  auto pce = new PreClassEmitter(n);
   m_pceVec.emplace_back(pce);
   return pce;
 }
@@ -574,7 +550,7 @@ Id UnitEmitter::getEntryPointId() const {
 
 void UnitEmitter::finish() {
   calculateEntryPointId();
-  assertx(m_fatalUnit || (isASystemLib() == (m_extension != nullptr)));
+  assertx(m_fatalUnit || (isSystemLib() == (m_extension != nullptr)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -617,11 +593,11 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
   static const bool kVerifyVerbose =
     kVerifyVerboseSystem || getenv("HHVM_VERIFY_VERBOSE");
 
-  const bool isSystemLib = FileUtil::isSystemName(m_filepath->slice());
+  const bool isSystemLib_ = isSystemLib();
   const bool doVerify = kVerify || boost::ends_with(m_filepath->data(), ".hhas");
 
   // Systemlib is verified during build so we don't need to do it here.
-  if (!isSystemLib && doVerify) {
+  if (!isSystemLib_ && doVerify) {
     // The verifier needs the bytecode available, but we don't want to
     // necessarily force it to load (otherwise it would defeat the
     // point of lazy loading when we're using the verifier). So, load
@@ -636,13 +612,13 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
     };
     if (Cfg::Repo::Authoritative) {
       for (auto& fe : m_fes) {
-        auto const token = fe->loadBc();
+        auto const token = fe->loadBc(m_sn);
         if (!token) continue;
         tokens.emplace_back(std::make_pair(fe.get(), *token));
       }
       for (auto& pce : m_pceVec) {
         for (auto& fe : pce->methods()) {
-          auto const token = fe->loadBc();
+          auto const token = fe->loadBc(m_sn);
           if (!token) continue;
           tokens.emplace_back(std::make_pair(fe, *token));
         }
@@ -655,11 +631,11 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
         std::cerr << folly::format(
           "Verification failed for unit {}. Re-run with "
           "HHVM_VERIFY_VERBOSE{}=1 to see more details.\n",
-          m_filepath->data(), isSystemLib ? "_SYSTEM" : ""
+          m_filepath->data(), isSystemLib_ ? "_SYSTEM" : ""
         );
       }
       if (Cfg::Eval::VerifyOnly) {
-        if (!isSystemLib) {
+        if (!isSystemLib_) {
           std::fflush(stdout);
           _Exit(1);
         }
@@ -672,7 +648,7 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
         )->create();
       }
     }
-    if (!isSystemLib && Cfg::Eval::VerifyOnly) {
+    if (!isSystemLib_ && Cfg::Eval::VerifyOnly) {
       std::fflush(stdout);
       _Exit(0);
     }
@@ -693,6 +669,7 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
   u->m_moduleName = m_moduleName;
   u->m_sha1 = m_sha1;
   u->m_bcSha1 = m_bcSha1;
+  u->m_extension = m_extension;
   for (auto const& pce : m_pceVec) {
     auto const preCls = pce->create(*u);
     u->m_preClasses.emplace_back(PreClassPtr{preCls});
@@ -757,7 +734,7 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
   }
 
   if (Cfg::Eval::DumpHhas > 1 ||
-    (!isASystemLib() && Cfg::Eval::DumpHhas == 1)) {
+    (!isSystemLib_ && Cfg::Eval::DumpHhas == 1)) {
     auto const& hhaspath = Cfg::Eval::DumpHhasToFile;
     if (!hhaspath.empty()) {
       static std::atomic<bool> first_unit{true};
@@ -771,7 +748,7 @@ std::unique_ptr<Unit> UnitEmitter::create() const {
       std::printf("%s", disassemble(u.get()).c_str());
       std::fflush(stdout);
     }
-    if (!isASystemLib()) {
+    if (!isSystemLib_) {
       _Exit(0);
     }
   }
@@ -793,7 +770,7 @@ void UnitEmitter::serde(SerDe& sd, bool lazy) {
 
   MemoryManager::SuppressOOM so{*tl_heap};
 
-  auto is_systemlib = isASystemLib();
+  auto is_systemlib = isSystemLib();
   if (is_systemlib) lazy = false;
 
   // Have SerDe use this unit's string/array table for encoding or decoding.
@@ -1053,7 +1030,7 @@ void UnitEmitter::serde(SerDe& sd, bool lazy) {
                 m_litarrayBuffer = nullptr;
                 m_litarrayBufferSize = 0;
               };
-              for (size_t i = 0; i < count; ++i) lookupArray(i);
+              for (size_t i = 0; i < count; ++i) lookupArrayId(i);
             }
           } else {
             sd.lazyCount(

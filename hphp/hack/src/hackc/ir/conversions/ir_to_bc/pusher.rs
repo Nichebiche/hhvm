@@ -3,15 +3,6 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 
-use ir::analysis;
-use ir::instr;
-use ir::instr::HasLocals;
-use ir::instr::HasOperands;
-use ir::instr::IrToBc;
-use ir::instr::LocalId;
-use ir::instr::Special;
-use ir::instr::Terminator;
-use ir::passes;
 use ir::BlockId;
 use ir::FullInstrId;
 use ir::Func;
@@ -23,6 +14,15 @@ use ir::LocId;
 use ir::UnnamedLocalId;
 use ir::ValueId;
 use ir::ValueIdMap;
+use ir::analysis;
+use ir::instr;
+use ir::instr::HasLocals;
+use ir::instr::HasOperands;
+use ir::instr::IrToBc;
+use ir::instr::LocalId;
+use ir::instr::Special;
+use ir::instr::Terminator;
+use ir::passes;
 use itertools::Itertools;
 use log::trace;
 use smallvec::SmallVec;
@@ -252,9 +252,8 @@ impl PushInserter {
             .iter()
             .copied()
             .filter(|vid| {
-                vid.instr().map_or(false, |iid| {
-                    self.liveness.instr_last_use[iid].contains(&cur_iid)
-                })
+                vid.instr()
+                    .is_some_and(|iid| self.liveness.instr_last_use[iid].contains(&cur_iid))
             })
             .sorted_by_key(|vid| vid.raw())
             .dedup_with_count()
@@ -262,7 +261,7 @@ impl PushInserter {
             .collect();
 
         for vid in vids {
-            let vid_consume = vid_histogram.get_mut(vid).map_or(false, |count| {
+            let vid_consume = vid_histogram.get_mut(vid).is_some_and(|count| {
                 *count -= 1;
                 *count == 0
             });

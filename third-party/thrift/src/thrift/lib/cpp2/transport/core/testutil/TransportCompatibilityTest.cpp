@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
+#include <gtest/gtest.h>
 #include <folly/Conv.h>
 #include <folly/portability/GFlags.h>
-#include <folly/portability/GTest.h>
 
 #include <glog/logging.h>
 
@@ -737,8 +737,11 @@ void TransportCompatibilityTest::TestRequestResponse_Connection_CloseNow() {
 void TransportCompatibilityTest::TestRequestResponse_ServerQueueTimeout() {
   connectToServer([this](
                       std::unique_ptr<TestServiceAsyncClient> client) mutable {
-    int32_t numCores = sysconf(_SC_NPROCESSORS_ONLN);
-    int callCount = numCores + 1; // more than the core count!
+    // Pidgeon-hole principle. Each client request causes a blocking sleep on a
+    // server-side IO thread, due to server executing with inline executor. N
+    // threads blocked with N + 1 requests leaves 1 request in the queue. By the
+    // time the first N requests finish, the last queued request will be stale.
+    int32_t callCount = 1 + server_->getServer()->getNumIOWorkerThreads();
 
     // Queue expiration - executes some of the tasks ( = thread count)
     server_->getServer()->setQueueTimeout(std::chrono::milliseconds(10));
@@ -1098,7 +1101,8 @@ void TransportCompatibilityTest::TestBadPayload() {
             apache::thrift::SerializedRequest(
                 std::move(envelopeAndRequest->second)),
             std::move(header),
-            ErrorCallback::create());
+            ErrorCallback::create(),
+            nullptr);
       } else {
         ErrorCallback::create().release()->onResponseError(
             folly::make_exception_wrapper<

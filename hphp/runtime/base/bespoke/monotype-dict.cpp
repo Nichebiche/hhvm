@@ -17,26 +17,19 @@
 
 #include "hphp/runtime/base/bespoke/monotype-dict.h"
 
-#include "hphp/runtime/base/array-data-defs.h"
 #include "hphp/runtime/base/bespoke-array.h"
 #include "hphp/runtime/base/bespoke/escalation-logging.h"
 #include "hphp/runtime/base/bespoke/monotype-dict-x64.h"
 #include "hphp/runtime/base/memory-manager.h"
-#include "hphp/runtime/base/static-string-table.h"
-#include "hphp/runtime/base/string-data-macros.h"
 #include "hphp/runtime/base/tv-uncounted.h"
-#include "hphp/runtime/base/vanilla-dict-defs.h"
 
-#include "hphp/runtime/vm/jit/mcgen-translate.h"
 #include "hphp/runtime/vm/jit/type.h"
-#include "hphp/runtime/vm/vm-regs.h"
 
 #include <algorithm>
-#include <atomic>
 
 namespace HPHP::bespoke {
 
-TRACE_SET_MOD(bespoke);
+TRACE_SET_MOD(bespoke)
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -184,7 +177,7 @@ bool EmptyMonotypeDict::checkInvariants() const {
 
 //////////////////////////////////////////////////////////////////////////////
 
-void EmptyMonotypeDict::Scan(const Self* ad, type_scan::Scanner& scanner) {
+void EmptyMonotypeDict::Scan(const Self*, type_scan::Scanner&) {
 }
 ArrayData* EmptyMonotypeDict::EscalateToVanilla(
     const Self* ad, const char* reason) {
@@ -193,15 +186,15 @@ ArrayData* EmptyMonotypeDict::EscalateToVanilla(
   return legacy ? staticEmptyMarkedDictArray() : staticEmptyDictArray();
 }
 void EmptyMonotypeDict::ConvertToUncounted(
-    Self* madIn, const MakeUncountedEnv& env) {
+    Self*, const MakeUncountedEnv&) {
   // All EmptyMonotypeDicts are static, so we should never make them uncounted.
   always_assert(false);
 }
-void EmptyMonotypeDict::ReleaseUncounted(Self* ad) {
+void EmptyMonotypeDict::ReleaseUncounted(Self*) {
   // All EmptyMonotypeDicts are static, so we should never release them.
   always_assert(false);
 }
-void EmptyMonotypeDict::Release(Self* ad) {
+void EmptyMonotypeDict::Release(Self*) {
   // All EmptyMonotypeDicts are static, so we should never release them.
   always_assert(false);
 }
@@ -214,38 +207,38 @@ ArrayData* EmptyMonotypeDict::Copy(const Self*) {
 //////////////////////////////////////////////////////////////////////////////
 // Accessors
 
-bool EmptyMonotypeDict::IsVectorData(const Self* ad) {
+bool EmptyMonotypeDict::IsVectorData(const Self*) {
   return true;
 }
-TypedValue EmptyMonotypeDict::NvGetInt(const Self* ad, int64_t k) {
+TypedValue EmptyMonotypeDict::NvGetInt(const Self*, int64_t /*k*/) {
   return make_tv<KindOfUninit>();
 }
-TypedValue EmptyMonotypeDict::NvGetStr(const Self* ad, const StringData* k) {
+TypedValue EmptyMonotypeDict::NvGetStr(const Self*, const StringData* /*k*/) {
   return make_tv<KindOfUninit>();
 }
-TypedValue EmptyMonotypeDict::GetPosKey(const Self* ad, ssize_t pos) {
+TypedValue EmptyMonotypeDict::GetPosKey(const Self*, ssize_t /*pos*/) {
   always_assert(false);
 }
-TypedValue EmptyMonotypeDict::GetPosVal(const Self* ad, ssize_t pos) {
+TypedValue EmptyMonotypeDict::GetPosVal(const Self*, ssize_t /*pos*/) {
   always_assert(false);
 }
-bool EmptyMonotypeDict::PosIsValid(const Self* ad, ssize_t pos) {
+bool EmptyMonotypeDict::PosIsValid(const Self*, ssize_t /*pos*/) {
   return false;
 }
 
-ssize_t EmptyMonotypeDict::IterBegin(const Self* ad) {
+ssize_t EmptyMonotypeDict::IterBegin(const Self*) {
   return 0;
 }
-ssize_t EmptyMonotypeDict::IterLast(const Self* ad) {
+ssize_t EmptyMonotypeDict::IterLast(const Self*) {
   return 0;
 }
-ssize_t EmptyMonotypeDict::IterEnd(const Self* ad) {
+ssize_t EmptyMonotypeDict::IterEnd(const Self*) {
   return 0;
 }
-ssize_t EmptyMonotypeDict::IterAdvance(const Self* ad, ssize_t prev) {
+ssize_t EmptyMonotypeDict::IterAdvance(const Self*, ssize_t /*prev*/) {
   return 0;
 }
-ssize_t EmptyMonotypeDict::IterRewind(const Self* ad, ssize_t prev) {
+ssize_t EmptyMonotypeDict::IterRewind(const Self*, ssize_t /*prev*/) {
   return 0;
 }
 
@@ -295,10 +288,10 @@ ArrayData* EmptyMonotypeDict::SetStrMove(Self* ad, StringData* k, TypedValue v) 
   return k->isStatic() ? makeStrMonotypeDict<StaticStrPtr>(legacy, k, v)
                        : makeStrMonotypeDict<StringData*>(legacy, k, v);
 }
-ArrayData* EmptyMonotypeDict::RemoveIntMove(Self* ad, int64_t k) {
+ArrayData* EmptyMonotypeDict::RemoveIntMove(Self* ad, int64_t /*k*/) {
   return ad;
 }
-ArrayData* EmptyMonotypeDict::RemoveStrMove(Self* ad, const StringData* k) {
+ArrayData* EmptyMonotypeDict::RemoveStrMove(Self* ad, const StringData* /*k*/) {
   return ad;
 }
 
@@ -312,13 +305,13 @@ ArrayData* EmptyMonotypeDict::PopMove(Self* ad, Variant& ret) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-ArrayData* EmptyMonotypeDict::PreSort(Self* ead, SortFunction sf) {
+ArrayData* EmptyMonotypeDict::PreSort(Self*, SortFunction) {
   always_assert(false);
 }
-ArrayData* EmptyMonotypeDict::PostSort(Self* ead, ArrayData* vad) {
+ArrayData* EmptyMonotypeDict::PostSort(Self*, ArrayData* /*vad*/) {
   always_assert(false);
 }
-ArrayData* EmptyMonotypeDict::SetLegacyArray(Self* ad, bool copy, bool legacy) {
+ArrayData* EmptyMonotypeDict::SetLegacyArray(Self*, bool /*copy*/, bool legacy) {
   return GetDict(legacy);
 }
 
@@ -845,10 +838,10 @@ void MonotypeDict<Key>::forEachElm(ElmFn e) const {
 template <typename Key>
 void MonotypeDict<Key>::incRefElms() {
   forEachElm(
-    [&](auto i, auto k) { incRefKey(k); },
+    [&](auto /*i*/, auto k) { incRefKey(k); },
     [&](auto v) { reinterpret_cast<Countable*>(val(v).pcnt)->incRefCount(); },
     [&](auto v) { val(v).pcnt->incRefCount(); },
-    [&](auto v) {}
+    [&](auto /*v*/) {}
   );
 }
 
@@ -856,7 +849,7 @@ template <typename Key>
 void MonotypeDict<Key>::decRefElms() {
   auto const dt = type();
   forEachElm(
-    [&](auto i, auto k) { decRefKey(k); },
+    [&](auto /*i*/, auto k) { decRefKey(k); },
     [&](auto v) {
       auto const countable = reinterpret_cast<Countable*>(val(v).pcnt);
       if (countable->decReleaseCheck()) destructorForType(dt)(countable);
@@ -865,7 +858,7 @@ void MonotypeDict<Key>::decRefElms() {
       auto const countable = val(v).pcnt;
       if (countable->decReleaseCheck()) destructorForType(dt)(countable);
     },
-    [&](auto v) {}
+    [&](auto /*v*/) {}
   );
 }
 
@@ -937,7 +930,7 @@ MonotypeDict<Key>* MonotypeDict<Key>::compactIfNeeded() {
 
   auto cur = 0;
   auto const data = result->elms();
-  forEachElm([&](auto i, auto elm) {
+  forEachElm([&](auto /*i*/, auto elm) {
     auto const target = &data[cur];
     if (target != elm) *target = *elm;
     *result->findForAdd(getHash(elm->key)).index = cur;
@@ -1117,7 +1110,7 @@ bool MonotypeDict<Key>::hasEmptyLayout() const {
 template <typename Key>
 void MonotypeDict<Key>::Scan(const Self* mad, type_scan::Scanner& scanner) {
   auto const dt = mad->type();
-  mad->forEachElm([&](auto i, auto elm) {
+  mad->forEachElm([&](auto /*i*/, auto elm) {
     if constexpr (std::is_same<Key, StringData*>::value) scanner.scan(elm->key);
     if (isRefcountedType(dt)) scanner.scan(elm->val.pcnt);
   });
@@ -1134,7 +1127,7 @@ void MonotypeDict<Key>::ConvertToUncounted(
     Self* mad, const MakeUncountedEnv& env) {
   auto const dt = mad->type();
 
-  mad->forEachElm([&](auto i, auto elm) {
+  mad->forEachElm([&](auto /*i*/, auto elm) {
     auto const elm_mut = const_cast<Elm*>(elm);
     if constexpr (std::is_same<Key, StringData*>::value) {
       elm_mut->key = MakeUncountedString(elm_mut->key, env);
@@ -1152,7 +1145,7 @@ template <typename Key>
 void MonotypeDict<Key>::ReleaseUncounted(Self* mad) {
   auto const dt = mad->type();
 
-  mad->forEachElm([&](auto i, auto elm) {
+  mad->forEachElm([&](auto /*i*/, auto elm) {
     if constexpr (std::is_same<Key, StringData*>::value) {
       DecRefUncountedString(elm->key);
     }
@@ -1359,7 +1352,7 @@ template <typename Key>
 ArrayData* MonotypeDict<Key>::appendImpl(TypedValue v) {
   auto nextKI = int64_t{0};
   if constexpr (std::is_same<Key, int64_t>::value) {
-    forEachElm([&](auto i, auto elm) {
+    forEachElm([&](auto /*i*/, auto elm) {
       if (elm->key >= nextKI && nextKI >= 0) {
         nextKI = static_cast<uint64_t>(elm->key) + 1;
       }
@@ -1471,15 +1464,15 @@ Type resultKeyType(KeyTypes kt) {
 
 // TopMonotypeDictLayout(KeyType)
 
-ArrayLayout TopMonotypeDictLayout::appendType(Type val) const {
+ArrayLayout TopMonotypeDictLayout::appendType(Type /*val*/) const {
   return ArrayLayout::Top();
 }
 
-ArrayLayout TopMonotypeDictLayout::removeType(Type key) const {
+ArrayLayout TopMonotypeDictLayout::removeType(Type /*key*/) const {
   return ArrayLayout(this);
 }
 
-ArrayLayout TopMonotypeDictLayout::setType(Type key, Type val) const {
+ArrayLayout TopMonotypeDictLayout::setType(Type /*key*/, Type /*val*/) const {
   return ArrayLayout::Top();
 }
 
@@ -1489,11 +1482,11 @@ std::pair<Type, bool> TopMonotypeDictLayout::elemType(Type key) const {
 }
 
 std::pair<Type, bool> TopMonotypeDictLayout::firstLastType(
-    bool isFirst, bool isKey) const {
+    bool /*isFirst*/, bool isKey) const {
   return {isKey ? resultKeyType(m_keyType) : TInitCell, false};
 }
 
-Type TopMonotypeDictLayout::iterPosType(Type pos, bool isKey) const {
+Type TopMonotypeDictLayout::iterPosType(Type /*pos*/, bool isKey) const {
   return isKey ? resultKeyType(m_keyType) : TInitCell;
 }
 
@@ -1503,7 +1496,7 @@ ArrayLayout EmptyMonotypeDictLayout::appendType(Type val) const {
   return setType(TInt, val);
 }
 
-ArrayLayout EmptyMonotypeDictLayout::removeType(Type key) const {
+ArrayLayout EmptyMonotypeDictLayout::removeType(Type /*key*/) const {
   return ArrayLayout(this);
 }
 
@@ -1524,16 +1517,16 @@ ArrayLayout EmptyMonotypeDictLayout::setType(Type key, Type val) const {
     : ArrayLayout(TopMonotypeDictLayout::Index(kt));
 }
 
-std::pair<Type, bool> EmptyMonotypeDictLayout::elemType(Type key) const {
+std::pair<Type, bool> EmptyMonotypeDictLayout::elemType(Type /*key*/) const {
   return {TBottom, false};
 }
 
 std::pair<Type, bool> EmptyMonotypeDictLayout::firstLastType(
-    bool isFirst, bool isKey) const {
+    bool /*isFirst*/, bool /*isKey*/) const {
   return {TBottom, false};
 }
 
-Type EmptyMonotypeDictLayout::iterPosType(Type pos, bool isKey) const {
+Type EmptyMonotypeDictLayout::iterPosType(Type /*pos*/, bool /*isKey*/) const {
   return TBottom;
 }
 
@@ -1543,7 +1536,7 @@ ArrayLayout MonotypeDictLayout::appendType(Type val) const {
   return setType(TInt, val);
 }
 
-ArrayLayout MonotypeDictLayout::removeType(Type key) const {
+ArrayLayout MonotypeDictLayout::removeType(Type /*key*/) const {
   return ArrayLayout(this);
 }
 
@@ -1581,11 +1574,11 @@ std::pair<Type, bool> MonotypeDictLayout::elemType(Type key) const {
 }
 
 std::pair<Type, bool> MonotypeDictLayout::firstLastType(
-    bool isFirst, bool isKey) const {
+    bool /*isFirst*/, bool isKey) const {
   return {isKey ? resultKeyType(m_keyType) : Type(m_valType), false};
 }
 
-Type MonotypeDictLayout::iterPosType(Type pos, bool isKey) const {
+Type MonotypeDictLayout::iterPosType(Type /*pos*/, bool isKey) const {
   return isKey ? resultKeyType(m_keyType) : Type(m_valType);
 }
 

@@ -18,13 +18,13 @@
 #![deny(warnings)]
 
 macro_rules! bail_err {
-    ($e:expr) => {
+    ($e:expr_2021) => {
         return Err(From::from($e))
     };
 }
 
 macro_rules! ensure_err {
-    ($cond:expr, $e:expr) => {
+    ($cond:expr_2021, $e:expr_2021) => {
         if !$cond {
             bail_err!($e);
         }
@@ -44,6 +44,7 @@ pub mod builtin_types;
 pub mod compact_protocol;
 pub mod context_stack;
 pub mod deserialize;
+pub mod errors;
 pub mod export;
 pub mod framing;
 pub mod metadata;
@@ -58,7 +59,6 @@ pub mod uri;
 
 mod bufext;
 mod client;
-mod errors;
 mod exceptions;
 mod varint;
 
@@ -76,6 +76,8 @@ pub use crate::bufext::BufMutExt;
 pub use crate::bufext::DeserializeSource;
 pub use crate::client::ClientFactory;
 pub use crate::client::ClientStreamElement;
+pub use crate::client::SinkReply;
+pub use crate::client::SinkResult;
 pub use crate::client::Transport;
 pub use crate::compact_protocol::CompactProtocol;
 pub use crate::context_stack::ContextStack;

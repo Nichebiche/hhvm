@@ -23,9 +23,6 @@
 #include "hphp/runtime/vm/jit/mcgen.h"
 #include "hphp/runtime/vm/jit/mcgen-async.h"
 #include "hphp/runtime/vm/jit/perf-counters.h"
-#include "hphp/runtime/vm/jit/prof-data.h"
-#include "hphp/runtime/vm/jit/service-requests.h"
-#include "hphp/runtime/vm/jit/smashable-instr.h"
 #include "hphp/runtime/vm/jit/tc.h"
 #include "hphp/runtime/vm/jit/tc-internal.h"
 #include "hphp/runtime/vm/jit/tc-record.h"
@@ -37,17 +34,13 @@
 #include "hphp/runtime/vm/hhbc.h"
 #include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/runtime.h"
-#include "hphp/runtime/vm/treadmill.h"
 #include "hphp/runtime/vm/workload-stats.h"
 
-#include "hphp/vixl/a64/decoder-a64.h"
-
-#include "hphp/util/arch.h"
 #include "hphp/util/configs/debugger.h"
 #include "hphp/util/ringbuffer.h"
 #include "hphp/util/trace.h"
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 namespace HPHP::jit::svcreq {
 
@@ -193,6 +186,11 @@ TranslationResult getTranslation(SrcKey sk) {
 }
 
 JitResumeAddr getFuncEntry(const Func* func) {
+  if (!RID().getJit()) {
+    return JitResumeAddr::helper(
+      tc::ustubs().resumeHelperNoTranslateFuncEntryFromInterp);
+  }
+
   if (auto const addr = func->getFuncEntry()) {
     return JitResumeAddr::transFuncEntry(addr);
   }
@@ -563,6 +561,8 @@ JitResumeAddr handleResume(ResumeFlags flags) {
   FTRACE(2, "handleResume: sk: {}\n", showShort(sk));
 
   auto const findOrTranslate = [&] (ResumeFlags flags) -> JitResumeAddr {
+    if (!RID().getJit()) return JitResumeAddr::none();
+
     if (!flags.m_noTranslate) {
       auto const trans = getTranslation(sk);
       if (auto const addr = trans.addr()) {
@@ -579,11 +579,9 @@ JitResumeAddr handleResume(ResumeFlags flags) {
 
     if (auto const sr = tc::findSrcRec(sk)) {
       if (auto const tca = sr->getTopTranslation()) {
-        if (LIKELY(RID().getJit())) {
-          SKTRACE(2, sk, "handleResume: found %p\n", tca);
-          if (sk.funcEntry()) return JitResumeAddr::transFuncEntry(tca);
-          return JitResumeAddr::trans(tca);
-        }
+        SKTRACE(2, sk, "handleResume: found %p\n", tca);
+        if (sk.funcEntry()) return JitResumeAddr::transFuncEntry(tca);
+        return JitResumeAddr::trans(tca);
       }
     }
     return JitResumeAddr::none();

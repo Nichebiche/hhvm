@@ -9,8 +9,8 @@
 type t = {
   implicit_inherit_sdt: bool;
   everything_sdt: bool;
-  enable_strict_const_semantics: int;
   class_class_type: bool;
+  safe_abstract: bool;
 }
 [@@deriving show]
 

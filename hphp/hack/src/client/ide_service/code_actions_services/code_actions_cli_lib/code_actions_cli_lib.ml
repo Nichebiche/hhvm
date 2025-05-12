@@ -103,7 +103,7 @@ let run_exn ctx ~error_filter entry range ~title_prefix ~use_snippet_edits =
       |> List.map ~f:(function
              | CodeAction.Action CodeAction.{ title; kind; _ } ->
                let kind_str =
-                 Printf.sprintf "CodeActionKind: %s"
+                 Printf.sprintf {|CodeActionKind: "%s"|}
                  @@ Lsp.CodeActionKind.string_of_kind kind
                in
                let is_selected = String.is_prefix ~prefix:title_prefix title in
@@ -157,7 +157,16 @@ let run_exn ctx ~error_filter entry range ~title_prefix ~use_snippet_edits =
         in
         match patched_opt with
         | Ok (Some patched) ->
-          Printf.sprintf "\nApplied edit for code action:%s%s" separator patched
+          let is_noop =
+            String.equal (Full_fidelity_source_text.text source_text) patched
+          in
+          if is_noop then
+            "\nThe code action edit was a no-op"
+          else
+            Printf.sprintf
+              "\nApplied edit for code action:%s%s"
+              separator
+              patched
         | Ok None ->
           "\nThe command_or_action cannot be converted into patches.\n"
         | Error error ->

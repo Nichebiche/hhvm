@@ -75,7 +75,7 @@ final class ImplicitContextData {}
  * Returns the implicit context keyed by $key or null if such doesn't exist
  */
 <<__Native>>
-function get_implicit_context(string $key)[leak_safe]: mixed;
+function get_implicit_context<T>(class<T> $key)[leak_safe]: ?T::T;
 
 <<__Native>>
 function get_whole_implicit_context()[zoned]: ImplicitContextData;
@@ -87,16 +87,36 @@ function get_whole_implicit_context()[zoned]: ImplicitContextData;
  * Does not affect the state of the IC
  */
 <<__Native>>
-function has_key(string $key)[leak_safe]: bool;
+function has_key<T>(class<T> $key)[leak_safe]: bool;
 
 /**
  * Creates implicit context $context keyed by $key.
  */
 <<__Native>>
-function create_implicit_context(
-  string $key,
+function create_implicit_context<T>(
+  class<T> $key,
   mixed $context,
   bool $memo_sensitive,
+)[leak_safe]: ImplicitContextData;
+
+/**
+ * Creates memo agnostic implicit context $context keyed by $key.
+ */
+<<__Native>>
+function create_memo_agnostic<T as \HH\MemoAgnosticImplicitContext>(
+  class<T> $key,
+  mixed $context,
+)[leak_safe]: ImplicitContextData;
+
+/**
+ * Creates memo sensitive implicit context $context keyed by $key,
+ * with $context's instance key provided by $context_key.
+ */
+<<__Native>>
+function create_memo_sensitive<T as \HH\MemoSensitiveImplicitContext>(
+  class<T> $key,
+  \HH\IPureMemoizeParam $context,
+  string $context_key,
 )[leak_safe]: ImplicitContextData;
 
 /*
@@ -116,6 +136,100 @@ function get_implicit_context_debug_info()[]: vec<string>;
 
 } // namespace ImplicitContext_Private
 
+abstract class MemoAgnosticImplicitContext extends ImplicitContextBase {
+  final protected static async function runWithAsync<Tout>(
+    this::TData $context,
+    (function ()[_]: Awaitable<Tout>) $f,
+  )[this::CRun, ctx $f]: Awaitable<Tout> {
+    return await self::runWithImplAsync(self::createContext($context), $f);
+  }
+
+  final protected static function runWith<Tout>(
+    this::TData $context,
+    (function ()[_]: Tout) $f,
+  )[this::CRun, ctx $f]: Tout {
+    return self::runWithImpl(self::createContext($context), $f);
+  }
+
+  private static function createContext(
+    this::TData $context,
+  )[leak_safe]: ImplicitContext\_Private\ImplicitContextData {
+    return ImplicitContext\_Private\create_memo_agnostic(
+      static::class,
+      $context,
+    );
+  }
+}
+
+abstract class MemoSensitiveImplicitContext extends ImplicitContextBase {
+  abstract const type TData as IPureMemoizeParam;
+
+  final protected static async function runWithAsync<Tout>(
+    this::TData $context,
+    (function ()[_]: Awaitable<Tout>) $f,
+  )[this::CRun, ctx $f]: Awaitable<Tout> {
+    return await self::runWithImplAsync(self::createContext($context), $f);
+  }
+
+  final protected static function runWith<Tout>(
+    this::TData $context,
+    (function ()[_]: Tout) $f,
+  )[this::CRun, ctx $f]: Tout {
+    return self::runWithImpl(self::createContext($context), $f);
+  }
+
+  private static function createContext(
+    this::TData $context,
+  )[leak_safe]: ImplicitContext\_Private\ImplicitContextData {
+    return ImplicitContext\_Private\create_memo_sensitive(
+      static::class,
+      $context,
+      $context->getInstanceKey(),
+    );
+  }
+}
+
+<<__Sealed(MemoAgnosticImplicitContext::class, MemoSensitiveImplicitContext::class)>>
+abstract class ImplicitContextBase {
+  abstract const type TData as nonnull;
+  abstract const ctx CRun as [leak_safe];
+
+  protected static function exists()[this::CRun]: bool {
+    return ImplicitContext\_Private\has_key(static::class);
+  }
+
+  protected static function get()[this::CRun]: ?this::TData {
+    return ImplicitContext\_Private\get_implicit_context(static::class);
+  }
+
+  final protected static async function runWithImplAsync<Tout>(
+    ImplicitContext\_Private\ImplicitContextData $context,
+    (function ()[_]: Awaitable<Tout>) $f,
+  )[this::CRun, ctx $f]: Awaitable<Tout> {
+    $prev = ImplicitContext\_Private\set_implicit_context_by_value($context);
+    try {
+      $result = $f();
+    } finally {
+      ImplicitContext\_Private\set_implicit_context_by_value($prev);
+    }
+    // Needs to be awaited here so that context dependency is established
+    // between parent/child functions
+    return await $result;
+  }
+
+  final protected static function runWithImpl<Tout>(
+    ImplicitContext\_Private\ImplicitContextData $context,
+    (function ()[_]: Tout) $f,
+  )[this::CRun, ctx $f]: Tout {
+    $prev = ImplicitContext\_Private\set_implicit_context_by_value($context);
+    try {
+      return $f();
+    } finally {
+      ImplicitContext\_Private\set_implicit_context_by_value($prev);
+    }
+  }
+}
+
 abstract class ImplicitContext {
   abstract const type T as nonnull;
   abstract const bool IS_MEMO_SENSITIVE;
@@ -127,7 +241,7 @@ abstract class ImplicitContext {
   )[this::CRun, ctx $f]: Awaitable<Tout> {
     $prev = ImplicitContext\_Private\set_implicit_context_by_value(
       ImplicitContext\_Private\create_implicit_context(
-        nameof static,
+        static::class,
         $context,
         static::IS_MEMO_SENSITIVE,
       ),
@@ -148,7 +262,7 @@ abstract class ImplicitContext {
   )[this::CRun, ctx $f]: Tout {
     $prev = ImplicitContext\_Private\set_implicit_context_by_value(
       ImplicitContext\_Private\create_implicit_context(
-        nameof static,
+        static::class,
         $context,
         static::IS_MEMO_SENSITIVE,
       ),
@@ -161,11 +275,11 @@ abstract class ImplicitContext {
   }
 
   protected static function exists()[this::CRun]: bool {
-    return ImplicitContext\_Private\has_key(nameof static);
+    return ImplicitContext\_Private\has_key(static::class);
   }
 
   protected static function get()[this::CRun]: ?this::T {
-    return ImplicitContext\_Private\get_implicit_context(nameof static);
+    return ImplicitContext\_Private\get_implicit_context(static::class);
   }
 }
 

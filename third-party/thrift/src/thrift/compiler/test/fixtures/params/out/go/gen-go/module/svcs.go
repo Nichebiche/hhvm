@@ -9,6 +9,7 @@ package module
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,8 +19,9 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type NestedContainers interface {
@@ -31,8 +33,12 @@ type NestedContainers interface {
 }
 
 type NestedContainersClientInterface interface {
-    thrift.ClientInterface
-    NestedContainers
+    io.Closer
+    MapList(ctx context.Context, foo map[int32][]int32) (error)
+    MapSet(ctx context.Context, foo map[int32][]int32) (error)
+    ListMap(ctx context.Context, foo []map[int32]int32) (error)
+    ListSet(ctx context.Context, foo [][]int32) (error)
+    Turtles(ctx context.Context, foo [][]map[int32]map[int32][]int32) (error)
 }
 
 type NestedContainersClient struct {
@@ -47,8 +53,12 @@ func NewNestedContainersChannelClient(channel thrift.RequestChannel) *NestedCont
     }
 }
 
-func NewNestedContainersClient(prot thrift.Protocol) *NestedContainersClient {
-    return NewNestedContainersChannelClient(thrift.NewSerialChannel(prot))
+func NewNestedContainersClient(prot thrift.DO_NOT_USE_ChannelWrapper) *NestedContainersClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewNestedContainersChannelClient(channel)
 }
 
 func (c *NestedContainersClient) Close() error {
@@ -56,61 +66,61 @@ func (c *NestedContainersClient) Close() error {
 }
 
 func (c *NestedContainersClient) MapList(ctx context.Context, foo map[int32][]int32) (error) {
-    in := &reqNestedContainersMapList{
+    fbthriftReq := &reqNestedContainersMapList{
         Foo: foo,
     }
-    out := newRespNestedContainersMapList()
-    err := c.ch.Call(ctx, "mapList", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespNestedContainersMapList()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "mapList", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
 
 func (c *NestedContainersClient) MapSet(ctx context.Context, foo map[int32][]int32) (error) {
-    in := &reqNestedContainersMapSet{
+    fbthriftReq := &reqNestedContainersMapSet{
         Foo: foo,
     }
-    out := newRespNestedContainersMapSet()
-    err := c.ch.Call(ctx, "mapSet", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespNestedContainersMapSet()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "mapSet", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
 
 func (c *NestedContainersClient) ListMap(ctx context.Context, foo []map[int32]int32) (error) {
-    in := &reqNestedContainersListMap{
+    fbthriftReq := &reqNestedContainersListMap{
         Foo: foo,
     }
-    out := newRespNestedContainersListMap()
-    err := c.ch.Call(ctx, "listMap", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespNestedContainersListMap()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "listMap", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
 
 func (c *NestedContainersClient) ListSet(ctx context.Context, foo [][]int32) (error) {
-    in := &reqNestedContainersListSet{
+    fbthriftReq := &reqNestedContainersListSet{
         Foo: foo,
     }
-    out := newRespNestedContainersListSet()
-    err := c.ch.Call(ctx, "listSet", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespNestedContainersListSet()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "listSet", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
 
 func (c *NestedContainersClient) Turtles(ctx context.Context, foo [][]map[int32]map[int32][]int32) (error) {
-    in := &reqNestedContainersTurtles{
+    fbthriftReq := &reqNestedContainersTurtles{
         Foo: foo,
     }
-    out := newRespNestedContainersTurtles()
-    err := c.ch.Call(ctx, "turtles", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespNestedContainersTurtles()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "turtles", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
@@ -119,7 +129,7 @@ func (c *NestedContainersClient) Turtles(ctx context.Context, foo [][]map[int32]
 type NestedContainersProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            NestedContainers
+    handler              NestedContainers
 }
 
 func NewNestedContainersProcessor(handler NestedContainers) *NestedContainersProcessor {
@@ -177,16 +187,16 @@ type procFuncNestedContainersMapList struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncNestedContainersMapList)(nil)
 
-func (p *procFuncNestedContainersMapList) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncNestedContainersMapList) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqNestedContainersMapList()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncNestedContainersMapList) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncNestedContainersMapList) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -194,16 +204,16 @@ func (p *procFuncNestedContainersMapList) Write(seqId int32, result thrift.Writa
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("mapList", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("mapList", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -228,16 +238,16 @@ type procFuncNestedContainersMapSet struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncNestedContainersMapSet)(nil)
 
-func (p *procFuncNestedContainersMapSet) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncNestedContainersMapSet) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqNestedContainersMapSet()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncNestedContainersMapSet) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncNestedContainersMapSet) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -245,16 +255,16 @@ func (p *procFuncNestedContainersMapSet) Write(seqId int32, result thrift.Writab
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("mapSet", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("mapSet", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -279,16 +289,16 @@ type procFuncNestedContainersListMap struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncNestedContainersListMap)(nil)
 
-func (p *procFuncNestedContainersListMap) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncNestedContainersListMap) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqNestedContainersListMap()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncNestedContainersListMap) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncNestedContainersListMap) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -296,16 +306,16 @@ func (p *procFuncNestedContainersListMap) Write(seqId int32, result thrift.Writa
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("listMap", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("listMap", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -330,16 +340,16 @@ type procFuncNestedContainersListSet struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncNestedContainersListSet)(nil)
 
-func (p *procFuncNestedContainersListSet) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncNestedContainersListSet) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqNestedContainersListSet()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncNestedContainersListSet) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncNestedContainersListSet) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -347,16 +357,16 @@ func (p *procFuncNestedContainersListSet) Write(seqId int32, result thrift.Writa
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("listSet", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("listSet", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -381,16 +391,16 @@ type procFuncNestedContainersTurtles struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncNestedContainersTurtles)(nil)
 
-func (p *procFuncNestedContainersTurtles) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncNestedContainersTurtles) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqNestedContainersTurtles()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncNestedContainersTurtles) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncNestedContainersTurtles) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -398,16 +408,16 @@ func (p *procFuncNestedContainersTurtles) Write(seqId int32, result thrift.Writa
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("turtles", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("turtles", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

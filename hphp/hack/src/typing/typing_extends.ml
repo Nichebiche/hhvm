@@ -206,15 +206,13 @@ let check_visibility env parent_vis c_vis parent_pos pos on_error =
   | (Vpublic, Vpublic)
   | (Vprotected _, Vprotected _)
   | (Vprotected _, Vpublic)
+  | (Vprotected_internal _, Vprotected _)
+  | (Vprotected_internal _, Vpublic)
   | (Vinternal _, Vpublic) ->
     ()
-  | (Vinternal parent_module, (Vprotected _ | Vprivate _)) ->
-    let err =
-      Typing_error.Secondary.Visibility_override_internal
-        { pos; module_name = None; parent_pos; parent_module }
-    in
-    Typing_error_utils.add_typing_error ~env
-    @@ Typing_error.(apply_reasons ~on_error err)
+  | ( Vprotected_internal { module_ = parent_m; _ },
+      Vprotected_internal { module_ = child_m; _ } )
+  | (Vprotected_internal { module_ = parent_m; _ }, Vinternal child_m)
   | (Vinternal parent_m, Vinternal child_m) ->
     let err_opt =
       match
@@ -643,11 +641,7 @@ let add_pessimisation_dependency
 let add_member_dep
     env class_ parent_class (member_kind, member_name, member_origin) =
   let origin_pos = Cls.pos parent_class in
-  if
-    (not
-       (TypecheckerOptions.optimized_member_fanout @@ Typing_env.get_tcopt env))
-    && not (Pos_or_decl.is_hhi origin_pos)
-  then (
+  if not (Pos_or_decl.is_hhi origin_pos) then (
     let dep =
       match member_kind with
       | MemberKind.Method -> Dep.Method (member_origin, member_name)
@@ -721,6 +715,23 @@ let check_abstract_overrides_concrete
                    `method_
                  else
                    `property);
+             })
+
+let check_needs_concrete_override env parent_class_elt class_elt on_error =
+  if
+    (not (get_ce_readonly_prop_or_needs_concrete parent_class_elt))
+    && get_ce_readonly_prop_or_needs_concrete class_elt
+  then
+    (* It would be unsound for a class that needs concrete (`<<__NeedsConcrete>>`) to override one that does not, because
+     * then `<<__NeedsConcrete>>` methods have stricter requirements (`static` must point to a concrete class). *)
+    Typing_error_utils.add_typing_error
+      ~env
+      Typing_error.(
+        apply_reasons ~on_error
+        @@ Secondary.Needs_concrete_override
+             {
+               pos = Lazy.force class_elt.ce_pos;
+               parent_pos = Lazy.force parent_class_elt.ce_pos;
              })
 
 let detect_multiple_concrete_defs
@@ -1015,9 +1026,9 @@ let check_override
     parent_class_elt
     class_elt
     on_error;
+  check_needs_concrete_override env parent_class_elt class_elt on_error;
 
   let (lazy pos) = class_elt.ce_pos in
-  let (lazy parent_pos) = parent_class_elt.ce_pos in
 
   let (lazy fty_child) = class_elt.ce_type in
   let (lazy fty_parent) = parent_class_elt.ce_type in
@@ -1053,21 +1064,6 @@ let check_override
     on_error;
 
   match (deref fty_parent, deref fty_child) with
-  | ((_, Tany _), (_, Tany _)) -> env
-  | ((_, Tany _), _) ->
-    Typing_error_utils.add_typing_error
-      ~env
-      Typing_error.(
-        apply_reasons ~on_error
-        @@ Secondary.Decl_override_missing_hint parent_pos);
-
-    env
-  | (_, (_, Tany _)) ->
-    Typing_error_utils.add_typing_error
-      ~env
-      Typing_error.(
-        apply_reasons ~on_error @@ Secondary.Decl_override_missing_hint pos);
-    env
   | ((r_parent, Tfun ft_parent), (r_child, Tfun ft_child)) ->
     (match member_kind with
     | MemberKind.Constructor { is_consistent = false } ->
@@ -1140,8 +1136,6 @@ let check_override
 
 (* Constants and type constants with declared values in declared interfaces
  * can never be overridden by other inherited constants.
- * Constants from traits are taken into account only if the
- * --enable-strict-const-semantics is enabled
  * @precondition: both constants must not be synthesized
  *)
 let constant_conflict_with_declared_interface_or_trait
@@ -1153,14 +1147,11 @@ let constant_conflict_with_declared_interface_or_trait
     parent_origin
     origin
     const_name =
-  let strict_const_semantics =
-    TCO.enable_strict_const_semantics (Env.get_tcopt env) > 0
-  in
   let is_inherited_and_conflicts_with_parent =
     String.( <> ) origin (Cls.name class_) && String.( <> ) origin parent_origin
   in
   let child_const_from_used_trait =
-    if strict_const_semantics && include_traits then
+    if include_traits then
       match Env.get_class env origin with
       | Decl_entry.Found cls -> Cls.kind cls |> Ast_defs.is_c_trait
       | Decl_entry.DoesNotExist
@@ -1177,7 +1168,7 @@ let constant_conflict_with_declared_interface_or_trait
     | Decl_entry.Found cls ->
       Cls.kind cls |> Ast_defs.is_c_interface
       &&
-      if strict_const_semantics && include_traits then
+      if include_traits then
         true
       else
         List.fold implements ~init:false ~f:(fun acc (_, iface) ->
@@ -1203,7 +1194,7 @@ let constant_conflict_with_declared_interface_or_trait
     (* constant must be declared on a trait (or interface if include_traits == true) to conflict *)
     (match Env.get_class env parent_origin with
     | Decl_entry.Found cls ->
-      if strict_const_semantics && include_traits then
+      if include_traits then
         Cls.kind cls |> fun k ->
         Ast_defs.is_c_trait k || Ast_defs.is_c_interface k
       else
@@ -1737,7 +1728,7 @@ let default_constructor_ce class_ =
         ~lsb:false
         ~synthesized:true
         ~dynamicallycallable:false
-        ~readonly_prop:false
+        ~readonly_prop_or_needs_concrete:false
         ~support_dynamic_type:false
         ~needs_init:false
         ~safe_global_variable:false
@@ -2389,11 +2380,7 @@ let check_no_conflicting_inherited_concrete_typeconsts
     ParentTypeConstSet.filter
       (fun { typeconst = { ttc_kind; ttc_synthesized; _ }; _ } ->
         match ttc_kind with
-        | TCConcrete _ ->
-          if TCO.enable_strict_const_semantics (Env.get_tcopt env) > 2 then
-            not ttc_synthesized
-          else
-            true
+        | TCConcrete _ -> not ttc_synthesized
         | TCAbstract _ -> false)
       typeconsts
     |> ParentTypeConstSet.elements
@@ -2448,16 +2435,13 @@ let union_parent_constants parents : ParentClassConstSet.t MemberNameMap.t =
                acc)
            consts)
 
-let union_parent_typeconsts env parents : ParentTypeConstSet.t MemberNameMap.t =
+let union_parent_typeconsts parents : ParentTypeConstSet.t MemberNameMap.t =
   let get_declared_consts
       ((parent_pos, _), parent_type, parent_tparaml, parent_class) :
       ParentClassElt.parent * _ =
     let psubst = Inst.make_subst (Cls.tparams parent_class) parent_tparaml in
     let typeconsts =
       Cls.typeconsts parent_class
-      |> List.filter ~f:(fun (_, ttc) ->
-             TCO.enable_strict_const_semantics (Env.get_tcopt env) > 2
-             || not ttc.ttc_synthesized)
       |> List.map
            ~f:(Tuple.T2.map_snd ~f:(Inst.instantiate_typeconst_type psubst))
     in
@@ -2493,12 +2477,11 @@ let check_class_extends_parents_constants
 
   MemberNameMap.fold
     (fun const_name inherited env ->
-      if TCO.enable_strict_const_semantics (Env.get_tcopt env) > 1 then
-        check_no_conflicting_inherited_concrete_constants
-          env
-          const_name
-          inherited
-          class_pos;
+      check_no_conflicting_inherited_concrete_constants
+        env
+        const_name
+        inherited
+        class_pos;
 
       (* TODO(vmladenov): factor individual checks out of check_const_override and remove [implements] parameter *)
       ParentClassConstSet.fold
@@ -2550,18 +2533,17 @@ let check_class_extends_parents_typeconsts
     (parents : ((Pos.t * string) * decl_ty * decl_ty list * Cls.t) list)
     (on_error : Pos.t * string -> Typing_error.Reasons_callback.t) =
   let typeconsts : ParentTypeConstSet.t MemberNameMap.t =
-    union_parent_typeconsts env parents
+    union_parent_typeconsts parents
   in
   let class_pos = fst class_ast.Aast.c_name in
 
   MemberNameMap.fold
     (fun tconst_name inherited env ->
-      if TCO.enable_strict_const_semantics (Env.get_tcopt env) > 1 then
-        check_no_conflicting_inherited_concrete_typeconsts
-          env
-          tconst_name
-          inherited
-          class_pos;
+      check_no_conflicting_inherited_concrete_typeconsts
+        env
+        tconst_name
+        inherited
+        class_pos;
 
       ParentTypeConstSet.fold
         (fun ParentTypeConst.

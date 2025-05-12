@@ -89,7 +89,7 @@ struct Args_MyRoot_do_root {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyRoot_do_root {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyRoot.do_root"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -142,13 +142,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyRoot";
         const METHOD_NAME: &::std::ffi::CStr = c"do_root";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyRoot.do_root";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyRoot_do_root = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyRoot_do_root = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -171,12 +172,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyRoot.do_root", exception = ?exn);
+                ::tracing::error!(method = "MyRoot.do_root", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyRoot.do_root", exn);
-                ::tracing::error!(method = "MyRoot.do_root", panic = ?aexn);
+                ::tracing::error!(method = "MyRoot.do_root", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_root::DoRootExn::ApplicationException(aexn))
             }
         };
@@ -438,7 +439,7 @@ struct Args_MyNode_do_mid {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyNode_do_mid {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyNode.do_mid"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -493,13 +494,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyNode";
         const METHOD_NAME: &::std::ffi::CStr = c"do_mid";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyNode.do_mid";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyNode_do_mid = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyNode_do_mid = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -522,12 +524,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyNode.do_mid", exception = ?exn);
+                ::tracing::error!(method = "MyNode.do_mid", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyNode.do_mid", exn);
-                ::tracing::error!(method = "MyNode.do_mid", panic = ?aexn);
+                ::tracing::error!(method = "MyNode.do_mid", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_node::DoMidExn::ApplicationException(aexn))
             }
         };
@@ -807,7 +809,7 @@ struct Args_MyLeaf_do_leaf {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyLeaf_do_leaf {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyLeaf.do_leaf"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -862,13 +864,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyLeaf";
         const METHOD_NAME: &::std::ffi::CStr = c"do_leaf";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyLeaf.do_leaf";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyLeaf_do_leaf = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyLeaf_do_leaf = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -891,12 +894,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyLeaf.do_leaf", exception = ?exn);
+                ::tracing::error!(method = "MyLeaf.do_leaf", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyLeaf.do_leaf", exn);
-                ::tracing::error!(method = "MyLeaf.do_leaf", panic = ?aexn);
+                ::tracing::error!(method = "MyLeaf.do_leaf", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_leaf::DoLeafExn::ApplicationException(aexn))
             }
         };

@@ -15,11 +15,10 @@ let make_subst tparams tyl = Subst.make_decl tparams tyl
 
 let get_tparams_in_ty_and_acc acc ty =
   let tparams_visitor =
-    object (this)
+    object
       inherit [SSet.t] Type_visitor.decl_type_visitor
 
-      method! on_tgeneric acc _ s tyl =
-        List.fold_left tyl ~f:this#on_type ~init:(SSet.add s acc)
+      method! on_tgeneric acc _ s = SSet.add s acc
     end
   in
   tparams_visitor#on_type acc ty
@@ -32,23 +31,6 @@ let get_tparams_in_subst subst =
 (*****************************************************************************)
 
 let rec instantiate subst (ty : decl_ty) =
-  let merge_hk_type orig_r orig_var ty args =
-    let (r, ty_) = deref ty in
-    let res_ty_ =
-      match ty_ with
-      | Tapply (n, existing_args) ->
-        (* We could insist on existing_args = [] here unless we want to support partial application. *)
-        Tapply (n, existing_args @ args)
-      | Tgeneric (n, existing_args) ->
-        (* Same here *)
-        Tgeneric (n, existing_args @ args)
-      | _ ->
-        (* We could insist on args = [] here, everything else is a kinding error *)
-        ty_
-    in
-    mk (Reason.instantiate (r, orig_var, orig_r), res_ty_)
-  in
-
   (* PERF: If subst is empty then instantiation is a no-op. We can save a
    * significant amount of CPU by avoiding recursively deconstructing the ty
    * data type.
@@ -57,11 +39,13 @@ let rec instantiate subst (ty : decl_ty) =
     ty
   else
     match deref ty with
-    | (r, Tgeneric (x, args)) ->
-      let args = List.map args ~f:(instantiate subst) in
+    | (r, Tgeneric x) ->
       (match SMap.find_opt x subst with
-      | Some x_ty -> merge_hk_type r x x_ty args
-      | None -> mk (r, Tgeneric (x, args)))
+      | Some found_ty ->
+        let (found_r, found_ty_) = deref found_ty in
+        let new_r = Reason.instantiate (found_r, x, r) in
+        mk (new_r, found_ty_)
+      | None -> mk (r, Tgeneric x))
     | (r, ty) ->
       let ty = instantiate_ subst ty in
       mk (r, ty)
@@ -143,7 +127,7 @@ and instantiate_ subst x =
             (* Fresh only because we don't support nesting of generic function types *)
             let fresh_tp_name = name ^ "#0" in
             let reason = Typing_reason.witness_from_decl pos in
-            ( SMap.add name (mk (reason, Tgeneric (fresh_tp_name, []))) subst,
+            ( SMap.add name (mk (reason, Tgeneric fresh_tp_name)) subst,
               { tp with tp_name = (pos, fresh_tp_name) } )
           else
             (subst, tp))

@@ -117,10 +117,6 @@ trait Service1ClientBase {
    *        2: MyStruct arg2);
    */
   public async function func(string $arg1, ?MyStruct $arg2): Awaitable<MyStruct> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Service1_func_args::fromShape(shape(
       'arg1' => $arg1,
@@ -128,7 +124,7 @@ trait Service1ClientBase {
     ));
     await $this->asyncHandler_->genBefore(Service1StaticMetadata::THRIFT_SVC_NAME, "func", $args);
     $currentseqid = $this->sendImplHelper($args, "func", false, Service1StaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Service1_func_result::class, "func", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Service1_func_result::class, "func", false, $currentseqid, $rpc_options))[0];
   }
 
   /**
@@ -138,10 +134,6 @@ trait Service1ClientBase {
    *         2: MyStruct arg2);
    */
   public async function func1(string $arg1, ?MyStruct $arg2): Awaitable<MyStruct> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Service1_func1_args::fromShape(shape(
       'arg1' => $arg1,
@@ -149,7 +141,7 @@ trait Service1ClientBase {
     ));
     await $this->asyncHandler_->genBefore(Service1StaticMetadata::THRIFT_SVC_NAME, "func1", $args);
     $currentseqid = $this->sendImplHelper($args, "func1", false, Service1StaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Service1_func1_result::class, "func1", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Service1_func1_result::class, "func1", false, $currentseqid, $rpc_options))[0];
   }
 
   /**
@@ -159,10 +151,6 @@ trait Service1ClientBase {
    *         2: i64WithWrapper arg2);
    */
   public async function func2(?StructWithWrapper $arg1, i64WithWrapper $arg2): Awaitable<i64WithWrapper> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Service1_func2_args::withDefaultValues();
     if ($arg1 !== null) {
@@ -173,7 +161,7 @@ trait Service1ClientBase {
     }
     await $this->asyncHandler_->genBefore(Service1StaticMetadata::THRIFT_SVC_NAME, "func2", $args);
     $currentseqid = $this->sendImplHelper($args, "func2", false, Service1StaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Service1_func2_result::class, "func2", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Service1_func2_result::class, "func2", false, $currentseqid, $rpc_options))[0];
   }
 
 }

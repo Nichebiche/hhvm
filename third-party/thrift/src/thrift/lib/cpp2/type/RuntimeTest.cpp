@@ -27,9 +27,9 @@
 #include <utility>
 #include <vector>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <folly/io/IOBuf.h>
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
 #include <thrift/lib/cpp2/type/Id.h>
 #include <thrift/lib/cpp2/type/Tag.h>
 #include <thrift/lib/thrift/gen-cpp2/schema_types.h>
@@ -557,7 +557,7 @@ TEST(RuntimeTest, IntInterOp) {
   auto largeInt = Value::of<i64_t>(2);
 
   EXPECT_EQ(smallInt, int8_t(1));
-  EXPECT_LT(largeInt, 5L);
+  EXPECT_LT(largeInt, int64_t(5L));
 
   EXPECT_EQ(smallInt, 1);
   EXPECT_EQ(smallInt, 1.0);

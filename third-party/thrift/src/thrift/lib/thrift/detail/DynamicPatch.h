@@ -17,9 +17,11 @@
 #pragma once
 
 #include <folly/lang/Badge.h>
+#include <thrift/lib/cpp2/PluggableFunction.h>
 #include <thrift/lib/cpp2/op/Patch.h>
 #include <thrift/lib/cpp2/protocol/FieldMask.h>
 #include <thrift/lib/cpp2/protocol/Object.h>
+#include <thrift/lib/cpp2/protocol/Patch.h>
 
 namespace apache::thrift::op::detail {
 template <typename>
@@ -40,50 +42,19 @@ class DynamicMapPatch;
 class DynamicStructPatch;
 class DynamicUnionPatch;
 
-namespace detail {
+THRIFT_PLUGGABLE_FUNC_DECLARE(
+    bool, useAssignPatchInDiffVisitorForAnyLikeStruct);
+
 using ValueList = std::vector<Value>;
-using ValueSet = folly::F14FastSet<Value>;
+using ValueSet = folly::F14VectorSet<Value>;
 using ValueMap = folly::F14FastMap<Value, Value>;
+
+namespace detail {
 
 // Use Badge pattern to control access.
 // See thrift/lib/cpp2/patch/detail/PatchBadge.h
 struct PatchBadgeFactory;
 using Badge = folly::badge<PatchBadgeFactory>;
-
-template <typename T>
-using detect_from_object = decltype(std::declval<T>().fromObject(
-    std::declval<Badge>(), std::declval<Object>()));
-template <typename T>
-constexpr static bool has_from_object_v =
-    folly::is_detected_v<detect_from_object, T>;
-
-template <typename T>
-using detect_empty_with_badge =
-    decltype(std::declval<T>().empty(std::declval<Badge>()));
-template <typename T>
-constexpr static bool has_empty_with_badge_v =
-    folly::is_detected_v<detect_empty_with_badge, T>;
-
-template <typename T>
-using detect_merge_with_badge =
-    decltype(std::declval<T>().merge(std::declval<Badge>(), std::declval<T>()));
-template <typename T>
-constexpr static bool has_merge_with_badge_v =
-    folly::is_detected_v<detect_merge_with_badge, T>;
-
-template <typename T>
-using detect_clear_with_badge =
-    decltype(std::declval<T>().clear(std::declval<Badge>()));
-template <typename T>
-constexpr static bool has_clear_with_badge_v =
-    folly::is_detected_v<detect_clear_with_badge, T>;
-
-template <typename T>
-using detect_custom_visit_with_badge = decltype(std::declval<T>().customVisit(
-    std::declval<Badge>(), std::declval<T>));
-template <typename T>
-constexpr static bool has_custom_visit_with_badge_v =
-    folly::is_detected_v<detect_custom_visit_with_badge, T>;
 
 template <typename T, typename U>
 using if_same_type_after_remove_cvref = std::enable_if_t<
@@ -92,11 +63,16 @@ using if_same_type_after_remove_cvref = std::enable_if_t<
 template <class PatchType>
 PatchType createPatchFromObject(Badge badge, Object obj) {
   PatchType patch;
-  if constexpr (has_from_object_v<PatchType>) {
+  if constexpr (__FBTHRIFT_IS_VALID(
+                    patch, patch.fromObject(badge, std::move(obj)))) {
     patch.fromObject(badge, std::move(obj));
   } else {
-    // TODO: schema validation
-    patch = fromObjectStruct<type::infer_tag<PatchType>>(std::move(obj));
+    if (!ProtocolValueToThriftValue<type::infer_tag<PatchType>>{}(obj, patch)) {
+      throw std::runtime_error(fmt::format(
+          "Object does not match patch ({}) schema. Object = {}",
+          folly::pretty_name<PatchType>(),
+          debugStringViaEncode(obj)));
+    }
   }
   return patch;
 }
@@ -113,11 +89,17 @@ struct DynamicPatchOptions {
   bool doNotConvertStringToBinary = false;
 };
 
-// Note: this function is half-baked.
-// Currently we only implemented struct/union for internal use cases.
-// Ideally we should also support primitive types (e.g., i32 --> I32Patch).
-// External users should use toPatchUri/fromPatchUri instead for now.
-type::Type toPatchType(type::Type input);
+void checkSameType(
+    const apache::thrift::protocol::Value& v1,
+    const apache::thrift::protocol::Value& v2);
+void checkCompatibleType(
+    const ValueList& l, const apache::thrift::protocol::Value& v);
+void checkCompatibleType(
+    const ValueSet& s, const apache::thrift::protocol::Value& v);
+void checkHomogeneousContainer(const ValueList& l);
+void checkHomogeneousContainer(const ValueSet& s);
+void checkHomogeneousContainer(const ValueMap& m);
+
 } // namespace detail
 
 class DynamicPatch;
@@ -130,7 +112,7 @@ class DynamicPatchBase {
   DynamicPatchBase& operator=(const DynamicPatchBase&) = default;
   DynamicPatchBase& operator=(DynamicPatchBase&&) = default;
 
-  void clear(detail::Badge) {
+  void clear() {
     patch_.members()->clear();
     get(op::PatchOp::Clear).emplace_bool(true);
   }
@@ -177,20 +159,99 @@ class DynamicPatchBase {
   detail::DynamicPatchOptions options_;
 };
 
+/// DynamicPatch for ambiguous type.
+///
+/// When DynamicPatch is created from serialized blob, there could be an
+/// ambiguity to deduce the exact patch type. It consists of the
+/// following operations: `assign`, `clear`, `patchIfSet`, `removeMulti`. See
+/// DynamicUnknownPatch::Category for all possible scenarios.
+///
+/// If the exact patch type is known, `DynamicPatch::getStoredPatchByTag` can be
+/// used to inform the exact patch type.
+///
+/// Good example:
+///
+/// DynamicPatch dynPatch; // patch with only `patchIfSet`.
+/// EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+/// // Assert Category::StructuredPatch is union patch.
+/// dynPatch.getStoredPatchByTag<type::union_c>();
+///
+///
+/// Bad example:
+///
+/// DynamicPatch dynPatch; // patch with only `removeMulti`.
+/// EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+/// EXPECT_THROW(dynPatch.getStoredPatchByTag<type::union_c>());
+///
+/// For introspection, users should provide a visitor with the following methods
+/// for `customVisit`:
+///
+///     struct Visitor {
+///       // Category::StructuredOrAnyPatch
+///       void assign(const Object&);
+///       // Category::ClearPatch
+///       void clear();
+///       // Category::AssociativeContainerPatch
+///       void removeMulti(const ValueSet&);
+///       // Category::StructuredPatch
+///       void patchIfSet(FieldId, const DynamicPatch&);
+///     }
 class DynamicUnknownPatch : public DynamicPatchBase {
  public:
-  void assign(detail::Badge, Object v);
-  void remove(detail::Badge badge, Value v);
-  void patchIfSet(detail::Badge, FieldId, const DynamicPatch&);
+  void assign(Object v);
+  void removeMulti(ValueSet v);
+  void patchIfSet(FieldId, const DynamicPatch&);
 
   void fromObject(detail::Badge badge, Object obj) {
     DynamicPatchBase::fromObject(badge, std::move(obj));
     validateAndGetCategory();
   }
 
+  /// Checks if it is convertible to the patch type.
+  template <class Patch>
+  void checkConvertible() const {
+    auto category = validateAndGetCategory();
+    switch (category) {
+      case Category::EmptyPatch:
+        // Empty patch is compatible with any patch type.
+        break;
+      case Category::ClearPatch:
+        // Clear patch is compatible with any patch type.
+        break;
+      case Category::StructuredPatch:
+        // Structured patch is compatible with struct or union patch.
+        if constexpr (
+            !std::is_same_v<Patch, DynamicStructPatch> &&
+            !std::is_same_v<Patch, DynamicUnionPatch>) {
+          throwIncompatibleConversion();
+        }
+        break;
+      case Category::StructuredOrAnyPatch:
+        // Structured or any patch is compatible with struct, union, or any
+        // patch.
+        if constexpr (
+            !std::is_same_v<Patch, DynamicStructPatch> &&
+            !std::is_same_v<Patch, DynamicUnionPatch> &&
+            !std::is_same_v<Patch, op::AnyPatch>) {
+          throwIncompatibleConversion();
+        }
+        break;
+      case Category::AssociativeContainerPatch:
+        // Associative container patch is compatible with set or map patch.
+        if constexpr (
+            !std::is_same_v<Patch, DynamicSetPatch> &&
+            !std::is_same_v<Patch, DynamicMapPatch>) {
+          throwIncompatibleConversion();
+        }
+        break;
+    }
+  }
+
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const;
+
  private:
   template <class Self, class Visitor>
-  static void customVisitImpl(Self&&, detail::Badge, Visitor&&);
+  static void customVisitImpl(Self&&, Visitor&&);
 
  public:
   FOLLY_FOR_EACH_THIS_OVERLOAD_IN_CLASS_BODY_DELEGATE(
@@ -200,69 +261,91 @@ class DynamicUnknownPatch : public DynamicPatchBase {
 
   template <class Next>
   detail::if_same_type_after_remove_cvref<Next, DynamicUnknownPatch> merge(
-      detail::Badge badge, Next&& other) {
-    std::forward<Next>(other).customVisit(badge, *this);
+      detail::Badge, Next&& other) {
+    std::forward<Next>(other).customVisit(*this);
   }
 
  private:
   // The unknown patch can be classified into the following categories
   enum class Category {
-    // The patch has no operation.
+    // The patch has no operation. It can be any kinds of patch.
     EmptyPatch,
 
-    // The patch only has clear operation.
+    // The patch only has `clear` operation. It can be any kinds of patch.
     ClearPatch,
 
-    // The patch has assign or patchPrior/patchAfter, but we don't know whether
-    // it is a struct patch or an union patch
+    // The patch has `patchPrior/patchAfter`. It can be a struct patch or
+    // union patch.
     StructuredPatch,
 
-    // Patch only has the `remove` operation, we don't know whether it is a set
-    // or a map patch.
+    // The patch only has `assign` of Object. It can be a struct, union, or
+    // any patch.
+    StructuredOrAnyPatch,
+
+    // The patch only has `remove` operation. It can be a set or map patch.
     AssociativeContainerPatch
   };
 
   Category validateAndGetCategory() const;
 
+  [[noreturn]] void throwIncompatibleConversion() const;
   [[noreturn]] void throwIncompatibleCategory(std::string_view method) const;
 
   bool isOneOfCategory(std::initializer_list<Category> c) const {
     return std::find(c.begin(), c.end(), validateAndGetCategory()) != c.end();
   }
 };
+
+/// DynamicPatch for a Thrift list.
+///
+/// It consists of the following operations: `assign`, `clear`, and
+/// `push_back`.
+///
+/// For introspection, users should provide a visitor with the following methods
+/// for `customVisit`:
+///
+///     struct Visitor {
+///       void assign(const ValueList&);
+///       void clear();
+///       void push_back(const Value&);
+///     }
 class DynamicListPatch : public DynamicPatchBase {
  public:
   using DynamicPatchBase::DynamicPatchBase;
-  void assign(detail::Badge, detail::ValueList v) {
+  void assign(ValueList v) {
+    checkHomogeneousContainer(v);
     patch_.members()->clear();
     get(op::PatchOp::Assign).emplace_list(std::move(v));
   }
 
-  void push_back(detail::Badge, Value v) {
+  void push_back(Value v) {
     if (auto assign = get_ptr(op::PatchOp::Assign)) {
+      detail::checkCompatibleType(assign->as_list(), v);
       assign->as_list().push_back(std::move(v));
       return;
     }
-    get(op::PatchOp::Put).ensure_list().push_back(std::move(v));
+    auto& l = get(op::PatchOp::Put).ensure_list();
+    detail::checkCompatibleType(l, v);
+    l.push_back(std::move(v));
   }
 
  private:
   template <class Self, class Visitor>
-  static void customVisitImpl(Self&& self, detail::Badge badge, Visitor&& v) {
+  static void customVisitImpl(Self&& self, Visitor&& v) {
     if (auto assign = self.get_ptr(op::PatchOp::Assign)) {
       std::forward<Visitor>(v).assign(
-          badge, folly::forward_like<Self>(assign->as_list()));
+          folly::forward_like<Self>(assign->as_list()));
       return;
     }
 
     if (auto clear = self.get_ptr(op::PatchOp::Clear);
         clear && clear->as_bool()) {
-      std::forward<Visitor>(v).clear(badge);
+      std::forward<Visitor>(v).clear();
     }
 
     if (auto put = self.get_ptr(op::PatchOp::Put)) {
       for (auto& i : put->as_list()) {
-        std::forward<Visitor>(v).push_back(badge, folly::forward_like<Self>(i));
+        std::forward<Visitor>(v).push_back(folly::forward_like<Self>(i));
       }
     }
   }
@@ -271,79 +354,97 @@ class DynamicListPatch : public DynamicPatchBase {
   FOLLY_FOR_EACH_THIS_OVERLOAD_IN_CLASS_BODY_DELEGATE(
       customVisit, customVisitImpl);
 
-  void apply(detail::Badge, detail::ValueList& v) const;
+  void apply(detail::Badge, ValueList& v) const;
+
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const;
 
   template <class Next>
   detail::if_same_type_after_remove_cvref<Next, DynamicListPatch> merge(
-      detail::Badge badge, Next&& other) {
-    std::forward<Next>(other).customVisit(badge, *this);
+      detail::Badge, Next&& other) {
+    std::forward<Next>(other).customVisit(*this);
   }
 };
 
+/// DynamicPatch for a Thrift set.
+///
+/// It consists of the following operations: `assign`, `clear`, `addMulti`, and
+/// `removeMulti`.
+///
+/// For introspection, users should provide a visitor with the following methods
+/// for `customVisit`:
+///
+///     struct Visitor {
+///       void assign(const ValueSet&);
+///       void clear();
+///       void removeMulti(const ValueSet&);
+///       void addMulti(const ValueSet&);
+///     }
 class DynamicSetPatch : public DynamicPatchBase {
  public:
   using DynamicPatchBase::DynamicPatchBase;
-  void assign(detail::Badge, detail::ValueSet v) {
+  void assign(ValueSet v) {
+    detail::checkHomogeneousContainer(v);
     patch_.members()->clear();
     get(op::PatchOp::Assign).emplace_set(std::move(v));
   }
 
-  void insert(detail::Badge, Value v) {
+  void insert(Value v) {
     if (auto assign = get_ptr(op::PatchOp::Assign)) {
-      assign->ensure_set().insert(std::move(v));
+      detail::checkCompatibleType(assign->as_set(), v);
+      assign->as_set().insert(std::move(v));
       return;
     }
     if (auto remove = get_ptr(op::PatchOp::Remove)) {
-      remove->ensure_set().erase(v);
+      remove->as_set().erase(v);
     }
-    get(op::PatchOp::Add).ensure_set().insert(std::move(v));
+    auto& s = get(op::PatchOp::Add).ensure_set();
+    detail::checkCompatibleType(s, v);
+    s.insert(std::move(v));
   }
 
-  void erase(detail::Badge, Value v) {
+  void erase(Value v) {
     if (auto assign = get_ptr(op::PatchOp::Assign)) {
-      assign->ensure_set().erase(v);
+      assign->as_set().erase(v);
       return;
     }
     if (auto add = get_ptr(op::PatchOp::Add)) {
-      add->ensure_set().erase(v);
+      add->as_set().erase(v);
     }
     get(op::PatchOp::Remove).ensure_set().insert(std::move(v));
   }
 
-  void addMulti(detail::Badge badge, const detail::ValueSet& add) {
-    for (const auto& i : add) {
-      insert(badge, i);
-    }
+  void addMulti(ValueSet add) {
+    add.eraseInto(
+        add.begin(), add.end(), [&](auto&& k) { insert(std::move(k)); });
   }
 
-  void removeMulti(detail::Badge badge, const detail::ValueSet& remove) {
-    for (const auto& i : remove) {
-      erase(badge, i);
-    }
+  void removeMulti(ValueSet remove) {
+    remove.eraseInto(
+        remove.begin(), remove.end(), [&](auto&& k) { erase(std::move(k)); });
   }
 
  private:
   template <class Self, class Visitor>
-  static void customVisitImpl(Self&& self, detail::Badge badge, Visitor&& v) {
+  static void customVisitImpl(Self&& self, Visitor&& v) {
     if (auto assign = self.get_ptr(op::PatchOp::Assign)) {
       std::forward<Visitor>(v).assign(
-          badge, folly::forward_like<Self>(assign->as_set()));
+          folly::forward_like<Self>(assign->as_set()));
       return;
     }
 
     if (auto clear = self.get_ptr(op::PatchOp::Clear);
         clear && clear->as_bool()) {
-      std::forward<Visitor>(v).clear(badge);
+      std::forward<Visitor>(v).clear();
     }
 
     if (auto remove = self.get_ptr(op::PatchOp::Remove)) {
       std::forward<Visitor>(v).removeMulti(
-          badge, folly::forward_like<Self>(remove->as_set()));
+          folly::forward_like<Self>(remove->as_set()));
     }
 
     if (auto add = self.get_ptr(op::PatchOp::Add)) {
       std::forward<Visitor>(v).addMulti(
-          badge, folly::forward_like<Self>(add->as_set()));
+          folly::forward_like<Self>(add->as_set()));
     }
   }
 
@@ -351,52 +452,71 @@ class DynamicSetPatch : public DynamicPatchBase {
   FOLLY_FOR_EACH_THIS_OVERLOAD_IN_CLASS_BODY_DELEGATE(
       customVisit, customVisitImpl);
 
-  void apply(detail::Badge, detail::ValueSet& v) const;
+  void apply(detail::Badge, ValueSet& v) const;
+
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const;
 
   template <class Next>
   detail::if_same_type_after_remove_cvref<Next, DynamicSetPatch> merge(
-      detail::Badge badge, Next&& other) {
-    std::forward<Next>(other).customVisit(badge, *this);
+      detail::Badge, Next&& other) {
+    std::forward<Next>(other).customVisit(*this);
   }
 };
 
+/// DynamicPatch for a Thrift map.
+///
+/// It consists of the following operations: `assign`, `clear`, `putMulti`,
+/// `tryPutMulti`, `removeMulti`, and `patchByKey`.
+///
+/// For introspection, users should provide a visitor with the following methods
+/// for `customVisit`:
+///
+///     struct Visitor {
+///       void assign(const ValueMap&);
+///       void clear();
+///       void putMulti(const ValueMap&);
+///       void tryPutMulti(const ValueMap&);
+///       void removeMulti(const ValueSet&);
+///       void patchByKey(const Value&, const DynamicPatch&);
+///     }
 class DynamicMapPatch {
  public:
-  void assign(detail::Badge, detail::ValueMap v) {
+  void assign(ValueMap v) {
+    detail::checkHomogeneousContainer(v);
     *this = {};
+    setOrCheckMapType(v);
     assign_ = std::move(v);
   }
 
-  void clear(detail::Badge) {
+  void clear() {
     *this = {};
     clear_ = true;
   }
 
-  void insert_or_assign(detail::Badge, Value k, Value v);
-  void erase(detail::Badge, Value k);
+  void insert_or_assign(Value k, Value v);
+  void erase(Value k);
 
-  void tryPutMulti(detail::Badge, detail::ValueMap v);
-  void removeMulti(detail::Badge badge, const detail::ValueSet& v) {
-    for (const auto& k : v) {
-      erase(badge, k);
-    }
+  void tryPutMulti(ValueMap v);
+  void removeMulti(ValueSet v) {
+    v.eraseInto(v.begin(), v.end(), [&](auto&& k) { erase(std::move(k)); });
   }
-  void putMulti(detail::Badge badge, const detail::ValueMap& m) {
-    for (const auto& [k, v] : m) {
-      insert_or_assign(badge, k, v);
-    }
+  void putMulti(ValueMap m) {
+    detail::checkHomogeneousContainer(m);
+    m.eraseInto(m.begin(), m.end(), [&](auto&& k, auto&& v) {
+      insert_or_assign(std::move(k), std::move(v));
+    });
   }
 
   // Return the subPatch. We can use it to provide similar APIs to static patch.
-  DynamicPatch& patchByKey(detail::Badge, Value k, const DynamicPatch& p) {
+  DynamicPatch& patchByKey(Value k, const DynamicPatch& p) {
     return patchByKeyImpl(std::move(k), p);
   }
-  DynamicPatch& patchByKey(detail::Badge, Value k, DynamicPatch&& p) {
+  DynamicPatch& patchByKey(Value k, DynamicPatch&& p) {
     return patchByKeyImpl(std::move(k), std::move(p));
   }
 
-  DynamicPatch& patchByKey(detail::Badge, Value&&);
-  DynamicPatch& patchByKey(detail::Badge, const Value&);
+  DynamicPatch& patchByKey(Value&&);
+  DynamicPatch& patchByKey(const Value&);
 
   [[nodiscard]] Object toObject() &&;
   [[nodiscard]] Object toObject() const&;
@@ -414,17 +534,19 @@ class DynamicMapPatch {
 
  private:
   template <class Self, class Visitor>
-  static void customVisitImpl(Self&& self, detail::Badge badge, Visitor&& v);
+  static void customVisitImpl(Self&& self, Visitor&& v);
 
  public:
   FOLLY_FOR_EACH_THIS_OVERLOAD_IN_CLASS_BODY_DELEGATE(
       customVisit, customVisitImpl);
-  void apply(detail::Badge, detail::ValueMap& v) const;
+  void apply(detail::Badge, ValueMap& v) const;
+
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const;
 
   template <class Next>
   detail::if_same_type_after_remove_cvref<Next, DynamicMapPatch> merge(
-      detail::Badge badge, Next&& other) {
-    std::forward<Next>(other).customVisit(badge, *this);
+      detail::Badge, Next&& other) {
+    std::forward<Next>(other).customVisit(*this);
   }
 
   void doNotConvertStringToBinary(detail::Badge) {
@@ -434,51 +556,60 @@ class DynamicMapPatch {
  private:
   void undoChanges(const Value& k);
   void ensurePatchable();
+  void setOrCheckMapType(const protocol::Value& k, const protocol::Value& v);
+  void setOrCheckMapType(const ValueMap& m) {
+    if (!m.empty()) {
+      setOrCheckMapType(m.begin()->first, m.begin()->second);
+    }
+  }
 
   template <class SubPatch>
   DynamicPatch& patchByKeyImpl(Value k, SubPatch&& p);
 
-  std::optional<detail::ValueMap> assign_;
+  std::optional<ValueMap> assign_;
   bool clear_ = false;
   folly::F14VectorMap<Value, DynamicPatch> patchPrior_;
-  detail::ValueMap add_;
+  ValueMap add_;
   folly::F14VectorMap<Value, DynamicPatch> patchAfter_;
-  detail::ValueSet remove_;
-  detail::ValueMap put_;
+  ValueSet remove_;
+  ValueMap put_;
   detail::DynamicPatchOptions options_;
+
+  std::optional<detail::Value::Type> keyType_;
+  std::optional<detail::Value::Type> valueType_;
 };
 
 template <bool IsUnion>
 class DynamicStructurePatch {
  public:
-  void assign(detail::Badge, Object v) {
+  void assign(Object v) {
     *this = {};
     assign_ = std::move(v);
   }
 
-  void clear(detail::Badge) {
+  void clear() {
     *this = {};
     clear_ = true;
   }
 
-  void remove(detail::Badge, FieldId id) {
+  void remove(FieldId id) {
     undoChanges(id);
     remove_.insert(id);
   }
 
-  void ensure(detail::Badge, FieldId id, Value v) {
+  void ensure(FieldId id, Value v) {
     return IsUnion ? ensureUnion(id, std::move(v))
                    : ensureStruct(id, std::move(v));
   }
 
   // patchIfSet
   template <class Tag>
-  auto& patchIfSet(detail::Badge badge, FieldId id) {
-    auto& subPatch = patchIfSet(badge, id);
-    return subPatch.template getStoredPatchByTag<Tag>(badge);
+  auto& patchIfSet(FieldId id) {
+    auto& subPatch = patchIfSet(id);
+    return subPatch.template getStoredPatchByTag<Tag>();
   }
 
-  DynamicPatch& patchIfSet(detail::Badge, FieldId id) {
+  DynamicPatch& patchIfSet(FieldId id) {
     ensurePatchable();
     return ensure_.contains(id) ? patchAfter_[id] : patchPrior_[id];
   }
@@ -503,14 +634,17 @@ class DynamicStructurePatch {
         remove_.contains(id);
   }
 
+  // Ensures and patches fields with assign operation from the given object.
+  void ensureAndAssignFieldsFromObject(Object obj);
+
  private:
   template <class Self, class Visitor>
-  static void customVisitImpl(Self&& self, detail::Badge, Visitor&& v);
+  static void customVisitImpl(Self&& self, Visitor&& v);
 
   // Needed for merge(...). We can consider making this a public API.
   template <class SubPatch>
-  void patchIfSet(detail::Badge badge, FieldId id, SubPatch&& patch) {
-    patchIfSet(badge, id).merge(badge, std::forward<SubPatch>(patch));
+  void patchIfSet(FieldId id, SubPatch&& patch) {
+    patchIfSet(id).merge(std::forward<SubPatch>(patch));
   }
 
  public:
@@ -535,51 +669,162 @@ class DynamicStructurePatch {
   detail::DynamicPatchOptions options_;
 };
 
+/// DynamicPatch for a Thrift struct.
+///
+/// It consists of the following operations: `assign`, `clear`, `patchIfSet`,
+/// `ensure`, `patch`, and `remove`.
+///
+/// For introspection, users should provide a visitor with the following methods
+/// for `customVisit`:
+///
+///     struct Visitor {
+///       void assign(const Object&);
+///       void clear();
+///       void ensure(FieldId, const Value&);
+///       void patchIfSet(FieldId, const DynamicPatch&);
+///       void remove(FieldId);
+///     }
 class DynamicStructPatch : public DynamicStructurePatch<false> {
  public:
   template <class Next>
   detail::if_same_type_after_remove_cvref<Next, DynamicStructPatch> merge(
-      detail::Badge badge, Next&& other) {
-    std::forward<Next>(other).customVisit(badge, *this);
+      detail::Badge, Next&& other) {
+    std::forward<Next>(other).customVisit(*this);
   }
+
+  ExtractedMasksFromPatch extractMaskFromPatch() const;
 };
+
+/// DynamicPatch for a Thrift union.
+///
+/// It consists of the following operations: `assign`, `clear`, `patchIfSet`,
+/// `ensure`, and `patch`.
+///
+/// For introspection, users should provide a visitor with the following methods
+/// for `customVisit`:
+///
+///     struct Visitor {
+///       void assign(const Object&);
+///       void clear();
+///       void ensure(FieldId, const Value&);
+///       void patchIfSet(FieldId, const DynamicPatch&);
+///     }
 class DynamicUnionPatch : public DynamicStructurePatch<true> {
  public:
   template <class Next>
   detail::if_same_type_after_remove_cvref<Next, DynamicUnionPatch> merge(
-      detail::Badge badge, Next&& other) {
-    std::forward<Next>(other).customVisit(badge, *this);
+      detail::Badge, Next&& other) {
+    std::forward<Next>(other).customVisit(*this);
   }
+
+  ExtractedMasksFromPatch extractMaskFromPatch() const;
 
  private:
   // Hide `remove` operation since we can't remove field from union
   using DynamicStructurePatch::remove;
 };
 
+/// Schema-less Patch.
+///
+/// When Static Patch is unavailable, Dynamic Patch offers a schema-less patch
+/// apply, merge, and introspection (requires advanced knowledge of Thrift
+/// Patch).
 class DynamicPatch {
  public:
+  /// @cond
   DynamicPatch();
   DynamicPatch(const DynamicPatch&);
   DynamicPatch& operator=(const DynamicPatch&);
-
   DynamicPatch(DynamicPatch&&) noexcept;
   DynamicPatch& operator=(DynamicPatch&&) noexcept;
   ~DynamicPatch();
+  /// @endcond
 
   template <class T>
   explicit DynamicPatch(T t) : patch_(std::make_unique<Patch>(std::move(t))) {}
 
+  /// Convert DynamicPatch to Protocol Object
   Object toObject() &&;
   Object toObject() const&;
-  type::AnyStruct toAny(detail::Badge, type::Type type) const;
 
-  [[nodiscard]] bool empty(detail::Badge) const;
+  /// Returns if the patch is no-op.
   [[nodiscard]] bool empty() const;
 
-  void apply(detail::Badge, Value&) const;
+  /// Applies the patch to the given value. Throws if the patch is not
+  /// applicable to the value.
+  void apply(Value&) const;
+  /// Applies the patch to the given Thrift Any. Throws if the patch is not
+  /// applicable.
+  void applyToDataFieldInsideAny(type::AnyStruct&) const;
+  /// @brief Applies the patch to the given blob and returns the result as a
+  /// blob. Throws if the patch is not applicable.
+  ///
+  /// Note, this method uses introspection API `extractMaskFromPatch` to avoid
+  /// full deserialization when applying Thrift Patch to serialized structured
+  /// object in a blob.
+  template <type::StandardProtocol Protocol>
+  std::unique_ptr<folly::IOBuf> applyToSerializedObject(
+      const folly::IOBuf& buf) const;
 
-  void fromObject(detail::Badge, Object);
-  void fromAny(detail::Badge, const type::AnyStruct& any);
+  /// Converts SafePatch stored in Thrift Any to DynamicPatch.
+  [[nodiscard]] static DynamicPatch fromSafePatch(const type::AnyStruct& any);
+  /// Stores DynamicPatch as SafePatch in Thrift Any with the provided type
+  /// using CompactProtocol.
+  type::AnyStruct toSafePatch(type::Type type) const;
+
+  /// Merges another patch into this patch. After the merge
+  /// (`patch.merge(next)`), `patch.apply(value)` is equivalent to
+  /// `next.apply(patch.apply(value))`.
+  template <class Other>
+  detail::if_same_type_after_remove_cvref<Other, DynamicPatch> merge(Other&&);
+
+  /// Convert Patch stored in Protocol Object to DynamicPatch.
+  [[nodiscard]] static DynamicPatch fromObject(Object);
+
+  /// Retrieves the stored patch by the specified tag. Can be used to assert the
+  /// type of DynamicUnknownPatch. Throws if the patch cannot be retrieved with
+  /// the specified tag.
+  template <class Tag>
+  auto& getStoredPatchByTag() {
+    return getStoredPatchByTag(Tag{});
+  }
+
+  /// Returns if the patch type is ambiguous.
+  [[nodiscard]] bool isPatchTypeAmbiguous() const;
+
+  /// @brief Constructs read and write Thrift Masks that only contain fields
+  /// that are read / written to respectively by the Patch. The read mask
+  /// specifies entries that must be known in advance to correctly apply Thrift
+  /// Patch. The write mask specifies entries that are potentially affected by
+  /// the patch.
+  ///
+  /// It constructs nested Mask for map, struct, union, and any patches. For
+  /// map, it only supports integer or string key. If the type of key map is not
+  /// integer or string, it throws.
+  ///
+  /// Disclaimer: Mask-extraction only guarentees recall (i.e. all fields that
+  /// are read/written to *will* be selected). However, it provides only a
+  /// best-effort guarentee of precision (selected fields are not guarenteed to
+  /// be relevant to a given patch). If high precision is important, the user is
+  /// advised to use visitPatch or customVisit to introspect the patch directly.
+  ExtractedMasksFromPatch extractMaskFromPatch() const;
+
+  /// Convert Patch stored in Thrift Any to DynamicPatch.
+  [[nodiscard]] static DynamicPatch fromPatch(const type::AnyStruct& any);
+  /// Stores DynamicPatch as Patch in Thrift Any with the provided type
+  /// using CompactProtocol.
+  type::AnyStruct toPatch(type::Type type) const;
+
+  /// @cond
+  template <typename Protocol>
+  std::uint32_t encode(Protocol& prot) const;
+  template <typename Protocol>
+  std::unique_ptr<folly::IOBuf> encode() const;
+
+  template <typename Protocol>
+  void decode(Protocol& prot);
+  template <typename Protocol>
+  void decode(const folly::IOBuf& buf);
 
   template <class T>
   bool holds_alternative(detail::Badge) const {
@@ -587,78 +832,70 @@ class DynamicPatch {
   }
 
   template <class PatchType>
-  PatchType* get_if(detail::Badge) {
+  PatchType* get_if() {
+    return std::get_if<PatchType>(patch_.get());
+  }
+  template <class PatchType>
+  const PatchType* get_if() const {
     return std::get_if<PatchType>(patch_.get());
   }
 
-  template <class Other>
-  detail::if_same_type_after_remove_cvref<Other, DynamicPatch> merge(
-      detail::Badge, Other&&);
-
-  template <class Tag>
-  auto& getStoredPatchByTag(detail::Badge badge) {
-    return getStoredPatchByTag(Tag{}, badge);
+  template <class PatchType>
+  PatchType& get() {
+    // std::unique_ptr::operator* requires complete type.
+    return std::get<PatchType>(*patch_.get());
   }
+  template <class PatchType>
+  const PatchType& get() const {
+    return std::get<PatchType>(*patch_.get());
+  }
+
+  /// @endcond
 
  private:
-  template <class Tag>
-  auto& getStoredPatchByTag(type::list<Tag>, detail::Badge badge) {
-    return getStoredPatch<DynamicListPatch>(badge);
-  }
-  template <class Tag>
-  auto& getStoredPatchByTag(type::set<Tag>, detail::Badge badge) {
-    return getStoredPatch<DynamicSetPatch>(badge);
-  }
-  template <class K, class V>
-  auto& getStoredPatchByTag(type::map<K, V>, detail::Badge badge) {
-    return getStoredPatch<DynamicMapPatch>(badge);
-  }
-  template <class T>
-  auto& getStoredPatchByTag(type::struct_t<T>, detail::Badge badge) {
-    return getStoredPatch<DynamicStructPatch>(badge);
-  }
-  template <class T>
-  auto& getStoredPatchByTag(type::union_t<T>, detail::Badge badge) {
-    return getStoredPatch<DynamicUnionPatch>(badge);
-  }
+  DynamicListPatch& getStoredPatchByTag(type::list_c);
+  DynamicSetPatch& getStoredPatchByTag(type::set_c);
+  DynamicMapPatch& getStoredPatchByTag(type::map_c);
+  DynamicStructPatch& getStoredPatchByTag(type::struct_c);
+  DynamicUnionPatch& getStoredPatchByTag(type::union_c);
   template <class T, class Tag>
-  auto& getStoredPatchByTag(type::cpp_type<T, Tag>, detail::Badge badge) {
-    return getStoredPatchByTag(Tag{}, badge);
+  auto& getStoredPatchByTag(type::cpp_type<T, Tag>) {
+    return getStoredPatchByTag(Tag{});
   }
-  template <class T>
-  auto& getStoredPatchByTag(type::enum_t<T>, detail::Badge badge) {
-    return getStoredPatch<op::I32Patch>(badge);
-  }
+  op::I32Patch& getStoredPatchByTag(type::enum_c);
+  op::AnyPatch& getStoredPatchByTag(type::struct_t<type::AnyStruct>);
   template <class Tag>
-  auto& getStoredPatchByTag(Tag, detail::Badge badge) {
-    static_assert(type::is_a_v<Tag, type::primitive_c>);
-    return getStoredPatch<op::patch_type<Tag>>(badge);
+  std::enable_if_t<type::is_a_v<Tag, type::primitive_c>, op::patch_type<Tag>&>
+  getStoredPatchByTag(Tag) {
+    return getStoredPatch<op::patch_type<Tag>>();
   }
 
   template <class Patch>
-  Patch& getStoredPatch(detail::Badge badge) {
+  Patch& getStoredPatch() {
     // patch already has the correct type, return it directly.
-    if (auto p = get_if<Patch>(badge)) {
+    if (auto p = get_if<Patch>()) {
       return *p;
     }
 
     // Use merge to change patch's type.
-    merge(badge, DynamicPatch{Patch{}});
-    return *get_if<Patch>(badge);
+    merge(DynamicPatch{Patch{}});
+    return get<Patch>();
   }
 
   template <class Self, class Visitor>
-  static decltype(auto) visitPatchImpl(
-      Self&& self, detail::Badge, Visitor&& visitor) {
+  static decltype(auto) visitPatchImpl(Self&& self, Visitor&& visitor) {
     return std::visit(
         std::forward<Visitor>(visitor), *std::forward<Self>(self).patch_);
   }
 
   template <class Self, class Visitor>
   static void customVisitImpl(Self&& self, detail::Badge badge, Visitor&& v) {
-    std::forward<Self>(self).visitPatch(badge, [&](auto&& patch) {
+    std::forward<Self>(self).visitPatch([&](auto&& patch) {
       using PatchType = folly::remove_cvref_t<decltype(patch)>;
-      if constexpr (detail::has_custom_visit_with_badge_v<PatchType>) {
+      if constexpr (__FBTHRIFT_IS_VALID(
+                        patch,
+                        std::forward<PatchType>(patch).customVisit(
+                            badge, std::forward<Visitor>(v)))) {
         std::forward<PatchType>(patch).customVisit(
             badge, std::forward<Visitor>(v));
       } else {
@@ -666,6 +903,45 @@ class DynamicPatch {
       }
     });
   }
+
+  // A SafePatch storage for DynamicPatch.
+  class DynamicSafePatch {
+   public:
+    DynamicSafePatch() = default;
+    DynamicSafePatch(std::int32_t version, std::unique_ptr<folly::IOBuf> data)
+        : version_(version), data_(std::move(data)) {}
+    DynamicSafePatch(const DynamicSafePatch&) = delete;
+    DynamicSafePatch& operator=(const DynamicSafePatch&) = delete;
+    DynamicSafePatch(DynamicSafePatch&&) = default;
+    DynamicSafePatch& operator=(DynamicSafePatch&&) = default;
+    ~DynamicSafePatch() = default;
+
+    template <typename Protocol>
+    std::uint32_t encode(Protocol& prot) const;
+    template <typename Protocol>
+    void decode(Protocol& prot);
+    template <typename Protocol>
+    std::unique_ptr<folly::IOBuf> encode() const {
+      folly::IOBufQueue queue(folly::IOBufQueue::cacheChainLength());
+      Protocol prot;
+      prot.setOutput(&queue);
+      encode(prot);
+      return queue.move();
+    }
+    template <typename Protocol>
+    void decode(const folly::IOBuf& buf) {
+      Protocol prot;
+      prot.setInput(&buf);
+      return decode(prot);
+    }
+
+    std::int32_t version() const { return version_; }
+    const std::unique_ptr<folly::IOBuf>& data() const { return data_; }
+
+   private:
+    std::int32_t version_;
+    std::unique_ptr<folly::IOBuf> data_;
+  };
 
  public:
   FOLLY_FOR_EACH_THIS_OVERLOAD_IN_CLASS_BODY_DELEGATE(
@@ -696,97 +972,89 @@ class DynamicPatch {
 };
 
 template <class Self, class Visitor>
-void DynamicUnknownPatch::customVisitImpl(
-    Self&& self, detail::Badge badge, Visitor&& v) {
+void DynamicUnknownPatch::customVisitImpl(Self&& self, Visitor&& v) {
   // We don't need to check EnsureStruct and EnsureUnion fields since they won't
   // exists -- otherwise we are able to identify the exact patch type and it
   // should not be unknown patch.
   if (auto assign = self.get_ptr(op::PatchOp::Assign)) {
     std::forward<Visitor>(v).assign(
-        badge, folly::forward_like<Self>(assign->as_object()));
+        folly::forward_like<Self>(assign->as_object()));
     return;
   }
 
   if (auto clear = self.get_ptr(op::PatchOp::Clear);
       clear && clear->as_bool()) {
-    std::forward<Visitor>(v).clear(badge);
+    std::forward<Visitor>(v).clear();
   }
 
   for (auto op : {op::PatchOp::PatchPrior, op::PatchOp::PatchAfter}) {
     if (auto subPatch = self.get_ptr(op)) {
       for (auto& [fieldId, fieldPatch] : subPatch->as_object()) {
-        DynamicPatch patch;
-        patch.fromObject(
-            badge, folly::forward_like<Self>(fieldPatch.as_object()));
         std::forward<Visitor>(v).patchIfSet(
-            badge, static_cast<FieldId>(fieldId), std::move(patch));
+            static_cast<FieldId>(fieldId),
+            DynamicPatch::fromObject(
+                folly::forward_like<Self>(fieldPatch.as_object())));
       }
     }
   }
 
   if (auto remove = self.get_ptr(op::PatchOp::Remove)) {
-    for (auto& i : remove->as_set()) {
-      std::forward<Visitor>(v).remove(badge, i);
-    }
+    std::forward<Visitor>(v).removeMulti(
+        folly::forward_like<Self>(remove->as_set()));
   }
 }
 
 template <class Self, class Visitor>
-void DynamicMapPatch::customVisitImpl(
-    Self&& self, detail::Badge badge, Visitor&& v) {
+void DynamicMapPatch::customVisitImpl(Self&& self, Visitor&& v) {
   if (self.assign_) {
-    std::forward<Visitor>(v).assign(badge, *std::forward<Self>(self).assign_);
+    std::forward<Visitor>(v).assign(*std::forward<Self>(self).assign_);
     return;
   }
 
   if (self.clear_) {
-    std::forward<Visitor>(v).clear(badge);
+    std::forward<Visitor>(v).clear();
   }
 
   for (auto& [k, p] : self.patchPrior_) {
-    std::forward<Visitor>(v).patchByKey(badge, k, folly::forward_like<Self>(p));
+    std::forward<Visitor>(v).patchByKey(k, folly::forward_like<Self>(p));
   }
 
-  std::forward<Visitor>(v).tryPutMulti(badge, std::forward<Self>(self).add_);
-  std::forward<Visitor>(v).removeMulti(badge, std::forward<Self>(self).remove_);
-  std::forward<Visitor>(v).putMulti(badge, std::forward<Self>(self).put_);
+  std::forward<Visitor>(v).tryPutMulti(std::forward<Self>(self).add_);
+  std::forward<Visitor>(v).removeMulti(std::forward<Self>(self).remove_);
+  std::forward<Visitor>(v).putMulti(std::forward<Self>(self).put_);
 
   for (auto& [k, p] : self.patchAfter_) {
-    std::forward<Visitor>(v).patchByKey(badge, k, folly::forward_like<Self>(p));
+    std::forward<Visitor>(v).patchByKey(k, folly::forward_like<Self>(p));
   }
 }
 
 template <bool IsUnion>
 template <class Self, class Visitor>
-void DynamicStructurePatch<IsUnion>::customVisitImpl(
-    Self&& self, detail::Badge badge, Visitor&& v) {
+void DynamicStructurePatch<IsUnion>::customVisitImpl(Self&& self, Visitor&& v) {
   if (self.assign_) {
-    std::forward<Visitor>(v).assign(badge, *std::forward<Self>(self).assign_);
+    std::forward<Visitor>(v).assign(*std::forward<Self>(self).assign_);
     return;
   }
 
   if (self.clear_) {
-    std::forward<Visitor>(v).clear(badge);
+    std::forward<Visitor>(v).clear();
   }
 
   for (auto& [id, p] : self.patchPrior_) {
-    std::forward<Visitor>(v).patchIfSet(
-        badge, id, folly::forward_like<Self>(p));
+    std::forward<Visitor>(v).patchIfSet(id, folly::forward_like<Self>(p));
   }
 
   for (auto& [id, value] : self.ensure_) {
-    std::forward<Visitor>(v).ensure(
-        badge, id, folly::forward_like<Self>(value));
+    std::forward<Visitor>(v).ensure(id, folly::forward_like<Self>(value));
   }
 
   for (auto& [id, p] : self.patchAfter_) {
-    std::forward<Visitor>(v).patchIfSet(
-        badge, id, folly::forward_like<Self>(p));
+    std::forward<Visitor>(v).patchIfSet(id, folly::forward_like<Self>(p));
   }
 
   if constexpr (!IsUnion) {
     for (const auto& id : self.remove_) {
-      std::forward<Visitor>(v).remove(badge, id);
+      std::forward<Visitor>(v).remove(id);
     }
   }
 }
@@ -815,11 +1083,11 @@ class DiffVisitorBase {
   [[nodiscard]] virtual op::BinaryPatch diffBinary(
       const folly::IOBuf& src, const folly::IOBuf& dst);
   [[nodiscard]] virtual DynamicListPatch diffList(
-      const detail::ValueList& src, const detail::ValueList& dst);
+      const ValueList& src, const ValueList& dst);
   [[nodiscard]] virtual DynamicSetPatch diffSet(
-      const detail::ValueSet& src, const detail::ValueSet& dst);
+      const ValueSet& src, const ValueSet& dst);
   [[nodiscard]] virtual DynamicMapPatch diffMap(
-      const detail::ValueMap& src, const detail::ValueMap& dst);
+      const ValueMap& src, const ValueMap& dst);
   [[nodiscard]] virtual DynamicPatch diffStructured(
       const Object& src, const Object& dst);
 
@@ -834,8 +1102,8 @@ class DiffVisitorBase {
       FieldId id,
       DynamicStructPatch& patch);
   void diffElement(
-      const detail::ValueMap& src,
-      const detail::ValueMap& dst,
+      const ValueMap& src,
+      const ValueMap& dst,
       const Value& key,
       DynamicMapPatch& patch);
 
@@ -855,8 +1123,22 @@ class DiffVisitorBase {
   std::stack<Mask*> maskInPath_{{&path_}};
 };
 
+/// @cond
 // Convert a normal struct uri to patch uri
 std::string toPatchUri(std::string s);
 std::string fromPatchUri(std::string s);
+/// @endcond
+
+/// Convert a struct/union type to SafePatch type.
+type::Type toSafePatchType(type::Type input);
+/// Convert SafePatch type to struct/union type.
+type::Type fromSafePatchType(type::Type input, bool isUnion);
+
+/// Convert struct/union type to Patch type.
+/// Currently, it does not support primitive types (e.g., i32 --> I32Patch).
+type::Type toPatchType(type::Type input);
+/// Convert Patch type to struct/union type.
+/// Currently, it does not support primitive types (e.g., I32Patch --> i32).
+type::Type fromPatchType(type::Type input, bool isUnion);
 
 } // namespace apache::thrift::protocol

@@ -24,6 +24,7 @@ namespace apache::thrift {
 
 template <>
 class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncClient {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::PrimitivesService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
  public:
   using apache::thrift::GeneratedAsyncClient::GeneratedAsyncClient;
 
@@ -92,7 +93,7 @@ class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncC
     auto wrappedCallback = apache::thrift::RequestClientCallback::Ptr(cancellableCallback ? (apache::thrift::RequestClientCallback*)cancellableCallback.get() : &callback);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie(p_param0, p_param1);
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_init(*rpcOptions, header, ctx.get(), std::move(wrappedCallback), p_param0, p_param1);
@@ -147,7 +148,7 @@ class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncC
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_init(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack, ::std::int64_t p_param0, ::std::int64_t p_param1);
   template <typename RpcOptions>
-  void fbthrift_send_init(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback);
+  void fbthrift_send_init(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> initCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<::std::int64_t> fbthrift_semifuture_init(apache::thrift::RpcOptions& rpcOptions, ::std::int64_t p_param0, ::std::int64_t p_param1);
@@ -212,7 +213,7 @@ class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncC
     auto wrappedCallback = apache::thrift::RequestClientCallback::Ptr(cancellableCallback ? (apache::thrift::RequestClientCallback*)cancellableCallback.get() : &callback);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie();
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_method_that_throws(*rpcOptions, header, ctx.get(), std::move(wrappedCallback));
@@ -267,7 +268,7 @@ class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncC
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_method_that_throws(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_method_that_throws(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback);
+  void fbthrift_send_method_that_throws(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> method_that_throwsCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<::cpp2::Result> fbthrift_semifuture_method_that_throws(apache::thrift::RpcOptions& rpcOptions);
@@ -332,7 +333,7 @@ class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncC
     auto wrappedCallback = apache::thrift::RequestClientCallback::Ptr(cancellableCallback ? (apache::thrift::RequestClientCallback*)cancellableCallback.get() : &callback);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie(p_id);
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_return_void_method(*rpcOptions, header, ctx.get(), std::move(wrappedCallback), p_id);
@@ -385,7 +386,7 @@ class Client<::cpp2::PrimitivesService> : public apache::thrift::GeneratedAsyncC
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_return_void_method(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack, ::std::int64_t p_id);
   template <typename RpcOptions>
-  void fbthrift_send_return_void_method(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback);
+  void fbthrift_send_return_void_method(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> return_void_methodCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<folly::Unit> fbthrift_semifuture_return_void_method(apache::thrift::RpcOptions& rpcOptions, ::std::int64_t p_id);

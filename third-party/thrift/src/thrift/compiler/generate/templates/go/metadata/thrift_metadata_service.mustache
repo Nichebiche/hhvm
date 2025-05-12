@@ -23,15 +23,15 @@
     SetName("{{service:scoped_name}}").
     {{#service:extends?}}
     {{#service:extends}}
-    SetParent(thrift.StringPtr("{{service:scoped_name}}")).
+    SetParent(thrift.Pointerize("{{service:scoped_name}}")).
     {{/service:extends}}
     {{/service:extends?}}
     SetFunctions(
         []*{{program:metadata_qualifier}}ThriftFunction{
             {{#service:functions}}
-            {{#function:go_supported?}}
+            {{#function:go_server_supported?}}
             {{> metadata/thrift_metadata_function}},
-            {{/function:go_supported?}}
+            {{/function:go_server_supported?}}
             {{/service:functions}}
         },
     )

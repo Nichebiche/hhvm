@@ -74,6 +74,10 @@ val fresh_type_reason :
     it won't be solved automatically at the end of the scope *)
 val fresh_type_invariant : env -> Pos.t -> env * locl_ty
 
+(** Generate a fresh type variable type with a specified ranks for use
+    in subtyping of rank-n polymorphic types *)
+val fresh_type_invariant_with_rank : env -> int -> Pos.t -> env * locl_ty
+
 (** Generate a fresh type variable to stand for an unknown type in the
     case of type errors. *)
 val fresh_type_error : env -> Pos.t -> env * locl_ty
@@ -135,8 +139,7 @@ val env_with_constructor_droot_member : env -> env
 (** Get class declaration from the appropriate backend and add dependency. *)
 val get_class : env -> type_key -> class_decl Decl_entry.t
 
-val add_parent_dep :
-  env -> skip_constructor_dep:bool -> is_req:bool -> string -> unit
+val add_parent_dep : env -> skip_constructor_dep:bool -> string -> unit
 
 (** Get function declaration from the appropriate backend and add dependency. *)
 val get_fun :
@@ -147,6 +150,8 @@ val get_typedef : env -> type_key -> typedef_decl Decl_entry.t
 
 val get_class_or_typedef :
   env -> type_key -> Folded_class.t class_or_typedef_result Decl_entry.t
+
+val get_class_or_typedef_tparams : env -> type_key -> decl_tparam list
 
 (** Get class constant declaration from the appropriate backend and add dependency. *)
 val get_const : env -> class_decl -> string -> class_const option
@@ -210,11 +215,14 @@ val with_inside_expr_tree :
   env -> Aast_defs.class_name -> (env -> env * 'a * 'b) -> env * 'a * 'b
 
 val with_outside_expr_tree :
-  env -> (env -> Aast.class_name option -> env * 'a * 'b) -> env * 'a * 'b
+  env ->
+  macro_variables:Aast_defs.lid list option ->
+  (env -> Aast.class_name option -> env * 'a * 'b) ->
+  env * 'a * 'b * (Pos.t * locl_ty) Local_id.Map.t option
 
 val inside_expr_tree : env -> Aast_defs.class_name -> env
 
-val outside_expr_tree : env -> env
+val outside_expr_tree : env -> macro_variables:Aast_defs.lid list option -> env
 
 val is_in_expr_tree : env -> bool
 
@@ -277,6 +285,8 @@ val set_everything_sdt : env -> bool -> env
 
 val set_no_auto_likes : env -> bool -> env
 
+val set_needs_concrete : env -> bool -> env
+
 val get_module : env -> module_key -> module_decl option
 
 val get_current_module : env -> string option
@@ -294,17 +304,18 @@ val set_current_package_membership :
     module *)
 val make_depend_on_current_module : Typing_env_types.env -> unit
 
-(** Update the dep graph with info inherent to the class,
-    e.g. its kind, module, declared members. *)
-val add_non_external_deps : Typing_env_types.env -> Nast.class_ -> unit
-
-val add_not_subtype_dep : Typing_env_types.env -> string -> unit
-
 val get_internal : env -> bool
 
 val get_support_dynamic_type : env -> bool
 
 val get_no_auto_likes : env -> bool
+
+(** when true, the receiver of `static::foo()` is a concrete class
+ where "concrete" means that the class is
+  - non-abstract
+  - OR final+non-__ConsistentConstruct
+*)
+val static_points_to_concrete_class : env -> bool
 
 val set_self : env -> string -> locl_ty -> env
 
@@ -362,6 +373,7 @@ val all_continuations : env -> Typing_continuations.t list
 
 val set_local :
   ?immutable:bool ->
+  ?macro_splice_vars:(Pos.t * Typing_defs.locl_ty) Local_id.Map.t ->
   is_defined:bool ->
   bound_ty:locl_ty option ->
   env ->
@@ -369,6 +381,8 @@ val set_local :
   locl_ty ->
   Pos.t ->
   env
+
+val set_local_ : env -> Local_id.t -> Typing_local_types.local -> env
 
 val is_using_var : env -> Local_id.t -> bool
 
@@ -401,11 +415,11 @@ val get_global_tpenv : env -> TPEnv.t
 val get_pos_and_kind_of_generic :
   env -> string -> (Pos_or_decl.t * Typing_kinding_defs.kind) option
 
-val get_lower_bounds : env -> string -> locl_ty list -> TPEnv.tparam_bounds
+val get_lower_bounds : env -> string -> TPEnv.tparam_bounds
 
-val get_upper_bounds : env -> string -> locl_ty list -> TPEnv.tparam_bounds
+val get_upper_bounds : env -> string -> TPEnv.tparam_bounds
 
-val get_equal_bounds : env -> string -> locl_ty list -> TPEnv.tparam_bounds
+val get_equal_bounds : env -> string -> TPEnv.tparam_bounds
 
 val get_reified : env -> string -> Aast.reify_kind
 
@@ -579,7 +593,17 @@ val is_package_loaded : env -> string -> bool
 
 val package_v2 : env -> bool
 
-val package_v2_bypass_package_check_for_class_const : env -> bool
+val package_v2_allow_typedef_violations : env -> bool
+
+val package_v2_allow_classconst_violations : env -> bool
+
+val package_v2_allow_reifiable_tconst_violations : env -> bool
+
+val package_v2_allow_all_tconst_violations : env -> bool
+
+val package_v2_allow_reified_generics_violations : env -> bool
+
+val package_v2_allow_all_generics_violations : env -> bool
 
 (** Remove solved variable from environment by replacing it by its binding. *)
 val remove_var :
@@ -620,3 +644,7 @@ val update_ity_reason :
   internal_type ->
   f:(locl_phase Typing_reason.t_ -> locl_phase Typing_reason.t_) ->
   internal_type
+
+val rank_of_tvar : env -> Tvid.t -> int
+
+val rank_of_tparam : env -> string -> int

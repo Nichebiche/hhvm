@@ -196,11 +196,6 @@ let allowed_expression_tree_visitors t =
 let typeconst_concrete_concrete_error t =
   t.GlobalOptions.tco_typeconst_concrete_concrete_error
 
-let enable_strict_const_semantics t =
-  t.GlobalOptions.tco_enable_strict_const_semantics
-
-let strict_wellformedness t = t.GlobalOptions.tco_strict_wellformedness
-
 let meth_caller_only_public_visibility t =
   t.GlobalOptions.tco_meth_caller_only_public_visibility
 
@@ -242,19 +237,11 @@ let optimized_member_fanout t =
   GlobalOptions.(t.tco_saved_state.rollouts)
     .Saved_state_rollouts.optimized_member_fanout
 
-let optimized_parent_fanout t =
-  GlobalOptions.(t.tco_saved_state.rollouts)
-    .Saved_state_rollouts.optimized_parent_fanout
-
-let optimized_attribute_fanout t =
-  GlobalOptions.(t.tco_saved_state.rollouts)
-    .Saved_state_rollouts.optimized_attribute_fanout
-
-let dummy_one t =
-  GlobalOptions.(t.tco_saved_state.rollouts).Saved_state_rollouts.dummy_one
-
 let profile_top_level_definitions t =
   t.GlobalOptions.tco_profile_top_level_definitions
+
+let typecheck_if_name_matches_regexp t =
+  t.GlobalOptions.tco_typecheck_if_name_matches_regexp
 
 let allow_all_files_for_module_declarations t =
   t.GlobalOptions.tco_allow_all_files_for_module_declarations
@@ -320,8 +307,23 @@ let set_package_info t package_info =
 let package_v2_support_multifile_tests t =
   t.GlobalOptions.po.ParserOptions.package_v2_support_multifile_tests
 
-let package_v2_bypass_package_check_for_class_const t =
-  t.GlobalOptions.tco_package_v2_bypass_package_check_for_class_const
+let package_v2_allow_typedef_violations t =
+  t.GlobalOptions.tco_package_v2_allow_typedef_violations
+
+let package_v2_allow_classconst_violations t =
+  t.GlobalOptions.tco_package_v2_allow_classconst_violations
+
+let package_v2_allow_reifiable_tconst_violations t =
+  t.GlobalOptions.tco_package_v2_allow_reifiable_tconst_violations
+
+let package_v2_allow_all_tconst_violations t =
+  t.GlobalOptions.tco_package_v2_allow_all_tconst_violations
+
+let package_v2_allow_reified_generics_violations t =
+  t.GlobalOptions.tco_package_v2_allow_reified_generics_violations
+
+let package_v2_allow_all_generics_violations t =
+  t.GlobalOptions.tco_package_v2_allow_all_generics_violations
 
 let package_v2_exclude_patterns t =
   t.GlobalOptions.tco_package_v2_exclude_patterns
@@ -332,3 +334,9 @@ let enable_class_pointer_hint t =
   t.GlobalOptions.po.ParserOptions.enable_class_pointer_hint
 
 let class_class_type t = t.GlobalOptions.class_class_type
+
+let safe_abstract t = t.GlobalOptions.safe_abstract
+
+let needs_concrete t = t.GlobalOptions.needs_concrete
+
+let allow_class_string_cast t = t.GlobalOptions.allow_class_string_cast

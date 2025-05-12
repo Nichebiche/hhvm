@@ -23,24 +23,28 @@ import (
 	"time"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/facebook/fbthrift/thrift/lib/thrift/rocket_upgrade"
 )
 
 type upgradeToRocketClient struct {
 	// Current protocol - either 'nil', 'headerProtocol' or 'rocketProtocol',
 	// depending on the current state of "upgrade". It will be 'nil' initially
 	// to indicate that "upgrade" has not yet been attempted or started.
-	types.Protocol
+	Protocol
 
-	rocketProtocol types.Protocol
-	headerProtocol types.Protocol
+	rocketProtocol Protocol
+	headerProtocol Protocol
 }
 
-var _ types.Protocol = (*upgradeToRocketClient)(nil)
-var _ types.RequestHeaders = (*upgradeToRocketClient)(nil)
-var _ types.ResponseHeaderGetter = (*upgradeToRocketClient)(nil)
+var _ Protocol = (*upgradeToRocketClient)(nil)
 
 // newUpgradeToRocketClient creates a protocol that upgrades from Header to Rocket client from a socket.
-func newUpgradeToRocketClient(conn net.Conn, protoID types.ProtocolID, ioTimeout time.Duration, persistentHeaders map[string]string) (types.Protocol, error) {
+func newUpgradeToRocketClient(
+	conn net.Conn,
+	protoID types.ProtocolID,
+	ioTimeout time.Duration,
+	persistentHeaders map[string]string,
+) (Protocol, error) {
 	rocket, err := newRocketClient(conn, protoID, ioTimeout, persistentHeaders)
 	if err != nil {
 		return nil, err
@@ -82,7 +86,9 @@ func newUpgradeToRocketClient(conn net.Conn, protoID types.ProtocolID, ioTimeout
 // If this fails, we send the original message using the HeaderProtocol and continue using the HeaderProtocol.
 func (p *upgradeToRocketClient) WriteMessageBegin(name string, typeID types.MessageType, seqid int32) error {
 	if p.Protocol == nil {
-		if err := p.upgradeToRocket(); err != nil {
+		ruClient := rocket_upgrade.NewRocketUpgradeClient(p.headerProtocol)
+		err := ruClient.UpgradeToRocket(context.Background())
+		if err != nil {
 			p.Protocol = p.headerProtocol
 		} else {
 			p.Protocol = p.rocketProtocol
@@ -91,29 +97,25 @@ func (p *upgradeToRocketClient) WriteMessageBegin(name string, typeID types.Mess
 	return p.Protocol.WriteMessageBegin(name, typeID, seqid)
 }
 
-func (p *upgradeToRocketClient) upgradeToRocket() error {
-	return upgradeToRocket(context.Background(), p.headerProtocol)
-}
-
-func (p *upgradeToRocketClient) SetRequestHeader(key, value string) {
+func (p *upgradeToRocketClient) setRequestHeader(key, value string) {
 	if p.Protocol == nil {
-		p.rocketProtocol.(types.RequestHeaders).SetRequestHeader(key, value)
-		p.headerProtocol.(types.RequestHeaders).SetRequestHeader(key, value)
+		p.rocketProtocol.setRequestHeader(key, value)
+		p.headerProtocol.setRequestHeader(key, value)
 		return
 	}
-	p.Protocol.(types.RequestHeaders).SetRequestHeader(key, value)
+	p.Protocol.setRequestHeader(key, value)
 }
 
-func (p *upgradeToRocketClient) GetResponseHeaders() map[string]string {
+func (p *upgradeToRocketClient) getResponseHeaders() map[string]string {
 	if p.Protocol == nil {
-		headers := p.headerProtocol.GetResponseHeaders()
-		rocketHeaders := p.rocketProtocol.GetResponseHeaders()
+		headers := p.headerProtocol.getResponseHeaders()
+		rocketHeaders := p.rocketProtocol.getResponseHeaders()
 		for k, v := range rocketHeaders {
 			headers[k] = v
 		}
 		return headers
 	}
-	return p.Protocol.GetResponseHeaders()
+	return p.Protocol.getResponseHeaders()
 }
 
 func (p *upgradeToRocketClient) Close() error {
@@ -123,4 +125,12 @@ func (p *upgradeToRocketClient) Close() error {
 		return p.headerProtocol.Close()
 	}
 	return p.Protocol.Close()
+}
+
+func (p *upgradeToRocketClient) DO_NOT_USE_WrapChannel() RequestChannel {
+	return NewSerialChannel(p)
+}
+
+func (p *upgradeToRocketClient) DO_NOT_USE_GetResponseHeaders() map[string]string {
+	return p.getResponseHeaders()
 }

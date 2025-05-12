@@ -18,7 +18,7 @@
 #include <folly/io/IOBuf.h>
 #include <folly/lang/Assume.h>
 
-namespace proxygen { namespace hq {
+namespace proxygen::hq {
 
 class HQControlCodec
     : public HQUnidirectionalCodec
@@ -91,10 +91,6 @@ class HQControlCodec
 
   size_t generatePriority(folly::IOBufQueue& writeBuf,
                           StreamID stream,
-                          const HTTPMessage::HTTP2Priority& pri) override;
-
-  size_t generatePriority(folly::IOBufQueue& writeBuf,
-                          StreamID stream,
                           HTTPPriority priority) override;
 
   size_t generatePushPriority(folly::IOBufQueue& writeBuf,
@@ -134,12 +130,6 @@ class HQControlCodec
     folly::assume_unreachable();
   }
 
-  size_t addPriorityNodes(PriorityQueue& queue,
-                          folly::IOBufQueue& writeBuf,
-                          uint8_t maxLevel) override;
-
-  HTTPCodec::StreamID mapPriorityToDependency(uint8_t priority) const override;
-
   bool receivedSettings() const {
     return receivedSettings_;
   }
@@ -173,4 +163,4 @@ class HQControlCodec
   HTTPSettings& settings_;
 };
 
-}} // namespace proxygen::hq
+} // namespace proxygen::hq

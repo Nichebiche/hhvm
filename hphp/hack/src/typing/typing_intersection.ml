@@ -88,11 +88,41 @@ let negate_type env r ty ~approx =
       | Some predicate -> MkType.neg r predicate
       | None -> approximated (* void, noreturn *)
     end
-    | Tneg (r, IsTag (ClassTag c)) when Utils.class_has_no_params env c ->
+    | Tneg (r, IsTag (ClassTag (c, []))) when Utils.class_has_no_params env c ->
       MkType.class_type r c []
     | Tneg predicate -> Typing_refinement.TyPredicate.to_ty predicate
     | Tnonnull -> MkType.null r
-    | Tclass ((_, c), Nonexact _, _) -> MkType.neg r (r, IsTag (ClassTag c))
+    | Tclass ((_, c), Nonexact _, args) ->
+      let tparams =
+        match Env.get_class env c with
+        | Decl_entry.Found cls -> Folded_class.tparams cls
+        | _ -> []
+      in
+      let is_fresh_generic ty =
+        match get_node ty with
+        | Tgeneric name -> Env.is_fresh_generic_parameter name
+        | _ -> false
+      in
+      let rec is_all_filled_reified tparams args =
+        match (tparams, args) with
+        | ([], []) -> true
+        | (tparam :: tparams, arg :: args)
+          when (not (Aast.is_erased tparam.tp_reified))
+               && not (is_fresh_generic arg) ->
+          is_all_filled_reified tparams args
+        (* too few args counts as unfilled, too many args is malformed, but treat that like the tparam is erased *)
+        | _ -> false
+      in
+      MkType.neg
+        r
+        ( r,
+          IsTag
+            (ClassTag
+               ( c,
+                 if is_all_filled_reified tparams args then
+                   args
+                 else
+                   [] )) )
     | _ -> approximated
   in
   (env, neg_ty)
@@ -369,6 +399,9 @@ and intersect_ env (rec_tracker : Recursion_tracker.t) ~r ty1 ty2 =
                           s_unknown_value = shape_kind;
                           s_fields = fdm;
                         } ) )
+              | ((_, Tclass_ptr ty_c1), (_, Tclass_ptr ty_c2)) ->
+                let (env, ty) = intersect ~r env rec_tracker ty_c1 ty_c2 in
+                (env, mk (r, Tclass_ptr ty))
               | ((_, Tintersection tyl1), (_, Tintersection tyl2)) ->
                 intersect_lists env rec_tracker r tyl1 tyl2
               (* Simplify `supportdyn<t> & u` to `supportdyn<t & u>`. Do not apply if `u` is
@@ -385,6 +418,21 @@ and intersect_ env (rec_tracker : Recursion_tracker.t) ~r ty1 ty2 =
                 let (env, ty) = intersect ~r env rec_tracker ty1 ty2arg in
                 let (env, res) = Utils.simple_make_supportdyn r env ty in
                 (env, res)
+              (* If class<T> <: classname<T>, class<U> & classname<V> -> classname<U & V> *)
+              | ((_, Tnewtype (cn, [ty_cn], _)), (_, Tclass_ptr ty_c))
+              | ((_, Tclass_ptr ty_c), (_, Tnewtype (cn, [ty_cn], _)))
+                when TypecheckerOptions.class_sub_classname (Env.get_tcopt env)
+                     && String.equal cn Naming_special_names.Classes.cClassname
+                ->
+                let (env, ty) = intersect ~r env rec_tracker ty_c ty_cn in
+                (env, MkType.classname r [ty])
+              | ( (_, Tnewtype (cn1, [ty_cn1], _)),
+                  (_, Tnewtype (cn2, [ty_cn2], _)) )
+                when String.equal cn1 Naming_special_names.Classes.cClassname
+                     && String.equal cn2 Naming_special_names.Classes.cClassname
+                ->
+                let (env, ty) = intersect ~r env rec_tracker ty_cn1 ty_cn2 in
+                (env, MkType.classname r [ty])
               | ((_, Tintersection tyl), _) ->
                 intersect_lists env rec_tracker r [ty2] tyl
               | (_, (_, Tintersection tyl)) ->
@@ -479,6 +527,7 @@ and try_simplifying_case_type
       | Some variants ->
         let (env, filtered_ty) =
           Typing_case_types.filter_variants_using_datatype
+            ~safe_for_are_disjoint:false
             env
             r
             variants
@@ -571,6 +620,9 @@ and intersect_lists env rec_tracker r tyl1 tyl2 =
   make_intersection env r tyl
 
 and intersect_ty_tyl env rec_tracker r ty tyl =
+  (* try negs last because we expect them to be more likely to fail try_intersect *)
+  let (negs, others) = List.partition_tf tyl ~f:is_neg in
+  let tyl = others @ negs in
   let rec intersect_ty_tyl env ty tyl missed_inter_tyl =
     match tyl with
     | [] -> (env, (ty, missed_inter_tyl))
@@ -690,6 +742,10 @@ let intersect env ~r ty1 ty2 =
     intersect env rec_tracker ~r ty1 ty2
 
 let intersect_list env = intersect_list env Recursion_tracker.empty
+
+let intersect_with_nonnull env pos ty =
+  let r = Reason.witness_from_decl pos in
+  intersect env ~r ty (Typing_make_type.nonnull r)
 
 let () = Utils.negate_type_ref := negate_type
 

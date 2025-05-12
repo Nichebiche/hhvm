@@ -42,12 +42,6 @@ struct AcceptorConfiguration : public wangle::ServerSocketConfig {
   std::chrono::milliseconds transactionIdleTimeout{600000};
 
   /**
-   * The compression level to use for SPDY headers with responses from
-   * this Acceptor.
-   */
-  int spdyCompressionLevel{Z_NO_COMPRESSION};
-
-  /**
    * The name of the protocol to use on non-TLS connections.
    */
   std::string plaintextProtocol;
@@ -101,6 +95,14 @@ struct AcceptorConfiguration : public wangle::ServerSocketConfig {
    * Determines if HTTP2 ping is enabled on connection
    **/
   bool HTTP2PingEnabled{false};
+
+  /**
+   * When the server sends a complete response prior to the client sending an
+   * entire request (for non-upgraded streams), the server will subsequently
+   * write RST_STREAM/NO_ERROR (h2) or STOP_SENDING/NO_ERROR (h3). This has no
+   * effect in http/1.1.
+   */
+  bool serverEarlyResponseEnabled{false};
 
   /* Strategy for which headers to insert into HPACK/QPACK dynamic table */
   const HeaderIndexingStrategy* headerIndexingStrategy{nullptr};

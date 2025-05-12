@@ -17,10 +17,11 @@
 package gotest
 
 import (
+	"bytes"
 	"testing"
 
 	"thrift/lib/go/thrift"
-	"thrift/test/go/if/reflecttest"
+	"thrift/test/go/if/thrifttest"
 )
 
 // Run this benchmark:
@@ -34,15 +35,15 @@ func BenchmarkStructRead(b *testing.B) {
 	// "field53": {["hello1", "hello2", "hello3"]: "value1"},
 	// ....
 
-	originalStruct := reflecttest.VariousFieldsStructConst1
-	originalStruct.Field51 = map[reflecttest.ComparableStruct]string{
+	originalStruct := thrifttest.VariousFieldsStructConst1
+	originalStruct.Field51 = map[thrifttest.ComparableStruct]string{
 		{Field1: 123}: "value1",
 	}
 	originalStruct.Field53 = map[*[]string]string{
 		{"hello1", "hello2", "hello3"}: "value1",
 	}
 
-	buffer := thrift.NewMemoryBufferLen(10 * 1024 * 1024)
+	buffer := bytes.NewBuffer(make([]byte, 0, 10*1024*1024))
 	proto := thrift.NewBinaryFormat(buffer)
 	err := originalStruct.Write(proto)
 	if err != nil {
@@ -53,8 +54,9 @@ func BenchmarkStructRead(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		buffer.Init(dataBytes)
-		readTargetStruct := reflecttest.NewVariousFieldsStruct()
+		buffer.Reset()
+		buffer.Write(dataBytes)
+		readTargetStruct := thrifttest.NewVariousFieldsStruct()
 		err = readTargetStruct.Read(proto)
 		if err != nil {
 			b.Fatalf("failed to read struct: %v", err)
@@ -70,15 +72,15 @@ func BenchmarkStructWrite(b *testing.B) {
 	// "field53": {["hello1", "hello2", "hello3"]: "value1"},
 	// ....
 
-	originalStruct := reflecttest.VariousFieldsStructConst1
-	originalStruct.Field51 = map[reflecttest.ComparableStruct]string{
+	originalStruct := thrifttest.VariousFieldsStructConst1
+	originalStruct.Field51 = map[thrifttest.ComparableStruct]string{
 		{Field1: 123}: "value1",
 	}
 	originalStruct.Field53 = map[*[]string]string{
 		{"hello1", "hello2", "hello3"}: "value1",
 	}
 
-	buffer := thrift.NewMemoryBufferLen(10 * 1024 * 1024)
+	buffer := bytes.NewBuffer(make([]byte, 0, 10*1024*1024))
 	proto := thrift.NewBinaryFormat(buffer)
 
 	b.ResetTimer()
@@ -99,8 +101,8 @@ func BenchmarkStructToString(b *testing.B) {
 	// "field53": {["hello1", "hello2", "hello3"]: "value1"},
 	// ....
 
-	originalStruct := reflecttest.VariousFieldsStructConst1
-	originalStruct.Field51 = map[reflecttest.ComparableStruct]string{
+	originalStruct := thrifttest.VariousFieldsStructConst1
+	originalStruct.Field51 = map[thrifttest.ComparableStruct]string{
 		{Field1: 123}: "value1",
 	}
 	originalStruct.Field53 = map[*[]string]string{

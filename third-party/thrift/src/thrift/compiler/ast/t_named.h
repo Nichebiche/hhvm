@@ -50,6 +50,8 @@ class t_named : public t_node {
   }
   void add_structured_annotation(std::unique_ptr<t_const> annot);
 
+  bool has_structured_annotation(const char* uri) const;
+
   const t_const* find_structured_annotation_or_null(const char* uri) const;
 
   // The 'universal' name for this node.
@@ -71,7 +73,7 @@ class t_named : public t_node {
   const t_program* program() const { return program_; }
 
   // Returns the documentation comment.
-  const std::string& doc() const { return doc_ ? doc_->value : kEmptyString; }
+  const std::string& doc() const { return doc_ ? doc_->value : emptyString(); }
 
   bool has_doc() const { return !!doc_; }
 

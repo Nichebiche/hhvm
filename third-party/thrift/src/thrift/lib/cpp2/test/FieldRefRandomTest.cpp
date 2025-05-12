@@ -19,11 +19,10 @@
 #include <string>
 #include <thrift/lib/cpp2/FieldRef.h>
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <folly/container/Array.h>
 #include <thrift/lib/cpp2/BadFieldAccess.h>
-#include <thrift/lib/cpp2/FieldRef.h>
 
 using apache::thrift::optional_field_ref;
 using namespace std;

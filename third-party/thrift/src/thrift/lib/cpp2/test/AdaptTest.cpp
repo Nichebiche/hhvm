@@ -22,8 +22,8 @@
 #include <type_traits>
 #include <unordered_set>
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/type/Testing.h>
 
 namespace apache::thrift::test {

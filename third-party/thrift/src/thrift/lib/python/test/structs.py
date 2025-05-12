@@ -21,7 +21,7 @@ import copy
 import math
 import types
 import unittest
-from typing import Type, TypeVar
+from typing import Callable, Type, TypeVar
 from unittest import mock
 
 import testing.thrift_mutable_types as mutable_test_types
@@ -34,10 +34,10 @@ from folly.iobuf import IOBuf
 
 from parameterized import parameterized_class
 
-from testing.thrift_mutable_types import __Reserved as DoubleUnderscoreReservedMutable
+from testing.thrift_mutable_types import _Reserved as _ReservedMutable
 
 from testing.thrift_types import (
-    __Reserved as DoubleUnderscoreReserved,
+    _Reserved,
     Color,
     ComplexRef,
     customized,
@@ -48,6 +48,7 @@ from testing.thrift_types import (
     IOBufListStruct,
     Kind,
     ListTypes,
+    mixed,
     Nested1,
     Nested2,
     Nested3,
@@ -61,6 +62,7 @@ from testing.thrift_types import (
     StructuredAnnotation,
     UnusedError,
 )
+from thrift.python.exceptions import GeneratedError
 from thrift.python.mutable_types import (
     _isset as mutable_isset,
     _ThriftListWrapper,
@@ -71,7 +73,7 @@ from thrift.python.mutable_types import (
     to_thrift_set,
 )
 
-from thrift.python.types import isset, Struct, update_nested_field
+from thrift.python.types import isset, Struct, StructOrUnion, update_nested_field
 
 ListT = TypeVar("ListT")
 SetT = TypeVar("SetT")
@@ -107,18 +109,20 @@ class StructTestsParameterized(unittest.TestCase):
         self.StructuredAnnotation: Type[StructuredAnnotation] = (
             self.test_types.StructuredAnnotation
         )
+        self.mixed: Type[mixed] = self.test_types.mixed
         self.is_mutable_run: bool = self.test_types.__name__.endswith(
             "thrift_mutable_types"
         )
         # pyre-ignore[8]: Intentional for test
-        self.DoubleUnderscoreReserved: Type[DoubleUnderscoreReserved] = (
-            DoubleUnderscoreReserved
-            if not self.is_mutable_run
-            else DoubleUnderscoreReservedMutable
+        self._Reserved: Type[_Reserved] = (
+            _Reserved if not self.is_mutable_run else _ReservedMutable
         )
         # pyre-ignore[16]: has no attribute `serializer_module`
         self.serializer: types.ModuleType = self.serializer_module
-        self.isset = mutable_isset if self.is_mutable_run else isset
+        # pyre-ignore[8]: has no attribute `serializer_module`
+        self.isset: Callable[[StructOrUnion | GeneratedError], dict[str, bool]] = (
+            mutable_isset if self.is_mutable_run else isset
+        )
 
     def to_list(self, list_data: list[ListT]) -> list[ListT] | _ThriftListWrapper:
         return to_thrift_list(list_data) if self.is_mutable_run else list_data
@@ -138,13 +142,11 @@ class StructTestsParameterized(unittest.TestCase):
 
     def test_isset_Error(self) -> None:
         e = self.UnusedError(message="ACK")
-        # pyre-ignore[6]: `mutable_isset` expected ...
         self.assertTrue(self.isset(e)["message"])
 
     def test_isset_Union(self) -> None:
         i = self.Integers(large=2)
         with self.assertRaises(TypeError):
-            # pyre-ignore[6]: for test
             self.isset(i)["large"]
 
     def test_no_dict(self) -> None:
@@ -240,6 +242,7 @@ class StructTestsParameterized(unittest.TestCase):
             self.easy(val=1, an_int=self.Integers(small=300), name=1)
 
     def test_iterate(self) -> None:
+        # pyre-ignore[28]: proving __mangled_str works
         x = self.Reserved(
             from_="hello",
             nonlocal_=3,
@@ -248,7 +251,7 @@ class StructTestsParameterized(unittest.TestCase):
             move="Qh4xe1",
             inst="foo",
             changes="bar",
-            _Reserved__mangled_str="secret",
+            __mangled_str="secret",
             _Reserved__mangled_int=42,
         )
         self.assertEqual(
@@ -307,11 +310,14 @@ class StructTestsParameterized(unittest.TestCase):
         x = self.easy()
 
         err_type = AttributeError if self.is_mutable_run else TypeError
-        with self.assertRaisesRegex(err_type, "'easy' object .* attribute.* 'bad_key'"):
+        with self.assertRaisesRegex(
+            err_type, "'easy' .*(attribute|initialization).* 'bad_key'"
+        ):
             # pyre-ignore[28]: bad key for test
             x = x(bad_key="foo")
 
     def test_reserved(self) -> None:
+        # pyre-ignore[28]: proving the mangling is optional
         x = self.Reserved(
             from_="hello",
             nonlocal_=3,
@@ -321,7 +327,7 @@ class StructTestsParameterized(unittest.TestCase):
             inst="foo",
             changes="bar",
             _Reserved__mangled_str="secret",
-            _Reserved__mangled_int=42,
+            __mangled_int=42,
         )
         self.assertEqual(x.from_, "hello")
         self.assertEqual(x.nonlocal_, 3)
@@ -335,7 +341,7 @@ class StructTestsParameterized(unittest.TestCase):
 
         self.assertEqual(x, x)
 
-        y = self.DoubleUnderscoreReserved(
+        y = self._Reserved(
             _Reserved__mangled_str="secret",
             _Reserved__mangled_int=42,
         )
@@ -372,6 +378,53 @@ class StructTestsParameterized(unittest.TestCase):
         dif_int = copy.copy(x.an_int)
         self.assertEqual(x.an_int, dif_int)
 
+    def test_defaulted_optional_field(self) -> None:
+        def assert_mixed(m: mixed) -> None:
+            self.assertIsNone(m.opt_field)
+            self.assertIsNone(m.opt_float)
+            self.assertIsNone(m.opt_int)
+            self.assertIsNone(m.opt_enum)
+
+        def assert_isset(m: mixed) -> None:
+            isset = self.isset(m)
+            for fld_name, _ in mixed:
+                if not fld_name.startswith("opt_"):
+                    continue
+                self.assertFalse(isset[fld_name], fld_name)
+
+        # constructor
+        m = self.mixed()
+        assert_mixed(m)
+        assert_isset(m)
+
+        # call operator
+        m = m(some_field_="don't care")
+        assert_mixed(m)
+        assert_isset(m)
+
+        # serialization round-trip
+        m = self.serializer.deserialize(self.mixed, self.serializer.serialize(m))
+        assert_mixed(m)
+        assert_isset(m)
+
+        ### Now with explicit `None` set
+        m = self.mixed(opt_field=None)
+        self.assertIsNone(m.opt_field)
+        self.assertFalse(self.isset(m)["opt_field"])
+
+        m = m(opt_field=None)
+        self.assertIsNone(m.opt_field)
+        self.assertFalse(self.isset(m)["opt_field"])
+
+        m = self.serializer.deserialize(self.mixed, self.serializer.serialize(m))
+        self.assertIsNone(m.opt_field)
+        self.assertFalse(self.isset(m)["opt_field"])
+
+    def test_getattr(self) -> None:
+        e = self.easy(val=1, an_int=self.Integers(small=300), name="foo")
+        for name, value in e:
+            self.assertEqual(getattr(e, name), value)
+
 
 class StructTestsImmutable(unittest.TestCase):
     """
@@ -391,6 +444,30 @@ class StructTestsImmutable(unittest.TestCase):
         with self.assertRaises(AttributeError):
             # pyre-ignore[41]: Cannot reassign final attribute `name`.
             e.name = "foo"
+
+    def test_setattr(self) -> None:
+        e = easy(val=1, an_int=Integers(small=300), name="foo")
+
+        vals = {
+            "an_int": Integers(small=3),
+            "val": 2,
+            "name": "bar",
+        }
+
+        # run-around for linter error on setattr usage
+        for field, val in vals.items():
+            with self.assertRaisesRegex(AttributeError, field):
+                setattr(e, field, val)
+
+            if field == "val":
+                object.__setattr__(e, field, val)
+                self.assertEqual(e.val, val)
+                # BAD, AttributeError still not raised for primitive types
+                # and the mutation succeeds
+                # "primitive" means types where internal type same as python type
+                continue
+            with self.assertRaisesRegex(AttributeError, field):
+                object.__setattr__(e, field, val)
 
 
 class StructTests(unittest.TestCase):
@@ -450,6 +527,7 @@ class NumericalConversionsTests(unittest.TestCase):
         """
         # pyre-ignore[16]: has no attribute `test_types`
         self.numerical: Type[numerical] = self.test_types.numerical
+        self.Kind: Type[Kind] = self.test_types.Kind
         self.is_mutable_run: bool = self.test_types.__name__.endswith(
             "thrift_mutable_types"
         )
@@ -502,6 +580,53 @@ class NumericalConversionsTests(unittest.TestCase):
                 # pyre-ignore[6]: for test
                 int_list=[math.pi, math.e],
             )
+
+    def roundtrip(self, x: numerical) -> numerical:
+        return self.serializer.deserialize(self.numerical, self.serializer.serialize(x))
+
+    def test_permissive_init_int_with_enum(self) -> None:
+        n = self.numerical(int_val=self.Kind.LINK)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.int_val), int)
+            self.assertEqual(n.int_val, self.Kind.LINK.value)
+
+        assert_strict(n)
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_permissive_init_float_with_enum(self) -> None:
+        n = self.numerical(float_val=self.Kind.LINK)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.float_val), float)
+            self.assertEqual(n.float_val, self.Kind.LINK.value)
+
+        assert_strict(n)
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_permissive_init_float_with_bool(self) -> None:
+        n = self.numerical(float_val=True)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.float_val), float)
+            self.assertEqual(n.float_val, float(True))
+
+        assert_strict(n)
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_permissive_init_float_with_int(self) -> None:
+        n = self.numerical(float_val=888)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.float_val), float)
+            self.assertEqual(n.float_val, 888.0)
+
+        assert_strict(n)
+        rt = self.roundtrip(n)
+        assert_strict(rt)
 
 
 @parameterized_class(

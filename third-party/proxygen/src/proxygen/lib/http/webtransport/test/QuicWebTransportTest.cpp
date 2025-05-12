@@ -11,11 +11,22 @@
 #include <proxygen/lib/http/session/test/MockQuicSocketDriver.h>
 #include <proxygen/lib/http/webtransport/QuicWebTransport.h>
 #include <proxygen/lib/http/webtransport/test/Mocks.h>
+#include <quic/priority/HTTPPriorityQueue.h>
 
 using namespace proxygen;
 using namespace proxygen::test;
 using namespace testing;
 using quic::MockQuicSocketDriver;
+
+class MockDeliveryCallback : public WebTransport::ByteEventCallback {
+ public:
+  MOCK_METHOD(void, onByteEvent, (quic::StreamId, uint64_t), (noexcept));
+
+  MOCK_METHOD(void,
+              onByteEventCanceled,
+              (quic::StreamId, uint64_t),
+              (noexcept));
+};
 
 namespace {
 const uint32_t WT_ERROR_1 = 19;
@@ -70,7 +81,7 @@ TEST_F(QuicWebTransportTest, PeerBidiStream) {
   EXPECT_CALL(*handler_, onNewBidiStream(_))
       .WillOnce([this](WebTransport::BidiStreamHandle bidiHandle) {
         bidiHandle.writeHandle->writeStreamData(
-            folly::IOBuf::copyBuffer("hello"), true);
+            folly::IOBuf::copyBuffer("hello"), true, nullptr);
         bidiHandle.readHandle->awaitNextRead(
             &eventBase_,
             [](WebTransport::StreamReadHandle*,
@@ -121,7 +132,7 @@ TEST_F(QuicWebTransportTest, OnStopSending) {
   auto id = handle.value()->getID();
   socketDriver_.addStopSending(id, WT_ERROR_1);
   eventBase_.loopOnce();
-  auto res = handle.value()->writeStreamData(nullptr, true);
+  auto res = handle.value()->writeStreamData(nullptr, true, nullptr);
   EXPECT_TRUE(res.hasError());
   EXPECT_EQ(res.error(), WebTransport::ErrorCode::STOP_SENDING);
   EXPECT_EQ(*handle.value()->stopSendingErrorCode(), WT_ERROR_1);
@@ -141,11 +152,29 @@ TEST_F(QuicWebTransportTest, ConnectionError) {
 TEST_F(QuicWebTransportTest, SetPriority) {
   auto handle = webTransport()->createUniStream();
   EXPECT_TRUE(handle.hasValue());
-  EXPECT_CALL(
-      *socketDriver_.getSocket(),
-      setStreamPriority(handle.value()->getID(), quic::Priority(1, false, 1)));
+  socketDriver_.expectSetPriority(
+      handle.value()->getID(), quic::HTTPPriorityQueue::Priority(1, false, 1));
   handle.value()->setPriority(1, 1, false);
-  handle.value()->writeStreamData(nullptr, true);
+  handle.value()->writeStreamData(nullptr, true, nullptr);
+  eventBase_.loop();
+}
+
+TEST_F(QuicWebTransportTest, WriteWithDeliveryCallback) {
+  auto handle = webTransport()->createUniStream();
+  EXPECT_TRUE(handle.hasValue());
+  auto mockCallback = std::make_unique<StrictMock<MockDeliveryCallback>>();
+
+  folly::StringPiece data = "test data";
+
+  uint64_t expectedStreamId = handle.value()->getID();
+  uint32_t expectedOffset = data.size();
+  EXPECT_CALL(*mockCallback, onByteEvent(expectedStreamId, expectedOffset))
+      .Times(1);
+
+  handle.value()->writeStreamData(
+      folly::IOBuf::copyBuffer(data), true, mockCallback.get());
+  // The MockQuicSocketDriver automatically simulates the delivery of data
+  // written to the QUIC socket.
   eventBase_.loop();
 }
 

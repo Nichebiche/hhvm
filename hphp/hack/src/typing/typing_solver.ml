@@ -18,7 +18,6 @@ module ITySet = Internal_type_set
 module TL = Typing_logic
 module TUtils = Typing_utils
 module Utils = Typing_solver_utils
-module Cls = Folded_class
 module TySet = Typing_set
 module MakeType = Typing_make_type
 
@@ -93,17 +92,7 @@ let rec freshen_inside_ty env ty :
   | Tlabel _
   | Tneg _ ->
     default ()
-  | Tgeneric (name, tyl) ->
-    if List.is_empty tyl then
-      default ()
-    else
-      (* TODO(T69931993) Replace Invariant here once we support arbitrary variances
-         on HK generics *)
-      let variancel =
-        List.replicate ~num:(List.length tyl) Ast_defs.Invariant
-      in
-      let* (env, tyl) = freshen_tparams env variancel tyl in
-      return (env, mk (r, Tnewtype (name, tyl, ty)))
+  | Tgeneric _ -> default ()
   | Tdependent _ -> default ()
   (* Nullable is covariant *)
   | Toption ty ->
@@ -159,31 +148,25 @@ let rec freshen_inside_ty env ty :
   | Tnewtype (name, tyl, ty) ->
     if List.is_empty tyl then
       default ()
-    else begin
-      match Env.get_typedef env name with
-      | Decl_entry.DoesNotExist
-      | Decl_entry.NotYetAvailable ->
+    else
+      let tparams = Env.get_class_or_typedef_tparams env name in
+      if List.is_empty tparams then
         default ()
-      | Decl_entry.Found td ->
-        let variancel = List.map td.td_tparams ~f:(fun t -> t.tp_variance) in
+      else
+        let variancel = List.map tparams ~f:(fun t -> t.tp_variance) in
         let* (env, tyl) = freshen_tparams env variancel tyl in
         return (env, mk (r, Tnewtype (name, tyl, ty)))
-    end
   | Tclass ((p, cid), e, tyl) ->
     if List.is_empty tyl then
       default ()
-    else begin
-      match Env.get_class env cid with
-      | Decl_entry.DoesNotExist
-      | Decl_entry.NotYetAvailable ->
+    else
+      let tparams = Env.get_class_or_typedef_tparams env cid in
+      if List.is_empty tparams then
         default ()
-      | Decl_entry.Found cls ->
-        let variancel =
-          List.map (Cls.tparams cls) ~f:(fun t -> t.tp_variance)
-        in
+      else
+        let variancel = List.map tparams ~f:(fun t -> t.tp_variance) in
         let* (env, tyl) = freshen_tparams env variancel tyl in
         return (env, mk (r, Tclass ((p, cid), e, tyl)))
-    end
   | Tvec_or_dict (ty1, ty2) ->
     let (env, ty1) = freshen_ty env ty1 in
     let (env, ty2) = freshen_ty env ty2 in
@@ -192,7 +175,6 @@ let rec freshen_inside_ty env ty :
   | Taccess (ty, ids) ->
     let (env, ty) = freshen_ty env ty in
     Some (env, mk (r, Taccess (ty, ids)))
-  | Tunapplied_alias _ -> default ()
   | Tclass_ptr ty ->
     let (env, ty) = freshen_ty env ty in
     (* TODO(T199606542) Matches classname but does it actually make sense
@@ -852,36 +834,26 @@ let expand_type_and_solve_eq env ty =
 let widen env widen_concrete_type ty =
   let ty_nothing = MakeType.nothing Reason.none in
   let rec widen env ty =
-    let (env, ty) = Env.expand_type env ty in
-    match deref ty with
-    | (r, Tunion tyl) -> widen_all env r tyl
-    | (r, Toption ty) -> widen_all env r [MakeType.null r; ty]
-    (* Don't widen the `this` type, because the field type changes up the hierarchy
-     * so we lose precision
-     *)
-    | (_, Tgeneric ("this", [])) -> ((env, None), ty)
-    (* For other abstract types, just widen to the bound, if possible *)
-    | (r, Tnewtype (name, [ty], _))
-      when String.equal name Naming_special_names.Classes.cSupportDyn ->
-      let ((env, err), ty) = widen env ty in
-      let (env, ty) = TUtils.make_supportdyn r env ty in
-      ((env, err), ty)
-    | (_, Tdependent (_, ty))
-    | (_, Tnewtype (_, _, ty)) ->
-      widen env ty
-    | _ ->
-      let ((env, ty_err_opt), ty_opt) = widen_concrete_type env ty in
-      let ty = Option.value ~default:ty_nothing ty_opt in
-      ((env, ty_err_opt), ty)
+    TUtils.map_supportdyn env ty (fun env ty ->
+        let (env, ty) = Env.expand_type env ty in
+        match deref ty with
+        | (r, Tunion tyl) -> widen_all env r tyl
+        | (r, Toption ty) -> widen_all env r [MakeType.null r; ty]
+        (* Don't widen the `this` type, because the field type changes up the hierarchy
+         * so we lose precision
+         *)
+        | (_, Tgeneric "this") -> (env, ty)
+        (* For abstract types, just widen to the bound, if possible *)
+        | (_, Tdependent (_, ty))
+        | (_, Tnewtype (_, _, ty)) ->
+          widen env ty
+        | _ ->
+          let (env, ty_opt) = widen_concrete_type env ty in
+          let ty = Option.value ~default:ty_nothing ty_opt in
+          (env, ty))
   and widen_all env r tyl =
-    let (env, ty_errs, rev_tyl) =
-      List.fold tyl ~init:(env, [], []) ~f:(fun (env, ty_errs, tys) ty ->
-          match widen env ty with
-          | ((env, Some ty_err), ty) -> (env, ty_err :: ty_errs, ty :: tys)
-          | ((env, _), ty) -> (env, ty_errs, ty :: tys))
-    in
-    let (env, ty) = Typing_union.union_list env r @@ List.rev rev_tyl in
-    ((env, Typing_error.union_opt ty_errs), ty)
+    let (env, tyl) = List.map_env env tyl ~f:widen in
+    Typing_union.union_list env r tyl
   in
   widen env ty
 
@@ -954,10 +926,8 @@ let expand_type_and_narrow
     if not !has_tyvar then
       ((env, ty_err_opt1), ty)
     else
-      let ((env, ty_err_opt2), widened_ty) =
-        widen env widen_concrete_type concretized_ty
-      in
-      let ((env, ty_err_opt3), ty) =
+      let (env, widened_ty) = widen env widen_concrete_type concretized_ty in
+      let ((env, ty_err_opt2), ty) =
         match
           ((not allow_nothing) && is_nothing env widened_ty, default, widened_ty)
         with
@@ -995,7 +965,7 @@ let expand_type_and_narrow
       in
       let ty_err_opt =
         Typing_error.union_opt
-        @@ List.filter_map ~f:Fn.id [ty_err_opt1; ty_err_opt2; ty_err_opt3]
+        @@ List.filter_map ~f:Fn.id [ty_err_opt1; ty_err_opt2]
       in
       ((env, ty_err_opt), ty)
   in
@@ -1028,44 +998,6 @@ let is_sub_type env ty1 ty2 =
   let ((env, ty_err_opt2), ty2) = expand_type_and_solve_eq env ty2 in
   let ty_err_opt = Option.merge ty_err_opt1 ty_err_opt2 ~f:Typing_error.both in
   (TUtils.is_sub_type env ty1 ty2, ty_err_opt)
-
-(**
- * Strips away all Toption that we possible can in a type, expanding type
- * variables along the way, turning ?T -> T. This exists to avoid ??T when
- * we wrap a type in Toption while typechecking.
- *)
-let rec non_null env pos ty =
-  (* This is to mimic the previous behaviour of non_null on Tabstract, but
-     is hacky. We basically non_nullify the concrete supertypes of abstract
-     types. *)
-  let make_concrete_super_types_nonnull =
-    object
-      inherit Type_mapper.tvar_expanding_type_mapper as super
-
-      method! on_tdependent env r dep cstr =
-        let ty = mk (r, Tdependent (dep, cstr)) in
-        match TUtils.get_concrete_supertypes ~abstract_enum:true env ty with
-        | (env, [ty'])
-          when TUtils.is_sub_type_for_union env (MakeType.null Reason.none) ty'
-          ->
-          let (env, ty') = non_null env pos ty' in
-          (env, mk (r, Tdependent (dep, ty')))
-        | (env, _) -> super#on_tdependent env r dep cstr
-
-      method! on_tnewtype env r x tyl cstr =
-        let ty = mk (r, Tnewtype (x, tyl, cstr)) in
-        match TUtils.get_concrete_supertypes ~abstract_enum:true env ty with
-        | (env, [ty'])
-          when TUtils.is_sub_type_for_union env (MakeType.null Reason.none) ty'
-          ->
-          let (env, ty') = non_null env pos ty' in
-          (env, mk (r, Tnewtype (x, tyl, ty')))
-        | (env, _) -> super#on_tnewtype env r x tyl cstr
-    end
-  in
-  let (env, ty) = make_concrete_super_types_nonnull#on_type env ty in
-  let r = Reason.witness_from_decl pos in
-  Inter.intersect env ~r ty (MakeType.nonnull r)
 
 let try_bind_to_equal_bound env v =
   (* The reason we pass here doesn't matter since it's used only when `freshen` is true. *)

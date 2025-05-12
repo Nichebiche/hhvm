@@ -101,7 +101,7 @@
 #include "hphp/system/systemlib.h"
 #include "hphp/zend/zend-string.h"
 
-TRACE_SET_MOD(hhas);
+TRACE_SET_MOD(hhas)
 
 namespace HPHP {
 
@@ -126,13 +126,15 @@ struct FatalUnitError {
 
 namespace {
 
+const StaticString s_OutOnly("__OutOnly");
+
 StringData* makeDocComment(const String& s) {
   if (Cfg::Eval::GenerateDocComments) return makeStaticString(s);
   return staticEmptyString();
 }
 
 struct AsmState;
-typedef void (*ParserFunc)(AsmState& as);
+using ParserFunc = void (*)(AsmState& as);
 
 struct Input {
   explicit Input(std::istream& in)
@@ -1325,7 +1327,7 @@ std::map<std::string,ParserFunc> opcode_parsers;
   }
 
 #define IMM_SA     as.fe->emitInt32(create_litstr_id(as))
-#define IMM_RATA   encodeRAT(*as.fe, read_repo_auth_type(as))
+#define IMM_RATA   encodeRAT(*as.fe, *as.ue, read_repo_auth_type(as))
 #define IMM_I64A   as.fe->emitInt64(read_opcode_arg<int64_t>(as))
 #define IMM_DA     as.fe->emitDouble(read_opcode_arg<double>(as))
 #define IMM_LA     as.fe->emitIVA(as.getLocalId(  \
@@ -1402,7 +1404,7 @@ std::map<std::string,ParserFunc> opcode_parsers;
   as.fe->emitInt32(0);                                              \
 } while (0)
 
-#define IMM_KA encode_member_key(read_member_key(as), *as.fe)
+#define IMM_KA encode_member_key(read_member_key(as), *as.fe, *as.ue)
 
 #define NUM_PUSH_NOV 0
 #define NUM_PUSH_ONE(a) 1
@@ -1487,7 +1489,7 @@ std::map<std::string,ParserFunc> opcode_parsers;
     }                                                                  \
                                                                        \
     /* Stack depth should be 1 after resume from suspend. */           \
-    if (thisOpcode == OpCreateCont || thisOpcode == OpAwait ||         \
+    if (isAwait(thisOpcode) || thisOpcode == OpCreateCont ||           \
         thisOpcode == OpYield || thisOpcode == OpYieldK) {             \
       as.enforceStackDepth(1);                                         \
     }                                                                  \
@@ -1822,7 +1824,7 @@ void parse_coeffects_closure_parent_scope(AsmState& as) {
  * directive-coeffects_generator_this ';'
  */
 void parse_coeffects_generator_this(AsmState& as) {
-  assertx(as.ue->isASystemLib());
+  assertx(as.ue->isSystemLib());
   as.fe->coeffectRules.emplace_back(CoeffectRule(CoeffectRule::GeneratorThis{}));
   as.in.expectWs(';');
 }
@@ -2228,6 +2230,10 @@ void parse_parameter_list(AsmState& as) {
     if (as.in.tryConsume("inout")) {
       if (seenVariadic) as.error("inout parameters cannot be variadic");
       param.setFlag(Func::ParamInfo::Flags::InOut);
+
+      if (as.fe->isNative && param.userAttributes.contains(s_OutOnly.get())) {
+        param.setFlag(Func::ParamInfo::Flags::OutOnly);
+      }
     }
 
     if (as.in.tryConsume("readonly")) {
@@ -2336,7 +2342,7 @@ void check_native(AsmState& as) {
     as.fe->isNative =
       !(as.fe->parseNativeAttributes(as.fe->attrs) & Native::AttrOpCodeImpl);
 
-    if (as.ue->isASystemLib()) as.fe->attrs |= AttrBuiltin;
+    if (as.ue->isSystemLib()) as.fe->attrs |= AttrBuiltin;
   }
 }
 
@@ -2351,7 +2357,7 @@ void parse_function(AsmState& as) {
 
   UserAttributeMap userAttrs;
   Attr attrs = parse_attribute_list(as, AttrContext::Func, &userAttrs);
-  assertx(IMPLIES(as.ue->isASystemLib(), attrs & AttrBuiltin));
+  assertx(IMPLIES(as.ue->isSystemLib(), attrs & AttrBuiltin));
 
   int line0;
   int line1;
@@ -2363,11 +2369,11 @@ void parse_function(AsmState& as) {
     as.error(".function must have a name");
   }
   auto const sname = makeStaticString(name);
-  assertx(IMPLIES(as.ue->isASystemLib(),
+  assertx(IMPLIES(as.ue->isSystemLib(),
     bool(attrs & AttrPersistent) != RO::funcIsRenamable(sname)));
 
   as.fe = as.ue->newFuncEmitter(sname);
-  as.fe->init(line0, line1, attrs, nullptr);
+  as.fe->init(line0, line1, attrs, nullptr, as.ue->isSystemLib());
 
   as.fe->retUserType = userType;
   as.fe->retTypeConstraints = TypeIntersectionConstraint(
@@ -2375,11 +2381,11 @@ void parse_function(AsmState& as) {
   );
   as.fe->userAttributes = userAttrs;
 
+  check_native(as);
+
   parse_parameter_list(as);
   // parse_function_flabs relies on as.fe already having valid attrs
   parse_function_flags(as);
-
-  check_native(as);
 
   as.in.expectWs('{');
 
@@ -2400,7 +2406,7 @@ void parse_method(AsmState& as) {
   UserAttributeMap userAttrs;
   Attr attrs = parse_attribute_list(as, AttrContext::Func, &userAttrs);
 
-  assertx(IMPLIES(as.ue->isASystemLib(), attrs & AttrBuiltin));
+  assertx(IMPLIES(as.ue->isSystemLib(), attrs & AttrBuiltin));
 
   int line0;
   int line1;
@@ -2419,7 +2425,7 @@ void parse_method(AsmState& as) {
 
   as.fe = as.ue->newMethodEmitter(sname, as.pce);
   as.pce->addMethod(as.fe);
-  as.fe->init(line0, line1, attrs, nullptr);
+  as.fe->init(line0, line1, attrs, nullptr, as.ue->isSystemLib());
 
   as.fe->retUserType = userType;
   as.fe->retTypeConstraints = TypeIntersectionConstraint(
@@ -2427,11 +2433,11 @@ void parse_method(AsmState& as) {
   );
   as.fe->userAttributes = userAttrs;
 
+  check_native(as);
+
   parse_parameter_list(as);
   // parse_function_flabs relies on as.fe already having valid attrs
   parse_function_flags(as);
-
-  check_native(as);
 
   as.in.expectWs('{');
 
@@ -2780,7 +2786,7 @@ void parse_class(AsmState& as) {
 
   UserAttributeMap userAttrs;
   Attr attrs = parse_attribute_list(as, AttrContext::Class, &userAttrs);
-  assertx(IMPLIES(as.ue->isASystemLib(), attrs & AttrPersistent &&
+  assertx(IMPLIES(as.ue->isSystemLib(), attrs & AttrPersistent &&
                                          attrs & AttrBuiltin));
 
   std::string name;
@@ -2836,7 +2842,8 @@ void parse_class(AsmState& as) {
                line1,
                attrs,
                makeStaticString(parentName),
-               staticEmptyString());
+               staticEmptyString(),
+               as.ue->isSystemLib());
   for (auto const& iface : ifaces) {
     as.pce->addInterface(makeStaticString(iface));
   }
@@ -2961,7 +2968,7 @@ void parse_alias(AsmState& as, AliasKind kind) {
 
   UserAttributeMap userAttrs;
   Attr attrs = parse_attribute_list(as, AttrContext::Alias, &userAttrs);
-  assertx(IMPLIES(as.ue->isASystemLib(), attrs & AttrPersistent));
+  assertx(IMPLIES(as.ue->isSystemLib(), attrs & AttrPersistent));
   std::string name;
   if (!as.in.readname(name)) {
     as.error(".alias must have a name");
@@ -3024,7 +3031,7 @@ void parse_constant(AsmState& as) {
 
   Constant constant;
   Attr attrs = parse_attribute_list(as, AttrContext::Constant);
-  assertx(IMPLIES(as.ue->isASystemLib(), attrs & AttrPersistent));
+  assertx(IMPLIES(as.ue->isSystemLib(), attrs & AttrPersistent));
 
   std::string name;
   if (!as.in.readword(name)) {

@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct myEnum;
 struct myBigEnum;
@@ -26,8 +24,7 @@ APACHE_THRIFT_DEFINE_ACCESSOR(myEnum);
 APACHE_THRIFT_DEFINE_ACCESSOR(myBigEnum);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
 namespace test::fixtures::enumstrict {
@@ -36,15 +33,11 @@ namespace test::fixtures::enumstrict {
 enum class EmptyEnum {
 };
 
-
-
 /** Glean {"file": "thrift/compiler/test/fixtures/basic-enum/src/module.thrift", "name": "MyEnum", "kind": "enum" } */
 enum class MyEnum {
   ONE = 1,
   TWO = 2,
 };
-
-
 
 /** Glean {"file": "thrift/compiler/test/fixtures/basic-enum/src/module.thrift", "name": "MyUseIntrinsicDefaultEnum", "kind": "enum" } */
 enum class MyUseIntrinsicDefaultEnum {
@@ -52,8 +45,6 @@ enum class MyUseIntrinsicDefaultEnum {
   ONE = 1,
   TWO = 2,
 };
-
-
 
 /** Glean {"file": "thrift/compiler/test/fixtures/basic-enum/src/module.thrift", "name": "MyBigEnum", "kind": "enum" } */
 enum class MyBigEnum {
@@ -79,25 +70,18 @@ enum class MyBigEnum {
   NINETEEN = 19,
 };
 
-
-
 } // namespace test::fixtures::enumstrict
 
-namespace std {
-template<> struct hash<::test::fixtures::enumstrict::EmptyEnum> :
+template<> struct std::hash<::test::fixtures::enumstrict::EmptyEnum> :
   ::apache::thrift::detail::enum_hash<::test::fixtures::enumstrict::EmptyEnum> {};
-template<> struct hash<::test::fixtures::enumstrict::MyEnum> :
+template<> struct std::hash<::test::fixtures::enumstrict::MyEnum> :
   ::apache::thrift::detail::enum_hash<::test::fixtures::enumstrict::MyEnum> {};
-template<> struct hash<::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum> :
+template<> struct std::hash<::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum> :
   ::apache::thrift::detail::enum_hash<::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum> {};
-template<> struct hash<::test::fixtures::enumstrict::MyBigEnum> :
+template<> struct std::hash<::test::fixtures::enumstrict::MyBigEnum> :
   ::apache::thrift::detail::enum_hash<::test::fixtures::enumstrict::MyBigEnum> {};
-} // std
 
-namespace apache { namespace thrift {
-
-
-template <> struct TEnumDataStorage<::test::fixtures::enumstrict::EmptyEnum>;
+namespace apache::thrift {
 
 template <> struct TEnumTraits<::test::fixtures::enumstrict::EmptyEnum> {
   using type = ::test::fixtures::enumstrict::EmptyEnum;
@@ -124,9 +108,6 @@ template <> struct TEnumTraits<::test::fixtures::enumstrict::EmptyEnum> {
     return ret.data();
   }
 };
-
-
-template <> struct TEnumDataStorage<::test::fixtures::enumstrict::MyEnum>;
 
 template <> struct TEnumTraits<::test::fixtures::enumstrict::MyEnum> {
   using type = ::test::fixtures::enumstrict::MyEnum;
@@ -156,9 +137,6 @@ template <> struct TEnumTraits<::test::fixtures::enumstrict::MyEnum> {
   static constexpr type max() { return type::TWO; }
 };
 
-
-template <> struct TEnumDataStorage<::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum>;
-
 template <> struct TEnumTraits<::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum> {
   using type = ::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum;
 
@@ -186,9 +164,6 @@ template <> struct TEnumTraits<::test::fixtures::enumstrict::MyUseIntrinsicDefau
   static constexpr type min() { return type::ZERO; }
   static constexpr type max() { return type::TWO; }
 };
-
-
-template <> struct TEnumDataStorage<::test::fixtures::enumstrict::MyBigEnum>;
 
 template <> struct TEnumTraits<::test::fixtures::enumstrict::MyBigEnum> {
   using type = ::test::fixtures::enumstrict::MyBigEnum;
@@ -218,10 +193,7 @@ template <> struct TEnumTraits<::test::fixtures::enumstrict::MyBigEnum> {
   static constexpr type max() { return type::NINETEEN; }
 };
 
-
-}} // apache::thrift
-
-
+} // namespace apache::thrift
 // END declare_enums
 // BEGIN forward_declare
 namespace test::fixtures::enumstrict {
@@ -258,34 +230,18 @@ class MyStruct final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 2;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::myEnum,
     ::apache::thrift::ident::myBigEnum
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::enum_t<::test::fixtures::enumstrict::MyEnum>,
     ::apache::thrift::type::enum_t<::test::fixtures::enumstrict::MyBigEnum>
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 2;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -330,115 +286,91 @@ class MyStruct final  {
   bool operator<(const MyStruct&) const;
 
   /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> myEnum_ref() const& {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> myEnum_ref() const& {
     return {this->__fbthrift_field_myEnum, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> myEnum_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_myEnum), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> myEnum_ref() & {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> myEnum_ref() & {
     return {this->__fbthrift_field_myEnum, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> myEnum_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_myEnum), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> myEnum_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_myEnum), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> myEnum() const& {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> myEnum() const& {
     return {this->__fbthrift_field_myEnum, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> myEnum() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_myEnum), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> myEnum() & {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> myEnum() & {
     return {this->__fbthrift_field_myEnum, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "myEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> myEnum() && {
-    return {static_cast<T&&>(this->__fbthrift_field_myEnum), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> myEnum() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_myEnum), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> myBigEnum_ref() const& {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyBigEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> myBigEnum_ref() const& {
     return {this->__fbthrift_field_myBigEnum, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> myBigEnum_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_myBigEnum), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> myBigEnum_ref() & {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyBigEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> myBigEnum_ref() & {
     return {this->__fbthrift_field_myBigEnum, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> myBigEnum_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_myBigEnum), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyBigEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> myBigEnum_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_myBigEnum), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> myBigEnum() const& {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyBigEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> myBigEnum() const& {
     return {this->__fbthrift_field_myBigEnum, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> myBigEnum() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_myBigEnum), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> myBigEnum() & {
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyBigEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> myBigEnum() & {
     return {this->__fbthrift_field_myBigEnum, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "myBigEnum" } */
-  template <typename..., typename T = ::test::fixtures::enumstrict::MyBigEnum>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> myBigEnum() && {
-    return {static_cast<T&&>(this->__fbthrift_field_myBigEnum), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::test::fixtures::enumstrict::MyBigEnum>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> myBigEnum() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_myBigEnum), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "myEnum" } */
-  [[deprecated("Use `FOO.myEnum().value();` instead of `FOO.get_myEnum();`")]]
+  [[deprecated("Use `FOO.myEnum().value()` instead of `FOO.get_myEnum()`")]]
   ::test::fixtures::enumstrict::MyEnum get_myEnum() const;
 
   /** Glean { "field": "myEnum" } */
-  [[deprecated("Use `FOO.myEnum() = BAR;` instead of `FOO.set_myEnum(BAR);`")]]
+  [[deprecated("Use `FOO.myEnum() = BAR` instead of `FOO.set_myEnum(BAR)`")]]
   ::test::fixtures::enumstrict::MyEnum& set_myEnum(::test::fixtures::enumstrict::MyEnum myEnum_);
 
   /** Glean { "field": "myBigEnum" } */
-  [[deprecated("Use `FOO.myBigEnum().value();` instead of `FOO.get_myBigEnum();`")]]
+  [[deprecated("Use `FOO.myBigEnum().value()` instead of `FOO.get_myBigEnum()`")]]
   ::test::fixtures::enumstrict::MyBigEnum get_myBigEnum() const;
 
   /** Glean { "field": "myBigEnum" } */
-  [[deprecated("Use `FOO.myBigEnum() = BAR;` instead of `FOO.set_myBigEnum(BAR);`")]]
+  [[deprecated("Use `FOO.myBigEnum() = BAR` instead of `FOO.set_myBigEnum(BAR)`")]]
   ::test::fixtures::enumstrict::MyBigEnum& set_myBigEnum(::test::fixtures::enumstrict::MyBigEnum myBigEnum_);
 
   template <class Protocol_>
@@ -467,3 +399,31 @@ unsigned long MyStruct::read(Protocol_* iprot) {
 
 
 } // namespace test::fixtures::enumstrict
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::test::fixtures::enumstrict::MyStruct, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 4793286115894984127;
+  static constexpr ::std::string_view definitionKey = {"\x4c\x93\xef\x2c\x54\xbb\x96\x74\x7d\xb9\x05\xfc\x55\x81\x02\xdc", 16};
+};
+template <> struct TSchemaAssociation<::test::fixtures::enumstrict::EmptyEnum, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 4793286115894984127;
+  static constexpr ::std::string_view definitionKey = {"\x6c\xfe\x24\xd7\xe6\x7e\x80\xc4\x7d\xb1\xdb\xa0\x10\x4a\x41\x18", 16};
+};
+template <> struct TSchemaAssociation<::test::fixtures::enumstrict::MyEnum, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 4793286115894984127;
+  static constexpr ::std::string_view definitionKey = {"\xa9\xb0\x64\x27\xe8\x75\xcb\xde\xf9\x80\x5f\xe1\xcd\xab\x7e\xb0", 16};
+};
+template <> struct TSchemaAssociation<::test::fixtures::enumstrict::MyUseIntrinsicDefaultEnum, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 4793286115894984127;
+  static constexpr ::std::string_view definitionKey = {"\x85\x87\xce\x48\x6f\xf5\x3b\x78\x4a\x89\xb1\xcf\x2e\x41\xea\xd5", 16};
+};
+template <> struct TSchemaAssociation<::test::fixtures::enumstrict::MyBigEnum, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 4793286115894984127;
+  static constexpr ::std::string_view definitionKey = {"\xbb\x26\x78\x49\x25\xc3\x1f\x6d\x64\x84\xa0\x96\x70\xfd\xeb\xdc", 16};
+};
+} // namespace apache::thrift::detail

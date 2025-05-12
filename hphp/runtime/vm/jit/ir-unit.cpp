@@ -25,7 +25,7 @@
 namespace HPHP::jit {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -151,7 +151,6 @@ static bool endsUnitAtSrcKey(const Block* block, SrcKey sk) {
     case AsyncFuncRetSlow:
     case AsyncGenRetR:
     case AsyncGenYieldR:
-    case EnterTCUnwind:
       return true;
 
     // A ReqBindJmp ends a unit and it jumps to the next instruction to

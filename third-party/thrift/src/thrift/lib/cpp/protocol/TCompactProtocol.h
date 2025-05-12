@@ -24,9 +24,7 @@
 #include <stack>
 #include <folly/FBVector.h>
 
-namespace apache {
-namespace thrift {
-namespace protocol {
+namespace apache::thrift::protocol {
 
 /**
  * C++ Implementation of the Compact Protocol as described in THRIFT-110
@@ -261,7 +259,7 @@ class TCompactProtocolT
   int32_t container_limit_;
 };
 
-typedef TCompactProtocolT<TTransport> TCompactProtocol;
+using TCompactProtocol = TCompactProtocolT<TTransport>;
 
 /**
  * Constructs compact protocol handlers
@@ -304,11 +302,9 @@ class TCompactProtocolFactoryT : public TProtocolFactory {
   int32_t container_limit_;
 };
 
-typedef TCompactProtocolFactoryT<TTransport> TCompactProtocolFactory;
+using TCompactProtocolFactory = TCompactProtocolFactoryT<TTransport>;
 
-} // namespace protocol
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::protocol
 
 #include <thrift/lib/cpp/protocol/TCompactProtocol-inl.h>
 

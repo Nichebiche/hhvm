@@ -90,13 +90,13 @@ class Type : public detail::Wrap<TypeStruct> {
     return {Tag{}, std::forward<Args>(args)...};
   }
   template <typename Tag>
-  FOLLY_EXPORT static const Type& get() noexcept {
+  FOLLY_EXPORT static const Type& get() {
     static_assert(is_concrete_v<Tag>, "");
     static const Type& kInst = *new Type(Tag{});
     return kInst;
   }
   BaseType baseType() const noexcept {
-    return BaseType{data_.name()->getType()};
+    return static_cast<BaseType>(folly::to_underlying(data_.name()->getType()));
   }
 
   Type& operator=(const Type&) = default;
@@ -124,13 +124,13 @@ class Type : public detail::Wrap<TypeStruct> {
       bool ensure_params = false,
       bool validate_uri = false);
 
-  friend bool operator==(Type lhs, Type rhs) noexcept {
+  friend bool operator==(const Type& lhs, const Type& rhs) noexcept {
     return lhs.data_ == rhs.data_;
   }
-  friend bool operator!=(Type lhs, Type rhs) noexcept {
+  friend bool operator!=(const Type& lhs, const Type& rhs) noexcept {
     return lhs.data_ != rhs.data_;
   }
-  friend bool operator<(Type lhs, Type rhs) noexcept {
+  friend bool operator<(const Type& lhs, const Type& rhs) noexcept {
     return lhs.data_ < rhs.data_;
   }
 

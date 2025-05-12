@@ -26,7 +26,7 @@ let rec hint env (p, h) =
 and context_hint env (p, h) =
   match h with
   | Hfun_context n ->
-    make_decl_ty env p (Tgeneric (Format.sprintf "T/[ctx %s]" n, []))
+    make_decl_ty env p (Tgeneric (Format.sprintf "T/[ctx %s]" n))
   | Haccess ((_, (Habstr (n, []) | Hvar n)), ids) ->
     let name =
       Format.sprintf
@@ -34,7 +34,7 @@ and context_hint env (p, h) =
         n
         (String.concat ~sep:"::" (List.map ~f:snd ids))
     in
-    make_decl_ty env p (Tgeneric (name, []))
+    make_decl_ty env p (Tgeneric name)
   | _ -> hint env (p, h)
 
 and shape_field_info_to_shape_field_type
@@ -115,9 +115,7 @@ and hint_ p env = function
     in
     Tvec_or_dict (t1, hint env h2)
   | Hprim p -> Tprim p
-  | Habstr (x, argl) ->
-    let argl = List.map argl ~f:(hint env) in
-    Tgeneric (x, argl)
+  | Habstr (x, _tyl) -> Tgeneric x
   | Hclass_ptr (k, h) ->
     let h =
       match k with
@@ -131,6 +129,7 @@ and hint_ p env = function
   | Hlike h -> Tlike (hint env h)
   | Hfun
       {
+        hf_tparams;
         hf_is_readonly = ro;
         hf_param_tys = hl;
         hf_param_info = pil;
@@ -193,9 +192,65 @@ and hint_ p env = function
       | Some t -> (true, paraml @ [make_param t None])
       | None -> (false, paraml)
     in
+    let everything_sdt =
+      TypecheckerOptions.everything_sdt (Decl_env.tcopt env)
+    in
+    let ft_tparams =
+      List.map
+        hf_tparams
+        ~f:(fun { htp_name; htp_constraints; htp_user_attributes } ->
+          let tp_name =
+            let (pos, id) = htp_name in
+            (Pos_or_decl.of_raw_pos pos, id)
+          in
+          let tp_constraints =
+            List.map htp_constraints ~f:(fun (cstr_kind, cstr_hint) ->
+                (cstr_kind, hint env cstr_hint))
+          in
+
+          let tp_user_attributes =
+            List.map htp_user_attributes ~f:(fun (pos, id) ->
+                let ua_name = (Pos_or_decl.of_raw_pos pos, id) in
+                Typing_defs_core.{ ua_name; ua_params = []; ua_raw_val = None })
+          in
+          (* Add an implicit upper-bound if we are decling under implicit pessimisation
+             and `NoAutoBound` isn't set *)
+          let tp_constraints =
+            if
+              everything_sdt
+              && not
+                   (List.exists htp_user_attributes ~f:(fun (_, id) ->
+                        String.equal
+                          id
+                          Naming_special_names.UserAttributes.uaNoAutoBound))
+            then
+              let pos = fst tp_name in
+              let reason = Typing_reason.witness_from_decl pos in
+              let ub =
+                mk
+                  ( reason,
+                    Tapply
+                      ( (pos, Naming_special_names.Classes.cSupportDyn),
+                        [mk (reason, Tmixed)] ) )
+              in
+              (Ast_defs.Constraint_as, ub) :: tp_constraints
+            else
+              tp_constraints
+          in
+
+          Typing_defs_core.
+            {
+              tp_variance = Ast_defs.Invariant (* Meaningless here *);
+              tp_name;
+              tp_tparams = [];
+              tp_constraints;
+              tp_reified = Erased;
+              tp_user_attributes;
+            })
+    in
     Tfun
       {
-        ft_tparams = [];
+        ft_tparams;
         ft_where_constraints = [];
         ft_params = paraml;
         ft_implicit_params = implicit_params;
@@ -211,7 +266,7 @@ and hint_ p env = function
             ~variadic;
         (* TODO *)
         ft_cross_package = None;
-        ft_instantiated = true;
+        ft_instantiated = List.is_empty ft_tparams;
       }
   | Happly (id, argl) ->
     let id = Decl_env.make_decl_posed env id in

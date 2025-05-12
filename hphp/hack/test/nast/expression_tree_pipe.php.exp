@@ -45,13 +45,26 @@
                                                  (ET_Splice
                                                     { extract_client_type = false; 
                                                       contains_await = false; 
-                                                      macro_variables = None;
+                                                      macro_variables = None; 
+                                                      temp_lid = $0splice0;
                                                       spliced_expr =
                                                       ((), [4:22-36],
-                                                       (Pipe (([4:22-36], $$),
-                                                          ((), [4:22-30],
-                                                           (Pipe (([4:22-30], $$), ((), [4:22-24], (Lvar ([4:22-24], $0dollardollar))), ((), [4:28-30], (Dollardollar ([4:28-30], $$)))))),
-                                                          ((), [4:34-36], (Dollardollar ([4:34-36], $$))))))
+                                                       (Call
+                                                          { func = ((), [4:22-36], (Class_const (((), [4:22-36], (CI ([4:22-36], "\\ExampleDsl"))), ([4:22-36], "lift")))); 
+                                                            targs = [];
+                                                            args =
+                                                            [(Anormal
+                                                                ((), [4:22-36],
+                                                                 (Pipe ((
+                                                                    [4:22-36], $$),
+                                                                    (
+                                                                    (), [4:22-30],
+                                                                    (
+                                                                    Pipe (([4:22-30], $$), ((), [4:22-24], (Lvar ([4:22-24], $0dollardollar))), ((), [4:28-30], (Dollardollar ([4:28-30], $$)))))),
+                                                                    (
+                                                                    (), [4:34-36], (Dollardollar ([4:34-36], $$)))))))
+                                                              ];
+                                                            unpacked_arg = None }))
                                                       }))
                                                 )))));
                                          ([4:19-38],
@@ -96,24 +109,8 @@
                                                                     f_readonly_this = None; 
                                                                     f_annotation = (); 
                                                                     f_readonly_ret = None; 
-                                                                    f_ret = ((), None);
-                                                                    f_params =
-                                                                    [{ param_annotation = ();
-                                                                    param_type_hint =
-                                                                    (
-                                                                    (),
-                                                                    (Some (
-                                                                    [4:19-38],
-                                                                    (
-                                                                    Happly (([4:19-38], "\\HH\\supportdyn"), [([4:19-38], (Hshape { nsi_allows_unknown_fields = true; nsi_field_map = [] }))])))));
-                                                                    param_pos = [4:19-38]; 
-                                                                    param_name = "$0fv_shape"; 
-                                                                    param_info = (Param_optional (Some ((), [4:19-38], (Shape [])))); 
-                                                                    param_readonly = None; 
-                                                                    param_splat = None; 
-                                                                    param_callconv = Pnormal; 
-                                                                    param_user_attributes = []; 
-                                                                    param_visibility = None }]; 
+                                                                    f_ret = ((), None); 
+                                                                    f_params = []; 
                                                                     f_ctxs = (Some ([4:19-38], [([4:19-38], (Happly (([4:19-38], "\\HH\\Contexts\\defaults"), [])))])); 
                                                                     f_unsafe_ctxs = None;
                                                                     f_body =
@@ -127,13 +124,15 @@
                                                                     { extract_client_type = true; 
                                                                     contains_await = false; 
                                                                     macro_variables = None; 
+                                                                    temp_lid = $0splice0; 
                                                                     spliced_expr = ((), [4:22-36], (Lvar ([4:22-36], $0splice0))) })))))] }; 
                                                                     f_fun_kind = FSync; 
                                                                     f_user_attributes = []; 
                                                                     f_external = false; 
                                                                     f_doc_comment = None }; 
                                                                     ef_use = [((), ([4:8-18], $0splice0))]; 
-                                                                    ef_closure_class_name = None })))])));
+                                                                    ef_closure_class_name = None; 
+                                                                    ef_is_expr_tree_virtual_expr = false })))])));
                                                            (Anormal
                                                               ((), [4:19-38],
                                                                (Lfun (
@@ -192,8 +191,8 @@
                                      f_external = false; f_doc_comment = None },
                                    [((), ([4:22-36], $0splice0)); ((), ([4:34-36], $$))])));
                                targs = []; args = [(Anormal ((), [4:22-24], (Dollardollar ([4:22-24], $$))))]; 
-                               unpacked_arg = None }))
-                         }))
+                               unpacked_arg = None }));
+                         et_free_vars = None }))
                    )))))
             ]
           };

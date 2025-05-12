@@ -2,7 +2,6 @@
 //
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
-mod local_config;
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -14,15 +13,17 @@ use std::path::PathBuf;
 use anyhow::Context;
 use anyhow::Result;
 use config_file::ConfigFile;
-pub use local_config::LocalConfig;
 use oxidized::custom_error_config::CustomErrorConfig;
-use oxidized::decl_parser_options::DeclParserOptions;
 use oxidized::experimental_features;
 use oxidized::global_options::ExtendedReasonsConfig;
 use oxidized::global_options::GlobalOptions;
 use oxidized::global_options::NoneOrAllExcept;
+use oxidized::global_options::SavedState;
+use oxidized::global_options::SavedStateLoading;
 use oxidized::parser_options::ParserOptions;
+use oxidized::saved_state_rollouts::SavedStateRollouts;
 use package::PackageInfo;
+use serde_json::json;
 use sha1::Digest;
 use sha1::Sha1;
 
@@ -44,7 +45,6 @@ pub struct HhConfig {
     pub hash: String,
 
     pub opts: GlobalOptions,
-    pub local_config: LocalConfig,
 
     pub gc_minor_heap_size: usize,
     pub gc_space_overhead: usize,
@@ -59,6 +59,7 @@ pub struct HhConfig {
     pub naming_table_compression_level: usize,
     pub naming_table_compression_threads: usize,
     pub eden_fetch_parallelism: usize,
+    pub use_distc_crawl_dircache: bool,
 }
 
 impl HhConfig {
@@ -88,7 +89,6 @@ impl HhConfig {
             .unwrap_or(GlobalOptions::default().po.package_v2);
         PackageInfo::from_text_strict(
             package_v2,
-            root.as_ref().to_str().unwrap_or_default(),
             root.as_ref()
                 .join(package_config_pathbuf)
                 .to_str()
@@ -200,19 +200,6 @@ impl HhConfig {
         format!("{:x}", hasher.finalize())
     }
 
-    pub fn from_slice(bytes: &[u8]) -> Result<Self> {
-        let (hash, config) = ConfigFile::from_slice_with_sha1(bytes);
-        Ok(Self {
-            hash,
-            ..Self::from_configs(
-                PathBuf::new(),
-                config,
-                Default::default(),
-                Default::default(),
-            )?
-        })
-    }
-
     /// Construct from .hhconfig and hh.conf files with CLI overrides already applied.
     pub fn from_configs(
         root: impl AsRef<Path>,
@@ -228,15 +215,7 @@ impl HhConfig {
             .unwrap_or(Ok(false))?;
 
         let version = hhconfig.get_str("version");
-
-        let local_config = LocalConfig::from_config(
-            version,
-            current_rolled_out_flag_idx,
-            deactivate_saved_state_rollout,
-            &hh_conf,
-        )?;
         let package_info: PackageInfo = Self::get_package_info(root, &hhconfig);
-
         let default = ParserOptions::default();
         let experimental_features = hhconfig.get_str("enable_experimental_stx_features");
         let po = ParserOptions {
@@ -251,7 +230,9 @@ impl HhConfig {
             codegen: hhconfig.get_bool_or("codegen", default.codegen)?,
             deregister_php_stdlib: hhconfig
                 .get_bool_or("deregister_php_stdlib", default.deregister_php_stdlib)?,
-            allow_unstable_features: local_config.allow_unstable_features,
+            allow_unstable_features: hh_conf
+                .bool_if_min_version("allow_unstable_features", version)
+                .unwrap_or(Ok(default.allow_unstable_features))?,
             disable_lval_as_an_expression: default.disable_lval_as_an_expression,
             union_intersection_type_hints: hhconfig.get_bool_or(
                 "union_intersection_type_hints",
@@ -328,11 +309,31 @@ impl HhConfig {
                 "treat_non_annotated_memoize_as_kbic",
                 default.treat_non_annotated_memoize_as_kbic,
             )?,
+            use_oxidized_by_ref_decls: hhconfig.get_bool_or(
+                "use_oxidized_by_ref_decls",
+                hh_conf.get_bool_or(
+                    // The JKs are only read into hh_conf
+                    "use_oxidized_by_ref_decls",
+                    default.use_oxidized_by_ref_decls,
+                )?,
+            )?,
         };
+        let rollouts = SavedStateRollouts::make(
+            current_rolled_out_flag_idx,
+            deactivate_saved_state_rollout,
+            hh_conf.get_str("ss_force"),
+            |flag_name| hh_conf.get_bool(flag_name).unwrap_or(Ok(false)),
+        )?;
         let default = GlobalOptions::default();
         let opts = GlobalOptions {
             po,
-            tco_saved_state: local_config.saved_state.clone(),
+            tco_saved_state: SavedState {
+                loading: SavedStateLoading::default(),
+                rollouts,
+                project_metadata_w_flags: hh_conf
+                    .get_bool("project_metadata_w_flags")
+                    .unwrap_or(Ok(default.tco_saved_state.project_metadata_w_flags))?,
+            },
             tco_experimental_features: hhconfig.get_string_set_or(
                 "enable_experimental_tc_features",
                 default.tco_experimental_features,
@@ -452,12 +453,6 @@ impl HhConfig {
                     allowed_expression_tree_visitors
                 }),
             tco_typeconst_concrete_concrete_error: default.tco_typeconst_concrete_concrete_error,
-            tco_enable_strict_const_semantics: hhconfig.get_int_or(
-                "enable_strict_const_semantics",
-                default.tco_enable_strict_const_semantics,
-            )?,
-            tco_strict_wellformedness: hhconfig
-                .get_int_or("strict_wellformedness", default.tco_strict_wellformedness)?,
             tco_meth_caller_only_public_visibility: default.tco_meth_caller_only_public_visibility,
             tco_require_extends_implements_ancestors: default
                 .tco_require_extends_implements_ancestors,
@@ -479,6 +474,7 @@ impl HhConfig {
                 "profile_top_level_definitions",
                 default.tco_profile_top_level_definitions,
             )?,
+            tco_typecheck_if_name_matches_regexp: default.tco_typecheck_if_name_matches_regexp,
             tco_allow_all_files_for_module_declarations: default
                 .tco_allow_all_files_for_module_declarations,
             tco_allowed_files_for_module_declarations: hhconfig
@@ -510,8 +506,6 @@ impl HhConfig {
                 .get_bool_or("log_exhaustivity_check", default.tco_log_exhaustivity_check)?,
             tco_sticky_quarantine: default.tco_sticky_quarantine,
             tco_lsp_invalidation: default.tco_lsp_invalidation,
-            invalidate_all_folded_decls_upon_file_change: default
-                .invalidate_all_folded_decls_upon_file_change,
             tco_autocomplete_sort_text: default.tco_autocomplete_sort_text,
             tco_extended_reasons: hhconfig.get_either_int_or_str("extended_reasons").and_then(
                 |res| match res {
@@ -542,10 +536,32 @@ impl HhConfig {
             },
             warnings_default_all: hhconfig
                 .get_bool_or("warnings_default_all", default.warnings_default_all)?,
+            warnings_in_sandcastle: hhconfig
+                .get_bool_or("warnings_in_sandcastle", default.warnings_in_sandcastle)?,
             tco_strict_switch: hhconfig.get_bool_or("strict_switch", default.tco_strict_switch)?,
-            tco_package_v2_bypass_package_check_for_class_const: hhconfig.get_bool_or(
-                "package_v2_bypass_package_check_for_class_const",
-                default.tco_package_v2_bypass_package_check_for_class_const,
+            tco_package_v2_allow_typedef_violations: hhconfig.get_bool_or(
+                "package_v2_allow_typedef_violations",
+                default.tco_package_v2_allow_typedef_violations,
+            )?,
+            tco_package_v2_allow_classconst_violations: hhconfig.get_bool_or(
+                "package_v2_allow_classconst_violations",
+                default.tco_package_v2_allow_classconst_violations,
+            )?,
+            tco_package_v2_allow_reifiable_tconst_violations: hhconfig.get_bool_or(
+                "package_v2_allow_reifiable_tconst_violations",
+                default.tco_package_v2_allow_reifiable_tconst_violations,
+            )?,
+            tco_package_v2_allow_all_tconst_violations: hhconfig.get_bool_or(
+                "package_v2_allow_all_tconst_violations",
+                default.tco_package_v2_allow_all_tconst_violations,
+            )?,
+            tco_package_v2_allow_reified_generics_violations: hhconfig.get_bool_or(
+                "package_v2_allow_reified_generics_violations",
+                default.tco_package_v2_allow_reified_generics_violations,
+            )?,
+            tco_package_v2_allow_all_generics_violations: hhconfig.get_bool_or(
+                "package_v2_allow_all_generics_violations",
+                default.tco_package_v2_allow_all_generics_violations,
             )?,
             tco_package_v2_exclude_patterns: hhconfig
                 .get_str("package_v2_exclude_patterns")
@@ -568,9 +584,12 @@ impl HhConfig {
             class_sub_classname: hhconfig
                 .get_bool_or("class_sub_classname", default.class_sub_classname)?,
             class_class_type: hhconfig.get_bool_or("class_class_type", default.class_class_type)?,
+            safe_abstract: hhconfig.get_bool_or("safe_abstract", default.safe_abstract)?,
+            needs_concrete: hhconfig.get_bool_or("needs_concrete", default.needs_concrete)?,
+            allow_class_string_cast: hhconfig
+                .get_bool_or("allow_class_string_cast", default.allow_class_string_cast)?,
         };
         let mut c = Self {
-            local_config,
             opts,
             ..Self::default()
         };
@@ -625,14 +644,21 @@ impl HhConfig {
                 "hh_distc_exponential_backoff_num_retries" => {
                     c.hh_distc_exponential_backoff_num_retries = parse_json(&value)?;
                 }
+                "use_distc_crawl_dircache" => {
+                    c.use_distc_crawl_dircache = parse_json(&value)?;
+                }
                 _ => {}
             }
         }
         Ok(c)
     }
 
-    pub fn get_decl_parser_options(&self) -> DeclParserOptions {
-        DeclParserOptions::from_parser_options(&self.opts.po)
+    pub fn to_selected_experiments_json(&self) -> String {
+        let experiments = json!({
+            "eden_fetch_parallelism": self.eden_fetch_parallelism,
+            "use_distc_crawl_dircache": self.use_distc_crawl_dircache,
+        });
+        experiments.to_string()
     }
 }
 
@@ -658,7 +684,7 @@ fn parse_svec(value: &str) -> Vec<String> {
 }
 
 /// Return the local config file path, allowing HH_LOCALCONF_PATH to override it.
-pub fn system_config_path() -> PathBuf {
+fn system_config_path() -> PathBuf {
     const HH_CONF: &str = "hh.conf";
     match std::env::var_os("HH_LOCALCONF_PATH") {
         Some(path) => Path::new(&path).join(HH_CONF),
@@ -669,10 +695,22 @@ pub fn system_config_path() -> PathBuf {
 #[cfg(test)]
 mod test {
     use super::*;
+    fn from_slice(bytes: &[u8]) -> Result<HhConfig> {
+        let (hash, config) = ConfigFile::from_slice_with_sha1(bytes);
+        Ok(HhConfig {
+            hash,
+            ..HhConfig::from_configs(
+                PathBuf::new(),
+                config,
+                Default::default(),
+                Default::default(),
+            )?
+        })
+    }
 
     #[test]
     fn test_log_levels() {
-        let hhconf = HhConfig::from_slice(br#"log_levels={ "pessimise": 1 }"#).unwrap();
+        let hhconf = from_slice(br#"log_levels={ "pessimise": 1 }"#).unwrap();
         assert_eq!(
             hhconf.opts.log_levels.get("pessimise").copied(),
             Some(1isize)

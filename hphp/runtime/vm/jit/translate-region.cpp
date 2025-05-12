@@ -16,27 +16,21 @@
 
 #include "hphp/runtime/vm/jit/translate-region.h"
 
-#include "hphp/util/arch.h"
 #include "hphp/util/configs/debugger.h"
 #include "hphp/util/configs/hhir.h"
 #include "hphp/util/ringbuffer.h"
-#include "hphp/util/timer.h"
 #include "hphp/util/trace.h"
 
-#include "hphp/runtime/base/coeffects-config.h"
 #include "hphp/runtime/base/tracing.h"
-
-#include "hphp/runtime/ext/asio/ext_wait-handle.h"
 
 #include "hphp/runtime/vm/bc-pattern.h"
 
-#include "hphp/runtime/vm/hhbc-codec.h"
 #include "hphp/runtime/vm/jit/inlining-decider.h"
 #include "hphp/runtime/vm/jit/irgen.h"
 #include "hphp/runtime/vm/jit/irgen-control.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
+#include "hphp/runtime/vm/jit/irgen-inlining.h"
 #include "hphp/runtime/vm/jit/irgen-internal.h"
-#include "hphp/runtime/vm/jit/irgen-sib.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/location.h"
 #include "hphp/runtime/vm/jit/mcgen.h"
@@ -50,7 +44,7 @@
 #include "hphp/runtime/vm/jit/timer.h"
 #include "hphp/runtime/vm/jit/type.h"
 
-TRACE_SET_MOD(trans);
+TRACE_SET_MOD(trans)
 
 namespace HPHP::jit {
 
@@ -401,35 +395,36 @@ bool inEntryRetransChain(RegionDesc::BlockId bid, const RegionDesc& region) {
  * Otherwise, select a region for `callee' if one is not already present in
  * `retry'.  Update `inl' and return the region if it's inlinable.
  */
-RegionDescPtr getInlinableCalleeRegion(const irgen::IRGS& irgs,
-                                       SrcKey entry,
-                                       Type ctxType,
-                                       const ProfSrcKey& psk,
-                                       int& calleeCost) {
+irgen::RegionAndLazyUnit getInlinableCalleeRegionAndLazyUnit(const irgen::IRGS& irgs,
+                                                             SrcKey entry,
+                                                             Type ctxType,
+                                                             const ProfSrcKey& psk,
+                                                             int& calleeCost) {
   assertx(entry.funcEntry());
   if (isProfiling(irgs.context.kind) || irgs.inlineState.conjure) {
-    return nullptr;
+    return {psk.srcKey, nullptr};
   }
   if (!irgs.region || !irgs.retryContext) {
-    return nullptr;
+    return {psk.srcKey, nullptr};
   }
   auto annotationsPtr = mcgen::dumpTCAnnotation(irgs.context.kind) ?
                         irgs.unit.annotationData.get() : nullptr;
-  if (!canInlineAt(psk.srcKey, entry, annotationsPtr)) return nullptr;
+  if (!canInlineAt(psk.srcKey, entry, annotationsPtr)) return {psk.srcKey, nullptr};
+
 
   auto const& inlineBlacklist = irgs.retryContext->inlineBlacklist;
   if (inlineBlacklist.find(psk) != inlineBlacklist.end()) {
-    return nullptr;
+    return {psk.srcKey, nullptr};
   }
 
-  auto calleeRegion = selectCalleeRegion(irgs, entry, ctxType, psk.srcKey);
-  if (!calleeRegion || calleeRegion->instrSize() > irgs.budgetBCInstrs) {
-    return nullptr;
+  auto regionAndLazyUnit = selectCalleeRegion(irgs, entry, ctxType, psk.srcKey);
+  if (!regionAndLazyUnit.region()) {
+    return {psk.srcKey, nullptr};
   }
-
-  calleeCost = costOfInlining(psk.srcKey, entry.func(), *calleeRegion,
-                              annotationsPtr);
-  return calleeRegion;
+  if (!shouldInline(irgs, psk.srcKey, entry.func(), regionAndLazyUnit, calleeCost)) {
+    return {psk.srcKey, nullptr};
+  }
+  return regionAndLazyUnit;
 }
 
 static bool needsSurpriseCheck(Op op) {
@@ -606,11 +601,14 @@ TranslateResult irGenRegionImpl(irgen::IRGS& irgs,
   auto prevProfFactor  = irgs.profFactor;  irgs.profFactor  = profFactor;
   auto prevProfTransIDs = irgs.profTransIDs; irgs.profTransIDs = TransIDSet{};
   auto prevOffsetMapping = irb.saveAndClearOffsetMapping();
+  auto prevEHBlockMapping = irb.saveAndClearEHBlockMapping();
+  // Note: no need to save/restore m_skToEHDecRefBlockMap, it is uniquely keyed.
   SCOPE_EXIT {
     irgs.region      = prevRegion;
     irgs.profFactor  = prevProfFactor;
     irgs.profTransIDs = prevProfTransIDs;
     irb.restoreOffsetMapping(std::move(prevOffsetMapping));
+    irb.restoreEHBlockMapping(std::move(prevEHBlockMapping));
   };
 
   FTRACE(1, "translateRegion (mode={}, profFactor={:.2}) starting with:\n{}\n",
@@ -888,13 +886,14 @@ bool irGenTryInlineFCall(irgen::IRGS& irgs, SrcKey entry, SSATmp* ctx,
   int calleeCost{0};
 
   // See if we have a callee region we can inline.
-  auto const calleeRegion = getInlinableCalleeRegion(
+  auto calleeRegionAndUnit = getInlinableCalleeRegionAndLazyUnit(
     irgs, entry, ctx->type(), psk, calleeCost);
+  auto const calleeRegion = calleeRegionAndUnit.region();
   if (!calleeRegion) return false;
 
   // We shouldn't be inlining profiling translations.
   assertx(irgs.context.kind != TransKind::Profile);
-  assertx(calleeRegion->instrSize() <= irgs.budgetBCInstrs);
+  assertx(calleeRegion->instrSize() <= irgs.budgetBCInstrs || calleeCost <= Cfg::HHIR::AlwaysInlineVasmCostLimit);
   assert_flog(calleeRegion->start().func() == entry.func() &&
               calleeRegion->start().funcEntry() && entry.funcEntry() &&
               calleeRegion->start().numEntryArgs() >= entry.numEntryArgs(),
@@ -906,6 +905,13 @@ bool irGenTryInlineFCall(irgen::IRGS& irgs, SrcKey entry, SSATmp* ctx,
          entry.func()->fullName()->data(),
          entry.numEntryArgs(),
          show(irgs));
+
+  if (Cfg::HHIR::EnableInliningPass) {
+    assertx(calleeRegionAndUnit.unit());
+    auto unit = calleeRegionAndUnit.unit();
+    return stitchInlinedRegion(irgs, psk.srcKey, entry, *calleeRegion,
+                               *unit);
+  }
 
   irgen::beginInlining(irgs, entry, ctx, asyncEagerOffset, calleeCost,
                        calleeFP);

@@ -37,11 +37,8 @@
 #include "hphp/runtime/base/recorder.h"
 #include "hphp/runtime/base/replayer.h"
 #include "hphp/runtime/base/req-heap-sanitizer.h"
-#include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/base/static-string-table.h"
-#include "hphp/runtime/base/timestamp.h"
 #include "hphp/runtime/base/tv-refcount.h"
-#include "hphp/runtime/base/zend-string.h"
 #include "hphp/runtime/base/zend-url.h"
 #include "hphp/runtime/ext/extension-registry.h"
 #include "hphp/runtime/ext/hash/hash_murmur.h"
@@ -49,11 +46,8 @@
 #include "hphp/runtime/server/cli-server.h"
 #include "hphp/runtime/server/files-match.h"
 #include "hphp/runtime/server/virtual-host.h"
-#include "hphp/runtime/server/server-stats.h"
 #include "hphp/runtime/vm/jit/mcgen-translate.h"
-#include "hphp/runtime/vm/treadmill.h"
 #include "hphp/util/arch.h"
-#include "hphp/util/atomic-vector.h"
 #include "hphp/util/build-info.h"
 #include "hphp/util/bump-mapper.h"
 #include "hphp/util/configs/adminserver.h"
@@ -72,17 +66,14 @@
 #include "hphp/util/log-file-flusher.h"
 #include "hphp/util/logger.h"
 #include "hphp/util/network.h"
-#include "hphp/util/numa.h"
 #include "hphp/util/process.h"
 #include "hphp/util/service-data.h"
 #include "hphp/util/stack-trace.h"
 #include "hphp/util/struct-log.h"
-#include "hphp/util/text-util.h"
 #include "hphp/zend/zend-string.h"
 
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -91,7 +82,6 @@
 #include <vector>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <folly/CPortability.h>
 #include <folly/Conv.h>
 #include <folly/json/DynamicConverter.h>
 #include <folly/FileUtil.h>
@@ -643,6 +633,11 @@ int64_t RuntimeOption::SocketDefaultTimeout = 60;
 std::map<std::string, std::string> RuntimeOption::ServerVariables;
 std::map<std::string, std::string> RuntimeOption::EnvVariables;
 
+std::map<std::string, std::string>& RuntimeOption::GetMetadata() {
+  static std::map<std::string, std::string> Metadata;
+  return Metadata;
+}
+
 const std::string& RuntimeOption::GetServerPrimaryIPv4() {
    static std::string serverPrimaryIPv4 = GetPrimaryIPv4();
    return serverPrimaryIPv4;
@@ -747,7 +742,7 @@ std::string RuntimeOption::getTraceOutputFile() {
 using std::string;
 #define F(type, name, def) \
   type RuntimeOption::Eval ## name = type(def);
-EVALFLAGS();
+EVALFLAGS()
 #undef F
 hphp_string_map<TypedValue> RuntimeOption::ConstantFunctions;
 
@@ -764,6 +759,7 @@ bool RuntimeOption::HHProfRequest = false;
 int RuntimeOption::ThriftFBServerThriftServerIOWorkerThreads = 1;
 int RuntimeOption::ThriftFBServerThriftServerCPUWorkerThreads = 1;
 std::set<std::string> RuntimeOption::ThriftFBServerHighPriorityEndPoints;
+bool RuntimeOption::ThriftFBServerUseThriftResourcePool = false;
 
 bool RuntimeOption::EnableFb303Server = false;
 int RuntimeOption::Fb303ServerPort = 0;
@@ -985,7 +981,7 @@ static std::vector<std::string> getTierOverwrites(
   };
 
   std::vector<std::string> messages;
-  auto enableShards = true;
+  auto enableShards = !config["DisableShards"].configGetBool();
 
   auto const matchesTier = [&] (Hdf hdf) {
     // Check the patterns one by one so they all get evaluated; otherwise, when
@@ -1070,6 +1066,7 @@ void logTierOverwriteInputs() {
   log_entry.setStr("cpu", RuntimeOption::TierOverwriteInputs["cpu"]);
   log_entry.setStr("tiers", RuntimeOption::TierOverwriteInputs["tiers"]);
   log_entry.setStr("tags", RuntimeOption::TierOverwriteInputs["tags"]);
+  log_entry.setStr("config_file_name", RuntimeOption::GetMetadata()["ConfigFileName"]);
   StructuredLog::log("hhvm_config_hdf_logs", log_entry);
 }
 
@@ -1086,6 +1083,9 @@ void RuntimeOption::Load(
   // Intialize the memory manager here because various settings and
   // initializations that we do here need it
   tl_heap.getCheck();
+
+  // Store the config file name for logging.
+  Config::Bind(GetMetadata(), ini, config, "Metadata");
 
   // Get the ini (-d) and hdf (-v) strings, which may override some
   // of options that were set from config files. We also do these
@@ -1583,6 +1583,7 @@ void RuntimeOption::Load(
     Config::Bind(ThriftFBServerThriftServerCPUWorkerThreads, ini, config, "ThriftFBServer.ThriftServerCPUWorkerThreads",
                  1);
     Config::Bind(ThriftFBServerHighPriorityEndPoints, ini, config, "ThriftFBServer.HighPriorityEndPoints");
+    Config::Bind(ThriftFBServerUseThriftResourcePool, ini, config, "ThriftFBServer.UseThriftResourcePool", false);
 
     // Fb303Server
     Config::Bind(EnableFb303Server, ini, config, "Fb303Server.Enable",

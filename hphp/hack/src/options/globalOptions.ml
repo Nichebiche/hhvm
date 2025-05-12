@@ -153,8 +153,6 @@ type t = {
   tco_enable_function_references: bool;
   tco_allowed_expression_tree_visitors: string list;
   tco_typeconst_concrete_concrete_error: bool;
-  tco_enable_strict_const_semantics: int;
-  tco_strict_wellformedness: int;
   tco_meth_caller_only_public_visibility: bool;
   tco_require_extends_implements_ancestors: bool;
   tco_strict_value_equality: bool;
@@ -165,6 +163,7 @@ type t = {
   tco_type_printer_fuel: int;
   tco_specify_manifold_api_key: bool;
   tco_profile_top_level_definitions: bool;
+  tco_typecheck_if_name_matches_regexp: string option;
   tco_allow_all_files_for_module_declarations: bool;
   tco_allowed_files_for_module_declarations: string list;
   tco_record_fine_grained_dependencies: bool;
@@ -176,16 +175,21 @@ type t = {
   tco_log_exhaustivity_check: bool;
   tco_sticky_quarantine: bool;
   tco_lsp_invalidation: bool;
-  invalidate_all_folded_decls_upon_file_change: bool;
   tco_autocomplete_sort_text: bool;
   tco_extended_reasons: extended_reasons_config option;
   tco_disable_physical_equality: bool;
   hack_warnings: int none_or_all_except;
   warnings_default_all: bool;
+  warnings_in_sandcastle: bool;
   tco_strict_switch: bool;
   tco_allowed_files_for_ignore_readonly: string list;
   tco_package_v2_exclude_patterns: string list;
-  tco_package_v2_bypass_package_check_for_class_const: bool;
+  tco_package_v2_allow_typedef_violations: bool;
+  tco_package_v2_allow_classconst_violations: bool;
+  tco_package_v2_allow_reifiable_tconst_violations: bool;
+  tco_package_v2_allow_all_tconst_violations: bool;
+  tco_package_v2_allow_reified_generics_violations: bool;
+  tco_package_v2_allow_all_generics_violations: bool;
   re_no_cache: bool;
   hh_distc_should_disable_trace_store: bool;
   hh_distc_exponential_backoff_num_retries: int;
@@ -193,6 +197,9 @@ type t = {
   recursive_case_types: bool;
   class_sub_classname: bool;
   class_class_type: bool;
+  safe_abstract: bool;
+  needs_concrete: bool;
+  allow_class_string_cast: bool;
 }
 [@@deriving eq, show]
 
@@ -263,8 +270,6 @@ let default =
     tco_enable_function_references = true;
     tco_allowed_expression_tree_visitors = [];
     tco_typeconst_concrete_concrete_error = false;
-    tco_enable_strict_const_semantics = 0;
-    tco_strict_wellformedness = 0;
     tco_meth_caller_only_public_visibility = true;
     tco_require_extends_implements_ancestors = false;
     tco_strict_value_equality = false;
@@ -275,6 +280,7 @@ let default =
     tco_type_printer_fuel = 100;
     tco_specify_manifold_api_key = false;
     tco_profile_top_level_definitions = false;
+    tco_typecheck_if_name_matches_regexp = None;
     tco_allow_all_files_for_module_declarations = true;
     tco_allowed_files_for_module_declarations = [];
     tco_record_fine_grained_dependencies = false;
@@ -286,23 +292,32 @@ let default =
     tco_log_exhaustivity_check = false;
     tco_sticky_quarantine = false;
     tco_lsp_invalidation = false;
-    invalidate_all_folded_decls_upon_file_change = false;
     tco_autocomplete_sort_text = false;
     tco_extended_reasons = None;
     tco_disable_physical_equality = false;
     hack_warnings = All_except [];
     warnings_default_all = false;
+    warnings_in_sandcastle = true;
     tco_strict_switch = false;
     tco_allowed_files_for_ignore_readonly = [];
-    tco_package_v2_exclude_patterns = [{|.*/__tests__/.*|}];
-    tco_package_v2_bypass_package_check_for_class_const = true;
+    tco_package_v2_exclude_patterns =
+      [{|.*/__tests__/.*|}; {|.*/flib/intern/makehaste/.*|}];
+    tco_package_v2_allow_typedef_violations = true;
+    tco_package_v2_allow_classconst_violations = true;
+    tco_package_v2_allow_reifiable_tconst_violations = true;
+    tco_package_v2_allow_all_tconst_violations = true;
+    tco_package_v2_allow_reified_generics_violations = true;
+    tco_package_v2_allow_all_generics_violations = true;
     re_no_cache = false;
     hh_distc_should_disable_trace_store = false;
     hh_distc_exponential_backoff_num_retries = 10;
     tco_enable_abstract_method_optional_parameters = false;
     recursive_case_types = false;
     class_sub_classname = true;
-    class_class_type = false;
+    class_class_type = true;
+    safe_abstract = false;
+    needs_concrete = false;
+    allow_class_string_cast = true;
   }
 
 let set
@@ -371,8 +386,6 @@ let set
     ?tco_enable_function_references
     ?tco_allowed_expression_tree_visitors
     ?tco_typeconst_concrete_concrete_error
-    ?tco_enable_strict_const_semantics
-    ?tco_strict_wellformedness
     ?tco_meth_caller_only_public_visibility
     ?tco_require_extends_implements_ancestors
     ?tco_strict_value_equality
@@ -383,6 +396,7 @@ let set
     ?tco_type_printer_fuel
     ?tco_specify_manifold_api_key
     ?tco_profile_top_level_definitions
+    ?tco_typecheck_if_name_matches_regexp
     ?tco_allow_all_files_for_module_declarations
     ?tco_allowed_files_for_module_declarations
     ?tco_record_fine_grained_dependencies
@@ -394,16 +408,21 @@ let set
     ?tco_log_exhaustivity_check
     ?tco_sticky_quarantine
     ?tco_lsp_invalidation
-    ?invalidate_all_folded_decls_upon_file_change
     ?tco_autocomplete_sort_text
     ?tco_extended_reasons
     ?tco_disable_physical_equality
     ?hack_warnings
     ?warnings_default_all
+    ?warnings_in_sandcastle
     ?tco_strict_switch
     ?tco_allowed_files_for_ignore_readonly
     ?tco_package_v2_exclude_patterns
-    ?tco_package_v2_bypass_package_check_for_class_const
+    ?tco_package_v2_allow_typedef_violations
+    ?tco_package_v2_allow_classconst_violations
+    ?tco_package_v2_allow_reifiable_tconst_violations
+    ?tco_package_v2_allow_all_tconst_violations
+    ?tco_package_v2_allow_reified_generics_violations
+    ?tco_package_v2_allow_all_generics_violations
     ?re_no_cache
     ?hh_distc_should_disable_trace_store
     ?hh_distc_exponential_backoff_num_retries
@@ -411,6 +430,9 @@ let set
     ?recursive_case_types
     ?class_sub_classname
     ?class_class_type
+    ?safe_abstract
+    ?needs_concrete
+    ?allow_class_string_cast
     options =
   let setting setting option =
     match setting with
@@ -586,12 +608,6 @@ let set
       setting
         tco_typeconst_concrete_concrete_error
         options.tco_typeconst_concrete_concrete_error;
-    tco_enable_strict_const_semantics =
-      setting
-        tco_enable_strict_const_semantics
-        options.tco_enable_strict_const_semantics;
-    tco_strict_wellformedness =
-      setting tco_strict_wellformedness options.tco_strict_wellformedness;
     tco_meth_caller_only_public_visibility =
       setting
         tco_meth_caller_only_public_visibility
@@ -624,6 +640,10 @@ let set
       setting
         tco_profile_top_level_definitions
         options.tco_profile_top_level_definitions;
+    tco_typecheck_if_name_matches_regexp =
+      setting_opt
+        tco_typecheck_if_name_matches_regexp
+        options.tco_typecheck_if_name_matches_regexp;
     tco_allow_all_files_for_module_declarations =
       setting
         tco_allow_all_files_for_module_declarations
@@ -654,10 +674,6 @@ let set
       setting tco_sticky_quarantine options.tco_sticky_quarantine;
     tco_lsp_invalidation =
       setting tco_lsp_invalidation options.tco_lsp_invalidation;
-    invalidate_all_folded_decls_upon_file_change =
-      setting
-        invalidate_all_folded_decls_upon_file_change
-        options.invalidate_all_folded_decls_upon_file_change;
     tco_autocomplete_sort_text =
       setting tco_autocomplete_sort_text options.tco_autocomplete_sort_text;
     tco_extended_reasons =
@@ -669,6 +685,8 @@ let set
     hack_warnings = setting hack_warnings options.hack_warnings;
     warnings_default_all =
       setting warnings_default_all options.warnings_default_all;
+    warnings_in_sandcastle =
+      setting warnings_in_sandcastle options.warnings_in_sandcastle;
     tco_strict_switch = setting tco_strict_switch options.tco_strict_switch;
     tco_allowed_files_for_ignore_readonly =
       setting
@@ -678,10 +696,30 @@ let set
       setting
         tco_package_v2_exclude_patterns
         options.tco_package_v2_exclude_patterns;
-    tco_package_v2_bypass_package_check_for_class_const =
+    tco_package_v2_allow_typedef_violations =
       setting
-        tco_package_v2_bypass_package_check_for_class_const
-        options.tco_package_v2_bypass_package_check_for_class_const;
+        tco_package_v2_allow_typedef_violations
+        options.tco_package_v2_allow_typedef_violations;
+    tco_package_v2_allow_classconst_violations =
+      setting
+        tco_package_v2_allow_classconst_violations
+        options.tco_package_v2_allow_classconst_violations;
+    tco_package_v2_allow_reifiable_tconst_violations =
+      setting
+        tco_package_v2_allow_reifiable_tconst_violations
+        options.tco_package_v2_allow_reifiable_tconst_violations;
+    tco_package_v2_allow_all_tconst_violations =
+      setting
+        tco_package_v2_allow_all_tconst_violations
+        options.tco_package_v2_allow_all_tconst_violations;
+    tco_package_v2_allow_reified_generics_violations =
+      setting
+        tco_package_v2_allow_reified_generics_violations
+        options.tco_package_v2_allow_reified_generics_violations;
+    tco_package_v2_allow_all_generics_violations =
+      setting
+        tco_package_v2_allow_all_generics_violations
+        options.tco_package_v2_allow_all_generics_violations;
     re_no_cache = setting re_no_cache options.re_no_cache;
     hh_distc_should_disable_trace_store =
       setting
@@ -700,6 +738,10 @@ let set
     class_sub_classname =
       setting class_sub_classname options.class_sub_classname;
     class_class_type = setting class_class_type options.class_class_type;
+    safe_abstract = setting safe_abstract options.safe_abstract;
+    needs_concrete = setting needs_concrete options.needs_concrete;
+    allow_class_string_cast =
+      setting allow_class_string_cast options.allow_class_string_cast;
   }
 
 let so_naming_sqlite_path t = t.so_naming_sqlite_path

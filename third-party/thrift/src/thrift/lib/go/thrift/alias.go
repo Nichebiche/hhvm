@@ -17,18 +17,15 @@
 package thrift
 
 import (
+	"io"
+
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/format"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 )
 
 // These are temporary aliases to the types package. They will be removed or kept, but that is to be determined in future diffs as we refactor.
 
-type SerialChannel = types.SerialChannel
-
 type RequestChannel = types.RequestChannel
-
-type Protocol = types.Protocol
-
-type ClientInterface = types.ClientInterface
 
 type ProcessorFunction = types.ProcessorFunction
 
@@ -36,19 +33,15 @@ type Decoder = types.Decoder
 
 type Struct = types.Struct
 
-type Exception = types.Exception
-
 type WritableStruct = types.WritableStruct
+
+type ReadableStruct = types.ReadableStruct
 
 type Encoder = types.Encoder
 
 type ApplicationException = types.ApplicationException
 
 type Type = types.Type
-
-type IRequest = types.IRequest
-
-type IResponse = types.IResponse
 
 type FormatID = types.ProtocolID
 
@@ -60,13 +53,7 @@ type WritableResult = types.WritableResult
 
 type TransportException = types.TransportException
 
-type ResponseHeaderGetter = types.ResponseHeaderGetter
-
-type RequestHeaders = types.RequestHeaders
-
 type FormatException = types.ProtocolException
-
-var ZERO types.Numeric = types.ZERO
 
 var REPLY types.MessageType = types.REPLY
 var CALL types.MessageType = types.CALL
@@ -110,29 +97,17 @@ var UTF16 Type = types.UTF16
 var STREAM Type = types.STREAM
 var FLOAT Type = types.FLOAT
 
+var INVALID_HEADERS_TYPE = types.INVALID_HEADERS_TYPE
+var BAD_SEQUENCE_ID int32 = types.BAD_SEQUENCE_ID
+
+// Pointerize returns a pointer to the given value.
+func Pointerize[T types.ThriftPointerizable](v T) *T {
+	return types.Pointerize(v)
+}
+
 func PrependError(prepend string, err error) error {
 	return types.PrependError(prepend, err)
 }
-
-func NewSerialChannel(protocol types.Protocol) *types.SerialChannel {
-	return types.NewSerialChannel(protocol)
-}
-
-func Float32Ptr(v float32) *float32 { return &v }
-func Float64Ptr(v float64) *float64 { return &v }
-func IntPtr(v int) *int             { return &v }
-func Int8Ptr(v int8) *int8          { return &v }
-func Int16Ptr(v int16) *int16       { return &v }
-func Int32Ptr(v int32) *int32       { return &v }
-func Int64Ptr(v int64) *int64       { return &v }
-func StringPtr(v string) *string    { return &v }
-func Uint8Ptr(v uint8) *uint8       { return &v }
-func Uint16Ptr(v uint16) *uint16    { return &v }
-func Uint32Ptr(v uint32) *uint32    { return &v }
-func Uint64Ptr(v uint64) *uint64    { return &v }
-func BoolPtr(v bool) *bool          { return &v }
-func BytePtr(v byte) *byte          { return &v }
-func ByteSlicePtr(v []byte) *[]byte { return &v }
 
 func NewTransportException(t int, msg string) types.TransportException {
 	return types.NewTransportException(t, msg)
@@ -144,4 +119,52 @@ func NewFormatException(err error) FormatException {
 
 func NewTransportExceptionFromError(err error) types.TransportException {
 	return types.NewTransportExceptionFromError(err)
+}
+
+func NewCompactFormat(readWriter types.ReadWriteSizer) types.Format {
+	return format.NewCompactFormat(readWriter)
+}
+
+func NewBinaryFormat(readWriter types.ReadWriteSizer) types.Format {
+	return format.NewBinaryFormat(readWriter)
+}
+
+func NewBinaryFormatOptions(readWriter types.ReadWriteSizer, strictRead, strictWrite bool) types.Format {
+	return format.NewBinaryFormatOptions(readWriter, strictRead, strictWrite)
+}
+
+func NewSimpleJSONFormat(readWriter io.ReadWriter) types.Format {
+	return format.NewSimpleJSONFormat(readWriter)
+}
+
+func EncodeCompact(msg types.WritableStruct) ([]byte, error) {
+	return format.EncodeCompact(msg)
+}
+
+func EncodeBinary(msg types.WritableStruct) ([]byte, error) {
+	return format.EncodeBinary(msg)
+}
+
+func EncodeCompactJSON(msg types.WritableStruct) ([]byte, error) {
+	return format.EncodeCompactJSON(msg)
+}
+
+func EncodeSimpleJSON(msg types.WritableStruct) ([]byte, error) {
+	return format.EncodeSimpleJSON(msg)
+}
+
+func DecodeCompact(data []byte, msg types.ReadableStruct) error {
+	return format.DecodeCompact(data, msg)
+}
+
+func DecodeBinary(data []byte, msg types.ReadableStruct) error {
+	return format.DecodeBinary(data, msg)
+}
+
+func DecodeCompactJSON(data []byte, msg types.ReadableStruct) error {
+	return format.DecodeCompactJSON(data, msg)
+}
+
+func DecodeSimpleJSON(data []byte, msg types.ReadableStruct) error {
+	return format.DecodeSimpleJSON(data, msg)
 }

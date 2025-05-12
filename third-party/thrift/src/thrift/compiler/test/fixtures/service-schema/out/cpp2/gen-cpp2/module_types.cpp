@@ -94,7 +94,7 @@ CustomException::CustomException(apache::thrift::FragileConstructor, ::std::stri
 
 void CustomException::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_name = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_name = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_result = ::cpp2::Result();
   __isset = {};
 }
@@ -131,6 +131,7 @@ void swap([[maybe_unused]] CustomException& a, [[maybe_unused]] CustomException&
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void CustomException::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t CustomException::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t CustomException::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -139,6 +140,7 @@ template void CustomException::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t CustomException::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t CustomException::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t CustomException::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2

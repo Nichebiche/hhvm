@@ -70,10 +70,10 @@ function pagelet_server_task_status(resource $task): int;
 <<__Native("NoFCallBuiltin")>>
 function pagelet_server_task_result(
   resource $task,
-  <<__OutOnly('varray')>>
-  inout mixed $headers,
-  <<__OutOnly('KindOfInt64')>>
-  inout mixed $code,
+  <<__OutOnly>>
+  inout vec<mixed> $headers,
+  <<__OutOnly>>
+  inout int $code,
   int $timeout_ms = 0,
 ): string;
 

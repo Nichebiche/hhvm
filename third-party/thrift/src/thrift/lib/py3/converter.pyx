@@ -14,13 +14,14 @@
 
 from enum import Enum
 from typing import Any, Type
+from types import NoneType
 
 from thrift.py3.reflection import inspect
 
 from libcpp cimport bool
 from thrift.py3.reflection cimport FieldSpec, MapSpec, Qualifier, StructType
 from thrift.python.types cimport BadEnum
-from thrift.py3.types cimport Container, Struct
+from thrift.py3.types cimport Container, Struct, GeneratedError
 from thrift.py3.types import CompiledEnum
 from thrift.python.types cimport Struct as PythonStruct, Union as PythonUnion, List as PythonList, Map as PythonMap, Set as PythonSet
 from thrift.python.types import Enum as PythonEnum
@@ -30,12 +31,15 @@ def to_py3_struct(cls, obj):
         return None
     if isinstance(obj, cls):
         return obj
+    # fast path for immutable thrift-python to thrift-py3 when in-place migration activated
+    if isinstance(obj, getattr(cls, "_FBTHRIFT__PYTHON_CLASS", NoneType)):
+        return cls.from_python(obj)
     return _to_py3_struct(cls, obj)
 
 
 cdef object _to_py3_struct(object cls, object obj):
     struct_spec = inspect(cls)
-    if struct_spec.kind == StructType.STRUCT:
+    if struct_spec.kind == StructType.STRUCT or struct_spec.kind == StructType.EXCEPTION:
         return cls(
             **{
                 field_spec.py_name: _to_py3_field(
@@ -84,7 +88,7 @@ cdef bool _should_ignore_field(object obj, FieldSpec field_spec) noexcept:
 cdef object _to_py3_field(object cls, object obj):
     if obj is None:
         return None
-    if issubclass(cls, Struct):
+    if issubclass(cls, (GeneratedError, Struct)):
         return _to_py3_struct(cls, obj)
     elif issubclass(cls, (Container, PythonList, PythonMap, PythonSet)):
         container_spec = inspect(cls)

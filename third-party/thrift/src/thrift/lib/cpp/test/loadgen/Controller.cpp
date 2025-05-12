@@ -17,7 +17,6 @@
 #include <thrift/lib/cpp/test/loadgen/Controller.h>
 
 #include <thrift/lib/cpp/concurrency/PosixThreadFactory.h>
-#include <thrift/lib/cpp/concurrency/Util.h>
 #include <thrift/lib/cpp/test/loadgen/IntervalTimer.h>
 #include <thrift/lib/cpp/test/loadgen/Monitor.h>
 #include <thrift/lib/cpp/test/loadgen/WorkerIf.h>
@@ -103,9 +102,9 @@ void Controller::startWorkers(uint32_t numThreads) {
 
 void Controller::runMonitor(double interval) {
   unsigned long intervalUsec =
-      static_cast<unsigned long>(interval * concurrency::Util::US_PER_S);
+      static_cast<unsigned long>(interval * std::micro::den);
   unsigned long intervalNsec =
-      static_cast<unsigned long>(interval * concurrency::Util::NS_PER_S);
+      static_cast<unsigned long>(interval * std::nano::den);
   IntervalTimer itimer(intervalNsec);
 
   itimer.start();
@@ -134,7 +133,7 @@ void Controller::runMonitor(double interval) {
       uint64_t currentQps = monitor_->getCurrentQps();
       uint64_t desiredQps = config_->getDesiredQPS();
 
-      if (currentQps < desiredQps) {
+      if (currentQps != 0 && currentQps < desiredQps) {
         uint32_t numNewWorkerThreads =
             (desiredQps - currentQps) * numThreads_ / currentQps;
         numNewWorkerThreads =

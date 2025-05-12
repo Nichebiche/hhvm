@@ -15,12 +15,20 @@
    +----------------------------------------------------------------------+
  */
 
-#include "ext_gmp.h"
+#include "hphp/runtime/ext/gmp/ext_gmp.h"
 
 #include <cstdlib>
 #include <float.h>
 
 namespace HPHP {
+
+// GMP class strings
+const StaticString s_GMP_num("num");
+
+// Array indexes for division functions
+const StaticString s_GMP_s("s");
+const StaticString s_GMP_t("t");
+const StaticString s_GMP_g("g");
 
 ///////////////////////////////////////////////////////////////////////////////
 // helpers
@@ -920,6 +928,12 @@ static Variant HHVM_FUNCTION(gmp_pow,
     return false;
   }
 
+  // Check if the exponent is too large
+  if (exp > UINT32_MAX) {
+    raise_warning(cs_GMP_INVALID_EXPONENT_TOO_LARGE, "gmp_pow");
+    return false;
+  }
+
   if (!variantToGMPData("gmp_pow", gmpData, data)) {
     return false;
   }
@@ -1400,7 +1414,7 @@ void GMPData::setGMPMpz(const mpz_t data) {
 ///////////////////////////////////////////////////////////////////////////////
 // extension
 struct GMPExtension final : Extension {
-  GMPExtension() : Extension("gmp", "2.0.0-hhvm", NO_ONCALL_YET) { };
+  GMPExtension() : Extension("gmp", "2.0.0-hhvm", NO_ONCALL_YET) { }
   void moduleRegisterNative() override {
     HHVM_RC_INT_SAME(GMP_MAX_BASE);
     HHVM_RC_INT_SAME(GMP_ROUND_ZERO);

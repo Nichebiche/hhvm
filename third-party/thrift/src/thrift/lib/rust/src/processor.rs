@@ -18,9 +18,9 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use anyhow::bail;
 use anyhow::Error;
 use anyhow::Result;
+use anyhow::bail;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 
@@ -63,6 +63,18 @@ where
         stream: Option<BoxStream<'static, SerializedStreamElement<FramingEncodedFinal<F>>>>,
         protocol_id: ProtocolID,
     ) -> Result<()>;
+
+    fn send_sink_reply(
+        &self,
+        first_response: FramingEncodedFinal<F>,
+        buffer_size: u64,
+        chunk_timeout: std::time::Duration,
+        protocol_id: ProtocolID,
+    ) -> (
+        futures::stream::BoxStream<'static, Result<FramingDecoded<F>, crate::ApplicationException>>,
+        impl FnOnce(SerializedStreamElement<FramingEncodedFinal<F>>) + Send,
+    );
+
     fn set_interaction_processor(
         &self,
         _processor: Arc<
@@ -421,7 +433,7 @@ where
         rctxt.set_user_exception_header(ae.exn_name(), &ae.exn_value())?;
         let res = serialize!(P, |p| {
             p.write_message_begin(&name, ae.result_type().message_type(), seqid);
-            ae.write(p);
+            ae.rs_thrift_write(p);
             p.write_message_end();
         });
         reply_state.send_reply(res);

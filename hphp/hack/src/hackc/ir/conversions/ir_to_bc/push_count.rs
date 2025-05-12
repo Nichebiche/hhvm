@@ -3,10 +3,10 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 
+use ir::Instr;
 use ir::instr;
 use ir::instr::IrToBc;
 use ir::instr::Special;
-use ir::Instr;
 
 pub(crate) trait PushCount<'a> {
     /// How many values are pushed onto the stack?
@@ -57,6 +57,7 @@ impl<'a> PushCount<'a> for instr::Hhbc {
             | Hhbc::IterFree(..)
             | Hhbc::IterSetValue(..)
             | Hhbc::RaiseClassStringConversionNotice(..)
+            | Hhbc::ReifiedInit(..)
             | Hhbc::Silence(..)
             | Hhbc::ThrowNonExhaustiveSwitch(_)
             | Hhbc::UnsetG(..)
@@ -73,6 +74,7 @@ impl<'a> PushCount<'a> for instr::Hhbc {
             | Hhbc::ArrayUnmarkLegacy(..)
             | Hhbc::Await(..)
             | Hhbc::AwaitAll(..)
+            | Hhbc::AwaitLowPri(..)
             | Hhbc::BareThis(..)
             | Hhbc::BitAnd(..)
             | Hhbc::BitNot(..)
@@ -93,6 +95,7 @@ impl<'a> PushCount<'a> for instr::Hhbc {
             | Hhbc::ChainFaults(..)
             | Hhbc::CheckProp(..)
             | Hhbc::ClassGetC(..)
+            | Hhbc::ClassGetTS(..)
             | Hhbc::ClassHasReifiedGenerics(..)
             | Hhbc::ClassName(..)
             | Hhbc::Clone(..)
@@ -182,12 +185,13 @@ impl<'a> PushCount<'a> for instr::Hhbc {
             | Hhbc::VerifyParamType(..)
             | Hhbc::VerifyRetTypeC(..)
             | Hhbc::VerifyRetTypeTS(..)
+            | Hhbc::VerifyTypeTS(..)
             | Hhbc::WHResult(..)
             | Hhbc::Yield(..)
             | Hhbc::YieldK(..) => 1,
 
             // --- 2 pushed values
-            Hhbc::ClassGetTS(..) => 2,
+            Hhbc::ClassGetTSWithGenerics(..) => 2,
         }
     }
 }

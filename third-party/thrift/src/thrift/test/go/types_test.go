@@ -20,9 +20,9 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"unsafe"
 
 	"thrift/lib/go/thrift"
-	"thrift/test/go/if/reflecttest"
 	"thrift/test/go/if/thrifttest"
 )
 
@@ -174,8 +174,7 @@ func TestFieldSerializationOrderDeterminism(t *testing.T) {
 		Field19: 19,
 	}
 
-	serializer := thrift.NewCompactJSONSerializer()
-	buf, err := serializer.Write(value)
+	buf, err := thrift.EncodeCompactJSON(value)
 	if err != nil {
 		t.Fatalf("failed to serialize struct: %v", err)
 	}
@@ -188,22 +187,36 @@ func TestFieldSerializationOrderDeterminism(t *testing.T) {
 }
 
 func TestSimpleJSONSerialization(t *testing.T) {
-	writeTarget := reflecttest.VariousFieldsStructConst1
+	writeTarget := thrifttest.NewVariousFieldsStruct()
+	err := thrift.DeepCopy(thrifttest.VariousFieldsStructConst1, writeTarget)
+	if err != nil {
+		t.Fatalf("failed to deep copy: %v", err)
+	}
 
-	serializer := thrift.NewSimpleJSONSerializer()
-	data, err := serializer.Write(writeTarget)
+	data, err := thrift.EncodeSimpleJSON(writeTarget)
 	if err != nil {
 		t.Fatalf("failed to serialize struct: %v", err)
 	}
 
-	readTarget := &reflecttest.VariousFieldsStruct{}
-	deserializer := thrift.NewSimpleJSONDeserializer()
-	err = deserializer.Read(readTarget, data)
+	readTarget := &thrifttest.VariousFieldsStruct{}
+	err = thrift.DecodeSimpleJSON(data, readTarget)
 	if err != nil {
 		t.Fatalf("failed to deserialize struct: %v", err)
 	}
 
 	if writeTarget.String() != readTarget.String() {
 		t.Fatalf("values are not equal")
+	}
+}
+
+func TestMinimizePadding(t *testing.T) {
+	valOptimized := thrifttest.LayoutOptimizedStruct{}
+	if unsafe.Sizeof(valOptimized) != 16 {
+		t.Fatalf("layout is not optimized")
+	}
+
+	valUnoptimized := thrifttest.LayoutUnoptimizedStruct{}
+	if unsafe.Sizeof(valUnoptimized) != 32 {
+		t.Fatalf("unexpected unoptimized size")
 	}
 }

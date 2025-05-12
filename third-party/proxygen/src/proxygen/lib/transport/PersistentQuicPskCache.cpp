@@ -28,20 +28,20 @@ void PersistentQuicPskCache::setMaxPskUses(size_t maxUses) {
   maxPskUses_ = maxUses;
 }
 
-folly::Optional<size_t> PersistentQuicPskCache::getPskUses(
+quic::Optional<size_t> PersistentQuicPskCache::getPskUses(
     const std::string& identity) {
   auto cachedPsk = cache_.get(identity);
   if (cachedPsk) {
     return cachedPsk->uses;
   }
-  return folly::none;
+  return std::nullopt;
 }
 
-folly::Optional<quic::QuicCachedPsk> PersistentQuicPskCache::getPsk(
+quic::Optional<quic::QuicCachedPsk> PersistentQuicPskCache::getPsk(
     const std::string& identity) {
   auto cachedPsk = cache_.get(identity);
   if (!cachedPsk) {
-    return folly::none;
+    return std::nullopt;
   }
   try {
     quic::QuicCachedPsk quicCachedPsk;
@@ -76,6 +76,8 @@ folly::Optional<quic::QuicCachedPsk> PersistentQuicPskCache::getPsk(
                        cursor);
     fizz::detail::read(quicCachedPsk.transportParams.receiveTimestampsExponent,
                        cursor);
+    fizz::detail::read(quicCachedPsk.transportParams.extendedAckFeatures,
+                       cursor);
 
     std::unique_ptr<folly::IOBuf> appParams;
     fizz::detail::readBuf<uint16_t>(appParams, cursor);
@@ -91,7 +93,7 @@ folly::Optional<quic::QuicCachedPsk> PersistentQuicPskCache::getPsk(
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Error deserializing PSK: " << ex.what();
     cache_.remove(identity);
-    return folly::none;
+    return std::nullopt;
   }
 }
 
@@ -125,6 +127,8 @@ void PersistentQuicPskCache::putPsk(const std::string& identity,
   fizz::detail::write(quicCachedPsk.transportParams.maxReceiveTimestampsPerAck,
                       appender);
   fizz::detail::write(quicCachedPsk.transportParams.receiveTimestampsExponent,
+                      appender);
+  fizz::detail::write(quicCachedPsk.transportParams.extendedAckFeatures,
                       appender);
 
   fizz::detail::writeBuf<uint16_t>(

@@ -736,6 +736,11 @@ class Py3EnableCppAdapter:
     return self
 
 class MigrationBlockingAllowInheritance:
+  r"""
+  Allows inheritance from a struct or exception in thrift-py3.
+  Inheritance from union is DEPRECATED!
+  Do not add new usage of this. Prefer composition over inheritance.
+  """
 
   thrift_spec = None
   thrift_field_annotations = None

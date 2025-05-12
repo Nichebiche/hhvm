@@ -15,25 +15,20 @@
 */
 #include "hphp/runtime/base/stat-cache.h"
 
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/param.h>
 #include <sstream>
-#include <vector>
 
 #include <folly/MapUtil.h>
 #include <folly/portability/Unistd.h>
 
 #include "hphp/util/trace.h"
-#include "hphp/util/text-util.h"
-#include "hphp/runtime/base/file-util.h"
 #include "hphp/runtime/base/tracing.h"
 
 namespace HPHP {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(stat);
+TRACE_SET_MOD(stat)
 
 static std::string statToString(const struct stat* buf) {
   std::ostringstream os;

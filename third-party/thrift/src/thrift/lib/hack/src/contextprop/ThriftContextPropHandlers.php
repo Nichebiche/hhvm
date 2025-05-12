@@ -1,5 +1,20 @@
 <?hh
-// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 /**
  * Helper class to install the right context prop thrift handlers based on
@@ -14,8 +29,8 @@ final class ThriftContextPropHandlers {
   ): void {
     // contextprop v2 handler
     // TODO T204080230: add a CPv2 handler for AM so it does not need its own handler
+    $context_prop_state = ThriftContextPropState::get();
     try {
-      $context_prop_state = ThriftContextPropState::get();
       // Check if AM Traffic AND (AM Tenant OR Async job) AND JK passes with consistent rate using Request ID as the hash.
       if (
         $context_prop_state->getOriginId() == MCPProductID::L4_ADS_MANAGER &&
@@ -37,9 +52,30 @@ final class ThriftContextPropHandlers {
       FBLogger('am_request_priority', 'failed_to_register_handler')
         ->handle(
           $e,
-          Causes::the('AM Request priority handler')->to('be not set'),
+          causes_the('AM Request priority handler')->to('be not set'),
         );
 
+    }
+    try {
+      if (
+        $context_prop_state->getOriginId() == MCPProductID::L4_MARKETING_API &&
+        Environment::isAsyncEnvironment() &&
+        JustKnobs::evalString(
+          "ads/marketing_api/context_prop:set_thrift_request_priority",
+          $context_prop_state->getRequestId(),
+        )
+      ) {
+        $thrift_client_handler->addHandler(
+          'mapi_thrift_context_prop_update_request_priority',
+          MAPIThriftContextPropUpdateRequestPriority::getInstance(),
+        );
+      }
+    } catch (Exception $e) {
+      FBLogger('mapi_request_priority', 'failed_to_register_handler')
+        ->handle(
+          $e,
+          causes_the('MAPI Request priority handler')->to('not be set'),
+        );
     }
     if (JustKnobs::evalFast("servicerouter/thrift_context_prop", "enabled")) {
       $client_handler = new TContextPropV2ClientHandler(

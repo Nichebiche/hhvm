@@ -16,30 +16,41 @@
 
 #include <thrift/compiler/parse/parse_ast.h>
 
-#include <stdlib.h>
-#include <cstddef>
 #include <limits>
 #include <optional>
 #include <set>
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
+#include <thrift/annotation/bundled_annotations.h>
 #include <thrift/compiler/ast/t_const_value.h>
 #include <thrift/compiler/ast/t_field.h>
+#include <thrift/compiler/ast/t_global_scope.h>
 #include <thrift/compiler/ast/t_named.h>
 #include <thrift/compiler/ast/t_node.h>
 #include <thrift/compiler/ast/t_program.h>
 #include <thrift/compiler/ast/t_program_bundle.h>
-#include <thrift/compiler/ast/t_scope.h>
 #include <thrift/compiler/ast/t_union.h>
 #include <thrift/compiler/diagnostic.h>
 #include <thrift/compiler/parse/lexer.h>
 #include <thrift/compiler/parse/parser.h>
 #include <thrift/compiler/sema/sema.h>
 #include <thrift/compiler/source_location.h>
+#include <thrift/lib/thrift/bundled_lib_thrift.h>
+
+using apache::thrift::detail::bundled_annotation_files;
+using apache::thrift::detail::bundled_lib_thrift_files;
 
 namespace apache::thrift::compiler {
 namespace {
+constexpr bool should_bundle_std_files() {
+#ifdef THRIFT_OSS
+  return false;
+#else
+  return true;
+#endif
+}
 
 // Cleans up text commonly found in doxygen-like comments.
 //
@@ -199,14 +210,17 @@ class parsing_terminator : public std::runtime_error {
 }
 
 using include_handler = std::function<t_program*(
-    source_range range, const std::string& include_name, const t_program& p)>;
+    source_range range,
+    const std::string& include_name,
+    const std::optional<std::string_view>& alias,
+    const t_program& parent)>;
 
 // A semantic analyzer and AST builder for a single Thrift program.
 class ast_builder : public parser_actions {
  private:
   diagnostics_engine& diags_;
   t_program& program_; // The program being built.
-  t_scope* scope_; // The program scope.
+  t_global_scope* global_scope_; // The global scope.
   std::unordered_map<std::string, t_named*> definitions_;
   const parsing_params& params_;
   include_handler on_include_;
@@ -217,15 +231,17 @@ class ast_builder : public parser_actions {
   // ENUM_NAME.ENUM_VALUE.
   void validate_not_ambiguous_enum(
       source_location loc, const std::string& name) {
-    if (scope_->is_ambiguous_enum_value(name)) {
-      std::string possible_enums =
-          scope_->get_fully_qualified_enum_value_names(name).c_str();
+    if (program_.program_scope().is_ambiguous_enum_value(name)) {
+      const auto possible_enums =
+          program_.program_scope().find_ambiguous_enum_values(name);
       diags_.warning(
           loc,
           "The ambiguous enum `{}` is defined in more than one place. "
           "Please refer to this enum using ENUM_NAME.ENUM_VALUE.{}",
           name,
-          possible_enums.empty() ? "" : " Possible options: " + possible_enums);
+          possible_enums.empty() ? ""
+                                 : " Possible options: " +
+                  fmt::to_string(fmt::join(possible_enums, ", ")));
     }
   }
 
@@ -411,7 +427,7 @@ class ast_builder : public parser_actions {
       std::string name,
       std::unique_ptr<deprecated_annotations> annotations,
       const source_range& range) {
-    t_type_ref result = scope_->ref_type(program_, name, range);
+    t_type_ref result = global_scope_->ref_type(program_, name, range);
 
     if (auto* node = result.get_unresolved_type()) { // A newly created ph.
       set_annotations(node, std::move(annotations));
@@ -421,22 +437,6 @@ class ast_builder : public parser_actions {
     }
 
     return result;
-  }
-
-  void check_external_type_resolved(t_type_ref type) {
-    if (type.resolved()) {
-      return;
-    }
-    t_placeholder_typedef* unresolved_type = type.get_unresolved_type();
-    const std::string& type_name = unresolved_type->name();
-    size_t sep_pos = type_name.find(".");
-    if (sep_pos == std::string::npos ||
-        std::string_view(type_name.data(), sep_pos) == program_.name()) {
-      // Local types are handled separately because they can be used before
-      // definition.
-      return;
-    }
-    diags_.error(*unresolved_type, "Type `{}` not defined.", type_name);
   }
 
   // Tries to set the given fields, reporting an error on a collision.
@@ -478,9 +478,9 @@ class ast_builder : public parser_actions {
       include_handler on_include)
       : diags_(diags),
         program_(program),
-        scope_(program.scope()),
+        global_scope_(program.global_scope()),
         params_(params),
-        on_include_(on_include) {}
+        on_include_(std::move(on_include)) {}
 
   void on_program() override { clear_doctext(); }
 
@@ -505,14 +505,20 @@ class ast_builder : public parser_actions {
   void on_include(
       source_range range,
       std::string_view str,
+      const std::optional<std::string_view>& alias,
       source_range str_range) override {
     std::string include_name = fmt::to_string(str);
-    auto included_program = on_include_(range, include_name, program_);
+    std::optional<std::string> alias_str_opt = alias.has_value()
+        ? std::make_optional(std::string{alias.value()})
+        : std::nullopt;
+    auto included_program =
+        on_include_(range, include_name, alias_str_opt, program_);
     auto last_slash = include_name.find_last_of("/\\");
     if (last_slash != std::string::npos) {
       included_program->set_include_prefix(include_name.substr(0, last_slash));
     }
-    auto include = std::make_unique<t_include>(included_program, include_name);
+    auto include = std::make_unique<t_include>(
+        included_program, std::move(include_name), std::move(alias_str_opt));
     include->set_src_range(range);
     include->set_str_range(str_range);
     program_.add_include(std::move(include));
@@ -545,9 +551,6 @@ class ast_builder : public parser_actions {
       source_range range, std::string_view name) override {
     auto const_value = t_const_value::make_map();
     t_type_ref type = new_type_ref(fmt::to_string(name), nullptr, range);
-    // Once Thrift Patch is decoupled from the compiler we will be able to
-    // always resolve external types. Until then just resolve annotation types.
-    check_external_type_resolved(type);
     const_value->set_ttype(type);
     return on_structured_annotation(range, std::move(const_value));
   }
@@ -570,11 +573,7 @@ class ast_builder : public parser_actions {
     auto find_base_service = [&]() -> const t_service* {
       if (base.str.size() != 0) {
         auto base_name = base.str;
-        if (const t_service* result = scope_->find<t_service>(base_name)) {
-          return result;
-        }
-        if (const t_service* result =
-                scope_->find<t_service>(program_.scope_name(base_name))) {
+        if (const t_service* result = program_.find<t_service>(base_name)) {
           return result;
         }
         diags_.error(
@@ -615,14 +614,9 @@ class ast_builder : public parser_actions {
     auto return_name = ret.name.str;
     t_type_ref interaction;
     t_type_ref return_type = ret.type;
-    if (size_t size = return_name.size()) {
+    if (return_name.size()) {
       // Handle an interaction or return type name.
-      std::string qualified_name;
-      if (return_name.find('.') == std::string::npos) {
-        qualified_name = program_.scope_name(return_name);
-        return_name = qualified_name;
-      }
-      if (auto interaction_ptr = scope_->find<t_interaction>(return_name)) {
+      if (auto interaction_ptr = program_.find<t_interaction>(return_name)) {
         interaction = t_type_ref::from_ptr(interaction_ptr, ret.name.range());
       } else if (ret.type) {
         diags_.error(
@@ -836,9 +830,9 @@ class ast_builder : public parser_actions {
 
     // Register enum value names in scope.
     for (const auto& value : enum_node->consts()) {
-      // TODO: Remove the ability to access unscoped enum values.
-      scope_->add_enum_value(program_.scope_name(value), &value);
-      scope_->add_enum_value(program_.scope_name(*enum_node, value), &value);
+      program_.add_enum_definition(
+          scope::enum_id{program_.name(), enum_node->name(), value.name()},
+          value);
     }
 
     add_definition(std::move(enum_node));
@@ -879,15 +873,7 @@ class ast_builder : public parser_actions {
     auto find_const =
         [this](source_location loc, const std::string& name) -> const t_const* {
       validate_not_ambiguous_enum(loc, name);
-      if (const t_const* constant = scope_->find<t_const>(name)) {
-        return constant;
-      }
-      if (const t_const* constant =
-              scope_->find<t_const>(program_.scope_name(name))) {
-        validate_not_ambiguous_enum(loc, program_.scope_name(name));
-        return constant;
-      }
-      return nullptr;
+      return program_.find<t_const>(name);
     };
 
     auto name_str = fmt::to_string(name.str);
@@ -1001,86 +987,134 @@ std::unique_ptr<t_program_bundle> parse_ast(
     const parsing_params& params,
     const sema_params* sparams,
     t_program_bundle* already_parsed) {
+  if constexpr (should_bundle_std_files()) {
+    for (const auto& annotation_files :
+         {bundled_annotation_files(), bundled_lib_thrift_files()}) {
+      for (const auto& [annot_path, content] : annotation_files) {
+        auto found_or_error =
+            sm.find_include_file(annot_path, path, params.incl_searchpath);
+        if (found_or_error.index() != 0) {
+          // Fall back to the bundled annotation files.
+          sm.add_virtual_file(annot_path, content);
+        }
+      }
+    }
+  }
+
   std::string full_root_path = sm.get_file_path(path);
-  auto programs = std::make_unique<t_program_bundle>(
-      std::make_unique<t_program>(
-          path,
-          full_root_path,
-          already_parsed ? already_parsed->get_root_program() : nullptr),
-      already_parsed);
+  auto root_prog = std::make_unique<t_program>(
+      path,
+      full_root_path,
+      already_parsed ? already_parsed->get_root_program() : nullptr);
+  root_prog->set_use_global_resolution(params.use_global_resolution);
+  auto programs =
+      std::make_unique<t_program_bundle>(std::move(root_prog), already_parsed);
   assert(
       !already_parsed ||
       !already_parsed->find_program_by_full_path(full_root_path));
 
   auto circular_deps = std::set<std::string>{path};
 
-  include_handler on_include = [&](source_range range,
-                                   const std::string& include_path,
-                                   const t_program& parent) {
-    auto path_or_error = sm.find_include_file(
-        include_path, parent.path(), params.incl_searchpath);
-    if (path_or_error.index() == 1) {
-      diags.report(
-          range.begin,
-          params.allow_missing_includes ? diagnostic_level::warning
-                                        : diagnostic_level::error,
-          "{}",
-          std::get<1>(path_or_error));
-      if (!params.allow_missing_includes) {
-        end_parsing();
-      }
-    }
+  include_handler on_include =
+      [&](source_range range,
+          const std::string& include_path,
+          const std::optional<std::string_view>& include_alias,
+          const t_program& parent) {
+        auto path_or_error = sm.find_include_file(
+            include_path, parent.path(), params.incl_searchpath);
+        if (path_or_error.index() == 1) {
+          diags.report(
+              range.begin,
+              params.allow_missing_includes ? diagnostic_level::warning
+                                            : diagnostic_level::error,
+              "{}",
+              std::get<1>(path_or_error));
+          if (!params.allow_missing_includes) {
+            end_parsing();
+          }
+        }
 
-    // Skip already parsed files.
-    t_program* program = nullptr;
-    const std::string* resolved_path = &include_path;
-    const std::string* full_path = resolved_path;
-    if (path_or_error.index() == 0) {
-      full_path = &std::get<0>(path_or_error);
-      program = programs->find_program_by_full_path(*full_path);
-      if (program) {
-        // We've already seen this program but know it by another path.
-        resolved_path = &program->path();
-      }
-    }
-    if (program) {
-      if (program == programs->get_root_program()) {
-        // If we're including the root program we must have a dependency cycle.
-        assert(circular_deps.count(*full_path));
-      } else {
+        // Resolve the include path to a full path.
+        t_program* program = nullptr;
+        const std::string* resolved_path = &include_path;
+        const std::string* full_path = resolved_path;
+        if (path_or_error.index() == 0) {
+          full_path = &std::get<0>(path_or_error);
+          program = programs->find_program_by_full_path(*full_path);
+          if (program) {
+            // We've already seen this program but know it by another path.
+            resolved_path = &program->path();
+          }
+        }
+
+        // Fail on duplicate include aliases
+        if (include_alias.has_value()) {
+          const auto& knownIncludes = parent.includes();
+          for (const t_include* inc : knownIncludes) {
+            if (!inc->alias()) {
+              continue;
+            }
+
+            if (inc->alias() == include_alias.value()) {
+              diags.error(
+                  range.begin,
+                  "'{}' is already an alias for '{}'",
+                  *include_alias,
+                  inc->get_program()->full_path());
+            }
+
+            if (*full_path == inc->get_program()->full_path()) {
+              diags.error(
+                  range.begin,
+                  "Include '{}' has multiple aliases: '{}' vs '{}'",
+                  *full_path,
+                  inc->alias().value(),
+                  *include_alias);
+            }
+          }
+        }
+
+        // Skip already parsed files.
+        if (program) {
+          if (program == programs->get_root_program()) {
+            // If we're including the root program we must have a dependency
+            // cycle.
+            assert(circular_deps.count(*full_path));
+          } else {
+            return program;
+          }
+        }
+
+        // Fail on circular dependencies.
+        if (!circular_deps.insert(*full_path).second) {
+          diags.error(
+              range.begin,
+              "Circular dependency found: file `{}` is already parsed.",
+              *resolved_path);
+          end_parsing();
+        }
+
+        // Create a new program for a Thrift file in an include statement and
+        // set its include_prefix by parsing the directory which it is
+        // included from.
+        auto included_program =
+            std::make_unique<t_program>(*resolved_path, *full_path, &parent);
+        program = included_program.get();
+        program->set_use_global_resolution(params.use_global_resolution);
+        program->global_scope()->add_program(*program);
+        programs->add_program(std::move(included_program));
+        try {
+          ast_builder(diags, *program, params, on_include)
+              .parse_file(sm, range.begin);
+        } catch (...) {
+          if (!params.allow_missing_includes) {
+            throw;
+          }
+        }
+
+        circular_deps.erase(*full_path);
         return program;
-      }
-    }
-
-    // Fail on circular dependencies.
-    if (!circular_deps.insert(*full_path).second) {
-      diags.error(
-          range.begin,
-          "Circular dependency found: file `{}` is already parsed.",
-          *resolved_path);
-      end_parsing();
-    }
-
-    // Create a new program for a Thrift file in an include statement and
-    // set its include_prefix by parsing the directory which it is
-    // included from.
-    auto included_program =
-        std::make_unique<t_program>(*resolved_path, *full_path, &parent);
-    program = included_program.get();
-    programs->add_program(std::move(included_program));
-
-    try {
-      ast_builder(diags, *program, params, on_include)
-          .parse_file(sm, range.begin);
-    } catch (...) {
-      if (!params.allow_missing_includes) {
-        throw;
-      }
-    }
-
-    circular_deps.erase(*full_path);
-    return program;
-  };
+      };
 
   t_program& root_program = *programs->root_program();
   try {

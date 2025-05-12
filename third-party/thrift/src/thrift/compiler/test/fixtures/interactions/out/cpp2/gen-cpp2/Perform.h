@@ -39,6 +39,8 @@ class PerformServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::Perform> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::Perform>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "Perform"; }
 
@@ -176,6 +178,13 @@ class SerialInteractionIf : public apache::thrift::SerialInteractionTile, public
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_foo{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::Perform, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 5169293820847068718;
+  static constexpr ::std::string_view definitionKey = {"\xd6\x70\xd7\xbf\xf6\xfc\xe8\xac\x2f\x9b\x08\xdc\x29\xd3\x1a\xbb", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

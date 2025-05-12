@@ -17,6 +17,7 @@
 #include <folly/lang/Exception.h>
 #include <thrift/lib/cpp2/patch/detail/PatchBadge.h>
 #include <thrift/lib/cpp2/protocol/DebugProtocol.h>
+#include <thrift/lib/cpp2/protocol/detail/Patch.h>
 #include <thrift/lib/cpp2/type/Type.h>
 #include <thrift/lib/thrift/detail/AnyPatch.h>
 #include <thrift/lib/thrift/detail/DynamicPatch.h>
@@ -53,8 +54,7 @@ auto TypeToPatchMapAdapter::fromThrift(StandardType&& vec) -> AdaptedType {
   map.reserve(vec.size());
   for (auto& typeToPatchStruct : vec) {
     throwIfInvalidOrUnsupportedAny(*typeToPatchStruct.patch());
-    DynamicPatch patch;
-    patch.fromAny(badge, *typeToPatchStruct.patch());
+    DynamicPatch patch{DynamicPatch::fromPatch(*typeToPatchStruct.patch())};
     auto it = map.emplace(typeToPatchStruct.type().value(), std::move(patch));
     if (!it.second) {
       throwDuplicatedType(typeToPatchStruct.type().value());
@@ -69,7 +69,7 @@ auto TypeToPatchMapAdapter::toThrift(const AdaptedType& map) -> StandardType {
   for (const auto& [type, patch] : map) {
     auto& obj = vec.emplace_back();
     obj.type() = type;
-    obj.patch() = patch.toAny(badge, type);
+    obj.patch() = patch.toPatch(type);
   }
   return vec;
 }
@@ -98,14 +98,13 @@ bool TypeToPatchMapAdapter::equal(
 bool TypeToPatchMapAdapter::addDynamicPatchToMap(
     AdaptedType& map, const TypeToPatchInternalDoNotUse& typeToPatchStruct) {
   throwIfInvalidOrUnsupportedAny(*typeToPatchStruct.patch());
-  DynamicPatch patch;
-  patch.fromAny(badge, *typeToPatchStruct.patch());
+  DynamicPatch patch{DynamicPatch::fromPatch(*typeToPatchStruct.patch())};
   return map.emplace(typeToPatchStruct.type().value(), std::move(patch)).second;
 }
 
 type::AnyStruct TypeToPatchMapAdapter::toAny(
     const protocol::DynamicPatch& patch, const type::Type& type) {
-  return patch.toAny(badge, type);
+  return patch.toPatch(type);
 }
 
 template <class Patch>
@@ -120,7 +119,7 @@ void AnyPatch<Patch>::apply(type::AnyStruct& val) const {
       for (const auto& [type, patch] : *prior) {
         if (type::identicalType(type, val.type().value())) {
           dynVal = protocol::detail::parseValueFromAny(val);
-          patch.apply(badge, *dynVal);
+          patch.apply(*dynVal);
           break;
         }
       }
@@ -131,7 +130,7 @@ void AnyPatch<Patch>::apply(type::AnyStruct& val) const {
           if (!dynVal) {
             dynVal = protocol::detail::parseValueFromAny(val);
           }
-          patch.apply(badge, *dynVal);
+          patch.apply(*dynVal);
           break;
         }
       }
@@ -168,12 +167,11 @@ void AnyPatch<Patch>::apply(type::AnyStruct& val) const {
 template <class Patch>
 void AnyPatch<Patch>::patchIfTypeIsImpl(
     type::Type type, type::AnyStruct any, bool after) {
-  DynamicPatch patch;
-  patch.fromAny(badge, any);
+  DynamicPatch patch{DynamicPatch::fromPatch(any)};
   if (after) {
-    data_.patchIfTypeIsAfter()[type].merge(badge, patch);
+    data_.patchIfTypeIsAfter()[type].merge(patch);
   } else {
-    data_.patchIfTypeIsPrior()[type].merge(badge, patch);
+    data_.patchIfTypeIsPrior()[type].merge(patch);
   }
 }
 
@@ -182,9 +180,9 @@ void AnyPatch<Patch>::patchIfTypeIs(
     const type::Type& type, const protocol::DynamicPatch& patch) {
   tryPatchable(type);
   if (ensures(type)) {
-    data_.patchIfTypeIsAfter()[type].merge(badge, patch);
+    data_.patchIfTypeIsAfter()[type].merge(patch);
   } else {
-    data_.patchIfTypeIsPrior()[type].merge(badge, patch);
+    data_.patchIfTypeIsPrior()[type].merge(patch);
   }
 }
 
@@ -196,19 +194,12 @@ void AnyPatch<Patch>::DynamicPatchExtractionVisitor::assign(
     protocol::Object patch;
     patch[static_cast<FieldId>(PatchOp::Assign)] =
         protocol::detail::parseValueFromAny(any);
-    patch_.fromObject(badge, patch);
+    patch_ = protocol::DynamicPatch::fromObject(std::move(patch));
   }
 }
 template <class Patch>
 void AnyPatch<Patch>::DynamicPatchExtractionVisitor::clear() {
-  patch_.visitPatch(badge, [&](auto& patch) {
-    if constexpr (protocol::detail::has_clear_with_badge_v<
-                      folly::remove_cvref_t<decltype(patch)>>) {
-      patch.clear(badge);
-    } else {
-      patch.clear();
-    }
-  });
+  patch_.visitPatch([&](auto& patch) { patch.clear(); });
 }
 template <class Patch>
 void AnyPatch<Patch>::DynamicPatchExtractionVisitor::patchIfTypeIs(
@@ -216,7 +207,7 @@ void AnyPatch<Patch>::DynamicPatchExtractionVisitor::patchIfTypeIs(
   if (!type::identicalType(type, type_)) {
     return;
   }
-  patch_.merge(badge, dpatch);
+  patch_.merge(dpatch);
 }
 template <class Patch>
 void AnyPatch<Patch>::DynamicPatchExtractionVisitor::ensureAny(
@@ -224,6 +215,52 @@ void AnyPatch<Patch>::DynamicPatchExtractionVisitor::ensureAny(
   if (!type::identicalType(any.type().value(), type_)) {
     patch_ = {};
   }
+}
+
+template <class Patch>
+protocol::ExtractedMasksFromPatch AnyPatch<Patch>::extractMaskFromPatch()
+    const {
+  struct Visitor {
+    void assign(const type::AnyStruct&) {
+      masks = {protocol::noneMask(), protocol::allMask()};
+    }
+    void clear() { masks = {protocol::noneMask(), protocol::allMask()}; }
+    void patchIfTypeIs(
+        const type::Type& type, const protocol::DynamicPatch& patch) {
+      // granular read/write operation
+      // Insert next extracted mask and insert type to read mask if the next
+      // extracted mask does not include the type.
+      auto getIncludesTypeRef = [](protocol::Mask& mask) {
+        return mask.includes_type_ref();
+      };
+      auto nextMasks = patch.extractMaskFromPatch();
+      protocol::detail::insertNextMask(
+          masks, nextMasks, type, type, getIncludesTypeRef);
+      protocol::detail::insertTypeToMaskIfNotAllMask(masks.read, type);
+    }
+    void ensureAny(const type::AnyStruct& anyStruct) {
+      ensureAnyType_ = anyStruct.type().value();
+      masks.write = protocol::allMask();
+    }
+
+    void finalize() {
+      if (ensureAnyType_) {
+        protocol::detail::insertTypeToMaskIfNotAllMask(
+            masks.read, ensureAnyType_->get());
+      }
+      protocol::detail::ensureRWMaskInvariant(masks);
+    }
+
+    protocol::ExtractedMasksFromPatch masks{
+        protocol::noneMask(), protocol::noneMask()};
+
+   private:
+    std::optional<std::reference_wrapper<const type::Type>> ensureAnyType_;
+  };
+  Visitor v;
+  customVisit(v);
+  v.finalize();
+  return std::move(v.masks);
 }
 
 template class AnyPatch<AnyPatchStruct>;

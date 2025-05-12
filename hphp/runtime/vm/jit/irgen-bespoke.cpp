@@ -23,7 +23,6 @@
 #include "hphp/runtime/base/bespoke/struct-dict.h"
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
 
-#include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/irgen-builtin.h"
 #include "hphp/runtime/vm/jit/irgen-control.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
@@ -36,7 +35,6 @@
 #include "hphp/runtime/vm/srckey.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/configs/hhir.h"
-#include "hphp/util/tiny-vector.h"
 #include "hphp/util/trace.h"
 
 namespace HPHP::jit { namespace irgen {
@@ -950,24 +948,26 @@ void emitBespokeColFromArray(IRGS& env,
   push(env, col);
 }
 
-void emitBespokeClassGetTS(IRGS& env) {
+void classGetTSImpl(IRGS& env, bool pushGenerics) {
   auto const arr = topC(env);
   auto const arrType = arr->type();
   if (!(arrType <= TDict)) {
     if (arrType.maybe(TDict)) {
-      PUNT(Bespoke-ClassGetTS-UnguardedTS);
+      PUNT(Bespoke-ClassGetTSWithGenerics-UnguardedTS);
     } else {
       gen(env, RaiseError, cns(env, s_reified_type_must_be_ts.get()));
       return;
     }
   }
 
-  auto const generics = cns(env, s_generic_types.get());
-  ifElse(
-    env,
-    [&](Block* taken) { emitGet(env, arr, generics, taken); },
-    [&] { gen(env, Jmp, makeExitSlow(env)); }
-  );
+  if (pushGenerics) {
+    auto const generics = cns(env, s_generic_types.get());
+    ifElse(
+      env,
+      [&](Block* taken) { emitGet(env, arr, generics, taken); },
+      [&] { gen(env, Jmp, makeExitSlow(env)); }
+    );
+  }
 
   auto const classKey = cns(env, s_classname.get());
   auto const classVal = cond(
@@ -998,7 +998,15 @@ void emitBespokeClassGetTS(IRGS& env) {
   auto const cls = ldCls(env, className);
   popDecRef(env);
   push(env, cls);
-  push(env, cns(env, TInitNull));
+  if (pushGenerics) push(env, cns(env, ArrayData::CreateVec()));
+}
+
+void emitBespokeClassGetTS(IRGS& env) {
+  classGetTSImpl(env, false);
+}
+
+void emitBespokeClassGetTSWithGenerics(IRGS& env) {
+  classGetTSImpl(env, true);
 }
 
 void emitBespokeShapesAt(IRGS& env, int32_t numArgs) {
@@ -1234,6 +1242,9 @@ void emitBespoke(IRGS& env, const NormalizedInstruction& ni,
     case Op::ClassGetTS:
       emitBespokeClassGetTS(env);
       return;
+    case Op::ClassGetTSWithGenerics:
+      emitBespokeClassGetTSWithGenerics(env);
+      return;
     case Op::FCallClsMethodD: {
       using LSC = LayoutSensitiveCall;
       auto const call = getLayoutSensitiveCall(env, ni.source);
@@ -1268,6 +1279,7 @@ Optional<Location> getVanillaLocation(const IRGS& env, SrcKey sk) {
       return {Location::Stack{soff - 1}};
     case Op::AKExists:
     case Op::ClassGetTS:
+    case Op::ClassGetTSWithGenerics:
     case Op::ColFromArray:
       return {Location::Stack{soff}};
 

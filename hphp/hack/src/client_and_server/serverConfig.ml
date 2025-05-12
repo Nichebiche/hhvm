@@ -68,7 +68,7 @@ let make_gc_control config =
   in
   { GlobalConfig.gc_control with Gc.Control.minor_heap_size; space_overhead }
 
-let make_sharedmem_config ?ai_options config local_config =
+let make_sharedmem_config config local_config =
   let { SharedMem.global_size; heap_size; shm_min_avail; _ } =
     SharedMem.default_config
   in
@@ -95,26 +95,18 @@ let make_sharedmem_config ?ai_options config local_config =
   let shm_min_avail =
     int_ "sharedmem_minimum_available" ~default:shm_min_avail config
   in
-  let config =
-    {
-      SharedMem.global_size;
-      heap_size;
-      hash_table_pow;
-      log_level;
-      sample_rate;
-      shm_dirs;
-      shm_use_sharded_hashtbl;
-      shm_cache_size;
-      shm_min_avail;
-      compression;
-    }
-  in
-  let config =
-    match ai_options with
-    | None -> config
-    | Some ai_options -> Ai_options.modify_shared_mem ai_options config
-  in
-  config
+  {
+    SharedMem.global_size;
+    heap_size;
+    hash_table_pow;
+    log_level;
+    sample_rate;
+    shm_dirs;
+    shm_use_sharded_hashtbl;
+    shm_cache_size;
+    shm_min_avail;
+    compression;
+  }
 
 let config_list_regexp = Str.regexp "[, \t]+"
 
@@ -383,6 +375,9 @@ let load_config (config : Config_file_common.t) (options : GlobalOptions.t) :
         treat_non_annotated_memoize_as_kbic =
           bool_opt "treat_non_annotated_memoize_as_kbic" config
           >?? po_opt.treat_non_annotated_memoize_as_kbic;
+        use_oxidized_by_ref_decls =
+          bool_opt "use_oxidized_by_ref_decls" config
+          >?? po_opt.use_oxidized_by_ref_decls;
       }
   in
   GlobalOptions.set
@@ -450,15 +445,6 @@ let load_config (config : Config_file_common.t) (options : GlobalOptions.t) :
          ~f:(fun l -> List.map l ~f:Utils.add_ns))
     ?tco_typeconst_concrete_concrete_error:
       (bool_opt "typeconst_concrete_concrete_error" config)
-    ?tco_enable_strict_const_semantics:
-      (let key = "enable_strict_const_semantics" in
-       match int_opt_result key config with
-       | None -> None
-       | Some (Ok i) -> Some i
-       | Some (Error _) ->
-         (* not an int *)
-         bool_opt key config |> Option.map ~f:Bool.to_int)
-    ?tco_strict_wellformedness:(int_opt "strict_wellformedness" config)
     ?tco_meth_caller_only_public_visibility:
       (bool_opt "meth_caller_only_public_visibility" config)
     ?tco_require_extends_implements_ancestors:
@@ -473,6 +459,8 @@ let load_config (config : Config_file_common.t) (options : GlobalOptions.t) :
     ?tco_type_printer_fuel:(int_opt "type_printer_fuel" config)
     ?tco_profile_top_level_definitions:
       (bool_opt "profile_top_level_definitions" config)
+    ?tco_typecheck_if_name_matches_regexp:
+      (string_opt "typecheck_if_name_matches_regexp" config)
     ?log_levels:(prepare_log_levels config)
     ?class_pointer_levels:
       (Option.map
@@ -490,8 +478,18 @@ let load_config (config : Config_file_common.t) (options : GlobalOptions.t) :
     ?tco_strict_switch:(bool_opt "strict_switch" config)
     ?tco_allowed_files_for_ignore_readonly:
       (string_list_opt "allowed_files_for_ignore_readonly" config)
-    ?tco_package_v2_bypass_package_check_for_class_const:
-      (bool_opt "package_v2_bypass_package_check_for_class_const" config)
+    ?tco_package_v2_allow_typedef_violations:
+      (bool_opt "package_v2_allow_typedef_violations" config)
+    ?tco_package_v2_allow_classconst_violations:
+      (bool_opt "package_v2_allow_classconst_violations" config)
+    ?tco_package_v2_allow_reifiable_tconst_violations:
+      (bool_opt "package_v2_allow_reifiable_tconst_violations" config)
+    ?tco_package_v2_allow_reified_generics_violations:
+      (bool_opt "package_v2_allow_reified_generics_violations" config)
+    ?tco_package_v2_allow_all_tconst_violations:
+      (bool_opt "package_v2_allow_all_tconst_violations" config)
+    ?tco_package_v2_allow_all_generics_violations:
+      (bool_opt "package_v2_allow_all_generics_violations" config)
     ?tco_package_v2_exclude_patterns:
       (string_list_opt "package_v2_exclude_patterns" config)
     ?tco_extended_reasons:(reasons_config_opt config)
@@ -511,6 +509,9 @@ let load_config (config : Config_file_common.t) (options : GlobalOptions.t) :
     ?recursive_case_types:(bool_opt "recursive_case_types" config)
     ?class_sub_classname:(bool_opt "class_sub_classname" config)
     ?class_class_type:(bool_opt "class_class_type" config)
+    ?safe_abstract:(bool_opt "safe_abstract" config)
+    ?needs_concrete:(bool_opt "needs_concrete" config)
+    ?allow_class_string_cast:(bool_opt "allow_class_string_cast" config)
     options
 
 (** Load local config from the following sources:
@@ -525,7 +526,6 @@ let load_local_config
     (config : Config_file_common.t)
     (version : Config_file_version.version)
     ~(command_line_overrides : Config_file_common.t)
-    ~is_ai
     ~silent
     ~from : ServerLocalConfig.t =
   let current_rolled_out_flag_idx =
@@ -534,37 +534,16 @@ let load_local_config
   let deactivate_saved_state_rollout =
     bool_ "deactivate_saved_state_rollout" ~default:false config
   in
-  let local_config =
-    ServerLocalConfigLoad.load
-      ~silent
-      ~current_version:version
-      ~current_rolled_out_flag_idx
-      ~deactivate_saved_state_rollout
-      ~from
-      ~overrides:command_line_overrides
-  in
-  if is_ai then
-    let open ServerLocalConfig in
-    {
-      local_config with
-      watchman =
-        {
-          local_config.watchman with
-          Watchman.enabled = false;
-          subscribe = false;
-        };
-      interrupt_on_watchman = false;
-      interrupt_on_client = false;
-      trace_parsing = false;
-    }
-  else
-    local_config
-
-let load
+  ServerLocalConfigLoad.load
     ~silent
+    ~current_version:version
+    ~current_rolled_out_flag_idx
+    ~deactivate_saved_state_rollout
     ~from
-    ~(cli_config_overrides : (string * string) list)
-    ~(ai_options : Ai_options.t option) : t * ServerLocalConfig.t =
+    ~overrides:command_line_overrides
+
+let load ~silent ~from ~(cli_config_overrides : (string * string) list) :
+    t * ServerLocalConfig.t =
   let command_line_overrides = Config_file.of_list cli_config_overrides in
   let hhconfig_abs_path = Relative_path.to_absolute repo_config_path in
   let hhconfig = Config_file.parse_hhconfig hhconfig_abs_path in
@@ -579,13 +558,7 @@ let load
     Config_file.parse_version (Config_file.Getters.string_opt "version" config)
   in
   let local_config =
-    load_local_config
-      config
-      version
-      ~command_line_overrides
-      ~is_ai:(Option.is_some ai_options)
-      ~silent
-      ~from
+    load_local_config config version ~command_line_overrides ~silent ~from
   in
   Option.iter
     ~f:Config_file_common.set_pkgconfig_path
@@ -604,7 +577,7 @@ let load
   Hh_logger.log "Parsing and loading packages config at %s" pkgs_config_abs_path;
   let package_info =
     let package_v2 = bool_ "package_v2" ~default:false config in
-    PackageConfig.load_and_parse ~strict:true ~package_v2 ~pkgs_config_abs_path
+    PackageConfig.load_and_parse ~package_v2 ~strict:true ~pkgs_config_abs_path
   in
   let global_opts =
     let tco_custom_error_config = CustomErrorConfig.load_and_parse () in
@@ -617,6 +590,7 @@ let load
               ParserOptions.allow_unstable_features =
                 local_config.ServerLocalConfig.allow_unstable_features;
               package_info;
+              use_oxidized_by_ref_decls = local_config.use_oxidized_by_ref_decls;
             }
         ?so_naming_sqlite_path:local_config.naming_sqlite_path
         ?tco_log_large_fanouts_threshold:
@@ -640,8 +614,6 @@ let load
         ~tco_custom_error_config
         ~tco_sticky_quarantine:local_config.lsp_sticky_quarantine
         ~tco_lsp_invalidation:local_config.lsp_invalidation
-        ~invalidate_all_folded_decls_upon_file_change:
-          local_config.invalidate_all_folded_decls_upon_file_change
         ~tco_autocomplete_sort_text:local_config.autocomplete_sort_text
         ~hack_warnings:
           (if local_config.hack_warnings then
@@ -651,6 +623,7 @@ let load
           else
             GlobalOptions.NNone)
         ~warnings_default_all:local_config.warnings_default_all
+        ~warnings_in_sandcastle:local_config.warnings_in_sandcastle
         ~hh_distc_exponential_backoff_num_retries:
           local_config.hh_distc_exponential_backoff_num_retries
         GlobalOptions.default
@@ -667,7 +640,7 @@ let load
          * to wait indefinitely *)
         int_ "load_script_timeout" ~default:0 config;
       gc_control = make_gc_control config;
-      sharedmem_config = make_sharedmem_config config local_config ?ai_options;
+      sharedmem_config = make_sharedmem_config config local_config;
       tc_options = global_opts;
       parser_options = global_opts.GlobalOptions.po;
       glean_options = global_opts;
@@ -751,3 +724,25 @@ let warn_on_non_opt_build config = config.warn_on_non_opt_build
 let ide_fall_back_to_full_index config = config.ide_fall_back_to_full_index
 
 let warnings_generated_files config = config.warnings_generated_files
+
+let update_config_with_ai_options config local_config ai_options =
+  match ai_options with
+  | None -> (config, local_config)
+  | Some ai ->
+    ( {
+        config with
+        sharedmem_config =
+          Ai_options.modify_shared_mem ai config.sharedmem_config;
+      },
+      {
+        local_config with
+        watchman =
+          {
+            local_config.watchman with
+            Watchman.enabled = false;
+            subscribe = false;
+          };
+        interrupt_on_watchman = false;
+        interrupt_on_client = false;
+        trace_parsing = false;
+      } )

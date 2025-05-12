@@ -162,42 +162,17 @@ class FieldPatch : public BasePatch<Patch, FieldPatch<Patch>> {
 
   template <typename Visitor>
   void customVisit(Visitor&& v) const {
-    for_each_field_id<Patch>(
-        [&](auto id) { v.template patchIfSet<decltype(id)>(*get(id)); });
+    // Don't visit the field if it is empty.
+    for_each_field_id<Patch>([&](auto id) {
+      if (auto& p = *get(id); !p.empty()) {
+        v.template patchIfSet<decltype(id)>(p);
+      }
+    });
   }
 
  private:
   using Base::data_;
 };
-
-// This constexpr function is only defined in the generated patch.cpp
-// This is used for an additional check to ensure we only instantiated
-// `patch<Id>()` in in the generated patch.cpp.
-template <class>
-constexpr bool only_defined_in_generated_patch_cpp();
-
-template <FieldOrdinal Ord, class Patch>
-void* typeErasedPatchImpl(Patch& patch) {
-  using FieldPatchType = typename Patch::patch_type::underlying_type;
-  if constexpr (folly::to_underlying(Ord) <= size_v<FieldPatchType>) {
-    // Sanity check to ensure `patch<Ordinal>()` returns the correct type.
-    // Otherwise it's a bug in the patch library.
-    using Id = op::get_field_id<FieldPatchType, type::ordinal_tag<Ord>>;
-    static_assert(std::is_same_v<
-                  decltype(patch.template patchImpl<Id>()),
-                  decltype(patch.template patch<Id>())>);
-    return &patch.template patchImpl<Id>();
-  } else {
-    // This code path should never be executed since the caller should already
-    // validate whether the field is patchable.
-    // However, this is needed for explicit instantiation when we can't validate
-    // patchable field size in codegen.
-    folly::throw_exception<std::logic_error>(fmt::format(
-        "Ordinal ({}) exceeds patchable field size ({})",
-        folly::to_underlying(Ord),
-        size_v<FieldPatchType>));
-  }
-}
 
 /// Create a base patch that supports Ensure operator.
 ///
@@ -220,9 +195,6 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
   template <class>
   friend class FieldPatch;
 
-  template <FieldOrdinal, class P>
-  friend void* typeErasedPatchImpl(P& patch);
-
   struct Applier {
     T& v;
 
@@ -243,6 +215,17 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
     void ensure(const Field& def) {
       if (isAbsent(op::get<Id>(v))) {
         op::ensure<Id>(v) = def;
+      }
+    }
+    template <class Id>
+    void ensure(const std::unique_ptr<folly::IOBuf>& def) {
+      if (!isAbsent(op::get<Id>(v))) {
+        return;
+      }
+      if (def) {
+        op::ensure<Id>(v) = std::make_unique<folly::IOBuf>(*def);
+      } else {
+        op::ensure<Id>(v) = std::make_unique<folly::IOBuf>();
       }
     }
 
@@ -294,6 +277,7 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
     return !isAbsent(getEnsure<Id>(data_));
   }
 
+  /// Returns if the patch is no-op.
   bool empty() const {
     bool b = true;
     op::for_each_ordinal<T>([&](auto id) {
@@ -306,6 +290,7 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
     return b;
   }
 
+  /// Remove the given field. This is only valid for optional fields.
   template <typename Id>
   std::enable_if_t<
       type::is_optional_or_union_field_v<T, Id> && !is_thrift_union_v<T>>
@@ -367,15 +352,22 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
       }
     }
   }
+  template <typename Id>
+  std::enable_if_t<type::is_optional_or_union_field_v<T, Id>> ensure(
+      const std::unique_ptr<folly::IOBuf>& defaultVal) {
+    if (defaultVal) {
+      ensure<Id>(std::make_unique<folly::IOBuf>(*defaultVal));
+    } else {
+      ensure<Id>(std::make_unique<folly::IOBuf>());
+    }
+  }
+
   /// Ensures the given field is initalized, and return the associated patch
   /// object.
   template <class Id>
   decltype(auto) patch() {
-    using FieldPatchType = typename patch_type::underlying_type;
-    using Ret = op::get_native_type<FieldPatchType, Id>;
-    return *reinterpret_cast<Ret*>(
-        typeErasedPatchImpl<op::get_ordinal_v<FieldPatchType, Id>>(
-            static_cast<Derived&>(*this)));
+    static_assert(!std::is_same_v<Id, op::get_ordinal<T, Id>>);
+    return *op::get<Id>(patchImpl<op::get_field_id<T, Id>>().toThrift());
   }
 
   /// Returns the proper patch object for the given field.
@@ -396,7 +388,9 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
                          : getRawPatch<Id>(data_.patchPrior());
   }
 
-  /// @copybrief AssignPatch::customVisit
+  /// @brief This API uses the Visitor pattern to describe how Patch is applied.
+  /// For each operation that will be performed by the patch, the corresponding
+  /// method (that matches the write API) will be invoked.
   ///
   /// Users should provide a visitor with the following methods
   ///
@@ -453,7 +447,7 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
       });
     }
 
-    if (Base::template customVisitAssignAndClear(std::forward<Visitor>(v))) {
+    if (Base::customVisitAssignAndClear(std::forward<Visitor>(v))) {
       return;
     }
 
@@ -508,7 +502,7 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
     }
   }
 
-  void apply(T& val) const { return customVisit(Applier{val}); }
+  void apply(T& val) const;
 
   /**
    * Returns a Thrift Patch instance corresponding to the (decoded) `SafePatch`.
@@ -667,14 +661,8 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
   }
 
  private:
-  template <typename Id>
-  decltype(auto) patchImpl() {
-    // since only_defined_in_generated_patch_cpp(...) is only defined in the
-    // generated Patch.cpp, if anyone instantiates this function outside
-    // the generated Patch.cpp, they will get a build failure.
-    static_assert(only_defined_in_generated_patch_cpp<Id>());
-    return (maybeEnsure<Id>(), patchAfter<Id>());
-  }
+  template <class FieldId>
+  patch_type& patchImpl();
 
   template <typename Id, typename U>
   decltype(auto) getRawPatch(U&& patch) const {
@@ -698,6 +686,7 @@ class BaseEnsurePatch : public BaseClearPatch<Patch, Derived> {
 /// * `terse P patchPrior`
 /// * `terse T ensure`
 /// * `terse P patch`
+/// * `terse list<i16> remove`
 /// Where `P` is the field patch type for the struct type `T`.
 template <typename Patch>
 class StructPatch : public BaseEnsurePatch<Patch, StructPatch<Patch>> {
@@ -735,6 +724,7 @@ class StructPatch : public BaseEnsurePatch<Patch, StructPatch<Patch>> {
     }
   }
 
+  /// @cond
   template <class Protocol>
   uint32_t encode(Protocol& prot) const {
     // PatchOp::Remove
@@ -772,6 +762,10 @@ class StructPatch : public BaseEnsurePatch<Patch, StructPatch<Patch>> {
     s += prot.writeStructEnd();
     return s;
   }
+  /// @endcond
+
+  void merge(const StructPatch& patch);
+  void merge(StructPatch&& patch);
 
  private:
   using Base::data_;
@@ -847,6 +841,9 @@ class UnionPatch : public BaseEnsurePatch<Patch, UnionPatch<Patch>> {
   void assign(U&& val) {
     op::get<Id>(Base::resetAnd().assign().ensure()) = std::forward<U>(val);
   }
+
+  void merge(const UnionPatch& patch);
+  void merge(UnionPatch&& patch);
 };
 
 } // namespace apache::thrift::op::detail

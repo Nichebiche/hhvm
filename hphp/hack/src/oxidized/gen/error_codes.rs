@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<2710c48268f6a5eb1d65f3467baf643b>>
+// @generated SignedSource<<d143a641e4e355d300732fd45c233201>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -340,7 +340,6 @@ pub enum Typing {
     UnboundGlobal = 4106,
     UnboundNameTyping = 4107,
     UndefinedField = 4108,
-    UndefinedParent = 4109,
     UnifyError = 4110,
     UnsatisfiedReq = 4111,
     Visibility = 4112,
@@ -506,7 +505,6 @@ pub enum Typing {
     IllegalInformationFlow = 4379,
     ContextImplicitPolicyLeakage = 4380,
     ReifiedFunctionReference = 4381,
-    ClassMethAbstractCall = 4382,
     KindMismatch = 4383,
     UnboundNameTypeConstantAccess = 4384,
     UnknownInformationFlow = 4385,
@@ -600,6 +598,16 @@ pub enum Typing {
     OptionalParameterNotSupported = 4484,
     InvalidRecursiveType = 4485,
     StaticCallOnTraitRequireThisAs = 4486,
+    NeedsConcreteOverride = 4487,
+    StringToClassPointer = 4488,
+    SwitchNeedsDefault = 4489,
+    CallNeedsConcrete = 4490,
+    AbstractAccessViaStatic = 4491,
+    UninstantiableClassViaStatic = 4492,
+    SimpliHackRunPrompt = 4493,
+    InvalidReifiedArgumentFIXMEable = 4494,
+    SimpliHackEvalError = 4495,
+    ProtectedInternalMethCaller = 4496,
 }
 impl TrivialDrop for Typing {}
 arena_deserializer::impl_deserialize_in_arena!(Typing);
@@ -636,6 +644,12 @@ pub enum Warning {
     AsAlwaysSucceeds = 12011,
     AsAlwaysFails = 12012,
     ClassPointerToString = 12013,
+    SafeAbstractCall = 12014,
+    SafeAbstractNew = 12015,
+    SafeAbstractCallNeedsConcrete = 12016,
+    NoDisjointUnion = 12017,
+    SafeAbstractConstAccess = 12018,
+    SwitchRedundancy = 12019,
 }
 impl TrivialDrop for Warning {}
 arena_deserializer::impl_deserialize_in_arena!(Warning);

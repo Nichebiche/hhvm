@@ -1,7 +1,7 @@
 #  Copyright (c) 2018, Facebook, Inc.
 #  All rights reserved.
 
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 
 if (NOT DEFINED PACKAGE_VERSION)
   set(PACKAGE_VERSION "1.0.0")
@@ -14,9 +14,12 @@ if (NOT DEFINED CPACK_GENERATOR)
 endif()
 include(CPack)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+  message(STATUS "setting C++ standard to C++${CMAKE_CXX_STANDARD}")
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_MODULE_PATH
@@ -133,6 +136,7 @@ set(FIZZ_HEADER_DIRS
   experimental/crypto/exchange
   experimental/ktls
   experimental/util
+  extensions/clientpadding
   extensions/delegatedcred
   extensions/exportedauth
   extensions/tokenbinding
@@ -358,6 +362,7 @@ if(BUILD_TESTS)
   add_gtest(crypto/test/KeyDerivationTest.cpp KeyDerivationTest)
   add_gtest(crypto/test/RandomGeneratorTest.cpp RandomGeneratorTest)
   add_gtest(crypto/test/UtilsTest.cpp UtilsTest)
+  add_gtest(extensions/clientpadding/test/PaddingClientExtensionTest.cpp PaddingClientExtensionTest)
   add_gtest(extensions/delegatedcred/test/DelegatedCredTypesTest.cpp DelegatedCredTypesTest)
   add_gtest(extensions/delegatedcred/test/DelegatedCredentialFactoryTest.cpp DelegatedCredentialFactoryTest)
   add_gtest(extensions/delegatedcred/test/DelegatedCredentialCertManagerTest.cpp DelegatedCredentialCertManagerTest)

@@ -6,32 +6,11 @@
  */
 
 #include "thrift/compiler/test/fixtures/mixin/gen-cpp2/module_data.h"
+#include "thrift/compiler/test/fixtures/mixin/gen-cpp2/module_constants.h"
 
 #include <thrift/lib/cpp2/gen/module_data_cpp.h>
 
-FOLLY_CLANG_DISABLE_WARNING("-Wunused-macros")
-
-#if defined(__GNUC__) && defined(__linux__) && !FOLLY_MOBILE
-// These attributes are applied to the static data members to ensure that they
-// are not stripped from the compiled binary, in order to keep them available
-// for use by debuggers at runtime.
-//
-// The "used" attribute is required to ensure the compiler always emits unused
-// data.
-//
-// The "section" attribute is required to stop the linker from stripping used
-// data. It works by forcing all of the data members (both used and unused ones)
-// into the same section. As the linker strips data on a per-section basis, it
-// is then unable to remove unused data without also removing used data.
-// This has a similar effect to the "retain" attribute, but works with older
-// toolchains.
-#define THRIFT_DATA_MEMBER [[gnu::used]] [[gnu::section(".rodata.thrift.data")]]
-#else
-#define THRIFT_DATA_MEMBER
-#endif
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 THRIFT_DATA_MEMBER const std::string_view TStructDataStorage<::cpp2::Mixin1>::name = "Mixin1";
 THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::cpp2::Mixin1>::fields_names = { {
@@ -42,9 +21,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::cpp2::Mixin
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::cpp2::Mixin1>::fields_types = { {
   TType::T_STRING,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::cpp2::Mixin1>::storage_names = { {
-  "__fbthrift_field_field1"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::cpp2::Mixin1>::isset_indexes = { {
   0,
@@ -63,10 +39,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRING,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::Mixin2>::storage_names = { {
-  "__fbthrift_field_m1"sv,
-  "__fbthrift_field_field2"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::cpp2::Mixin2>::isset_indexes = { {
   0,
   1,
@@ -81,9 +53,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::cpp2::Mixin
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::cpp2::Mixin3Base>::fields_types = { {
   TType::T_STRING,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::cpp2::Mixin3Base>::storage_names = { {
-  "__fbthrift_field_field3"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::cpp2::Mixin3Base>::isset_indexes = { {
   0,
@@ -105,16 +74,25 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::Foo>::storage_names = { {
-  "__fbthrift_field_field4"sv,
-  "__fbthrift_field_m2"sv,
-  "__fbthrift_field_m3"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::Foo>::isset_indexes = { {
   0,
   1,
   2,
 }};
 
-} // namespace thrift
-} // namespace apache
+namespace detail {
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Mixin1, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Mixin2, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Mixin3Base, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Foo, false>::bundle)() =
+    nullptr;
+
+} // namespace detail
+} // namespace apache::thrift

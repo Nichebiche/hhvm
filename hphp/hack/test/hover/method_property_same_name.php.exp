@@ -1,3 +1,5 @@
-// Defined in MyClass
-private (function(): ~void) $foo
+Defined in `MyClass`
+---
+private ~(function(): ~void) $foo
+---
 I am a property.

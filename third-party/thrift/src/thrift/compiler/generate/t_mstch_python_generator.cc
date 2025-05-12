@@ -69,8 +69,7 @@ const t_const* get_transitive_annotation_of_adapter_or_null(
   for (const auto& annotation : node.structured_annotations()) {
     const t_type& annotation_type = *annotation.type();
     if (is_transitive_annotation(annotation_type)) {
-      if (annotation_type.find_structured_annotation_or_null(
-              kPythonAdapterUri)) {
+      if (annotation_type.has_structured_annotation(kPythonAdapterUri)) {
         return &annotation;
       }
     }
@@ -131,8 +130,8 @@ bool is_invariant_container_type(const t_type* type) {
   if (true_type->is_map()) {
     const t_map* map_type = dynamic_cast<const t_map*>(true_type);
     const t_type* key_type = map_type->get_key_type()->get_true_type();
-    return key_type->is_struct() || key_type->is_union() ||
-        key_type->is_exception() || key_type->is_container() ||
+    return key_type->is_struct_or_union() || key_type->is_exception() ||
+        key_type->is_container() ||
         is_invariant_container_type(map_type->get_val_type());
   } else if (true_type->is_list()) {
     return is_invariant_container_type(
@@ -249,7 +248,7 @@ class python_mstch_program : public mstch_program {
           {"included_module_mangle", it->ns_mangle},
           {"has_services?", it->has_services},
           {"has_types?", it->has_types},
-          {"is_unsafe_patch?", it->is_unsafe_patch}});
+          {"is_patch?", it->is_patch}});
     }
     return a;
   }
@@ -330,7 +329,7 @@ class python_mstch_program : public mstch_program {
     std::string ns_mangle;
     bool has_services;
     bool has_types;
-    bool is_unsafe_patch;
+    bool is_patch;
   };
 
   void gather_included_program_namespaces() {
@@ -348,7 +347,7 @@ class python_mstch_program : public mstch_program {
               included_program, get_option("root_module_prefix")),
           !included_program->services().empty(),
           has_types,
-          is_unsafe_patch_program(included_program)};
+          is_patch_program(included_program)};
     }
   }
 
@@ -366,6 +365,7 @@ class python_mstch_program : public mstch_program {
           mangle_program_path(prog, get_option("root_module_prefix"));
       ns.has_services = false;
       ns.has_types = true;
+      ns.is_patch = is_patch_program(prog);
       include_namespaces_[path] = std::move(ns);
     }
   }
@@ -701,8 +701,7 @@ class python_mstch_type : public mstch_type {
             {"type:external_program?", &python_mstch_type::is_external_program},
             {"type:integer?", &python_mstch_type::is_integer},
             {"type:iobuf?", &python_mstch_type::is_iobuf},
-            {"type:contains_unsafe_patch?",
-             &python_mstch_type::contains_unsafe_patch},
+            {"type:contains_patch?", &python_mstch_type::contains_patch},
             {"type:has_adapter?", &python_mstch_type::adapter},
 
             {"type:module_name",
@@ -808,9 +807,7 @@ class python_mstch_type : public mstch_type {
 
   mstch::node is_iobuf() { return is_type_iobuf(type_); }
 
-  mstch::node contains_unsafe_patch() {
-    return type_contains_unsafe_patch(type_);
-  }
+  mstch::node contains_patch() { return type_contains_patch(type_); }
 
   mstch::node adapter() {
     return adapter_node(
@@ -880,7 +877,9 @@ class python_mstch_struct : public mstch_struct {
             {"struct:has_invariant_field?",
              &python_mstch_struct::has_invariant_field},
             {"struct:legacy_api?", &python_mstch_struct::legacy_api},
-            {"struct:fields_size", &python_mstch_struct::fields_size},
+            {"struct:num_fields", &python_mstch_struct::num_fields},
+            {"struct:allow_inheritance?",
+             &python_mstch_struct::allow_inheritance},
         });
   }
 
@@ -919,7 +918,14 @@ class python_mstch_struct : public mstch_struct {
     return ::apache::thrift::compiler::generate_legacy_api(*struct_);
   }
 
-  mstch::node fields_size() { return struct_->fields().size(); }
+  mstch::node num_fields() { return struct_->fields().size(); }
+
+  // While inheritance is discouraged, there is limited support for py3
+  // auto-migraters
+  mstch::node allow_inheritance() {
+    return struct_->has_structured_annotation(
+        kPythonMigrationBlockingAllowInheritanceUri);
+  }
 
  private:
   const t_const* adapter_annotation_;
@@ -1024,17 +1030,12 @@ class python_mstch_enum : public mstch_enum {
         this,
         {
             {"enum:flags?", &python_mstch_enum::has_flags},
-            {"enum:legacy_api?", &python_mstch_enum::legacy_api},
         });
   }
 
   mstch::node has_flags() {
-    return enum_->has_annotation("py3.flags") ||
-        enum_->find_structured_annotation_or_null(kPythonFlagsUri);
-  }
-
-  mstch::node legacy_api() {
-    return ::apache::thrift::compiler::generate_legacy_api(*enum_);
+    return enum_->has_unstructured_annotation("py3.flags") ||
+        enum_->has_structured_annotation(kPythonFlagsUri);
   }
 };
 
@@ -1062,7 +1063,7 @@ void validate(
     const std::string& name,
     sema_context& ctx,
     Pred&& field_name_predicate) {
-  auto pyname = node->get_annotation("py3.name", &name);
+  auto pyname = node->get_unstructured_annotation("py3.name", &name);
   if (const t_const* annot =
           node->find_structured_annotation_or_null(kPythonNameUri)) {
     if (auto annotation_name =
@@ -1091,7 +1092,7 @@ bool validate_enum(sema_context& ctx, const t_enum& enm) {
   return true;
 }
 
-bool validate_union(sema_context& ctx, const t_struct& s) {
+bool validate_union(sema_context& ctx, const t_union& s) {
   auto predicate = [](const auto& pyname) {
     return pyname == "type" || pyname == "value" || pyname == "Type";
   };
@@ -1112,7 +1113,7 @@ void validate_module_name_collision(
     diagnostic_level level) {
   // the structured annotation @python.Name overrides unstructured py3.name
   std::reference_wrapper<const std::string> pyname =
-      node.get_annotation("py3.name", &name);
+      node.get_unstructured_annotation("py3.name", &name);
   if (const t_const* annot =
           node.find_structured_annotation_or_null(kPythonNameUri)) {
     if (auto annotation_name =

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <thrift/conformance/cpp2/internal/AnyStructSerializer.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/protocol/Object.h>
@@ -59,7 +59,6 @@ void testUseOpEncode() {
   original.adapted_int_field() = adaptedInt;
   original.list_int_field().emplace().push_back(adaptedInt);
   original.meta_ref() = "some metadata";
-  original.buf_ref() = {folly::IOBuf::wrapBufferAsValue("hi", 2)};
   original.adapted_list_field()->value.push_back(adaptedFoo);
   original.inplace_adapted_list_field()->value.push_back(adaptedFoo);
   original.nested_map_field().emplace()[adaptedFoo] = {

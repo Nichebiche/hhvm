@@ -49,12 +49,12 @@ namespace HPHP {
 #define GMP_MIN_BASE -36
 
 // GMP class strings
-const StaticString s_GMP_num("num");
+extern const StaticString s_GMP_num;
 
 // Array indexes for division functions
-const StaticString s_GMP_s("s");
-const StaticString s_GMP_t("t");
-const StaticString s_GMP_g("g");
+extern const StaticString s_GMP_s;
+extern const StaticString s_GMP_t;
+extern const StaticString s_GMP_g;
 
 // Error strings
 const char* const cs_GMP_INVALID_TYPE =
@@ -85,6 +85,8 @@ const char* const cs_GMP_INVALID_STARTING_INDEX_IS_NEGATIVE =
   "%s(): Starting index must be greater than or equal to zero";
 const char* const cs_GMP_ERROR_EVEN_ROOT_NEGATIVE_NUMBER =
   "%s(): Can't take even root of negative number";
+const char* const cs_GMP_INVALID_EXPONENT_TOO_LARGE =
+  "%s(): Exponent cannot be larger than or equal to 2^32";
 
 ///////////////////////////////////////////////////////////////////////////////
 // classes

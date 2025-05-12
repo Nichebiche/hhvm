@@ -20,6 +20,11 @@ namespace py3 thrift.benchmark
 namespace py thrift.benchmark.struct
 namespace cpp2 thrift.benchmark.st
 
+enum MyEnum {
+  FOO = 1,
+  BAR = 2,
+}
+
 struct MyStruct {
   1: bool val_bool;
   2: i32 val_i32;
@@ -31,9 +36,11 @@ struct MyStruct {
   9: list<i64> val_list;
   10: list<string> str_list;
   11: map<i32, string> val_map;
+  12: map<string, string> str_map;
   15: set<i32> val_set;
   18: map<i32, Included> val_map_structs;
   20: StringBucket val_struct;
+  22: MyEnum val_enum;
 }
 
 struct Included {

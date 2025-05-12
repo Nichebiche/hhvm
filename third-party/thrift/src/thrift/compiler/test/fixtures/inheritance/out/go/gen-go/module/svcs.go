@@ -9,6 +9,7 @@ package module
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,8 +19,9 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type MyRoot interface {
@@ -27,8 +29,8 @@ type MyRoot interface {
 }
 
 type MyRootClientInterface interface {
-    thrift.ClientInterface
-    MyRoot
+    io.Closer
+    DoRoot(ctx context.Context) (error)
 }
 
 type MyRootClient struct {
@@ -43,8 +45,12 @@ func NewMyRootChannelClient(channel thrift.RequestChannel) *MyRootClient {
     }
 }
 
-func NewMyRootClient(prot thrift.Protocol) *MyRootClient {
-    return NewMyRootChannelClient(thrift.NewSerialChannel(prot))
+func NewMyRootClient(prot thrift.DO_NOT_USE_ChannelWrapper) *MyRootClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewMyRootChannelClient(channel)
 }
 
 func (c *MyRootClient) Close() error {
@@ -52,12 +58,12 @@ func (c *MyRootClient) Close() error {
 }
 
 func (c *MyRootClient) DoRoot(ctx context.Context) (error) {
-    in := &reqMyRootDoRoot{
+    fbthriftReq := &reqMyRootDoRoot{
     }
-    out := newRespMyRootDoRoot()
-    err := c.ch.Call(ctx, "do_root", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespMyRootDoRoot()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "do_root", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
@@ -66,7 +72,7 @@ func (c *MyRootClient) DoRoot(ctx context.Context) (error) {
 type MyRootProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            MyRoot
+    handler              MyRoot
 }
 
 func NewMyRootProcessor(handler MyRoot) *MyRootProcessor {
@@ -116,16 +122,16 @@ type procFuncMyRootDoRoot struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncMyRootDoRoot)(nil)
 
-func (p *procFuncMyRootDoRoot) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncMyRootDoRoot) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqMyRootDoRoot()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncMyRootDoRoot) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncMyRootDoRoot) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -133,16 +139,16 @@ func (p *procFuncMyRootDoRoot) Write(seqId int32, result thrift.WritableStruct, 
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("do_root", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("do_root", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -168,8 +174,11 @@ type MyNode interface {
 }
 
 type MyNodeClientInterface interface {
-    thrift.ClientInterface
-    MyNode
+    io.Closer
+    // Inherited/extended service
+    MyRootClientInterface
+
+    DoMid(ctx context.Context) (error)
 }
 
 type MyNodeClient struct {
@@ -187,8 +196,12 @@ func NewMyNodeChannelClient(channel thrift.RequestChannel) *MyNodeClient {
     }
 }
 
-func NewMyNodeClient(prot thrift.Protocol) *MyNodeClient {
-    return NewMyNodeChannelClient(thrift.NewSerialChannel(prot))
+func NewMyNodeClient(prot thrift.DO_NOT_USE_ChannelWrapper) *MyNodeClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewMyNodeChannelClient(channel)
 }
 
 func (c *MyNodeClient) Close() error {
@@ -196,12 +209,12 @@ func (c *MyNodeClient) Close() error {
 }
 
 func (c *MyNodeClient) DoMid(ctx context.Context) (error) {
-    in := &reqMyNodeDoMid{
+    fbthriftReq := &reqMyNodeDoMid{
     }
-    out := newRespMyNodeDoMid()
-    err := c.ch.Call(ctx, "do_mid", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespMyNodeDoMid()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "do_mid", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
@@ -233,16 +246,16 @@ type procFuncMyNodeDoMid struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncMyNodeDoMid)(nil)
 
-func (p *procFuncMyNodeDoMid) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncMyNodeDoMid) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqMyNodeDoMid()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncMyNodeDoMid) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncMyNodeDoMid) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -250,16 +263,16 @@ func (p *procFuncMyNodeDoMid) Write(seqId int32, result thrift.WritableStruct, o
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("do_mid", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("do_mid", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -285,8 +298,11 @@ type MyLeaf interface {
 }
 
 type MyLeafClientInterface interface {
-    thrift.ClientInterface
-    MyLeaf
+    io.Closer
+    // Inherited/extended service
+    MyNodeClientInterface
+
+    DoLeaf(ctx context.Context) (error)
 }
 
 type MyLeafClient struct {
@@ -304,8 +320,12 @@ func NewMyLeafChannelClient(channel thrift.RequestChannel) *MyLeafClient {
     }
 }
 
-func NewMyLeafClient(prot thrift.Protocol) *MyLeafClient {
-    return NewMyLeafChannelClient(thrift.NewSerialChannel(prot))
+func NewMyLeafClient(prot thrift.DO_NOT_USE_ChannelWrapper) *MyLeafClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewMyLeafChannelClient(channel)
 }
 
 func (c *MyLeafClient) Close() error {
@@ -313,12 +333,12 @@ func (c *MyLeafClient) Close() error {
 }
 
 func (c *MyLeafClient) DoLeaf(ctx context.Context) (error) {
-    in := &reqMyLeafDoLeaf{
+    fbthriftReq := &reqMyLeafDoLeaf{
     }
-    out := newRespMyLeafDoLeaf()
-    err := c.ch.Call(ctx, "do_leaf", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespMyLeafDoLeaf()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "do_leaf", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
@@ -350,16 +370,16 @@ type procFuncMyLeafDoLeaf struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncMyLeafDoLeaf)(nil)
 
-func (p *procFuncMyLeafDoLeaf) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncMyLeafDoLeaf) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqMyLeafDoLeaf()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncMyLeafDoLeaf) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncMyLeafDoLeaf) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -367,16 +387,16 @@ func (p *procFuncMyLeafDoLeaf) Write(seqId int32, result thrift.WritableStruct, 
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("do_leaf", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("do_leaf", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

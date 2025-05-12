@@ -8,19 +8,32 @@
 
 I am a *markdown* **cell**
 */
+//@bento-cell-end
+
+//@bento-cell:{"cell_bento_metadata":{"language":"python"},"cell_type":"code","id":4}
+/*@non_hack:
+%%python
+
+print('Hello from python')
+*/
+//@bento-cell-end
 
 //@bento-cell:{"id": 1, "cell_type": "code"}
-class MyClass {
+class N1234MyClass {
   public function hello(): void {
     echo "hello";
   }
 }
-
-async function gen_notebook_main_n1234(): Awaitable<void> {
+function n1234_foo(): void {}
+function gen_n1234_bar(): void {}
+//@bento-cell-end
+async function gen_n1234_notebook_main(): Awaitable<void> {
   //@bento-cell:{"cell_bento_metadata":{"output": {"id":1247934846418027,"loadingStatus":"loaded"}, "collapsed": true},"cell_type":"code","id":1}
-  $m = new MyClass();
+  $m = new N1234MyClass();
   echo "hi1";
+  //@bento-cell-end
   //@bento-cell:{"id": 3, "cell_type": "code"}
   echo "hi2";
   $m->hello();
+  //@bento-cell-end
 }

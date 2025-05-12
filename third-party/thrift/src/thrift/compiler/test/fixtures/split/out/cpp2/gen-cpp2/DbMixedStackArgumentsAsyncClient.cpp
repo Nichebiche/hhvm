@@ -16,25 +16,25 @@ typedef apache::thrift::ThriftPresult<false, apache::thrift::FieldData<1, ::apac
 typedef apache::thrift::ThriftPresult<true, apache::thrift::FieldData<0, ::apache::thrift::type_class::binary, ::std::string*>> DbMixedStackArguments_getDataByKey1_presult;
 } // namespace cpp2
 template <typename RpcOptions>
-void apache::thrift::Client<::cpp2::DbMixedStackArguments>::fbthrift_send_getDataByKey0(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback) {
+void apache::thrift::Client<::cpp2::DbMixedStackArguments>::fbthrift_send_getDataByKey0(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata) {
 
   static ::apache::thrift::MethodMetadata::Data* methodMetadata =
         new ::apache::thrift::MethodMetadata::Data(
                 "getDataByKey0",
                 ::apache::thrift::FunctionQualifier::Unspecified,
                 "DbMixedStackArguments");
-  apache::thrift::clientSendT<apache::thrift::RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE>(std::move(request), std::forward<RpcOptions>(rpcOptions), std::move(callback), std::move(header), channel_.get(), ::apache::thrift::MethodMetadata::from_static(methodMetadata));
+  apache::thrift::clientSendT<apache::thrift::RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE>(std::move(request), std::forward<RpcOptions>(rpcOptions), std::move(callback), std::move(header), channel_.get(), ::apache::thrift::MethodMetadata::from_static(methodMetadata), std::move(interceptorFrameworkMetadata));
 }
 
 template <typename RpcOptions>
-void apache::thrift::Client<::cpp2::DbMixedStackArguments>::fbthrift_send_getDataByKey1(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback) {
+void apache::thrift::Client<::cpp2::DbMixedStackArguments>::fbthrift_send_getDataByKey1(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata) {
 
   static ::apache::thrift::MethodMetadata::Data* methodMetadata =
         new ::apache::thrift::MethodMetadata::Data(
                 "getDataByKey1",
                 ::apache::thrift::FunctionQualifier::Unspecified,
                 "DbMixedStackArguments");
-  apache::thrift::clientSendT<apache::thrift::RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE>(std::move(request), std::forward<RpcOptions>(rpcOptions), std::move(callback), std::move(header), channel_.get(), ::apache::thrift::MethodMetadata::from_static(methodMetadata));
+  apache::thrift::clientSendT<apache::thrift::RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE>(std::move(request), std::forward<RpcOptions>(rpcOptions), std::move(callback), std::move(header), channel_.get(), ::apache::thrift::MethodMetadata::from_static(methodMetadata), std::move(interceptorFrameworkMetadata));
 }
 
 
@@ -71,10 +71,14 @@ apache::thrift::SerializedRequest apache::thrift::Client<::cpp2::DbMixedStackArg
 
 void apache::thrift::Client<::cpp2::DbMixedStackArguments>::fbthrift_serialize_and_send_getDataByKey0(apache::thrift::RpcOptions& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::ContextStack* contextStack, apache::thrift::RequestClientCallback::Ptr callback, const ::std::string& p_key, bool stealRpcOptions) {
   apache::thrift::SerializedRequest request = fbthrift_serialize_getDataByKey0(rpcOptions, *header, contextStack, p_key);
+  std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata = nullptr;
+  if (contextStack != nullptr) {
+    interceptorFrameworkMetadata = detail::ContextStackUnsafeAPI(*contextStack).getInterceptorFrameworkMetadata(rpcOptions);
+  }
   if (stealRpcOptions) {
-    fbthrift_send_getDataByKey0(std::move(request), std::move(rpcOptions), std::move(header), std::move(callback));
+    fbthrift_send_getDataByKey0(std::move(request), std::move(rpcOptions), std::move(header), std::move(callback), std::move(interceptorFrameworkMetadata));
   } else {
-    fbthrift_send_getDataByKey0(std::move(request), rpcOptions, std::move(header), std::move(callback));
+    fbthrift_send_getDataByKey0(std::move(request), rpcOptions, std::move(header), std::move(callback), std::move(interceptorFrameworkMetadata));
   }
 }
 
@@ -111,7 +115,7 @@ void apache::thrift::Client<::cpp2::DbMixedStackArguments>::sync_getDataByKey0(a
   auto* contextStack  = ctxAndHeader.first.get();
   if (contextStack != nullptr) {
     auto argsAsRefs = std::tie(p_key);
-    contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), ctxAndHeader.second.get()).throwUnlessValue();
+    contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), ctxAndHeader.second.get(), rpcOptions).throwUnlessValue();
   }
   callback.waitUntilDone(
     evb,
@@ -149,15 +153,17 @@ folly::SemiFuture<::std::string> apache::thrift::Client<::cpp2::DbMixedStackArgu
   auto header = std::move(ctxAndHeader.second);
   auto* contextStack = wrappedCallbackAndContextStack.second;
   auto wrappedCallback = std::move(wrappedCallbackAndContextStack.first);
+  std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata = nullptr;
   if (contextStack != nullptr) {
     auto argsAsRefs = std::tie(p_key);
-    if (auto exTry = contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get());
+    if (auto exTry = contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), rpcOptions);
         exTry.hasException()) {
       return folly::makeSemiFuture<::std::string>(std::move(exTry).exception());
     }
+    interceptorFrameworkMetadata = detail::ContextStackUnsafeAPI(*contextStack).getInterceptorFrameworkMetadata(rpcOptions);
   }
   apache::thrift::SerializedRequest request = fbthrift_serialize_getDataByKey0(rpcOptions, *header, contextStack, p_key);
-  fbthrift_send_getDataByKey0(std::move(request), rpcOptions, std::move(header), std::move(wrappedCallback));
+  fbthrift_send_getDataByKey0(std::move(request), rpcOptions, std::move(header), std::move(wrappedCallback), std::move(interceptorFrameworkMetadata));
   return std::move(semifuture).deferValue(CallbackHelper::processClientInterceptorsAndExtractResult);
 }
 
@@ -264,10 +270,14 @@ apache::thrift::SerializedRequest apache::thrift::Client<::cpp2::DbMixedStackArg
 
 void apache::thrift::Client<::cpp2::DbMixedStackArguments>::fbthrift_serialize_and_send_getDataByKey1(apache::thrift::RpcOptions& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::ContextStack* contextStack, apache::thrift::RequestClientCallback::Ptr callback, const ::std::string& p_key, bool stealRpcOptions) {
   apache::thrift::SerializedRequest request = fbthrift_serialize_getDataByKey1(rpcOptions, *header, contextStack, p_key);
+  std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata = nullptr;
+  if (contextStack != nullptr) {
+    interceptorFrameworkMetadata = detail::ContextStackUnsafeAPI(*contextStack).getInterceptorFrameworkMetadata(rpcOptions);
+  }
   if (stealRpcOptions) {
-    fbthrift_send_getDataByKey1(std::move(request), std::move(rpcOptions), std::move(header), std::move(callback));
+    fbthrift_send_getDataByKey1(std::move(request), std::move(rpcOptions), std::move(header), std::move(callback), std::move(interceptorFrameworkMetadata));
   } else {
-    fbthrift_send_getDataByKey1(std::move(request), rpcOptions, std::move(header), std::move(callback));
+    fbthrift_send_getDataByKey1(std::move(request), rpcOptions, std::move(header), std::move(callback), std::move(interceptorFrameworkMetadata));
   }
 }
 
@@ -304,7 +314,7 @@ void apache::thrift::Client<::cpp2::DbMixedStackArguments>::sync_getDataByKey1(a
   auto* contextStack  = ctxAndHeader.first.get();
   if (contextStack != nullptr) {
     auto argsAsRefs = std::tie(p_key);
-    contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), ctxAndHeader.second.get()).throwUnlessValue();
+    contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), ctxAndHeader.second.get(), rpcOptions).throwUnlessValue();
   }
   callback.waitUntilDone(
     evb,
@@ -342,15 +352,17 @@ folly::SemiFuture<::std::string> apache::thrift::Client<::cpp2::DbMixedStackArgu
   auto header = std::move(ctxAndHeader.second);
   auto* contextStack = wrappedCallbackAndContextStack.second;
   auto wrappedCallback = std::move(wrappedCallbackAndContextStack.first);
+  std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata = nullptr;
   if (contextStack != nullptr) {
     auto argsAsRefs = std::tie(p_key);
-    if (auto exTry = contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get());
+    if (auto exTry = contextStack->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), rpcOptions);
         exTry.hasException()) {
       return folly::makeSemiFuture<::std::string>(std::move(exTry).exception());
     }
+    interceptorFrameworkMetadata = detail::ContextStackUnsafeAPI(*contextStack).getInterceptorFrameworkMetadata(rpcOptions);
   }
   apache::thrift::SerializedRequest request = fbthrift_serialize_getDataByKey1(rpcOptions, *header, contextStack, p_key);
-  fbthrift_send_getDataByKey1(std::move(request), rpcOptions, std::move(header), std::move(wrappedCallback));
+  fbthrift_send_getDataByKey1(std::move(request), rpcOptions, std::move(header), std::move(wrappedCallback), std::move(interceptorFrameworkMetadata));
   return std::move(semifuture).deferValue(CallbackHelper::processClientInterceptorsAndExtractResult);
 }
 

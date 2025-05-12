@@ -18,10 +18,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use clap::Parser;
 use futures::stream::StreamExt;
+use rpc::rpc::SinkBasicClientInstruction;
+use rpc::rpc::SinkBasicClientTestResult;
+use rpc::rpc::SinkChunkTimeoutClientInstruction;
+use rpc::rpc::SinkChunkTimeoutClientTestResult;
+use rpc::rpc::SinkDeclaredExceptionClientInstruction;
+use rpc::rpc::SinkDeclaredExceptionClientTestResult;
+use rpc::rpc::SinkInitialResponseClientInstruction;
+use rpc::rpc::SinkInitialResponseClientTestResult;
+use rpc::rpc::SinkUndeclaredExceptionClientInstruction;
+use rpc::rpc::SinkUndeclaredExceptionClientTestResult;
 use rpc::rpc::StreamBasicClientInstruction;
 use rpc::rpc::StreamBasicClientTestResult;
 use rpc::rpc::StreamChunkTimeoutClientInstruction;
@@ -40,16 +50,18 @@ use rpc::rpc::StreamInitialUndeclaredExceptionClientInstruction;
 use rpc::rpc::StreamInitialUndeclaredExceptionClientTestResult;
 use rpc::rpc::StreamUndeclaredExceptionClientInstruction;
 use rpc::rpc::StreamUndeclaredExceptionClientTestResult;
+use rpc_clients::rpc::RPCConformanceServiceExt;
+use rpc_clients::rpc::errors::r_p_c_conformance_service::SinkChunkTimeoutSinkFinalError;
+use rpc_clients::rpc::errors::r_p_c_conformance_service::SinkDeclaredExceptionSinkError;
+use rpc_clients::rpc::errors::r_p_c_conformance_service::SinkUndeclaredExceptionSinkError;
 use rpc_clients::rpc::errors::r_p_c_conformance_service::StreamDeclaredExceptionStreamError;
 use rpc_clients::rpc::errors::r_p_c_conformance_service::StreamInitialDeclaredExceptionError;
-use rpc_clients::rpc::make_RPCConformanceService;
-use rpc_clients::rpc::RPCConformanceService;
 use tracing_glog::Glog;
 use tracing_glog::GlogFields;
-use tracing_subscriber::filter::Directive;
-use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Registry;
+use tracing_subscriber::filter::Directive;
+use tracing_subscriber::layer::SubscriberExt;
 
 #[derive(Parser, Debug)]
 struct Arguments {
@@ -71,17 +83,30 @@ async fn main(fb: fbinit::FacebookInit, args: Arguments) -> Result<()> {
 async fn get_client(
     fb: fbinit::FacebookInit,
     port: u16,
-) -> Result<Arc<dyn RPCConformanceService + Send + Sync + 'static>> {
+) -> Result<Arc<dyn RPCConformanceServiceExt<thriftclient::ThriftChannel> + Send + Sync + 'static>>
+{
     // TODO: Why aren't we using the SRclient builder here? It has more functionality it seems
     // over the bareclient (specifically the ability to configure the RPC options without specying
     // a serialization protocol)
 
-    thriftclient::ThriftChannelBuilder::from_sock_addr(
+    let channel = thriftclient::ThriftChannelBuilder::from_sock_addr(
         fb,
         SocketAddr::new(std::net::Ipv6Addr::LOCALHOST.into(), port),
     )?
     .with_secure(false)
-    .build_client(make_RPCConformanceService) // patternlint-disable-line rust-sr-client-creation-method
+    .build_channel()?;
+
+    match channel.protocol_id() {
+        fbthrift::ProtocolID::BinaryProtocol => Ok(<dyn RPCConformanceServiceExt<_>>::new(
+            fbthrift::BinaryProtocol,
+            channel,
+        )),
+        fbthrift::ProtocolID::CompactProtocol => Ok(<dyn RPCConformanceServiceExt<_>>::new(
+            fbthrift::CompactProtocol,
+            channel,
+        )),
+        p => anyhow::bail!("Unsupported protocol: {:?}", p),
+    }
 }
 
 fn init_logging(directives: Vec<Directive>) {
@@ -121,14 +146,14 @@ use rpc::rpc::RequestResponseTimeoutClientInstruction;
 use rpc::rpc::RequestResponseTimeoutClientTestResult;
 use rpc::rpc::RequestResponseUndeclaredExceptionClientInstruction;
 use rpc::rpc::RequestResponseUndeclaredExceptionClientTestResult;
+use rpc_clients::rpc::BasicInteraction;
 use rpc_clients::rpc::errors::r_p_c_conformance_service::RequestResponseDeclaredExceptionError;
 use rpc_clients::rpc::errors::r_p_c_conformance_service::RequestResponseTimeoutError;
 use rpc_clients::rpc::errors::r_p_c_conformance_service::RequestResponseUndeclaredExceptionError;
-use rpc_clients::rpc::BasicInteraction;
 
-async fn test(client: &dyn RPCConformanceService) -> Result<()> {
+async fn test(client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>) -> Result<()> {
     use ClientInstruction::*;
-    #[allow(unused)]
+
     match &client.getTestCase().await?.clientInstruction {
         requestResponseBasic(i) => request_response_basic(client, i).await,
         requestResponseDeclaredException(i) => request_response_declared_exn(client, i).await,
@@ -148,23 +173,19 @@ async fn test(client: &dyn RPCConformanceService) -> Result<()> {
         streamInitialDeclaredException(i) => stream_initial_declared_exception(client, i).await,
         streamInitialUndeclaredException(i) => stream_initial_undeclared_exception(client, i).await,
         streamInitialTimeout(i) => stream_initial_timeout(client, i).await,
-        sinkBasic(i) => not_implemented(),
-        sinkChunkTimeout(i) => not_implemented(),
-        sinkInitialResponse(i) => not_implemented(),
-        sinkDeclaredException(i) => not_implemented(),
-        sinkUndeclaredException(i) => not_implemented(),
+        sinkBasic(i) => sink_basic(client, i).await,
+        sinkChunkTimeout(i) => sink_chunk_timeout(client, i).await,
+        sinkInitialResponse(i) => sink_initial_response(client, i).await,
+        sinkDeclaredException(i) => sink_declared_exception(client, i).await,
+        sinkUndeclaredException(i) => sink_undeclared_exception(client, i).await,
         UnknownField(i) => Err(anyhow!(format!("not supported: {:?}", i))),
     }
 }
 
 // ---
 
-fn not_implemented() -> Result<()> {
-    Err(anyhow!("not implemented"))
-}
-
 async fn create_interaction(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     initial_sum: &Option<i32>,
 ) -> Result<Arc<dyn BasicInteraction>> {
     Ok(match initial_sum {
@@ -176,7 +197,7 @@ async fn create_interaction(
 // ---
 
 async fn request_response_basic(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &RequestResponseBasicClientInstruction,
 ) -> Result<()> {
     let test_result =
@@ -189,7 +210,7 @@ async fn request_response_basic(
 }
 
 async fn request_response_declared_exn(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &RequestResponseDeclaredExceptionClientInstruction,
 ) -> Result<()> {
     match &client
@@ -214,7 +235,7 @@ async fn request_response_declared_exn(
 }
 
 async fn request_response_undeclared_exn(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &RequestResponseUndeclaredExceptionClientInstruction,
 ) -> Result<()> {
     match &client
@@ -238,7 +259,9 @@ async fn request_response_undeclared_exn(
     }
 }
 
-async fn request_response_no_arg_void_response(client: &dyn RPCConformanceService) -> Result<()> {
+async fn request_response_no_arg_void_response(
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
+) -> Result<()> {
     let () = client.requestResponseNoArgVoidResponse().await?;
     let test_result = ClientTestResult::requestResponseNoArgVoidResponse(
         RequestResponseNoArgVoidResponseClientTestResult {
@@ -250,22 +273,16 @@ async fn request_response_no_arg_void_response(client: &dyn RPCConformanceServic
 }
 
 async fn request_response_timeout(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &RequestResponseTimeoutClientInstruction,
 ) -> Result<()> {
-    match &client.requestResponseTimeout(&instr.request).await {
-        // TODO: This is wrong! On timeout we are receiving a default
-        // constructed response. The conformant behavior is as per the next
-        // case, a `ThriftError` containing a `TTransportException`.
-        // Ok(r) if r.data.as_str() == "" && r.num == None => {
-        //     let test_result =
-        //         ClientTestResult::requestResponseTimeout(RequestResponseTimeoutClientTestResult {
-        //             timeoutException: true,
-        //             ..Default::default()
-        //         });
-        //     client.sendTestResult(&test_result).await?;
-        //     Ok(())
-        // }
+    let mut opts = rust_types::RpcOptions::default();
+    opts.set_timeout_ms(instr.timeoutMs as u32);
+    let result = client
+        .requestResponseTimeout_with_rpc_opts(&instr.request, opts)
+        .await;
+
+    match &result {
         Err(RequestResponseTimeoutError::ThriftError(exn)) => {
             tracing::info!("thrift error: {:?}", exn);
             let test_result =
@@ -284,7 +301,7 @@ async fn request_response_timeout(
 }
 
 async fn interaction_constructor(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     _instr: &InteractionConstructorClientInstruction,
 ) -> Result<()> {
     let i = client.createBasicInteraction()?;
@@ -298,7 +315,7 @@ async fn interaction_constructor(
 }
 
 async fn interaction_factory_function(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &InteractionFactoryFunctionClientInstruction,
 ) -> Result<()> {
     let _i = client
@@ -313,7 +330,7 @@ async fn interaction_factory_function(
 }
 
 async fn interaction_persists_state(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &InteractionPersistsStateClientInstruction,
 ) -> Result<()> {
     let i = create_interaction(client, &instr.initialSum).await?;
@@ -328,7 +345,7 @@ async fn interaction_persists_state(
 }
 
 async fn interaction_termination(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &InteractionTerminationClientInstruction,
 ) -> Result<()> {
     let i = create_interaction(client, &instr.initialSum).await?;
@@ -343,11 +360,15 @@ async fn interaction_termination(
 }
 
 async fn stream_basic(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamBasicClientInstruction,
 ) -> Result<()> {
-    // TODO: configure rpc_options buffer?
-    let mut stream = client.streamBasic(&instr.request).await?;
+    let mut opts = rust_types::RpcOptions::default();
+    opts.set_chunk_buffer_size(instr.bufferSize as i32);
+
+    let mut stream = client
+        .streamBasic_with_rpc_opts(&instr.request, opts)
+        .await?;
     let mut test_result = StreamBasicClientTestResult {
         streamPayloads: vec![],
         ..Default::default()
@@ -362,10 +383,15 @@ async fn stream_basic(
 }
 
 async fn stream_chunk_timeout(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamChunkTimeoutClientInstruction,
 ) -> Result<()> {
-    let mut stream = client.streamChunkTimeout(&instr.request).await?;
+    let mut opts = rust_types::RpcOptions::default();
+    opts.set_chunk_timeout_ms(instr.chunkTimeoutMs as u32);
+
+    let mut stream = client
+        .streamChunkTimeout_with_rpc_opts(&instr.request, opts)
+        .await?;
     let mut test_result = StreamChunkTimeoutClientTestResult {
         chunkTimeoutException: false,
         streamPayloads: vec![],
@@ -391,7 +417,7 @@ async fn stream_chunk_timeout(
 }
 
 async fn stream_initial_response(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamInitialResponseClientInstruction,
 ) -> Result<()> {
     let (initial_response, mut stream) = client.streamInitialResponse(&instr.request).await?;
@@ -413,7 +439,7 @@ async fn stream_initial_response(
 }
 
 async fn stream_credit_timeout(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamCreditTimeoutClientInstruction,
 ) -> Result<()> {
     let mut stream = client.streamCreditTimeout(&instr.request).await?;
@@ -443,7 +469,7 @@ async fn stream_credit_timeout(
 }
 
 async fn stream_declared_exception(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamDeclaredExceptionClientInstruction,
 ) -> Result<()> {
     let mut stream = client.streamDeclaredException(&instr.request).await?;
@@ -463,7 +489,7 @@ async fn stream_declared_exception(
 }
 
 async fn stream_undeclared_exception(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamUndeclaredExceptionClientInstruction,
 ) -> Result<()> {
     let mut stream = client.streamUndeclaredException(&instr.request).await?;
@@ -483,7 +509,7 @@ async fn stream_undeclared_exception(
 }
 
 async fn stream_initial_declared_exception(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamInitialDeclaredExceptionClientInstruction,
 ) -> Result<()> {
     let result = client.streamInitialDeclaredException(&instr.request).await;
@@ -503,7 +529,7 @@ async fn stream_initial_declared_exception(
 }
 
 async fn stream_initial_undeclared_exception(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamInitialUndeclaredExceptionClientInstruction,
 ) -> Result<()> {
     let result = client
@@ -525,10 +551,14 @@ async fn stream_initial_undeclared_exception(
 }
 
 async fn stream_initial_timeout(
-    client: &dyn RPCConformanceService,
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
     instr: &StreamInitialTimeoutClientInstruction,
 ) -> Result<()> {
-    let result = client.streamInitialTimeout(&instr.request).await;
+    let mut opts = rust_types::RpcOptions::default();
+    opts.set_timeout_ms(instr.timeoutMs as u32);
+    let result = client
+        .streamInitialTimeout_with_rpc_opts(&instr.request, opts)
+        .await;
     let mut test_result = StreamInitialTimeoutClientTestResult {
         timeoutException: false,
         ..Default::default()
@@ -539,5 +569,159 @@ async fn stream_initial_timeout(
     client
         .sendTestResult(&ClientTestResult::streamInitialTimeout(test_result))
         .await?;
+    Ok(())
+}
+
+async fn sink_basic(
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
+    instr: &SinkBasicClientInstruction,
+) -> Result<()> {
+    let sink_result = client.sinkBasic(&instr.request).await?;
+    let final_response = (sink_result.sink)(
+        futures::stream::iter(instr.sinkPayloads.clone())
+            .map(Ok)
+            .boxed(),
+    )
+    .await
+    .map_err(|err| anyhow!("sink_basic: sink failed: {:?}", err))?;
+
+    let test_result = SinkBasicClientTestResult {
+        finalResponse: final_response,
+        ..Default::default()
+    };
+    client
+        .sendTestResult(&ClientTestResult::sinkBasic(test_result))
+        .await?;
+
+    Ok(())
+}
+
+async fn sink_chunk_timeout(
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
+    instr: &SinkChunkTimeoutClientInstruction,
+) -> Result<()> {
+    let sink_result = client.sinkChunkTimeout(&instr.request).await?;
+    let final_response = (sink_result.sink)(
+        futures::stream::iter(instr.sinkPayloads.clone())
+            .map(Ok)
+            .boxed(),
+    )
+    .await;
+
+    let chunk_timeout = match final_response {
+        Ok(_) => false,
+        Err(SinkChunkTimeoutSinkFinalError::ApplicationException(aexn))
+            if aexn.type_ == fbthrift::ApplicationExceptionErrorCode::Timeout =>
+        {
+            true
+        }
+        _ => false,
+    };
+
+    let test_result = SinkChunkTimeoutClientTestResult {
+        chunkTimeoutException: chunk_timeout,
+        ..Default::default()
+    };
+    client
+        .sendTestResult(&ClientTestResult::sinkChunkTimeout(test_result))
+        .await?;
+
+    Ok(())
+}
+
+async fn sink_initial_response(
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
+    instr: &SinkInitialResponseClientInstruction,
+) -> Result<()> {
+    let sink_result = client.sinkInitialResponse(&instr.request).await?;
+    let final_response = (sink_result.sink)(
+        futures::stream::iter(instr.sinkPayloads.clone())
+            .map(Ok)
+            .boxed(),
+    )
+    .await?;
+
+    let test_result = SinkInitialResponseClientTestResult {
+        finalResponse: final_response,
+        initialResponse: sink_result.initial_response,
+        ..Default::default()
+    };
+    client
+        .sendTestResult(&ClientTestResult::sinkInitialResponse(test_result))
+        .await?;
+
+    Ok(())
+}
+
+async fn sink_declared_exception(
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
+    instr: &SinkDeclaredExceptionClientInstruction,
+) -> Result<()> {
+    let sink_result = client.sinkDeclaredException(&instr.request).await?;
+    let final_response = if let Some(ue) = &instr.userException {
+        (sink_result.sink)(
+            futures::stream::iter([ue.clone()])
+                .map(|ex| Err(SinkDeclaredExceptionSinkError::e(ex)))
+                .boxed(),
+        )
+        .await
+    } else {
+        (sink_result.sink)(futures::stream::empty().boxed()).await
+    };
+
+    if instr.userException.is_some() {
+        assert!(final_response.is_err());
+    } else {
+        assert!(final_response.is_ok());
+    }
+
+    let test_result = SinkDeclaredExceptionClientTestResult {
+        sinkThrew: instr.userException.is_some(),
+        ..Default::default()
+    };
+    client
+        .sendTestResult(&ClientTestResult::sinkDeclaredException(test_result))
+        .await?;
+
+    Ok(())
+}
+
+async fn sink_undeclared_exception(
+    client: &dyn RPCConformanceServiceExt<thriftclient::ThriftChannel>,
+    instr: &SinkUndeclaredExceptionClientInstruction,
+) -> Result<()> {
+    let sink_result = client.sinkUndeclaredException(&instr.request).await?;
+    let final_response = if let Some(ue) = &instr.exceptionMessage {
+        (sink_result.sink)(
+            futures::stream::iter([ue.clone()])
+                .map(|ex| {
+                    Err(SinkUndeclaredExceptionSinkError::ApplicationException(
+                        fbthrift::ApplicationException::new(
+                            fbthrift::ApplicationExceptionErrorCode::Unknown,
+                            ex,
+                        ),
+                    ))
+                })
+                .boxed(),
+        )
+        .await
+    } else {
+        (sink_result.sink)(futures::stream::empty().boxed()).await
+    };
+
+    if instr.exceptionMessage.is_some() {
+        assert!(final_response.is_err());
+    } else {
+        assert!(final_response.is_ok());
+    }
+
+    let test_result = SinkUndeclaredExceptionClientTestResult {
+        sinkThrew: instr.exceptionMessage.is_some(),
+        ..Default::default()
+    };
+    client
+        .sendTestResult(&ClientTestResult::sinkUndeclaredException(test_result))
+        .await?;
+
     Ok(())
 }

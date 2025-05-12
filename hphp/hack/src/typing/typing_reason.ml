@@ -274,7 +274,7 @@ type prj_asymm =
   | Prj_asymm_nullable
   | Prj_asymm_arraykey
   | Prj_asymm_num
-  | Prj_rewrite_classname
+  | Prj_asymm_contains
 [@@deriving hash]
 
 let prj_asymm_to_json = function
@@ -284,7 +284,7 @@ let prj_asymm_to_json = function
   | Prj_asymm_nullable -> Hh_json.JSON_String "Prj_asymm_nullable"
   | Prj_asymm_arraykey -> Hh_json.JSON_String "Prj_asymm_arraykey"
   | Prj_asymm_num -> Hh_json.JSON_String "Prj_asymm_num"
-  | Prj_rewrite_classname -> Hh_json.JSON_String "Prj_rewrite_classname"
+  | Prj_asymm_contains -> Hh_json.JSON_String "Prj_asymm_contains"
 
 (* ~~ Flow kinds ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 
@@ -1055,6 +1055,8 @@ type witness_decl =
   | Pessimised_this of (Pos_or_decl.t[@hash.ignore])
   | Illegal_recursive_type of (Pos_or_decl.t[@hash.ignore]) * string
   | Support_dynamic_type_assume of (Pos_or_decl.t[@hash.ignore])
+  | Polymorphic_type_param of
+      (Pos_or_decl.t[@hash.ignore]) * string * string * int
 [@@deriving hash]
 
 let witness_decl_to_raw_pos = function
@@ -1085,7 +1087,8 @@ let witness_decl_to_raw_pos = function
   | Pessimised_return (pos_or_decl, _)
   | Pessimised_prop (pos_or_decl, _)
   | Illegal_recursive_type (pos_or_decl, _)
-  | Support_dynamic_type_assume pos_or_decl ->
+  | Support_dynamic_type_assume pos_or_decl
+  | Polymorphic_type_param (pos_or_decl, _, _, _) ->
     pos_or_decl
 
 let map_pos_witness_decl pos_or_decl witness =
@@ -1121,6 +1124,8 @@ let map_pos_witness_decl pos_or_decl witness =
   | Illegal_recursive_type (p, name) ->
     Illegal_recursive_type (pos_or_decl p, name)
   | Support_dynamic_type_assume p -> Support_dynamic_type_assume (pos_or_decl p)
+  | Polymorphic_type_param (p, new_name, orig_name, rank) ->
+    Polymorphic_type_param (pos_or_decl p, new_name, orig_name, rank)
 
 let string_of_pessimise_reason = function
   | PRabstract -> "abstract"
@@ -1171,6 +1176,7 @@ let constructor_string_of_witness_decl = function
   | Pessimised_this _ -> "Rpessimised_this"
   | Illegal_recursive_type _ -> "Rillegal_recursive_type"
   | Support_dynamic_type_assume _ -> "Rsupport_dynamic_type_assume"
+  | Polymorphic_type_param _ -> "Rpolymorphic_type_param"
 
 let pp_witness_decl fmt witness =
   let comma_ fmt () = Format.fprintf fmt ",@ " in
@@ -1213,6 +1219,14 @@ let pp_witness_decl fmt witness =
     | Support_dynamic_type_assume p
     | Global_class_prop p ->
       Pos_or_decl.pp fmt p
+    | Polymorphic_type_param (p, s1, s2, r) ->
+      Pos_or_decl.pp fmt p;
+      comma ();
+      Format.pp_print_string fmt s1;
+      comma ();
+      Format.pp_print_string fmt s2;
+      comma ();
+      Format.pp_print_int fmt r
     | Tconst_no_cstr pid -> pp_pos_id fmt pid
     | Cstr_on_generics (p, pid) ->
       Pos_or_decl.pp fmt p;
@@ -1345,6 +1359,19 @@ let witness_decl_to_json = function
           ( "Support_dynamic_type_assume",
             JSON_Array [Pos_or_decl.json pos_or_decl] );
         ])
+  | Polymorphic_type_param (pos_or_decl, new_name, orig_name, rank) ->
+    Hh_json.(
+      JSON_Object
+        [
+          ( "Polymorphic_type_param",
+            JSON_Array
+              [
+                Pos_or_decl.json pos_or_decl;
+                string_ new_name;
+                string_ orig_name;
+                int_ rank;
+              ] );
+        ])
   | Pessimised_inout pos_or_decl ->
     Hh_json.(
       JSON_Object
@@ -1391,6 +1418,24 @@ let pessimise_reason_to_string pr =
 let witness_decl_to_string prefix witness =
   match witness with
   | Witness_from_decl pos_or_decl -> (pos_or_decl, prefix)
+  | Polymorphic_type_param (pos_or_decl, new_name, orig_name, rank) ->
+    let msg =
+      let new_name = Format.sprintf "`%s`" new_name in
+      if String.is_suffix prefix ~suffix:new_name then
+        Format.sprintf
+          {|%s which corresponds to the rank-%n type parameter `%s` in the polymorphic function|}
+          prefix
+          (rank + 1)
+          orig_name
+      else
+        Format.sprintf
+          {|%s where %s corresponds to the rank-%n type parameter `%s` in the polymorphic function|}
+          prefix
+          new_name
+          (rank + 1)
+          orig_name
+    in
+    (pos_or_decl, msg)
   | Idx_vector_from_decl pos_or_decl ->
     ( pos_or_decl,
       prefix
@@ -1946,238 +1991,268 @@ let pos_or_decl_to_json pos_or_decl =
   else
     Pos_or_decl.json pos_or_decl
 
-let rec to_json_help : type a. a t_ -> Hh_json.json list -> Hh_json.json list =
- fun t acc ->
-  match t with
-  | No_reason -> Hh_json.(JSON_Object [("No_reason", JSON_Array [])]) :: acc
-  | Missing_field ->
-    Hh_json.(JSON_Object [("Missing_field", JSON_Array [])]) :: acc
-  | Invalid -> Hh_json.(JSON_Object [("Invalid", JSON_Array [])]) :: acc
-  | From_witness_locl witness ->
-    Hh_json.(
-      JSON_Object
-        [("From_witness_locl", JSON_Array [witness_locl_to_json witness])])
-    :: acc
-  | From_witness_decl witness ->
-    Hh_json.(
-      JSON_Object
-        [("From_witness_decl", JSON_Array [witness_decl_to_json witness])])
-    :: acc
-  | Idx (pos, r) ->
-    Hh_json.(JSON_Object [("Idx", JSON_Array [pos_to_json pos; to_json r])])
-    :: acc
-  | Arith_ret_float (pos, r, arg_pos) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Arith_ret_float",
-            JSON_Array
-              [pos_to_json pos; to_json r; arg_position_to_json arg_pos] );
-        ])
-    :: acc
-  | Arith_ret_num (pos, r, arg_pos) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Arith_ret_num",
-            JSON_Array
-              [pos_to_json pos; to_json r; arg_position_to_json arg_pos] );
-        ])
-    :: acc
-  | Lost_info (str, r, blame) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Lost_info",
-            JSON_Array [JSON_String str; to_json r; blame_to_json blame] );
-        ])
-    :: acc
-  | Format (pos, str, r) ->
-    Hh_json.(
-      JSON_Object
-        [("Format", JSON_Array [pos_to_json pos; JSON_String str; to_json r])])
-    :: acc
-  | Instantiate (r1, str, r2) ->
-    Hh_json.(
-      JSON_Object
-        [("Instantiate", JSON_Array [to_json r1; JSON_String str; to_json r2])])
-    :: acc
-  | Typeconst (r1, (pos_or_decl, str), lazy_str, r2) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Typeconst",
-            JSON_Array
-              [
-                to_json r1;
+let rec to_json_help : type a. a t_ -> int option -> Hh_json.json * int option =
+ fun t fuel_opt ->
+  if Option.value_map fuel_opt ~default:false ~f:(fun fuel -> fuel <= 0) then
+    (Hh_json.JSON_Object [], fuel_opt)
+  else begin
+    let fuel_opt = Option.map fuel_opt ~f:(fun fuel -> fuel - 1) in
+    match t with
+    | No_reason ->
+      (Hh_json.(JSON_Object [("No_reason", JSON_Array [])]), fuel_opt)
+    | Missing_field ->
+      (Hh_json.(JSON_Object [("Missing_field", JSON_Array [])]), fuel_opt)
+    | Invalid -> (Hh_json.(JSON_Object [("Invalid", JSON_Array [])]), fuel_opt)
+    | From_witness_locl witness ->
+      ( Hh_json.(
+          JSON_Object
+            [("From_witness_locl", JSON_Array [witness_locl_to_json witness])]),
+        fuel_opt )
+    | From_witness_decl witness ->
+      ( Hh_json.(
+          JSON_Object
+            [("From_witness_decl", JSON_Array [witness_decl_to_json witness])]),
+        fuel_opt )
+    | Idx (pos, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(JSON_Object [("Idx", JSON_Array [pos_to_json pos; r])]),
+        fuel_opt )
+    | Arith_ret_float (pos, r, arg_pos) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Arith_ret_float",
+                JSON_Array [pos_to_json pos; r; arg_position_to_json arg_pos] );
+            ]),
+        fuel_opt )
+    | Arith_ret_num (pos, r, arg_pos) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Arith_ret_num",
+                JSON_Array [pos_to_json pos; r; arg_position_to_json arg_pos] );
+            ]),
+        fuel_opt )
+    | Lost_info (str, r, blame) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ("Lost_info", JSON_Array [JSON_String str; r; blame_to_json blame]);
+            ]),
+        fuel_opt )
+    | Format (pos, str, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [("Format", JSON_Array [pos_to_json pos; JSON_String str; r])]),
+        fuel_opt )
+    | Instantiate (r1, str, r2) ->
+      let (r1, fuel_opt) = to_json_help r1 fuel_opt in
+      let (r2, fuel_opt) = to_json_help r2 fuel_opt in
+      ( Hh_json.(
+          JSON_Object [("Instantiate", JSON_Array [r1; JSON_String str; r2])]),
+        fuel_opt )
+    | Typeconst (r1, (pos_or_decl, str), lazy_str, r2) ->
+      let (r1, fuel_opt) = to_json_help r1 fuel_opt in
+      let (r2, fuel_opt) = to_json_help r2 fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Typeconst",
+                JSON_Array
+                  [
+                    r1;
+                    JSON_Object
+                      [
+                        ( "Tuple2",
+                          JSON_Array
+                            [Pos_or_decl.json pos_or_decl; JSON_String str] );
+                      ];
+                    JSON_String (Lazy.force lazy_str);
+                    r2;
+                  ] );
+            ]),
+        fuel_opt )
+    | Type_access (r, xs) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      let (xs, fuel_opt) =
+        List.fold_left
+          xs
+          ~init:([], fuel_opt)
+          ~f:(fun (acc, fuel_opt) (r, lazy_str) ->
+            let (r, fuel_opt) = to_json_help r fuel_opt in
+            let json =
+              Hh_json.(
                 JSON_Object
                   [
-                    ( "Tuple2",
-                      JSON_Array [Pos_or_decl.json pos_or_decl; JSON_String str]
-                    );
-                  ];
-                JSON_String (Lazy.force lazy_str);
-                to_json r2;
-              ] );
-        ])
-    :: acc
-  | Type_access (r, xs) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Type_access",
-            JSON_Array
-              [
-                to_json r;
+                    ("Tuple2", JSON_Array [r; JSON_String (Lazy.force lazy_str)]);
+                  ])
+            in
+            (json :: acc, fuel_opt))
+      in
+      ( Hh_json.(
+          JSON_Object
+            [("Type_access", JSON_Array [r; JSON_Array (List.rev xs)])]),
+        fuel_opt )
+    | Expr_dep_type (r, pos_or_decl, expr_dep_type_reason) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Expr_dep_type",
                 JSON_Array
-                  (List.map xs ~f:(fun (r, lazy_str) ->
-                       JSON_Object
-                         [
-                           ( "Tuple2",
-                             JSON_Array
-                               [to_json r; JSON_String (Lazy.force lazy_str)] );
-                         ]));
-              ] );
-        ])
-    :: acc
-  | Expr_dep_type (r, pos_or_decl, expr_dep_type_reason) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Expr_dep_type",
-            JSON_Array
-              [
-                to_json r;
-                Pos_or_decl.json pos_or_decl;
-                expr_dep_type_reason_to_json expr_dep_type_reason;
-              ] );
-        ])
-    :: acc
-  | Lambda_param (pos, r) ->
-    Hh_json.(
-      JSON_Object [("Lambda_param", JSON_Array [pos_to_json pos; to_json r])])
-    :: acc
-  | Dynamic_coercion r ->
-    Hh_json.(JSON_Object [("Dynamic_coercion", JSON_Array [to_json r])]) :: acc
-  | Dynamic_partial_enforcement (pos_or_decl, str, r) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Dynamic_partial_enforcement",
-            JSON_Array
-              [Pos_or_decl.json pos_or_decl; JSON_String str; to_json r] );
-        ])
-    :: acc
-  | Rigid_tvar_escape (pos, str1, str2, r) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Rigid_tvar_escape",
-            JSON_Array
-              [pos_to_json pos; JSON_String str1; JSON_String str2; to_json r]
-          );
-        ])
-    :: acc
-  | Opaque_type_from_module (pos_or_decl, str, r) ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Opaque_type_from_module",
-            JSON_Array
-              [Pos_or_decl.json pos_or_decl; JSON_String str; to_json r] );
-        ])
-    :: acc
-  | SDT_call (pos_or_decl, r) ->
-    Hh_json.(
-      JSON_Object
-        [("SDT_call", JSON_Array [Pos_or_decl.json pos_or_decl; to_json r])])
-    :: acc
-  | Like_call (pos_or_decl, r) ->
-    Hh_json.(
-      JSON_Object
-        [("Like_call", JSON_Array [Pos_or_decl.json pos_or_decl; to_json r])])
-    :: acc
-  | Flow { from; kind; into } ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Flow",
-            JSON_Object
-              [
-                ("from", to_json from);
-                ("kind", flow_kind_to_json kind);
-                ("into", to_json into);
-              ] );
-        ])
-    :: acc
-  | Lower_bound { bound; of_ } ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Lower_bound",
-            JSON_Object [("bound", to_json bound); ("of", to_json of_)] );
-        ])
-    :: acc
-  | Solved { solution; of_; in_ } ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Solved",
-            JSON_Object
-              [
-                ("solution", to_json solution);
-                ("of_", string_ (Tvid.show of_));
-                ("in_", to_json in_);
-              ] );
-        ])
-    :: acc
-  | Axiom { prev; axiom; next } ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Axiom",
-            JSON_Object
-              [
-                ("prev", to_json prev);
-                ("axiom", axiom_to_json axiom);
-                ("next", to_json next);
-              ] );
-        ])
-    :: acc
-  | Def (def, r) ->
-    Hh_json.(
-      JSON_Object [("Def", JSON_Array [pos_or_decl_to_json def; to_json r])])
-    :: acc
-  | Prj_both { sub_prj; prj; sub; super } ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Prj_both",
-            JSON_Object
-              [
-                ("sub_prj", to_json sub_prj);
-                ("prj", prj_symm_to_json prj);
-                ("sub", to_json sub);
-                ("super", to_json super);
-              ] );
-        ])
-    :: acc
-  | Prj_one { part; prj; whole } ->
-    Hh_json.(
-      JSON_Object
-        [
-          ( "Prj_one",
-            JSON_Object
-              [
-                ("part", to_json part);
-                ("prj", prj_asymm_to_json prj);
-                ("whole", to_json whole);
-              ] );
-        ])
-    :: acc
+                  [
+                    r;
+                    Pos_or_decl.json pos_or_decl;
+                    expr_dep_type_reason_to_json expr_dep_type_reason;
+                  ] );
+            ]),
+        fuel_opt )
+    | Lambda_param (pos, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(JSON_Object [("Lambda_param", JSON_Array [pos_to_json pos; r])]),
+        fuel_opt )
+    | Dynamic_coercion r ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      (Hh_json.(JSON_Object [("Dynamic_coercion", JSON_Array [r])]), fuel_opt)
+    | Dynamic_partial_enforcement (pos_or_decl, str, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Dynamic_partial_enforcement",
+                JSON_Array [Pos_or_decl.json pos_or_decl; JSON_String str; r] );
+            ]),
+        fuel_opt )
+    | Rigid_tvar_escape (pos, str1, str2, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Rigid_tvar_escape",
+                JSON_Array
+                  [pos_to_json pos; JSON_String str1; JSON_String str2; r] );
+            ]),
+        fuel_opt )
+    | Opaque_type_from_module (pos_or_decl, str, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Opaque_type_from_module",
+                JSON_Array [Pos_or_decl.json pos_or_decl; JSON_String str; r] );
+            ]),
+        fuel_opt )
+    | SDT_call (pos_or_decl, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [("SDT_call", JSON_Array [Pos_or_decl.json pos_or_decl; r])]),
+        fuel_opt )
+    | Like_call (pos_or_decl, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [("Like_call", JSON_Array [Pos_or_decl.json pos_or_decl; r])]),
+        fuel_opt )
+    | Flow { from; kind; into } ->
+      let (from, fuel_opt) = to_json_help from fuel_opt in
+      let (into, fuel_opt) = to_json_help into fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Flow",
+                JSON_Object
+                  [
+                    ("from", from);
+                    ("kind", flow_kind_to_json kind);
+                    ("into", into);
+                  ] );
+            ]),
+        fuel_opt )
+    | Lower_bound { bound; of_ } ->
+      let (bound, fuel_opt) = to_json_help bound fuel_opt in
+      let (of_, fuel_opt) = to_json_help of_ fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [("Lower_bound", JSON_Object [("bound", bound); ("of", of_)])]),
+        fuel_opt )
+    | Solved { solution; of_; in_ } ->
+      let (in_, fuel_opt) = to_json_help in_ fuel_opt in
+      let (solution, fuel_opt) = to_json_help solution fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Solved",
+                JSON_Object
+                  [
+                    ("solution", solution);
+                    ("of_", string_ (Tvid.show of_));
+                    ("in_", in_);
+                  ] );
+            ]),
+        fuel_opt )
+    | Axiom { prev; axiom; next } ->
+      let (next, fuel_opt) = to_json_help next fuel_opt in
+      let (prev, fuel_opt) = to_json_help prev fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Axiom",
+                JSON_Object
+                  [
+                    ("prev", prev);
+                    ("axiom", axiom_to_json axiom);
+                    ("next", next);
+                  ] );
+            ]),
+        fuel_opt )
+    | Def (def, r) ->
+      let (r, fuel_opt) = to_json_help r fuel_opt in
+      ( Hh_json.(JSON_Object [("Def", JSON_Array [pos_or_decl_to_json def; r])]),
+        fuel_opt )
+    | Prj_both { sub_prj; prj; sub; super } ->
+      let (sub_prj, fuel_opt) = to_json_help sub_prj fuel_opt in
+      let (sub, fuel_opt) = to_json_help sub fuel_opt in
+      let (super, fuel_opt) = to_json_help super fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Prj_both",
+                JSON_Object
+                  [
+                    ("sub_prj", sub_prj);
+                    ("prj", prj_symm_to_json prj);
+                    ("sub", sub);
+                    ("super", super);
+                  ] );
+            ]),
+        fuel_opt )
+    | Prj_one { part; prj; whole } ->
+      let (part, fuel_opt) = to_json_help part fuel_opt in
+      let (whole, fuel_opt) = to_json_help whole fuel_opt in
+      ( Hh_json.(
+          JSON_Object
+            [
+              ( "Prj_one",
+                JSON_Object
+                  [
+                    ("part", part);
+                    ("prj", prj_asymm_to_json prj);
+                    ("whole", whole);
+                  ] );
+            ]),
+        fuel_opt )
+  end
 
-and to_json : type a. a t_ -> Hh_json.json =
- (fun t -> Hh_json.JSON_Array (List.rev @@ to_json_help t []))
+let to_json : type a. a t_ -> Hh_json.json =
+ (fun t -> fst (to_json_help t (Some 20)))
+
+let to_json_full : type a. a t_ -> Hh_json.json =
+ (fun t -> fst (to_json_help t None))
 
 let to_pos : type ph. ph t_ -> Pos_or_decl.t = (fun r -> to_raw_pos r)
 
@@ -2541,6 +2616,9 @@ module Constructors = struct
 
   let yield_send p = from_witness_locl @@ Yield_send p
 
+  let polymorphic_type_param (p, new_name, orig_name, rank) =
+    from_witness_decl @@ Polymorphic_type_param (p, new_name, orig_name, rank)
+
   let lost_info (s, r, b) = Lost_info (s, r, b)
 
   let format (p, s, r) = Format (p, s, r)
@@ -2795,6 +2873,12 @@ module Constructors = struct
   let prj_asymm_super ~super ~super_prj prj =
     Prj_one { part = super_prj; prj; whole = super }
 
+  let prj_contains_sub ~sub ~sub_prj =
+    prj_asymm_sub ~sub ~sub_prj Prj_asymm_contains
+
+  let prj_contains_super ~super ~super_prj =
+    prj_asymm_super ~super ~super_prj Prj_asymm_contains
+
   let prj_union_sub ~sub ~sub_prj = prj_asymm_sub ~sub ~sub_prj Prj_asymm_union
 
   let prj_union_super ~super ~super_prj =
@@ -2826,9 +2910,6 @@ module Constructors = struct
 
   let prj_arraykey_super ~super ~super_prj =
     prj_asymm_super ~super ~super_prj Prj_asymm_arraykey
-
-  let prj_rewrite_classname ~sub ~sub_prj =
-    prj_asymm_sub ~sub ~sub_prj Prj_rewrite_classname
 
   let missing_field = Missing_field
 
@@ -3349,8 +3430,8 @@ module Derivation = struct
         "The subtype is an arraykey type so next I checked the subtype constraint is satisfied for both the int and string parts."
       | Prj_asymm_neg ->
         "The subtype is a negated type so next I checked the inner type."
-      | Prj_rewrite_classname ->
-        "The subtype is a class<T> type and the supertype might be classname<T> or one of its supertypes, so next I checked the constraint with the subtype rewritten to classname<T>."
+      | Prj_asymm_contains ->
+        "The subtype is some aggregate type so next I checked one the types that it contains."
 
     let explain_prj_asymm_super prj =
       match prj with
@@ -3366,8 +3447,8 @@ module Derivation = struct
         "The supertype is an arraykey type so next I checked the subtype constraint is satisfied for either the int or string part."
       | Prj_asymm_neg ->
         "The supertype is a negated type so I checked the inner type."
-      | Prj_rewrite_classname ->
-        failwith "The rewrites only happen for the subtype"
+      | Prj_asymm_contains ->
+        "The supertype is some aggregate type so next I checked one the types that it contains."
 
     let explain = function
       | Using_prj prj -> explain_prj prj
@@ -3510,9 +3591,7 @@ module Derivation = struct
     | From_witness_locl (Type_variable (_, id))
     | From_witness_locl (Type_variable_generics (_, _, _, id))
     | From_witness_locl (Type_variable_error (_, id)) ->
-      Option.value_map ~default:t ~f:(fun solution ->
-          solved id ~solution ~in_:t)
-      @@ Tvid.Map.find_opt id solutions
+      Option.value ~default:t @@ Tvid.Map.find_opt id solutions
     | Flow { from; into; kind } ->
       Flow
         {
@@ -3597,10 +3676,103 @@ module Derivation = struct
     | Like_call _ ->
       t
 
+  (** Bottom up traversal of a reason applying available solutions in order to
+      eliminate type variable associated and [Solved] reasons  *)
+  let rec resolve t ~depth ~solutions =
+    if depth <= 0 then
+      t
+    else begin
+      match t with
+      (* Substitute a tvar for its solution *)
+      | From_witness_locl (Type_variable (_, id))
+      | From_witness_locl (Type_variable_generics (_, _, _, id))
+      | From_witness_locl (Type_variable_error (_, id)) ->
+        Option.value ~default:t @@ Tvid.Map.find_opt id solutions
+      | From_witness_locl witness -> From_witness_locl witness
+      | From_witness_decl witness -> From_witness_decl witness
+      | Solved { solution; of_; in_ } ->
+        let depth = depth - 1 in
+        let solution = resolve solution ~depth ~solutions in
+        let solutions = Tvid.Map.add of_ solution solutions in
+        resolve in_ ~solutions ~depth
+      | Type_access (r, l) ->
+        Type_access
+          ( resolve r ~solutions ~depth,
+            List.map l ~f:(fun (r, x) -> (resolve r ~solutions ~depth, x)) )
+      | Typeconst (r1, x, s, r2) ->
+        Typeconst
+          (resolve r1 ~solutions ~depth, x, s, resolve r2 ~solutions ~depth)
+      | Arith_ret_float (x, r, z) ->
+        Arith_ret_float (x, resolve r ~solutions ~depth, z)
+      | Arith_ret_num (x, r, z) ->
+        Arith_ret_num (x, resolve r ~solutions ~depth, z)
+      | Lost_info (x, r, z) -> Lost_info (x, resolve r ~solutions ~depth, z)
+      | Format (x, y, r) -> Format (x, y, resolve r ~solutions ~depth)
+      | Instantiate (r1, x, r2) ->
+        Instantiate
+          (resolve r1 ~solutions ~depth, x, resolve r2 ~solutions ~depth)
+      | Expr_dep_type (r, y, z) ->
+        Expr_dep_type (resolve r ~solutions ~depth, y, z)
+      | Lambda_param (x, r) -> Lambda_param (x, resolve r ~solutions ~depth)
+      | Dynamic_coercion r -> Dynamic_coercion (resolve r ~solutions ~depth)
+      | Dynamic_partial_enforcement (x, y, r) ->
+        Dynamic_partial_enforcement (x, y, resolve r ~solutions ~depth)
+      | Rigid_tvar_escape (x, y, z, r) ->
+        Rigid_tvar_escape (x, y, z, resolve r ~solutions ~depth)
+      | Opaque_type_from_module (x, y, r) ->
+        Opaque_type_from_module (x, y, resolve r ~solutions ~depth)
+      | SDT_call (x, r) -> SDT_call (x, resolve r ~solutions ~depth)
+      | Like_call (x, r) -> Like_call (x, resolve r ~solutions ~depth)
+      | No_reason -> No_reason
+      | Invalid -> Invalid
+      | Missing_field -> Missing_field
+      | Idx (x, y) -> Idx (x, y)
+      | Flow { from; kind; into } ->
+        Flow
+          {
+            from = resolve from ~solutions ~depth;
+            kind;
+            into = resolve into ~solutions ~depth;
+          }
+      | Axiom { prev; axiom; next } ->
+        Axiom
+          {
+            prev = resolve prev ~solutions ~depth;
+            axiom;
+            next = resolve next ~solutions ~depth;
+          }
+      | Lower_bound { bound; of_ } ->
+        Lower_bound
+          {
+            bound = resolve bound ~solutions ~depth;
+            of_ = resolve of_ ~solutions ~depth;
+          }
+      | Def (def, t) -> Def (def, resolve t ~solutions ~depth)
+      | Prj_both { sub_prj; prj; sub; super } ->
+        Prj_both
+          {
+            sub_prj = resolve sub_prj ~solutions ~depth;
+            prj;
+            sub = resolve sub ~solutions ~depth;
+            super = resolve super ~solutions ~depth;
+          }
+      | Prj_one { part; prj; whole } ->
+        Prj_one
+          {
+            part = resolve part ~solutions ~depth;
+            prj;
+            whole = resolve whole ~solutions ~depth;
+          }
+    end
+
   (** Reasons are constructed by keeping track of preceeding subtype propositions
       during subtype constraint simplification. We reach a child subtype proposition
       either through a projection into a type constructor or using some user-declared
-      axiom. We can convert this to a list of derivation steps for each subtype constraint.
+      axiom.
+
+      We can convert this to a list of derivation steps for each subtype constraint along
+      with the term-level steps through which an expression was given its type.
+
       Since we also apply transitivity during constraint simplification, each reason may
       actually contain multiple subtype derivations. We reach a new derivation either
       because a upper- or lower-bound was added to a type variable and a new constraint
@@ -3612,10 +3784,12 @@ module Derivation = struct
       match (sub, super) with
       (* -- Accumulate solutions -- *)
       | (Solved { solution; of_; in_ }, _) ->
-        let solutions = Tvid.Map.add of_ (extract_first solution) solutions in
+        let solution = extract_first @@ resolve solution ~solutions ~depth:20 in
+        let solutions = Tvid.Map.add of_ solution solutions in
         aux (in_, super) ~deriv ~solutions
       | (_, Solved { solution; of_; in_ }) ->
-        let solutions = Tvid.Map.add of_ (extract_first solution) solutions in
+        let solution = extract_first @@ resolve solution ~solutions ~depth:20 in
+        let solutions = Tvid.Map.add of_ solution solutions in
         aux (sub, in_) ~deriv ~solutions
       (* -- Transitive constraints -- *)
       | ( Lower_bound
@@ -3730,7 +3904,6 @@ module Derivation = struct
         | Main
         | Upper
         | Lower
-        | Solution
         | Step of int
       [@@deriving eq]
 
@@ -3738,7 +3911,6 @@ module Derivation = struct
         | Main -> "Main"
         | Upper -> "Upper"
         | Lower -> "Lower"
-        | Solution -> "Solution"
         | Step n -> Format.sprintf "Step %d" (n + 1)
 
       type t = elem list [@@deriving eq]
@@ -3860,8 +4032,6 @@ module Derivation = struct
       let enter_upper t = enter t Derivation_path.Upper
 
       let enter_lower t = enter t Derivation_path.Lower
-
-      let enter_solution t = enter t Derivation_path.Solution
 
       let enter_step t n = enter t @@ Derivation_path.Step n
 
@@ -4085,8 +4255,7 @@ module Derivation = struct
           | Config.Ends -> extract_last into
         in
         explain_flow (from, into, kind) ~st ~cfg ~ctxt
-      | Solved { solution; in_; _ } ->
-        explain_solved ~solution ~in_ ~st ~cfg ~ctxt
+      | Solved { in_; _ } -> explain_reason in_ ~st ~cfg ~ctxt
       | Missing_field ->
         (* This needs to be special cased in [explain_step] *)
         ([Explanation.Witness_no_pos "missing field"], st)
@@ -4266,17 +4435,6 @@ module Derivation = struct
       let expl_into = prefix :: with_suffix expl_into ~suffix in
       (expl_from @ expl_into, st)
 
-    and explain_solved ~solution ~in_ ~st ~cfg ~ctxt =
-      let (expl_in, st) = explain_reason in_ ~st ~cfg ~ctxt in
-      let (expl_solution, st) =
-        explain_reason solution ~st ~cfg ~ctxt:Context.(enter_solution ctxt)
-      in
-      let prefix =
-        Explanation.Prefix { prefix = "which I solved to this"; sep = " " }
-      in
-      let expl_solution = prefix :: expl_solution in
-      (expl_in @ expl_solution, st)
-
     and explain_instantiate (r1, nm, r2) ~st ~cfg ~ctxt =
       explain_flow (r1, r2, Flow_instantiate nm) ~st ~cfg ~ctxt
 
@@ -4346,8 +4504,8 @@ module Derivation = struct
 end
 
 let explain ~sub ~super ~complexity =
-  Explanation.derivation
-    Derivation.(explain (of_reason ~sub ~super) ~complexity)
+  let deriv = Derivation.of_reason ~sub ~super in
+  Explanation.derivation Derivation.(explain deriv ~complexity)
 
 let debug_reason ~sub ~super =
   let json =

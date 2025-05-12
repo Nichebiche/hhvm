@@ -113,6 +113,7 @@ HTTPTransaction::HTTPTransaction(
       has1xxResponse_(false),
       isDelegated_(false),
       deferredNoError_(false),
+      upgraded_(false),
       idleTimeout_(defaultIdleTimeout),
       timer_(timer),
       setIngressTimeoutAfterEom_(setIngressTimeoutAfterEom),
@@ -222,7 +223,9 @@ void HTTPTransaction::onIngressHeadersComplete(
     return;
   }
   if (msg->isRequest()) {
-    headRequest_ = (msg->getMethod() == HTTPMethod::HEAD);
+    auto method = msg->getMethod();
+    headRequest_ = (method == HTTPMethod::HEAD);
+    upgraded_ = (method == HTTPMethod::CONNECT);
     wtConnectStream_ = WebTransport::isConnectMessage(*msg);
   }
 
@@ -249,6 +252,22 @@ void HTTPTransaction::onIngressHeadersComplete(
   if (transportCallback_) {
     transportCallback_->headerBytesReceived(msg->getIngressHeaderSize());
   }
+
+  if (txnObserverContainer_.hasObserversForEvent<
+          HTTPTransactionObserverInterface::Events::TxnBytes>()) {
+    const auto e =
+        HTTPTransactionObserverInterface::TxnBytesEvent::Builder()
+            .setTimestamp(proxygen::SteadyClock::now())
+            .setType(HTTPTransactionObserverInterface::TxnBytesEvent::Type::
+                         REQUEST_HEADERS_COMPLETE)
+            .build();
+    txnObserverContainer_.invokeInterfaceMethod<
+        HTTPTransactionObserverInterface::Events::TxnBytes>(
+        [&e](auto observer, auto observed) {
+          observer->onBytesEvent(observed, e);
+        });
+  }
+
   updateIngressCompressionInfo(transport_.getCodec().getCompressionInfo());
   if (mustQueueIngress()) {
     checkCreateDeferredIngress();
@@ -478,6 +497,7 @@ void HTTPTransaction::onIngressUpgrade(UpgradeProtocol protocol) {
           HTTPTransactionIngressSM::Event::onUpgrade)) {
     return;
   }
+  upgraded_ = true;
   if (mustQueueIngress()) {
     checkCreateDeferredIngress();
     deferredIngress_->emplace(id_, HTTPEvent::Type::UPGRADE, protocol);
@@ -640,14 +660,18 @@ bool HTTPTransaction::validateEgressStateTransition(
 }
 
 void HTTPTransaction::invariantViolation(HTTPException ex) {
+  DestructorGuard g(this);
   LOG(ERROR) << "invariantViolation msg=" << ex.what()
              << " aborted_=" << uint32_t(aborted_) << " " << *this;
-  sendAbort();
   if (handler_) {
     handler_->onInvariantViolation(ex);
   } else {
     LOG(FATAL) << "Invariant violation with no handler; ex=" << ex.what();
   }
+  // In http/1.1, this will send TCP reset and ungracefully terminate the
+  // connection. In h2, this will send stream reset but keep the connection
+  // open. Should this be INTERNAL_ERROR?
+  sendAbort(ErrorCode::NO_ERROR);
 }
 
 void HTTPTransaction::abortAndDeliverError(ErrorCode codecError,
@@ -1479,6 +1503,10 @@ size_t HTTPTransaction::sendEOMNow() {
   size_t nbytes = transport_.sendEOM(this, trailers_.get());
   trailers_.reset();
   updateReadTimeout();
+  // rst_stream/no_error if downstream egresses eom before ingress eom seen
+  deferredNoError_ = transport_.serverEarlyResponseEnabled() &&
+                     isDownstream() && !isIngressEOMSeen() && !isUpgraded();
+
   nbytes += maybeSendDeferredNoError();
 
   return nbytes;
@@ -1567,8 +1595,7 @@ void HTTPTransaction::sendEOM() {
   }
 
   if (getOutstandingEgressBodyBytes() == 0 && chunkHeaders_.empty()) {
-    // there is nothing left to send, egress the EOM directly.  For SPDY
-    // this will jump the txn queue
+    // there is nothing left to send, egress the EOM directly.
     if (!isEnqueued()) {
       size_t nbytes = sendEOMNow();
       transport_.notifyPendingEgress();
@@ -2012,41 +2039,10 @@ std::ostream& operator<<(std::ostream& os, const HTTPTransaction& txn) {
   return os;
 }
 
-void HTTPTransaction::updateAndSendPriority(int8_t newPriority) {
-  newPriority = HTTPMessage::normalizePriority(newPriority);
-  INVARIANT(newPriority >= 0);
-  priority_.streamDependency =
-      transport_.getCodec().mapPriorityToDependency(newPriority);
-  if (queueHandle_) {
-    queueHandle_ = egressQueue_.updatePriority(queueHandle_, priority_);
-  }
-  transport_.sendPriority(this, priority_);
-}
-
-void HTTPTransaction::updateAndSendPriority(
-    const http2::PriorityUpdate& newPriority) {
-  onPriorityUpdate(newPriority);
-  transport_.sendPriority(this, priority_);
-}
-
 void HTTPTransaction::updateAndSendPriority(HTTPPriority pri) {
   pri.urgency = HTTPMessage::normalizePriority((int8_t)pri.urgency);
   // Note we no longer want to play with the egressQueue_ with the new API.
   transport_.changePriority(this, pri);
-}
-
-void HTTPTransaction::onPriorityUpdate(const http2::PriorityUpdate& priority) {
-  if (!queueHandle_) {
-    LOG(ERROR) << "Received priority update on ingress only transaction";
-    return;
-  }
-  priority_ = priority;
-  queueHandle_ =
-      egressQueue_.updatePriority(queueHandle_, priority_, &currentDepth_);
-  if (priority_.streamDependency != egressQueue_.getRootId() &&
-      currentDepth_ == 1) {
-    priorityFallback_ = true;
-  }
 }
 
 void HTTPTransaction::checkIfEgressRateLimitedByUpstream() {

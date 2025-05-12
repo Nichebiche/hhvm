@@ -17,8 +17,10 @@
 package types
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 )
 
@@ -119,56 +121,46 @@ type Encoder interface {
 	Flush() (err error)
 }
 
-// IRequest represents a request to be sent to a thrift endpoint
-type IRequest interface {
-	Write(p Encoder) error
-}
-
-// IResponse represents a response received from a thrift call
-type IResponse interface {
-	Read(p Decoder) error
-}
-
 // The maximum recursive depth the skip() function will traverse
 const DEFAULT_RECURSION_DEPTH = 64
 
 // SkipDefaultDepth skips over the next data element from the provided Protocol object.
-func SkipDefaultDepth(prot Decoder, typeID Type) (err error) {
+func SkipDefaultDepth(prot Decoder, typeID Type) error {
 	return Skip(prot, typeID, DEFAULT_RECURSION_DEPTH)
 }
 
 // Skip skips over the next data element from the provided Protocol object.
-func Skip(self Decoder, fieldType Type, maxDepth int) (err error) {
+func Skip(self Decoder, fieldType Type, maxDepth int) error {
 	if maxDepth <= 0 {
 		return NewProtocolExceptionWithType(DEPTH_LIMIT, errors.New("Depth limit exceeded"))
 	}
 	switch fieldType {
 	case BOOL:
-		_, err = self.ReadBool()
-		return
+		_, err := self.ReadBool()
+		return err
 	case BYTE:
-		_, err = self.ReadByte()
-		return
+		_, err := self.ReadByte()
+		return err
 	case I16:
-		_, err = self.ReadI16()
-		return
+		_, err := self.ReadI16()
+		return err
 	case I32:
-		_, err = self.ReadI32()
-		return
+		_, err := self.ReadI32()
+		return err
 	case I64:
-		_, err = self.ReadI64()
-		return
+		_, err := self.ReadI64()
+		return err
 	case DOUBLE:
-		_, err = self.ReadDouble()
-		return
+		_, err := self.ReadDouble()
+		return err
 	case FLOAT:
-		_, err = self.ReadFloat()
-		return
+		_, err := self.ReadFloat()
+		return err
 	case STRING:
-		_, err = self.ReadString()
-		return
+		_, err := self.ReadString()
+		return err
 	case STRUCT:
-		if _, err = self.ReadStructBegin(); err != nil {
+		if _, err := self.ReadStructBegin(); err != nil {
 			return err
 		}
 		for {
@@ -230,11 +222,22 @@ type Flusher interface {
 	Flush() (err error)
 }
 
-// ReadSizeProvider is the interface that wraps the basic RemainingBytes method
-type ReadSizeProvider interface {
-	RemainingBytes() (numBytes uint64)
+// ReadSizer is a Reader with an additional Len() capability (to get remaining bytes count).
+type ReadSizer interface {
+	io.Reader
+	// https://pkg.go.dev/bytes#Reader.Len
+	// Len returns the number of bytes of the unread portion of the slice.
+	Len() int
 }
 
-// UnknownRemaining is used by transports that can not return a real answer
-// for RemainingBytes()
-const UnknownRemaining = ^uint64(0)
+// ReadWriteSizer is a ReadWriter with an additional Len() capability (to get remaining bytes count).
+type ReadWriteSizer interface {
+	io.ReadWriter
+	// https://pkg.go.dev/bytes#Reader.Len
+	// Len returns the number of bytes of the unread portion of the slice.
+	Len() int
+}
+
+// Compile-time check to ensure that 'bytes.Reader' and 'bytes.Buffer' implement ReadSizer.
+var _ ReadSizer = (*bytes.Reader)(nil)
+var _ ReadSizer = (*bytes.Buffer)(nil)

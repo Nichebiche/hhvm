@@ -8,12 +8,18 @@ namespace HH {
   * <<__Memoize>> functions
   */
 interface IMemoizeParam {
-  abstract const ctx CMemoParam = [defaults];
    /**
    * Serialize this object to a string that can be used as a
    * dictionary key to differentiate instances of this class.
    */
   public function getInstanceKey(): string;
+}
+
+/**
+ * Pure version of IMemoizeParam.
+ */
+interface IPureMemoizeParam extends IMemoizeParam {
+  public function getInstanceKey()[]: string;
 }
 
 /*
@@ -188,10 +194,11 @@ function dynamic_fun(string $name)[]: mixed;
 
 /**
  * Construct a cls_meth pointer for the method $cls::$meth. The method should be
- * a static method marked __DynamicallyCallable.
+ * a static method marked __DynamicallyCallable. Raises a notice similar to
+ * $cls::foo() if $cls is a string.
  */
 <<__Native("NoRecording")>>
-function dynamic_class_meth(string $cls, string $meth)[]: mixed;
+function dynamic_class_meth(class_or_classname<mixed> $cls, string $meth)[]: mixed;
 
 /**
  * Same as dynamic_fun but can't be used in RepoAuthoritative mode and
@@ -202,12 +209,12 @@ function dynamic_class_meth(string $cls, string $meth)[]: mixed;
 function dynamic_fun_force(string $name)[]: mixed;
 
 /**
- * Same as dynamic_class_meth but can't be used in RepoAuthoritative mode
- * and doesn't raise warnings or errors
- * on methods not marked __DynamicallyCallable.
+ * Same as dynamic_class_meth but can't be used in RepoAuthoritative mode and
+ * doesn't raise warnings or errors on methods not marked __DynamicallyCallable.
+ * Raises a notice similar to $cls::foo() if $cls is a string.
  */
 <<__Native>>
-function dynamic_class_meth_force(string $cls, string $meth)[]: mixed;
+function dynamic_class_meth_force(class_or_classname<mixed> $cls, string $meth)[]: mixed;
 
 /**
  * Creates a LazyClass pointer from input $classname. It does not eagerly
@@ -217,7 +224,7 @@ function dynamic_class_meth_force(string $cls, string $meth)[]: mixed;
 function classname_from_string_unsafe(string $classname)[]: mixed;
 
 <<__Native>>
-function class_to_classname(readonly classname<mixed> $cn)[]: classname<mixed>;
+function class_to_classname(readonly class_or_classname<mixed> $cn)[]: classname<mixed>;
 
 <<__Native>>
 function get_class_from_object(readonly object $o)[]: class<mixed>;
@@ -368,6 +375,17 @@ function active_config_experiments(): vec<string>;
 
 <<__Native>>
 function inactive_config_experiments(): vec<string>;
+
+<<__Native>>
+function mangle_unit_sha1(
+  string $sha1 = '',
+  string $ext = '.php',
+  ?string $repo = null,
+): string;
+
+function unit_schema(?string $repo = null): string {
+  return mangle_unit_sha1('', '.php', $repo);
+}
 
 } // HH
 

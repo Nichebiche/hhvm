@@ -439,7 +439,10 @@ ArgUnion* getImmPtr(PC opcode, int idx);
 void staticStreamer(const TypedValue* tv, std::string& out);
 std::string staticStreamer(const TypedValue* tv);
 
-std::string instrToString(PC it, Either<const Func*, const FuncEmitter*> f);
+std::string instrToString(PC it, const Func* f);
+std::string instrToString(PC it, Either<const Func*, const FuncEmitter*> f,
+                          Either<const Unit*, const UnitEmitter*> u);
+
 void staticArrayStreamer(const ArrayData*, std::string&);
 std::string staticArrayStreamer(const ArrayData* ad);
 
@@ -528,6 +531,13 @@ constexpr InstrFlags instrFlags(Op opcode) {
 
 constexpr bool instrIsControlFlow(Op opcode) {
   return (instrFlags(opcode) & CF) != 0;
+}
+
+constexpr bool isAwait(Op opcode) {
+  return 
+    opcode == Op::Await || 
+    opcode == Op::AwaitAll || 
+    opcode == Op::AwaitLowPri;
 }
 
 constexpr bool isUnconditionalJmp(Op opcode) {
@@ -709,10 +719,9 @@ inline MOpMode finalMemberOpMode(Op op) {
 
 // true if the opcode body can set pc=0 to halt the interpreter.
 constexpr bool instrCanHalt(Op op) {
-  return op == OpRetC || op == OpNativeImpl ||
-         op == OpAwait || op == OpAwaitAll || op == OpCreateCont ||
-         op == OpYield || op == OpYieldK || op == OpRetM ||
-         op == OpRetCSuspended;
+  return isAwait(op) || op == OpRetC || op == OpNativeImpl ||
+         op == OpCreateCont || op == OpYield || op == OpYieldK || 
+         op == OpRetM || op == OpRetCSuspended;
 }
 
 int instrNumPops(PC opcode);

@@ -44,7 +44,7 @@
 
 #include <folly/FBVector.h>
 
-TRACE_SET_MOD(libxml);
+TRACE_SET_MOD(libxml)
 
 namespace HPHP {
 ///////////////////////////////////////////////////////////////////////////////
@@ -267,7 +267,7 @@ static std::unordered_set<
 > s_ext_entity_whitelist;
 
 static bool allow_ext_entity_protocol(const String& protocol) {
-  return s_ext_entity_whitelist.count(protocol.get());
+  return s_ext_entity_whitelist.contains(protocol.get());
 }
 
 static xmlParserInputPtr libxml_ext_entity_loader(const char *url,
@@ -859,6 +859,11 @@ void checked_local_free(void* ptr) {
 }
 
 void* checked_local_realloc(void* ptr, size_t size) {
+  if (ptr == NULL) {
+    // system realloc with a nullptr behaves like malloc
+    return checked_local_malloc(size);
+  }
+
   if (!size) {
     checked_local_free(ptr);
     return nullptr;

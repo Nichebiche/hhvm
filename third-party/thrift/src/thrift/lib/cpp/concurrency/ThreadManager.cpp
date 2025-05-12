@@ -235,7 +235,7 @@ class ThreadManager::Impl : public ThreadManager,
         state_(ThreadManager::UNINITIALIZED),
         tasks_(N_SOURCES * numPriorities),
         deadWorkers_(),
-        namePrefix_(""),
+
         namePrefixCounter_(0),
         codelEnabled_(false || FLAGS_codel_enabled) {}
 
@@ -1345,7 +1345,7 @@ namespace {
 
 class PriorityQueueThreadManager : public ThreadManager::Impl {
  public:
-  typedef apache::thrift::concurrency::PRIORITY PRIORITY;
+  using PRIORITY = apache::thrift::concurrency::PRIORITY;
   explicit PriorityQueueThreadManager(size_t numThreads)
       : ThreadManager::Impl(N_PRIORITIES), numThreads_(numThreads) {
     for (int i = 0; i < N_PRIORITIES; i++) {
@@ -1545,6 +1545,10 @@ ThreadManagerExecutorAdapter::ThreadManagerExecutorAdapter(
 
 ThreadManagerExecutorAdapter::~ThreadManagerExecutorAdapter() {
   joinKeepAliveOnce();
+  // Executors must be destroyed in the same order as they were created.
+  for (auto& executor : owning_) {
+    executor.reset();
+  }
 }
 
 void ThreadManagerExecutorAdapter::join() {

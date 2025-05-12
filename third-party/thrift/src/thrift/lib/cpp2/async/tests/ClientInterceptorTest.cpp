@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <folly/coro/GtestHelpers.h>
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
 
 #include <fmt/core.h>
 
@@ -928,6 +928,31 @@ CO_TEST_P(ClientInterceptorTestP, Headers) {
   co_await client->noop(rpcOptions);
   EXPECT_EQ(interceptor->onRequestHeader, "dummy value");
   EXPECT_EQ(interceptor->onResponseHeader, "dummy value");
+}
+
+CO_TEST_P(ClientInterceptorTestP, RpcOptions) {
+  class ClientInterceptorWithRpcOptions
+      : public NamedClientInterceptor<folly::Unit> {
+   public:
+    using RequestState = folly::Unit;
+
+    using NamedClientInterceptor::NamedClientInterceptor;
+
+    std::optional<RequestState> onRequest(RequestInfo requestInfo) override {
+      readContextPropMask = requestInfo.rpcOptions->getContextPropMask();
+      return std::nullopt;
+    }
+
+    uint8_t readContextPropMask = 0;
+  };
+  auto interceptor =
+      std::make_shared<ClientInterceptorWithRpcOptions>("WithRpcOptions");
+  auto client = makeClient(makeInterceptorsList(interceptor));
+
+  RpcOptions rpcOptions;
+  rpcOptions.setContextPropMask(5);
+  co_await client->noop(rpcOptions);
+  EXPECT_EQ(interceptor->readContextPropMask, 5);
 }
 
 CO_TEST_P(ClientInterceptorTestP, BasicStream) {

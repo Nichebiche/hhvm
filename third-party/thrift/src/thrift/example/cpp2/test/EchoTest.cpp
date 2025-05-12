@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <thrift/example/cpp2/server/EchoService.h>
 #include <thrift/example/if/gen-cpp2/Echo.h>
@@ -23,8 +23,7 @@
 using example::chatroom::EchoAsyncClient;
 using example::chatroom::EchoHandler;
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 class EchoTest : public testing::Test {
  public:
@@ -45,5 +44,4 @@ TEST_F(EchoTest, Example) {
   EXPECT_EQ(echo, response);
 }
 
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift

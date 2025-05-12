@@ -35,7 +35,7 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-typedef msgbuf hhvm_msgbuf;
+using hhvm_msgbuf = msgbuf;
 
 using HPHP::ScopedMem;
 
@@ -82,7 +82,7 @@ struct MessageQueue : ResourceData {
   int64_t key;
   int id;
 
-  CLASSNAME_IS("MessageQueue");
+  CLASSNAME_IS("MessageQueue")
   const String& o_getClassNameHook() const override {
     return classnameof();
   }
@@ -340,7 +340,7 @@ struct Semaphore : SweepableResourceData {
   int count;        // Acquire count for auto-release.
   int auto_release; // flag that says to auto-release.
 
-  CLASSNAME_IS("Semaphore");
+  CLASSNAME_IS("Semaphore")
   // overriding ResourceData
   const String& o_getClassNameHook() const override { return classnameof(); }
 
@@ -408,7 +408,7 @@ struct Semaphore : SweepableResourceData {
 
     semop(semid, sop, opcount);
   }
-  DECLARE_RESOURCE_ALLOCATION(Semaphore);
+  DECLARE_RESOURCE_ALLOCATION(Semaphore)
 };
 
 IMPLEMENT_RESOURCE_ALLOCATION(Semaphore)
@@ -550,20 +550,20 @@ bool HHVM_FUNCTION(sem_remove,
 ///////////////////////////////////////////////////////////////////////////////
 // shared memory
 
-typedef struct {
+struct sysvshm_chunk {
   long key;
   long length;
   long next;
   char mem;
-} sysvshm_chunk;
+};
 
-typedef struct {
+struct sysvshm_chunk_head {
   char magic[8];
   long start;
   long end;
   long free;
   long total;
-} sysvshm_chunk_head;
+};
 
 struct sysvshm_shm {
   key_t key;               /* Key set by user */

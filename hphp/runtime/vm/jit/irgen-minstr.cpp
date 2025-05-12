@@ -19,9 +19,7 @@
 
 #include "hphp/runtime/base/strings.h"
 #include "hphp/runtime/base/collections.h"
-#include "hphp/runtime/vm/native-prop-handler.h"
 
-#include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/array-access-profile.h"
 #include "hphp/runtime/vm/jit/cow-profile.h"
 #include "hphp/runtime/vm/jit/guard-constraint.h"
@@ -39,7 +37,6 @@
 #include "hphp/runtime/vm/jit/irgen-types.h"
 
 #include "hphp/runtime/vm/jit/irgen-internal.h"
-#include "hphp/runtime/vm/module.h"
 
 #include "hphp/runtime/ext/collections/ext_collections-map.h"
 #include "hphp/runtime/ext/collections/ext_collections-pair.h"
@@ -48,8 +45,6 @@
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/safe-cast.h"
 #include "hphp/util/struct-log.h"
-
-#include <sstream>
 
 namespace HPHP::jit::irgen {
 
@@ -1449,6 +1444,16 @@ SSATmp* ldPropAddr(IRGS& env, SSATmp* obj, Block* taken,
     ? gen(env, LdInitPropAddr, taken, data, type & TInitCell, obj)
     : gen(env, LdPropAddr, data, type, obj);
 }
+
+SSATmp* ldClosureArg(IRGS& env, SSATmp* obj, const Class* cls, Slot slot, const Type& type) {
+  assertx(type <= TCell);
+  assertx(cls != nullptr);
+  assertx(slot != kInvalidSlot);
+
+  auto const data = IndexData { cls->propSlotToIndex(slot) };
+  return gen(env, LdClosureArg, data, type, obj);
+}
+
 
 SSATmp* ptrToInitNull(IRGS& env) {
   // Nothing is allowed to write anything to the init null variant, so this

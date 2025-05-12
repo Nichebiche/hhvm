@@ -12,21 +12,17 @@
 #include <proxygen/lib/http/codec/HQControlCodec.h>
 #include <proxygen/lib/http/codec/HQStreamCodec.h>
 #include <proxygen/lib/http/codec/HQUtils.h>
-#include <proxygen/lib/http/codec/HTTP1xCodec.h>
 #include <proxygen/lib/http/codec/HTTPCodec.h>
 #include <proxygen/lib/http/codec/HTTPCodecFilter.h>
 #include <proxygen/lib/http/codec/QPACKDecoderCodec.h>
 #include <proxygen/lib/http/codec/QPACKEncoderCodec.h>
 #include <proxygen/lib/http/session/HTTPSession.h>
-#include <proxygen/lib/http/session/HTTPSessionController.h>
 #include <proxygen/lib/http/session/HTTPSessionStats.h>
 #include <proxygen/lib/http/session/HTTPTransaction.h>
 
 #include <folly/CppAttributes.h>
-#include <folly/Format.h>
 #include <folly/ScopeGuard.h>
 #include <folly/io/IOBufQueue.h>
-#include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTransport.h>
 #include <folly/io/async/DelayedDestructionBase.h>
 #include <folly/io/async/EventBase.h>
@@ -91,11 +87,40 @@ quic::QuicErrorCode quicControlStreamError(quic::QuicErrorCode error) {
   folly::assume_unreachable();
 }
 
-quic::Priority toQuicPriority(const proxygen::HTTPPriority& pri) {
-  return quic::Priority(pri.urgency, pri.incremental, pri.orderId);
+quic::PriorityQueue::Priority toQuicPriority(
+    const proxygen::HTTPPriority& pri) {
+  return pri.paused ? quic::HTTPPriorityQueue::Priority(
+                          quic::HTTPPriorityQueue::Priority::PAUSED)
+                    : quic::HTTPPriorityQueue::Priority(
+                          pri.urgency, pri.incremental, pri.orderId);
 }
 
-bool writeWTStreamPrefaceToSock(
+// Get the size of the WebTransport stream preface without actually encoding it
+folly::Expected<size_t, quic::QuicError> getWebTransportPrefaceSize(
+    proxygen::HTTPCodec::StreamID streamId, quic::StreamId wtSessionId) {
+  // The preface contains two QuicIntegers: One which represents whether the
+  // stream is unidirectional or bidirectional, and the other of which
+  // represents the session id. We just sum up the sizes of the two if they
+  // were to be encoded as QuicIntegers.
+  uint64_t encodedStreamType =
+      quic::isUnidirectionalStream(streamId)
+          ? folly::to_underlying(
+                proxygen::hq::UnidirectionalStreamType::WEBTRANSPORT)
+          : folly::to_underlying(
+                proxygen::hq::BidirectionalStreamType::WEBTRANSPORT);
+  auto maybeStreamTypeEncodedSize = quic::getQuicIntegerSize(encodedStreamType);
+  if (maybeStreamTypeEncodedSize.hasError()) {
+    return folly::makeUnexpected(maybeStreamTypeEncodedSize.error());
+  }
+  auto maybeSessionIdEncodedSize = quic::getQuicIntegerSize(wtSessionId);
+  if (maybeSessionIdEncodedSize.hasError()) {
+    return folly::makeUnexpected(maybeSessionIdEncodedSize.error());
+  }
+  return *maybeStreamTypeEncodedSize + *maybeSessionIdEncodedSize;
+}
+
+// Returns the number of bytes written. 0 if error.
+uint32_t writeWTStreamPrefaceToSock(
     quic::QuicSocket& sock,
     quic::StreamId wtStreamId,
     quic::StreamId wtSessionId,
@@ -105,14 +130,14 @@ bool writeWTStreamPrefaceToSock(
       proxygen::hq::writeWTStreamPreface(writeBuf, streamType, wtSessionId);
   if (!res) {
     LOG(ERROR) << "Failed to write WT stream preface";
-    return false;
+    return 0;
   }
   auto writeRes = sock.writeChain(wtStreamId, writeBuf.move(), false);
   if (writeRes.hasError()) {
     LOG(ERROR) << "Failed to write stream preface to socket";
-    return false;
+    return 0;
   }
-  return true;
+  return res.value();
 }
 } // namespace
 
@@ -258,7 +283,7 @@ void HQSession::onStopSending(quic::StreamId id,
 
 void HQSession::onKnob(uint64_t knobSpace,
                        uint64_t knobId,
-                       quic::Buf knobBlob) {
+                       quic::BufPtr knobBlob) {
   VLOG(3) << __func__ << " sess=" << *this
           << " knob frame received: " << " KnobSpace: " << std::hex << knobSpace
           << " KnobId: " << knobId << " KnobBlob: "
@@ -634,11 +659,6 @@ size_t HQSession::HQStreamTransportBase::changePriority(
     return session_.sendPushPriority(pushId, priority);
   }
   return session_.sendPriority(txn->getID(), priority);
-}
-
-size_t HQSession::HQStreamTransportBase::sendPriority(
-    HTTPTransaction*, const http2::PriorityUpdate&) noexcept {
-  return 0;
 }
 
 size_t HQSession::HQStreamTransportBase::writeBufferSize() const {
@@ -1275,7 +1295,7 @@ void HQSession::readControlStream(HQControlStream* ctrlStream) {
     return;
   }
   resetTimeout();
-  quic::Buf data = std::move(readRes.value().first);
+  quic::BufPtr data = std::move(readRes.value().first);
   auto readSize = data ? data->computeChainDataLength() : 0;
   VLOG(4) << "Read " << readSize << " bytes from control stream";
   ctrlStream->readBuf_.append(std::move(data));
@@ -1339,7 +1359,7 @@ void HQSession::rejectStream(quic::StreamId id) {
   if (sock_->isBidirectionalStream(id)) {
     sock_->resetStream(id, HTTP3::ErrorCode::HTTP_STREAM_CREATION_ERROR);
   }
-  sock_->setReadCallback(id, nullptr, folly::none);
+  sock_->setReadCallback(id, nullptr, std::nullopt);
   sock_->setPeekCallback(id, nullptr);
 }
 
@@ -1364,7 +1384,7 @@ size_t HQSession::cleanupPendingStreams() {
 
 void HQSession::clearStreamCallbacks(quic::StreamId id) {
   if (sock_) {
-    sock_->setReadCallback(id, nullptr, folly::none);
+    sock_->setReadCallback(id, nullptr, std::nullopt);
     sock_->setPeekCallback(id, nullptr);
     sock_->setDSRPacketizationRequestSender(id, nullptr);
 
@@ -1423,7 +1443,7 @@ void HQSession::readRequestStream(quic::StreamId id) noexcept {
   }
 
   resetTimeout();
-  quic::Buf data = std::move(readRes.value().first);
+  quic::BufPtr data = std::move(readRes.value().first);
   auto readSize = data ? data->computeChainDataLength() : 0;
   hqStream->readEOF_ = readRes.value().second;
   VLOG(3) << "Got streamID=" << hqStream->getStreamId() << " len=" << readSize
@@ -2734,7 +2754,7 @@ void HQSession::abortStream(HTTPException::Direction dir,
 void HQSession::abortStream(quic::StreamId id) {
   if (sock_ && sock_->getState() && sock_->getState()->qLogger) {
     sock_->getState()->qLogger->addStreamStateUpdate(
-        id, quic::kAbort, folly::none);
+        id, quic::kAbort, std::nullopt);
   }
   auto cancel = qpackCodec_.encodeCancelStream(id);
   auto QPACKDecoderStream =
@@ -3359,7 +3379,7 @@ void HQSession::HQStreamTransportBase::trackEgressBodyOffset(
 }
 
 void HQSession::HQStreamTransportBase::armStreamByteEventCb(
-    uint64_t streamOffset, quic::QuicSocket::ByteEvent::Type type) {
+    uint64_t streamOffset, quic::ByteEvent::Type type) {
   auto res = session_.sock_->registerByteEventCallback(
       type, getEgressStreamId(), streamOffset, this);
   if (res.hasError()) {
@@ -3386,7 +3406,7 @@ void HQSession::HQStreamTransportBase::armEgressHeadersAckCb(
     uint64_t streamOffset) {
   VLOG(4) << __func__ << ": registering headers delivery callback for offset="
           << streamOffset << "; sess=" << session_ << "; txn=" << txn_;
-  armStreamByteEventCb(streamOffset, quic::QuicSocket::ByteEvent::Type::ACK);
+  armStreamByteEventCb(streamOffset, quic::ByteEvent::Type::ACK);
   egressHeadersAckOffset_ = streamOffset;
 }
 
@@ -3398,7 +3418,7 @@ void HQSession::HQStreamTransportBase::armEgressBodyCallbacks(
           << streamOffset << "; flags=" << uint32_t(eventFlags)
           << "; sess=" << session_ << "; txn=" << txn_;
   if (eventFlags & proxygen::ByteEvent::EventFlags::TX) {
-    armStreamByteEventCb(streamOffset, quic::QuicSocket::ByteEvent::Type::TX);
+    armStreamByteEventCb(streamOffset, quic::ByteEvent::Type::TX);
     auto res = egressBodyByteEventOffsets_.try_emplace(
         streamOffset, BodyByteOffset(bodyOffset, 1));
     if (!res.second) {
@@ -3406,7 +3426,7 @@ void HQSession::HQStreamTransportBase::armEgressBodyCallbacks(
     }
   }
   if (eventFlags & proxygen::ByteEvent::EventFlags::ACK) {
-    armStreamByteEventCb(streamOffset, quic::QuicSocket::ByteEvent::Type::ACK);
+    armStreamByteEventCb(streamOffset, quic::ByteEvent::Type::ACK);
     auto res = egressBodyByteEventOffsets_.try_emplace(
         streamOffset, BodyByteOffset(bodyOffset, 1));
     if (!res.second) {
@@ -3433,7 +3453,7 @@ void HQSession::HQStreamTransportBase::handleHeadersAcked(
 }
 
 void HQSession::HQStreamTransportBase::handleBodyEvent(
-    uint64_t streamOffset, quic::QuicSocket::ByteEvent::Type type) {
+    uint64_t streamOffset, quic::ByteEvent::Type type) {
   auto g = folly::makeGuard(setActiveCodec(__func__));
 
   auto bodyOffset = resetEgressBodyEventOffset(streamOffset);
@@ -3446,15 +3466,15 @@ void HQSession::HQStreamTransportBase::handleBodyEvent(
           << " for egress body, bodyOffset=" << *bodyOffset
           << "; sess=" << session_ << "; txn=" << txn_;
 
-  if (type == quic::QuicSocket::ByteEvent::Type::ACK) {
+  if (type == quic::ByteEvent::Type::ACK) {
     txn_.onEgressBodyBytesAcked(*bodyOffset);
-  } else if (type == quic::QuicSocket::ByteEvent::Type::TX) {
+  } else if (type == quic::ByteEvent::Type::TX) {
     txn_.onEgressBodyBytesTx(*bodyOffset);
   }
 }
 
 void HQSession::HQStreamTransportBase::handleBodyEventCancelled(
-    uint64_t streamOffset, quic::QuicSocket::ByteEvent::Type) {
+    uint64_t streamOffset, quic::ByteEvent::Type) {
   auto g = folly::makeGuard(setActiveCodec(__func__));
 
   auto bodyOffset = resetEgressBodyEventOffset(streamOffset);
@@ -3469,8 +3489,7 @@ void HQSession::HQStreamTransportBase::handleBodyEventCancelled(
   txn_.onEgressBodyDeliveryCanceled(*bodyOffset);
 }
 
-void HQSession::HQStreamTransportBase::onByteEvent(
-    quic::QuicSocket::ByteEvent byteEvent) {
+void HQSession::HQStreamTransportBase::onByteEvent(quic::ByteEvent byteEvent) {
   VLOG(4) << __func__ << ": got byte event type=" << uint32_t(byteEvent.type)
           << " for offset=" << byteEvent.offset << "; sess=" << session_
           << "; txn=" << txn_;
@@ -3482,7 +3501,7 @@ void HQSession::HQStreamTransportBase::onByteEvent(
   // For a given type (ACK|TX), onByteEvent calls will be called from QuicSocket
   // with monotonically increasing offsets.
   if (egressHeadersAckOffset_) {
-    if (byteEvent.type == quic::QuicSocket::ByteEvent::Type::ACK) {
+    if (byteEvent.type == quic::ByteEvent::Type::ACK) {
       handleHeadersAcked(byteEvent.offset);
       return;
     }
@@ -3493,7 +3512,7 @@ void HQSession::HQStreamTransportBase::onByteEvent(
 }
 
 void HQSession::HQStreamTransportBase::onByteEventCanceled(
-    quic::QuicSocket::ByteEventCancellation cancellation) {
+    quic::ByteEventCancellation cancellation) {
   VLOG(3) << __func__ << ": data cancelled on stream=" << cancellation.id
           << ", type=" << uint32_t(cancellation.type)
           << ", offset=" << cancellation.offset << "; sess=" << session_
@@ -3505,7 +3524,7 @@ void HQSession::HQStreamTransportBase::onByteEventCanceled(
   // Are byte events of a given type always cancelled in offset order?
 
   if (egressHeadersAckOffset_) {
-    if (cancellation.type == quic::QuicSocket::ByteEvent::Type::ACK) {
+    if (cancellation.type == quic::ByteEvent::Type::ACK) {
       resetEgressHeadersAckOffset();
       return;
     }
@@ -3731,7 +3750,7 @@ void HQSession::onDatagramsAvailable() noexcept {
     }
     auto streamId = quarterStreamId->first * 4;
     auto stream = findNonDetachedStream(streamId);
-    folly::Optional<std::pair<uint64_t, size_t>> ctxId;
+    quic::Optional<std::pair<uint64_t, size_t>> ctxId;
     if (!stream || !stream->txn_.isWebTransportConnectStream()) {
       // TODO: draft 8 and rfc don't include context ID
       ctxId = quic::decodeQuicInteger(cursor);
@@ -3795,8 +3814,8 @@ HQSession::HQStreamTransport::sendDatagram(
   //   [Context ID (i)],
   //   HTTP/3 Datagram Payload (..),
   // }
-  quic::Buf headerBuf =
-      quic::Buf(folly::IOBuf::create(session_.sock_->getDatagramSizeLimit()));
+  quic::BufPtr headerBuf = quic::BufPtr(
+      folly::IOBuf::create(session_.sock_->getDatagramSizeLimit()));
   quic::BufAppender appender(headerBuf.get(), kMaxDatagramHeaderSize);
   auto streamIdRes = quic::encodeQuicInteger(
       streamId_.value() / 4, [&](auto val) { appender.writeBE(val); });
@@ -3832,10 +3851,12 @@ HQSession::HQStreamTransport::newWebTransportBidiStream() {
     return folly::makeUnexpected(
         WebTransport::ErrorCode::STREAM_CREATION_ERROR);
   }
-  if (!writeWTStreamPrefaceToSock(*session_.sock_,
-                                  *id,
-                                  getEgressStreamId(),
-                                  hq::WebTransportStreamType::BIDI)) {
+  auto numPrefaceBytesWritten =
+      writeWTStreamPrefaceToSock(*session_.sock_,
+                                 *id,
+                                 getEgressStreamId(),
+                                 hq::WebTransportStreamType::BIDI);
+  if (numPrefaceBytesWritten == 0) {
     LOG(ERROR) << "Failed to write bidirectional stream preface";
     // TODO: resetStream/stopSending?
     return folly::makeUnexpected(
@@ -3853,10 +3874,12 @@ HQSession::HQStreamTransport::newWebTransportUniStream() {
     return folly::makeUnexpected(
         WebTransport::ErrorCode::STREAM_CREATION_ERROR);
   }
-  if (!writeWTStreamPrefaceToSock(*session_.sock_,
-                                  *id,
-                                  getEgressStreamId(),
-                                  hq::WebTransportStreamType::UNI)) {
+  auto numPrefaceBytesWritten =
+      writeWTStreamPrefaceToSock(*session_.sock_,
+                                 *id,
+                                 getEgressStreamId(),
+                                 hq::WebTransportStreamType::UNI);
+  if (numPrefaceBytesWritten == 0) {
     LOG(ERROR) << "Failed to write unidirectional stream preface";
     return folly::makeUnexpected(
         WebTransport::ErrorCode::STREAM_CREATION_ERROR);
@@ -3866,8 +3889,18 @@ HQSession::HQStreamTransport::newWebTransportUniStream() {
 
 folly::Expected<WebTransport::FCState, WebTransport::ErrorCode>
 HQSession::HQStreamTransport::sendWebTransportStreamData(
-    HTTPCodec::StreamID id, std::unique_ptr<folly::IOBuf> data, bool eof) {
-  auto res = session_.sock_->writeChain(id, std::move(data), eof);
+    HTTPCodec::StreamID id,
+    std::unique_ptr<folly::IOBuf> data,
+    bool eof,
+    WebTransport::ByteEventCallback* deliveryCallback) {
+  if (deliveryCallback) {
+    auto maybePrefaceSize = getWebTransportPrefaceSize(id, getEgressStreamId());
+    if (maybePrefaceSize) {
+      deliveryCallback->setWritePrefaceSize(*maybePrefaceSize);
+    }
+  }
+  auto res =
+      session_.sock_->writeChain(id, std::move(data), eof, deliveryCallback);
   if (res.hasError()) {
     LOG(ERROR) << "Failed to write WT stream data";
     return folly::makeUnexpected(WebTransport::ErrorCode::SEND_ERROR);
@@ -3940,12 +3973,14 @@ HQSession::HQStreamTransport::resumeWebTransportIngress(
 
 folly::Expected<folly::Unit, WebTransport::ErrorCode>
 HQSession::HQStreamTransport::stopReadingWebTransportIngress(
-    HTTPCodec::StreamID id, uint32_t errorCode) {
+    HTTPCodec::StreamID id, folly::Optional<uint32_t> errorCode) {
   if (session_.sock_) {
-    auto res = session_.sock_->setReadCallback(
-        id,
-        nullptr,
-        quic::ApplicationErrorCode(WebTransport::toHTTPErrorCode(errorCode)));
+    quic::Optional<quic::ApplicationErrorCode> quicErrorCode;
+    if (errorCode) {
+      quicErrorCode =
+          quic::ApplicationErrorCode(WebTransport::toHTTPErrorCode(*errorCode));
+    }
+    auto res = session_.sock_->setReadCallback(id, nullptr, quicErrorCode);
     if (res.hasError()) {
       return folly::makeUnexpected(WebTransport::ErrorCode::GENERIC_ERROR);
     }

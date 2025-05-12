@@ -18,10 +18,6 @@ use pos::Symbol;
 use pos::TypeConstName;
 use pos::TypeName;
 use special_names as sn;
-use ty::decl::folded::ConstraintRequirement;
-use ty::decl::folded::Constructor;
-use ty::decl::subst::Subst;
-use ty::decl::ty::DeclConstraintRequirement;
 use ty::decl::AbstractTypeconst;
 use ty::decl::Abstraction;
 use ty::decl::CeVisibility;
@@ -45,12 +41,16 @@ use ty::decl::Ty;
 use ty::decl::TypeConst;
 use ty::decl::Typeconst;
 use ty::decl::Visibility;
+use ty::decl::folded::ConstraintRequirement;
+use ty::decl::folded::Constructor;
+use ty::decl::subst::Subst;
+use ty::decl::ty::DeclConstraintRequirement;
 use ty::decl_error::DeclError;
 use ty::reason::Reason;
 
-use super::inherit::Inherited;
 use super::Result;
 use super::Substitution;
+use super::inherit::Inherited;
 
 mod decl_enum;
 
@@ -110,6 +110,10 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
             Visibility::Internal => module.map_or(CeVisibility::Public, |module_name| {
                 CeVisibility::Internal(module_name)
             }),
+            Visibility::ProtectedInternal => module
+                .map_or(CeVisibility::Protected(cls), |module_name| {
+                    CeVisibility::ProtectedInternal(cls, module_name)
+                }),
         }
     }
 
@@ -149,20 +153,36 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
         let pos = self.child.name.pos();
         let name = self.child.name.id();
         let reason = R::class_class(pos.clone(), name);
-        let classname_ty = if self.opts.class_class_type {
-            Ty::class_ptr(reason.clone(), Ty::this(reason))
-        } else {
-            Ty::apply(
-                reason.clone(),
-                Positioned::new(pos.clone(), *sn::classes::cClassname),
-                [Ty::this(reason)].into(),
-            )
+        let is_abstract = match self.child.kind {
+            ClassishKind::Cenum | ClassishKind::Ctrait | ClassishKind::Cinterface => true,
+            ClassishKind::Cclass(c) | ClassishKind::CenumClass(c) => c.is_abstract(),
+        };
+        // Examples: classname<this>, class<this>, concrete<classname<this>> ...
+        let ty = {
+            let classname_or_class_ptr_ty = if self.opts.class_class_type {
+                Ty::class_ptr(reason.clone(), Ty::this(reason.clone()))
+            } else {
+                Ty::apply(
+                    reason.clone(),
+                    Positioned::new(pos.clone(), *sn::classes::cClassname),
+                    [Ty::this(reason.clone())].into(),
+                )
+            };
+            if is_abstract || !self.opts.safe_abstract {
+                classname_or_class_ptr_ty
+            } else {
+                Ty::apply(
+                    reason,
+                    Positioned::new(pos.clone(), *sn::classes::cConcrete),
+                    [classname_or_class_ptr_ty].into(),
+                )
+            }
         };
         let class_const = ClassConst {
             is_synthesized: true,
             kind: ClassConstKind::CCConcrete,
             pos: pos.clone(),
-            ty: classname_ty,
+            ty,
             origin: name,
             refs: Box::default(),
         };
@@ -295,7 +315,7 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
             is_const: prop_flags.is_const(),
             is_lateinit: prop_flags.is_lateinit(),
             is_dynamicallycallable: false,
-            is_readonly_prop: prop_flags.is_readonly(),
+            is_readonly_prop_or_needs_concrete: prop_flags.is_readonly(),
             supports_dynamic_type: false,
             needs_init: prop_flags.needs_init(),
             safe_global_variable: false,
@@ -335,7 +355,7 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
             is_const: prop_flags.is_const(),
             is_lateinit: prop_flags.is_lateinit(),
             is_dynamicallycallable: false,
-            is_readonly_prop: prop_flags.is_readonly(),
+            is_readonly_prop_or_needs_concrete: prop_flags.is_readonly(),
             supports_dynamic_type: false,
             no_auto_likes: false,
             needs_init: false,
@@ -399,7 +419,7 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
             is_const: false,
             is_lateinit: false,
             is_dynamicallycallable: meth_flags.is_dynamicallycallable(),
-            is_readonly_prop: false,
+            is_readonly_prop_or_needs_concrete: meth_flags.is_needs_concrete(),
             supports_dynamic_type: meth_flags.supports_dynamic_type(),
             no_auto_likes,
             needs_init: false,
@@ -447,7 +467,7 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
                 is_const: false,
                 is_lateinit: false,
                 is_dynamicallycallable: false,
-                is_readonly_prop: false,
+                is_readonly_prop_or_needs_concrete: false,
                 supports_dynamic_type: false,
                 needs_init: false,
                 safe_global_variable: false,
@@ -878,7 +898,7 @@ impl<'a, R: Reason> DeclFolder<'a, R> {
             mut consts,
             mut type_consts,
             support_dynamic_type,
-        } = Inherited::make(self.opts, self.child, self.parents)?;
+        } = Inherited::make(self.child, self.parents)?;
 
         for sp in self.child.props.iter() {
             self.decl_prop(&mut props, sp);

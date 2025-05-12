@@ -38,6 +38,8 @@ class ParamServiceServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::some::valid::ns::ParamService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::some::valid::ns::ParamService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "ParamService"; }
 
@@ -307,6 +309,13 @@ class ServiceHandler<::some::valid::ns::ParamService> : public apache::thrift::S
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_listunion_string_param{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::some::valid::ns::ParamService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -7324834132563700898;
+  static constexpr ::std::string_view definitionKey = {"\xf5\x7c\x5b\x80\xa1\xc3\x4d\xe8\xa5\xa4\x28\x4c\xa6\x52\x26\x9e", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace some::valid::ns {

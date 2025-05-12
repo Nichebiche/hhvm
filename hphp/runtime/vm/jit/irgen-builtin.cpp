@@ -22,12 +22,9 @@
 #include "hphp/runtime/base/enum-cache.h"
 #include "hphp/runtime/base/isame-log.h"
 #include "hphp/runtime/base/repo-auth-type.h"
-#include "hphp/runtime/base/tv-refcount.h"
 #include "hphp/runtime/base/type-variant.h"
 #include "hphp/runtime/base/string-buffer.h"
-#include "hphp/runtime/base/implicit-context.h"
 #include "hphp/runtime/vm/func.h"
-#include "hphp/runtime/vm/repo-global-data.h"
 #include "hphp/runtime/vm/vm-regs.h"
 
 #include "hphp/runtime/vm/jit/analysis.h"
@@ -47,14 +44,9 @@
 #include "hphp/runtime/vm/jit/irgen-ret.h"
 #include "hphp/runtime/vm/jit/irgen-types.h"
 
-#include "hphp/runtime/ext/collections/ext_collections-map.h"
-#include "hphp/runtime/ext/collections/ext_collections-set.h"
-#include "hphp/runtime/ext/collections/ext_collections-vector.h"
-#include "hphp/runtime/ext/hh/ext_hh.h"
 #include "hphp/runtime/ext/std/ext_std_errorfunc.h"
 
 #include "hphp/util/configs/eval.h"
-#include "hphp/util/configs/hhir.h"
 #include "hphp/util/text-util.h"
 
 namespace HPHP::jit::irgen {
@@ -1214,9 +1206,9 @@ SSATmp* opt_enum_is_valid(IRGS& env, const ParamPrep& params) {
   if (params.size() != 1) return nullptr;
   auto const origVal = params[0].value;
   if (!origVal->type().isKnownDataType()) return nullptr;
-  auto const value = convertClassKey(env, origVal);
   auto const enum_values = getEnumValues(env, params);
   if (!enum_values) return nullptr;
+  auto const value = convertClassKey(env, origVal);
   auto const ad = VanillaDict::as(enum_values->names.get());
   if (value->isA(TInt)) {
     if (ad->keyTypes().mustBeStrs()) return cns(env, false);
@@ -1230,6 +1222,13 @@ SSATmp* opt_enum_is_valid(IRGS& env, const ParamPrep& params) {
 }
 
 SSATmp* opt_enum_coerce(IRGS& env, const ParamPrep& params) {
+  if (params.size() != 1) return nullptr;
+  auto const value = params[0].value;
+
+  // FIXME: Do not try to optimize class types yet, there is a mismatch in
+  // warnings between opt_enum_is_valid() and BuiltinEnum::coerce().
+  if (value->type().maybe(TCls | TLazyCls)) return nullptr;
+
   auto const valid = opt_enum_is_valid(env, params);
   if (!valid) return nullptr;
   return cond(env,
@@ -1237,7 +1236,6 @@ SSATmp* opt_enum_coerce(IRGS& env, const ParamPrep& params) {
     [&]{
       // We never need to coerce strs to ints here, but we may need to coerce
       // ints to strs if the enum is a string type with intish values.
-      auto const value = params[0].value;
       auto const isstr = isStringType(
         params.ctx->clsVal()->enumBaseTy().underlyingDataType());
       if (value->isA(TInt) && isstr) return gen(env, ConvIntToStr, value);
@@ -1475,38 +1473,6 @@ SSATmp* optimizedFCallBuiltin(IRGS& env,
 //////////////////////////////////////////////////////////////////////
 
 /*
- * Return the target type of  a parameter to a builtin function.
- *
- * If the builtin parameter has no type hints to cause coercion, this function
- * returns TBottom.
- */
-Optional<Type> param_target_type(const Func* callee, uint32_t paramIdx) {
-  auto const& pi = callee->params()[paramIdx];
-  auto const& tc = pi.typeConstraints.main();
-  if (tc.typeName() && interface_supports_arrlike(tc.typeName())) {
-    // If we're dealing with an array-like interface, then there's no need to
-    // check the input type: it's going to be mixed on the C++ side anyhow.
-    return std::nullopt;
-  }
-  if (tc.isNullable()) {
-    // FIXME(T116301380): native builtins don't resolve properly
-    auto const dt = tc.isUnresolved() ? KindOfObject : tc.underlyingDataType();
-    if (!dt) return std::nullopt;
-    return TNull | Type(*dt);
-  }
-  if (!pi.builtinType()) {
-    return tc.isVecOrDict() ? make_optional(TVec|TDict) : std::nullopt;
-  }
-  if (pi.builtinType() == KindOfObject &&
-      pi.defaultValue.m_type == KindOfNull) {
-    return TNullableObj;
-  }
-  return Type(*pi.builtinType());
-}
-
-//////////////////////////////////////////////////////////////////////
-
-/*
  * Collect parameters for a call to a builtin.  Also determine which ones will
  * need to be passed through the eval stack, and which ones will need
  * conversions.
@@ -1520,26 +1486,27 @@ prepare_params(IRGS& env, const Func* callee, SSATmp* ctx,
   // Fill in in reverse order, since they may come from popC's (depending on
   // what loadParam wants to do).
   for (auto offset = uint32_t{numArgs}; offset-- > 0;) {
-    auto const ty = param_target_type(callee, offset);
     auto& cur = ret[offset];
     auto& pi = callee->params()[offset];
 
     cur.isInOut = callee->isInOut(offset);
     cur.value = ldLoc(env, offset, DataTypeSpecific);
-    // We do actually mean exact type equality here.  We're only capable of
-    // passing the following primitives through registers; everything else goes
-    // by address unless its flagged "NativeArg".
-    auto const nonrefType = !pi.isTakenAsVariant() &&
-      (ty == TBool || ty == TInt || ty == TDbl ||
-       pi.isNativeArg() || pi.isTakenAsTypedValue());
-    if (cur.isInOut || nonrefType) {
-      cur.argValue = cur.value;
-      continue;
+    switch (pi.builtinAbi) {
+      case Func::ParamInfo::BuiltinAbi::Value:
+      case Func::ParamInfo::BuiltinAbi::FPValue:
+      case Func::ParamInfo::BuiltinAbi::TypedValue:
+      case Func::ParamInfo::BuiltinAbi::InOutByRef:
+        // Pass by value, inout params are processed further by builtinCall().
+        cur.argValue = cur.value;
+        break;
+      case Func::ParamInfo::BuiltinAbi::ValueByRef:
+      case Func::ParamInfo::BuiltinAbi::TypedValueByRef:
+        // Pass by reference.
+        cur.argValue = gen(env, LdLocAddr, LocalId(offset), fp(env));
+        cur.passByAddr = true;
+        ++ret.numByAddr;
+        break;
     }
-
-    cur.argValue = gen(env, LdLocAddr, LocalId(offset), fp(env));
-    ++ret.numByAddr;
-    cur.passByAddr = true;
   }
 
   return ret;
@@ -1548,122 +1515,8 @@ prepare_params(IRGS& env, const Func* callee, SSATmp* ctx,
 //////////////////////////////////////////////////////////////////////
 
 /*
- * Take the value in param, apply any needed conversions
- * and return the value to be passed to CallBuiltin.
- *
- * checkType(ty, fail):
- *    verify that the param is of type ty, and branch to fail
- *    if not. If it results in a new SSATmp*, (as eg CheckType
- *    would), then that should be returned; otherwise it should
- *    return nullptr;
- * convertParam(ty):
- *    convert the param to ty; failure should be handled by
- *    CatchMaker::makeParamCoerceCatch, and it should return
- *    a new SSATmp* (if appropriate) or nullptr.
- * realize():
- *    return the SSATmp* needed by CallBuiltin for this parameter.
- *    if checkType and convertParam returned non-null values,
- *    param.argValue will have been updated with a phi of their results.
- */
-template<class V, class C, class R>
-SSATmp* realize_param(IRGS& env,
-                      ParamPrep::Info& param,
-                      const Func* callee,
-                      Optional<Type> targetTy,
-                      V checkType,
-                      C convertParam,
-                      R realize) {
-  if (targetTy) {
-    auto const baseTy = *targetTy - TNull;
-    assertx(baseTy.isKnownDataType() || baseTy == (TVec|TDict));
-
-    if (auto const value = cond(
-          env,
-          [&] (Block* convert) -> SSATmp* {
-            if (targetTy == baseTy) {
-              return checkType(baseTy, convert);
-            }
-            return cond(
-              env,
-              [&] (Block* fail) { return checkType(baseTy, fail); },
-              [&] (SSATmp* v) { return v; },
-              [&] {
-                return checkType(TInitNull, convert);
-              });
-          },
-          [&] (SSATmp* v) { return v; },
-          [&] () -> SSATmp* {
-            return convertParam(baseTy);
-          }
-        )) {
-      // Heads up on non-local state here: we have to update
-      // the values inside ParamPrep so that the CatchMaker
-      // functions know about new potentially refcounted types
-      // to decref, or values that were already decref'd and
-      // replaced with things like ints.
-      param.argValue = value;
-    }
-  }
-
-  return realize();
-}
-
-template<class U, class F>
-SSATmp* maybeCoerceValue(
-  IRGS& env,
-  SSATmp* val,
-  Type target,
-  uint32_t id,
-  const Func* func,
-  U update,
-  F fail
-) {
-  assertx(target.isKnownDataType() || (target == (TVec|TDict)));
-
-  auto bail = [&] { fail(); return cns(env, TBottom); };
-  if (target <= TStr) {
-    if (!val->type().maybe(TLazyCls | TCls)) return bail();
-
-    auto castW = [&] (SSATmp* val){
-      if (Cfg::Eval::ClassStringHintNoticesSampleRate > 0) {
-        auto tcInfo = folly::sformat(
-          "argument {} passed to {}()", id + 1, func->fullName());
-        std::string msg;
-        string_printf(msg, Strings::CLASS_TO_STRING_IMPLICIT, tcInfo.c_str());
-        gen(
-          env,
-          RaiseNotice,
-          SampleRateData { Cfg::Eval::ClassStringHintNoticesSampleRate },
-          cns(env, makeStaticString(msg))
-        );
-      }
-      return update(val);
-    };
-
-    MultiCond mc{env};
-    mc.ifTypeThen(val, TLazyCls, [&](SSATmp* lcval) {
-      return castW(gen(env, LdLazyClsName, lcval));
-    });
-    mc.ifTypeThen(val, TCls, [&](SSATmp* cval) {
-      return castW(gen(env, LdClsName, cval));
-    });
-    return mc.elseDo([&] {
-      hint(env, Block::Hint::Unlikely);
-      return bail();
-    });
-  }
-
-  return bail();
-}
-
-StaticString
-  s_varray_or_darray("varray_or_darray"),
-  s_vec_or_dict("vec_or_dict");
-
-/*
  * Prepare the actual arguments to the CallBuiltin instruction, by converting a
- * ParamPrep into a vector of SSATmps to pass to CallBuiltin.  If any of the
- * parameters needed type conversions, we need to do that here too.
+ * ParamPrep into a vector of SSATmps to pass to CallBuiltin.
  */
 jit::vector<SSATmp*> realize_params(IRGS& env,
                                     const Func* callee,
@@ -1675,75 +1528,8 @@ jit::vector<SSATmp*> realize_params(IRGS& env,
   ret[argIdx++] = sp(env);
   if (params.ctx) ret[argIdx++] = params.ctx;
 
-  auto const genFail = [&](uint32_t param, SSATmp* val) {
-    auto const expected_type = [&]{
-      auto const& tc = callee->params()[param].typeConstraints.main();
-      if (tc.isVecOrDict()) return s_vec_or_dict.get();
-      auto const dt = param_target_type(callee, param).value_or(TUninit) - TNull;
-      return getDataTypeString(dt.toDataType()).get();
-    }();
-    auto const data = FuncArgTypeData { callee, param + 1, expected_type };
-    gen(env, ThrowParameterWrongType, data, val);
-  };
-
   for (auto paramIdx = uint32_t{0}; paramIdx < params.size(); ++paramIdx) {
-    auto& param = params[paramIdx];
-    auto const targetTy = param_target_type(callee, paramIdx);
-
-    if (param.passByAddr) {
-      assertx(param.argValue->type() <= TMem);
-      ret[argIdx++] = realize_param(
-        env, param, callee, targetTy,
-        [&] (const Type& ty, Block* fail) -> SSATmp* {
-          gen(env, CheckTypeMem, ty, fail, param.argValue);
-          return nullptr;
-        },
-        [&] (const Type& ty) -> SSATmp* {
-          hint(env, Block::Hint::Unlikely);
-          auto val = gen(env, LdMem, TCell, param.argValue);
-          maybeCoerceValue(
-            env,
-            val,
-            ty,
-            paramIdx,
-            callee,
-            [&] (SSATmp* val) {
-              gen(env, StLoc, LocalId{paramIdx}, fp(env), val);
-              return val;
-            },
-            [&] { genFail(paramIdx, val); }
-          );
-          return nullptr;
-        },
-        [&] {
-          return param.argValue;
-        });
-    } else {
-      assertx(param.argValue->type() <= TCell);
-      auto const oldVal = params[paramIdx].argValue;
-      ret[argIdx++] = realize_param(
-        env, param, callee, targetTy,
-        [&] (const Type& ty, Block* fail) {
-          auto ret = gen(env, CheckType, ty, fail, param.argValue);
-          env.irb->constrainValue(ret, DataTypeSpecific);
-          return ret;
-        },
-        [&] (const Type& ty) -> SSATmp* {
-          hint(env, Block::Hint::Unlikely);
-          return maybeCoerceValue(
-            env,
-            param.argValue,
-            ty,
-            paramIdx,
-            callee,
-            [&] (SSATmp* val) { return val; },
-            [&] { genFail(paramIdx, oldVal); }
-          );
-        },
-        [&] {
-          return param.argValue;
-        });
-    }
+    ret[argIdx++] = params[paramIdx].argValue;
   }
 
   assertx(argIdx == cbNumArgs);
@@ -1937,7 +1723,8 @@ Type builtinOutType(const Func* builtin, uint32_t i) {
 
   auto const& pinfo = builtin->params()[i];
   auto const& tc = pinfo.typeConstraints.main();
-  if (auto const dt = Native::builtinOutType(tc, pinfo.userAttributes)) {
+  auto const dt = tc.isUnresolved() ? KindOfObject : tc.underlyingDataType();
+  if (dt) {
     const auto ty = Type{*dt};
     return tc.isNullable() ? ty | TInitNull : ty;
   }
@@ -1948,9 +1735,6 @@ Type builtinOutType(const Func* builtin, uint32_t i) {
     switch (tc.metaType()) {
     case AnnotMetaType::Precise:
     case AnnotMetaType::SubObject:
-      if (auto const dt = tc.underlyingDataType()) {
-        return Type{*dt};
-      }
       return TInitCell;
     case AnnotMetaType::Mixed:
       return TInitCell;

@@ -21,19 +21,19 @@ use naming_special_names_rust::pseudo_consts;
 use naming_special_names_rust::pseudo_functions;
 use naming_special_names_rust::special_idents;
 use oxidized::aast_visitor;
-use oxidized::aast_visitor::visit_mut;
 use oxidized::aast_visitor::AstParams;
 use oxidized::aast_visitor::NodeMut;
 use oxidized::aast_visitor::VisitorMut;
+use oxidized::aast_visitor::visit_mut;
 use oxidized::ast::Abstraction;
 use oxidized::ast::Block;
 use oxidized::ast::CallExpr;
 use oxidized::ast::CaptureLid;
+use oxidized::ast::Class_;
 use oxidized::ast::ClassGetExpr;
 use oxidized::ast::ClassHint;
 use oxidized::ast::ClassName;
 use oxidized::ast::ClassVar;
-use oxidized::ast::Class_;
 use oxidized::ast::ClassishKind;
 use oxidized::ast::Contexts;
 use oxidized::ast::Def;
@@ -41,11 +41,11 @@ use oxidized::ast::Efun;
 use oxidized::ast::EmitId;
 use oxidized::ast::Expr;
 use oxidized::ast::Expr_;
+use oxidized::ast::Fun_;
 use oxidized::ast::FunDef;
 use oxidized::ast::FunKind;
 use oxidized::ast::FunParam;
 use oxidized::ast::FunParamInfo;
-use oxidized::ast::Fun_;
 use oxidized::ast::FuncBody;
 use oxidized::ast::Hint;
 use oxidized::ast::Hint_;
@@ -299,7 +299,7 @@ impl<'b> Scope<'b> {
                 }
                 ScopeSummary::Method(x) => {
                     parts.push(strip_id(x.name).to_string());
-                    if !parts.last().map_or(false, |x| x.ends_with("::")) {
+                    if !parts.last().is_some_and(|x| x.ends_with("::")) {
                         parts.push("::".into())
                     };
                 }
@@ -438,6 +438,8 @@ struct ReadOnlyState {
     empty_namespace: Arc<namespace_env::Env>,
     /// For debugger eval
     for_debugger_eval: bool,
+    // Preserve UNSAFE_CAST for emitter
+    checked_unsafe_cast: bool,
 }
 
 /// Mutable state used during visiting in ClosureVisitor. It's mutable and owned
@@ -799,6 +801,7 @@ fn make_dyn_meth_caller_lambda(pos: &Pos, cexpr: &Expr, fexpr: &Expr, force: boo
             fun: fd,
             use_: vec![],
             closure_class_name: None,
+            is_expr_tree_virtual_expr: false,
         }),
     );
     let fun_handle = hack_expr!(
@@ -1008,7 +1011,7 @@ impl<'ast, 'a: 'b, 'b> VisitorMut<'ast> for ClosureVisitor<'a, 'b> {
 
     fn visit_expr(&mut self, scope: &mut Scope<'b>, Expr(_, pos, e): &mut Expr) -> Result<()> {
         stack_limit::maybe_grow(|| {
-            *e = match strip_unsafe_casts(e) {
+            *e = match strip_unsafe_casts(self.ro_state, e) {
                 Expr_::Efun(x) => self.convert_lambda(scope, x.fun, Some(x.use_))?,
                 Expr_::Lfun(x) => self.convert_lambda(scope, x.0, None)?,
                 Expr_::Lvar(id_orig) => {
@@ -1042,12 +1045,12 @@ impl<'ast, 'a: 'b, 'b> VisitorMut<'ast> for ClosureVisitor<'a, 'b> {
                         .as_class_get()
                         .and_then(|(id, _, _)| id.as_ciexpr())
                         .and_then(|x| x.as_id())
-                        .map_or(false, string_utils::is_parent)
+                        .is_some_and(string_utils::is_parent)
                         || (x.func)
                             .as_class_const()
                             .and_then(|(id, _)| id.as_ciexpr())
                             .and_then(|x| x.as_id())
-                            .map_or(false, string_utils::is_parent) =>
+                            .is_some_and(string_utils::is_parent) =>
                 {
                     self.state_mut().add_var(scope, "$this");
                     let mut res = Expr_::Call(x);
@@ -1153,7 +1156,7 @@ impl<'a: 'b, 'b> ClosureVisitor<'a, 'b> {
                     if cid
                         .as_ciexpr()
                         .and_then(Expr::as_id)
-                        .map_or(false, |id| !is_selflike_keyword(id))
+                        .is_some_and(|id| !is_selflike_keyword(id))
                     {
                         let mut res = Expr_::Call(x);
                         res.recurse(scope, self)?;
@@ -1363,6 +1366,7 @@ impl<'a: 'b, 'b> ClosureVisitor<'a, 'b> {
             fun: fd,
             use_: use_vars,
             closure_class_name: Some(closure_class_name),
+            is_expr_tree_virtual_expr: false,
         };
         Ok(Expr_::mk_efun(efun))
     }
@@ -1385,7 +1389,7 @@ impl<'a: 'b, 'b> ClosureVisitor<'a, 'b> {
 
 /// Swap *e with Expr_::Null, then return it with UNSAFE_CAST
 /// and UNSAFE_NONNULL_CAST stripped off.
-fn strip_unsafe_casts(e: &mut Expr_) -> Expr_ {
+fn strip_unsafe_casts(ro_state: &ReadOnlyState, e: &mut Expr_) -> Expr_ {
     let null = Expr_::mk_null();
     let mut e_owned = std::mem::replace(e, null);
     /*
@@ -1404,8 +1408,11 @@ fn strip_unsafe_casts(e: &mut Expr_) -> Expr_ {
                 if !x.args.is_empty() && {
                     // Function name should be HH\FIXME\UNSAFE_CAST
                     // or HH\FIXME\UNSAFE_NONNULL_CAST
+                    // Leave UNSAFE_CAST in place if checked_unsafe_cast=true
+                    // because we will interpret it as a checked cast in emit_expression
                     if let Expr_::Id(ref id) = (x.func).2 {
                         id.1 == pseudo_functions::UNSAFE_CAST
+                            && !(ro_state.checked_unsafe_cast && x.targs.len() == 2)
                             || id.1 == pseudo_functions::UNSAFE_NONNULL_CAST
                     } else {
                         false
@@ -1501,6 +1508,7 @@ pub fn convert_toplevel_prog<'d>(
     let ro_state = ReadOnlyState {
         empty_namespace: Arc::clone(&namespace_env),
         for_debugger_eval: e.for_debugger_eval,
+        checked_unsafe_cast: e.options().hhbc.checked_unsafe_cast,
     };
     let state = State::initial_state(namespace_env);
 

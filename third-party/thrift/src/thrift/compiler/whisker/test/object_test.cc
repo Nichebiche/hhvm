@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
+#include <thrift/compiler/whisker/dsl.h>
 #include <thrift/compiler/whisker/object.h>
 
 namespace w = whisker::make;
@@ -90,7 +91,7 @@ TEST(ObjectTest, null) {
   EXPECT_FALSE(o.is_array());
   EXPECT_EQ(o, null());
   EXPECT_EQ(null(), o);
-  EXPECT_NE(o, array());
+  EXPECT_NE(o, array::of({}));
   EXPECT_EQ(o, o);
 }
 
@@ -105,7 +106,8 @@ TEST(ObjectTest, array) {
       w::array({w::i64(1), w::array({w::string("foo")}), w::boolean(true)}), o);
   EXPECT_NE(o, w::array({w::string("foo"), w::i64(1), w::boolean(true)}));
   EXPECT_NE(o, w::array({w::i64(0), w::string("foo"), w::boolean(true)}));
-  EXPECT_NE(o, map());
+  EXPECT_NE(o, map::of({}));
+  EXPECT_NE(o, array::ptr());
   EXPECT_EQ(o, o);
 }
 
@@ -114,7 +116,7 @@ TEST(ObjectTest, map) {
       {{"foo", w::i64(1)},
        {"bar", w::array({w::string("foo"), w::boolean(true)})}});
   EXPECT_TRUE(o.is_map());
-  EXPECT_FALSE(o.is_native_object());
+  EXPECT_FALSE(o.is_array());
   EXPECT_EQ(
       o,
       w::map(
@@ -125,86 +127,56 @@ TEST(ObjectTest, map) {
       w::map(
           {{"foo-bar", w::i64(1)},
            {"bar", w::array({w::string("foo"), w::boolean(true)})}}));
-  EXPECT_NE(o, native_object::ptr(nullptr));
+  EXPECT_NE(o, map::ptr());
   EXPECT_EQ(o, o);
 }
 
-TEST(ObjectTest, native_object) {
-  native_object::ptr ptr = std::make_shared<native_object>();
-
-  object o = w::native_object(ptr);
-  EXPECT_TRUE(o.is_native_object());
-  EXPECT_FALSE(o.is_i64());
-  EXPECT_EQ(o, ptr);
-  EXPECT_EQ(ptr, o);
-  EXPECT_NE(o, native_object::ptr(nullptr));
-  EXPECT_NE(native_object::ptr(nullptr), o);
-  EXPECT_NE(o, i64(1));
-  EXPECT_EQ(o, o);
-}
-
-TEST(ObjectTest, native_object_equality) {
-  struct always_zero_map : native_object,
-                           native_object::map_like,
-                           std::enable_shared_from_this<always_zero_map> {
+TEST(ObjectTest, map_array_equality) {
+  struct always_zero_map : map {
     explicit always_zero_map(std::set<std::string> keys)
         : keys_(std::move(keys)) {}
 
-    native_object::map_like::ptr as_map_like() const override {
-      return shared_from_this();
-    }
-
-    object::ptr lookup_property(std::string_view) const override {
-      return manage_owned<object>(w::i64(0));
+    std::optional<object> lookup_property(std::string_view) const override {
+      return w::i64(0);
     }
 
     std::optional<std::set<std::string>> keys() const override { return keys_; }
 
     void print_to(
-        tree_printer::scope scope,
+        tree_printer::scope& scope,
         const object_print_options& options) const override {
-      default_print_to("always_zero_map", keys_, std::move(scope), options);
+      default_print_to("always_zero_map", keys_, scope, options);
     }
 
    private:
     std::set<std::string> keys_;
   };
 
-  struct always_zero_array : native_object,
-                             native_object::array_like,
-                             std::enable_shared_from_this<always_zero_array> {
+  struct always_zero_array : array {
     explicit always_zero_array(std::size_t sz) : size_(sz) {}
-
-    native_object::array_like::ptr as_array_like() const override {
-      return shared_from_this();
-    }
 
     std::size_t size() const override { return size_; }
 
-    object::ptr at(std::size_t) const override {
-      return manage_owned<object>(w::i64(0));
-    }
+    object at(std::size_t) const override { return w::i64(0); }
 
     void print_to(
-        tree_printer::scope scope,
+        tree_printer::scope& scope,
         const object_print_options& options) const override {
-      default_print_to("always_zero_array", std::move(scope), options);
+      default_print_to("always_zero_array", scope, options);
     }
 
    private:
     std::size_t size_;
   };
 
-  native_object::ptr m1 =
-      std::make_shared<always_zero_map>(std::set<std::string>{"foo"});
-  native_object::ptr m2 =
-      std::make_shared<always_zero_map>(std::set<std::string>{"foo"});
-  native_object::ptr m3 =
+  map::ptr m1 = std::make_shared<always_zero_map>(std::set<std::string>{"foo"});
+  map::ptr m2 = std::make_shared<always_zero_map>(std::set<std::string>{"foo"});
+  map::ptr m3 =
       std::make_shared<always_zero_map>(std::set<std::string>{"foo", "bar"});
-  map raw_m3{{"foo", w::i64(0)}, {"bar", w::i64(0)}};
+  map::ptr raw_m3 = map::of({{"foo", w::i64(0)}, {"bar", w::i64(0)}});
 
-  object o1 = w::native_object(m1);
-  EXPECT_TRUE(o1.is_native_object());
+  object o1{m1};
+  EXPECT_TRUE(o1.is_map());
   EXPECT_FALSE(o1.is_i64());
   EXPECT_EQ(o1, m1);
   EXPECT_EQ(m1, o1);
@@ -213,16 +185,16 @@ TEST(ObjectTest, native_object_equality) {
   EXPECT_NE(o1, m3);
   EXPECT_NE(m3, o1);
   EXPECT_NE(o1, raw_m3);
-  EXPECT_EQ(raw_m3, w::native_object(m3));
-  EXPECT_EQ(w::native_object(m3), raw_m3);
+  EXPECT_EQ(raw_m3, object{m3});
+  EXPECT_EQ(object{m3}, raw_m3);
 
-  native_object::ptr a1 = std::make_shared<always_zero_array>(2);
-  native_object::ptr a2 = std::make_shared<always_zero_array>(2);
-  native_object::ptr a3 = std::make_shared<always_zero_array>(3);
-  array raw_a3{w::i64(0), w::i64(0), w::i64(0)};
+  array::ptr a1 = std::make_shared<always_zero_array>(2);
+  array::ptr a2 = std::make_shared<always_zero_array>(2);
+  array::ptr a3 = std::make_shared<always_zero_array>(3);
+  array::ptr raw_a3 = array::of({w::i64(0), w::i64(0), w::i64(0)});
 
-  object o2 = w::native_object(a1);
-  EXPECT_TRUE(o2.is_native_object());
+  object o2{a1};
+  EXPECT_TRUE(o2.is_array());
   EXPECT_FALSE(o2.is_i64());
   EXPECT_EQ(o2, a1);
   EXPECT_EQ(a1, o2);
@@ -231,25 +203,23 @@ TEST(ObjectTest, native_object_equality) {
   EXPECT_NE(o2, a3);
   EXPECT_NE(a3, o2);
   EXPECT_NE(o2, raw_a3);
-  EXPECT_EQ(raw_a3, w::native_object(a3));
-  EXPECT_EQ(w::native_object(a3), raw_a3);
+  EXPECT_EQ(raw_a3, object{a3});
+  EXPECT_EQ(object{a3}, raw_a3);
 
   EXPECT_EQ(o1, o1);
   EXPECT_EQ(o2, o2);
 
-  EXPECT_NE(o1, w::make_native_object<native_object>());
-  EXPECT_NE(w::make_native_object<native_object>(), o1);
-  EXPECT_NE(o1, native_object::ptr(nullptr));
-  EXPECT_NE(native_object::ptr(nullptr), o1);
+  EXPECT_NE(o1, map::ptr());
+  EXPECT_NE(map::ptr(), o1);
+  EXPECT_NE(o2, array::ptr());
+  EXPECT_NE(array::ptr(), o2);
 }
 
 TEST(ObjectTest, copy) {
-  native_object::ptr ptr = std::make_shared<native_object>();
-
   object o1 = w::array(
       {w::i64(1),
        w::array({w::string("foo"), w::f64(4.)}),
-       w::map({{"bar", w::null}, {"baz", w::native_object(ptr)}})});
+       w::map({{"bar", w::null}, {"baz", w::string("xyz")}})});
   object o2 = o1;
 
   EXPECT_EQ(
@@ -257,7 +227,7 @@ TEST(ObjectTest, copy) {
       w::array(
           {w::i64(1),
            w::array({w::string("foo"), w::f64(4.)}),
-           w::map({{"bar", w::null}, {"baz", w::native_object(ptr)}})}));
+           w::map({{"bar", w::null}, {"baz", w::string("xyz")}})}));
   EXPECT_EQ(o1, o2);
 
   o1 = "foo";
@@ -271,16 +241,14 @@ TEST(ObjectTest, copy) {
       w::array(
           {w::i64(1),
            w::array({w::string("foo"), w::f64(4.)}),
-           w::map({{"bar", w::null}, {"baz", w::native_object(ptr)}})}));
+           w::map({{"bar", w::null}, {"baz", w::string("xyz")}})}));
 }
 
 TEST(ObjectTest, move) {
-  native_object::ptr ptr = std::make_shared<native_object>();
-
   object o1 = w::array(
       {w::i64(1),
        w::array({w::string("foo")}),
-       w::map({{"bar", w::boolean(true)}, {"baz", w::native_object(ptr)}})});
+       w::map({{"bar", w::boolean(true)}, {"baz", w::string("xyz")}})});
   object o2 = std::move(o1);
 
   EXPECT_EQ(
@@ -288,8 +256,7 @@ TEST(ObjectTest, move) {
       w::array(
           {w::i64(1),
            w::array({w::string("foo")}),
-           w::map(
-               {{"bar", w::boolean(true)}, {"baz", w::native_object(ptr)}})}));
+           w::map({{"bar", w::boolean(true)}, {"baz", w::string("xyz")}})}));
   // @lint-ignore CLANGTIDY bugprone-use-after-move
   EXPECT_EQ(o1, null());
 
@@ -301,23 +268,19 @@ TEST(ObjectTest, move) {
       w::array(
           {w::i64(1),
            w::array({w::string("foo")}),
-           w::map(
-               {{"bar", w::boolean(true)}, {"baz", w::native_object(ptr)}})}));
+           w::map({{"bar", w::boolean(true)}, {"baz", w::string("xyz")}})}));
   // @lint-ignore CLANGTIDY bugprone-use-after-move
   EXPECT_EQ(o2, null());
 }
 
 TEST(ObjectTest, swap) {
-  native_object::ptr ptr1 = std::make_shared<native_object>();
-  native_object::ptr ptr2 = std::make_shared<native_object>();
-
   object o1 = w::array(
       {w::i64(1),
        w::array({w::string("foo")}),
-       w::map({{"bar", w::boolean(true)}, {"baz", w::native_object(ptr1)}})});
+       w::map({{"bar", w::boolean(true)}, {"baz", w::string("xyz")}})});
   object o2 = w::array(
       {w::array({w::boolean(true), w::string("foo"), w::f64(4.)}),
-       w::map({{"bar", w::string("xyz")}, {"baz", w::native_object(ptr1)}})});
+       w::map({{"bar", w::string("xyz")}, {"baz", w::string("xyz")}})});
   EXPECT_NE(o1, o2);
 
   o1.swap(o2);
@@ -325,15 +288,13 @@ TEST(ObjectTest, swap) {
       o1,
       w::array(
           {w::array({w::boolean(true), w::string("foo"), w::f64(4.)}),
-           w::map(
-               {{"bar", w::string("xyz")}, {"baz", w::native_object(ptr1)}})}));
+           w::map({{"bar", w::string("xyz")}, {"baz", w::string("xyz")}})}));
   EXPECT_EQ(
       o2,
       w::array(
           {w::i64(1),
            w::array({w::string("foo")}),
-           w::map(
-               {{"bar", w::boolean(true)}, {"baz", w::native_object(ptr1)}})}));
+           w::map({{"bar", w::boolean(true)}, {"baz", w::string("xyz")}})}));
 }
 
 TEST(ObjectTest, assign_copy_alternatives) {
@@ -366,37 +327,31 @@ TEST(ObjectTest, assign_copy_alternatives) {
     EXPECT_EQ(null(), o);
   }
   {
-    array a = {w::i64(1), w::string("2"), w::i64(3)};
+    array::ptr a = array::of({w::i64(1), w::string("2"), w::i64(3)});
     o = a;
     EXPECT_EQ(w::array({w::i64(1), w::string("2"), w::i64(3)}), o);
     EXPECT_EQ(a, w::array({w::i64(1), w::string("2"), w::i64(3)}));
   }
   {
-    map m = {{"foo", w::i64(3)}, {"bar", w::string("baz")}};
+    map::ptr m = map::of({{"foo", w::i64(3)}, {"bar", w::string("baz")}});
     o = m;
     EXPECT_EQ((w::map({{"foo", w::i64(3)}, {"bar", w::string("baz")}})), o);
     EXPECT_EQ(m, (w::map({{"foo", w::i64(3)}, {"bar", w::string("baz")}})));
-  }
-  {
-    native_object::ptr ptr = std::make_shared<native_object>();
-    o = ptr;
-    EXPECT_EQ(ptr, o);
-    EXPECT_NE(ptr, nullptr);
   }
 }
 
 TEST(ObjectTest, native_handle_equality) {
   {
-    native_handle handle1{manage_owned<int>(42)};
-    native_handle handle2{manage_owned<int>(42)};
+    native_handle handle1{manage_owned<int>(42), nullptr /* prototype */};
+    native_handle handle2{manage_owned<int>(42), nullptr /* prototype */};
     // Points to different objects, even though they have the same value.
     EXPECT_NE(handle1, handle2);
   }
 
   {
     auto integer = manage_owned<int>(42);
-    native_handle handle1{integer};
-    native_handle handle2{integer};
+    native_handle handle1{integer, nullptr /* prototype */};
+    native_handle handle2{integer, nullptr /* prototype */};
     EXPECT_EQ(handle1, handle2);
 
     // The underlying object is the same, even though the handles are of
@@ -407,52 +362,77 @@ TEST(ObjectTest, native_handle_equality) {
   }
 }
 
+// External linkage to avoid noise in demangled type name.
+struct ObjectTestSomeNativeType {};
+
 TEST(ObjectTest, to_string) {
+  const auto constant = [](auto x) {
+    return dsl::make_function([x](auto&&) { return x; });
+  };
+  ObjectTestSomeNativeType cpp_object;
+
+  class custom_array final : public array {
+   public:
+    std::size_t size() const final { return 0; }
+    [[noreturn]] object at(std::size_t) const final {
+      throw std::runtime_error("Should never be called");
+    }
+  };
+
+  class custom_map final : public map {
+   public:
+    std::optional<object> lookup_property(std::string_view) const final {
+      return std::nullopt;
+    }
+    std::optional<std::set<std::string>> keys() const final {
+      return std::set<std::string>{};
+    }
+  };
+
   object o = w::map({
       {"foo", w::i64(1)},
       {"baz",
        w::array(
            {w::string("foo"),
             w::boolean(true),
-            w::make_native_object<native_object>()})},
+            w::make_array<custom_array>(),
+            w::make_map<custom_map>()})},
       {"abc", w::null},
       {"fun",
        w::array(
            {w::f64(2.f),
             w::array({w::string("foo")}),
             w::map({{"bar", w::i64(1)}, {"baz", w::array({w::null})}})})},
+      {"native",
+       w::native_handle(
+           manage_as_static(cpp_object),
+           prototype<>::from(
+               {{"foo", constant(w::string("bar"))}},
+               prototype<>::from({{"abc", constant(w::string("xyz"))}})))},
   });
 
   constexpr std::string_view full_output =
-      "map (size=4)\n"
-      "`-'abc'\n"
-      "  |-null\n"
-      "`-'baz'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-'foo'\n"
-      "  | `-[1]\n"
-      "  |   |-true\n"
-      "  | `-[2]\n"
-      "  |   |-<native_object>\n"
-      "`-'foo'\n"
-      "  |-i64(1)\n"
-      "`-'fun'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-f64(2)\n"
-      "  | `-[1]\n"
-      "  |   |-array (size=1)\n"
-      "  |   | `-[0]\n"
-      "  |   |   |-'foo'\n"
-      "  | `-[2]\n"
-      "  |   |-map (size=2)\n"
-      "  |   | `-'bar'\n"
-      "  |   |   |-i64(1)\n"
-      "  |   | `-'baz'\n"
-      "  |   |   |-array (size=1)\n"
-      "  |   |   | `-[0]\n"
-      "  |   |   |   |-null\n";
+      "map (size=5)\n"
+      "├─ 'abc' → null\n"
+      "├─ 'baz' → array (size=4)\n"
+      "│  ├─ [0] 'foo'\n"
+      "│  ├─ [1] true\n"
+      "│  ├─ [2] array [custom] (size=0)\n"
+      "│  ╰─ [3] map [custom] (size=0)\n"
+      "├─ 'foo' → i64(1)\n"
+      "├─ 'fun' → array (size=3)\n"
+      "│  ├─ [0] f64(2)\n"
+      "│  ├─ [1] array (size=1)\n"
+      "│  │  ╰─ [0] 'foo'\n"
+      "│  ╰─ [2] map (size=2)\n"
+      "│     ├─ 'bar' → i64(1)\n"
+      "│     ╰─ 'baz' → array (size=1)\n"
+      "│        ╰─ [0] null\n"
+      "╰─ 'native' → <native_handle type='whisker::ObjectTestSomeNativeType'>\n"
+      "   ╰─ <prototype (size=1)>\n"
+      "      ├─ 'foo'\n"
+      "      ╰─ <prototype (size=1)>\n"
+      "         ╰─ 'abc'\n";
 
   EXPECT_EQ(to_string(o), full_output);
 
@@ -465,100 +445,76 @@ TEST(ObjectTest, to_string) {
 
   EXPECT_EQ(
       to_string(o, with_depth(1)),
-      "map (size=4)\n"
-      "`-'abc'\n"
-      "  |-null\n"
-      "`-'baz'\n"
-      "  |-...\n"
-      "`-'foo'\n"
-      "  |-i64(1)\n"
-      "`-'fun'\n"
-      "  |-...\n");
+      "map (size=5)\n"
+      "├─ 'abc' → null\n"
+      "├─ 'baz' → ...\n"
+      "├─ 'foo' → i64(1)\n"
+      "├─ 'fun' → ...\n"
+      "╰─ 'native' → ...\n");
 
   EXPECT_EQ(
       to_string(o, with_depth(2)),
-      "map (size=4)\n"
-      "`-'abc'\n"
-      "  |-null\n"
-      "`-'baz'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-'foo'\n"
-      "  | `-[1]\n"
-      "  |   |-true\n"
-      "  | `-[2]\n"
-      "  |   |-...\n"
-      "`-'foo'\n"
-      "  |-i64(1)\n"
-      "`-'fun'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-f64(2)\n"
-      "  | `-[1]\n"
-      "  |   |-...\n"
-      "  | `-[2]\n"
-      "  |   |-...\n");
+      "map (size=5)\n"
+      "├─ 'abc' → null\n"
+      "├─ 'baz' → array (size=4)\n"
+      "│  ├─ [0] 'foo'\n"
+      "│  ├─ [1] true\n"
+      "│  ├─ [2] ...\n"
+      "│  ╰─ [3] ...\n"
+      "├─ 'foo' → i64(1)\n"
+      "├─ 'fun' → array (size=3)\n"
+      "│  ├─ [0] f64(2)\n"
+      "│  ├─ [1] ...\n"
+      "│  ╰─ [2] ...\n"
+      "╰─ 'native' → <native_handle type='whisker::ObjectTestSomeNativeType'>\n"
+      "   ╰─ ...\n");
 
   EXPECT_EQ(
       to_string(o, with_depth(3)),
-      "map (size=4)\n"
-      "`-'abc'\n"
-      "  |-null\n"
-      "`-'baz'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-'foo'\n"
-      "  | `-[1]\n"
-      "  |   |-true\n"
-      "  | `-[2]\n"
-      "  |   |-<native_object>\n"
-      "`-'foo'\n"
-      "  |-i64(1)\n"
-      "`-'fun'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-f64(2)\n"
-      "  | `-[1]\n"
-      "  |   |-array (size=1)\n"
-      "  |   | `-[0]\n"
-      "  |   |   |-'foo'\n"
-      "  | `-[2]\n"
-      "  |   |-map (size=2)\n"
-      "  |   | `-'bar'\n"
-      "  |   |   |-i64(1)\n"
-      "  |   | `-'baz'\n"
-      "  |   |   |-...\n");
+      "map (size=5)\n"
+      "├─ 'abc' → null\n"
+      "├─ 'baz' → array (size=4)\n"
+      "│  ├─ [0] 'foo'\n"
+      "│  ├─ [1] true\n"
+      "│  ├─ [2] array [custom] (size=0)\n"
+      "│  ╰─ [3] map [custom] (size=0)\n"
+      "├─ 'foo' → i64(1)\n"
+      "├─ 'fun' → array (size=3)\n"
+      "│  ├─ [0] f64(2)\n"
+      "│  ├─ [1] array (size=1)\n"
+      "│  │  ╰─ [0] 'foo'\n"
+      "│  ╰─ [2] map (size=2)\n"
+      "│     ├─ 'bar' → i64(1)\n"
+      "│     ╰─ 'baz' → ...\n"
+      "╰─ 'native' → <native_handle type='whisker::ObjectTestSomeNativeType'>\n"
+      "   ╰─ <prototype (size=1)>\n"
+      "      ├─ 'foo'\n"
+      "      ╰─ ...\n");
 
   EXPECT_EQ(
-      to_string(w::proxy(manage_as_static(o)), with_depth(3)),
-      "map (size=4)\n"
-      "`-'abc'\n"
-      "  |-null\n"
-      "`-'baz'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-'foo'\n"
-      "  | `-[1]\n"
-      "  |   |-true\n"
-      "  | `-[2]\n"
-      "  |   |-<native_object>\n"
-      "`-'foo'\n"
-      "  |-i64(1)\n"
-      "`-'fun'\n"
-      "  |-array (size=3)\n"
-      "  | `-[0]\n"
-      "  |   |-f64(2)\n"
-      "  | `-[1]\n"
-      "  |   |-array (size=1)\n"
-      "  |   | `-[0]\n"
-      "  |   |   |-'foo'\n"
-      "  | `-[2]\n"
-      "  |   |-map (size=2)\n"
-      "  |   | `-'bar'\n"
-      "  |   |   |-i64(1)\n"
-      "  |   | `-'baz'\n"
-      "  |   |   |-...\n");
-  EXPECT_EQ(w::proxy(manage_as_static(o)), o);
+      // Proxied objects should be printed the same as the underlying object.
+      to_string(object(manage_as_static(o)), with_depth(3)),
+      "map (size=5)\n"
+      "├─ 'abc' → null\n"
+      "├─ 'baz' → array (size=4)\n"
+      "│  ├─ [0] 'foo'\n"
+      "│  ├─ [1] true\n"
+      "│  ├─ [2] array [custom] (size=0)\n"
+      "│  ╰─ [3] map [custom] (size=0)\n"
+      "├─ 'foo' → i64(1)\n"
+      "├─ 'fun' → array (size=3)\n"
+      "│  ├─ [0] f64(2)\n"
+      "│  ├─ [1] array (size=1)\n"
+      "│  │  ╰─ [0] 'foo'\n"
+      "│  ╰─ [2] map (size=2)\n"
+      "│     ├─ 'bar' → i64(1)\n"
+      "│     ╰─ 'baz' → ...\n"
+      "╰─ 'native' → <native_handle type='whisker::ObjectTestSomeNativeType'>\n"
+      "   ╰─ <prototype (size=1)>\n"
+      "      ├─ 'foo'\n"
+      "      ╰─ ...\n");
+  // Proxied objects should compare equal to the underlying object.
+  EXPECT_EQ(object(manage_as_static(o)), o);
 
   EXPECT_EQ(to_string(o, with_depth(4)), full_output);
   EXPECT_EQ(to_string(o, with_depth(5)), full_output);

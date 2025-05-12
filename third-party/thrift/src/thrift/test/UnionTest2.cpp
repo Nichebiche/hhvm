@@ -19,7 +19,7 @@
 #include <thrift/test/gen-cpp2/UnionTest2_types.h>
 #include <thrift/test/gen-cpp2/UnionTest3_types.h>
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 using namespace thrift::test::debug::cpp2;
 using namespace apache::thrift;
@@ -93,6 +93,30 @@ TEST_F(UnionTestFixture, ChangeType) {
   u.set_i32_field(100);
   EXPECT_EQ(TestUnion::Type::i32_field, u.getType());
   EXPECT_EQ(100, u.get_i32_field());
+
+  CHECK_EQ(TestUnion::Type::i32_field, u.getType());
+  EXPECT_DEATH(
+      CHECK_EQ(TestUnion::Type::other_i32_field, u.getType()),
+      "other_i32_field vs. i32_field");
+  if (folly::kIsDebug) {
+    EXPECT_DEATH(
+        DCHECK_EQ(TestUnion::Type::other_i32_field, u.getType()),
+        "other_i32_field vs. i32_field");
+  } else {
+    DCHECK_EQ(TestUnion::Type::other_i32_field, u.getType());
+  }
+
+  CHECK_NE(TestUnion::Type::other_i32_field, u.getType());
+  EXPECT_DEATH(
+      CHECK_NE(TestUnion::Type::i32_field, u.getType()),
+      "i32_field vs. i32_field");
+  if (folly::kIsDebug) {
+    EXPECT_DEATH(
+        DCHECK_NE(TestUnion::Type::i32_field, u.getType()),
+        "i32_field vs. i32_field");
+  } else {
+    DCHECK_NE(TestUnion::Type::i32_field, u.getType());
+  }
 
   u.set_other_i32_field(200);
   EXPECT_EQ(TestUnion::Type::other_i32_field, u.getType());

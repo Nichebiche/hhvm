@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <thrift/compiler/ast/t_field.h>
 #include <thrift/compiler/ast/t_structured.h>
@@ -64,7 +64,7 @@ TEST(TypedefTest, bad_true_type) {
 
 TEST(TypedefTest, inherited_annotations) {
   t_program program("test", "test");
-  t_scope scope;
+  t_global_scope scope;
   t_typedef t1(&program, &t_primitive_type::t_i32(), "t1", &scope);
   t_typedef t2(&program, &t1, "t2", &scope);
   t_typedef t3(&program, &t2, "t3", &scope);
@@ -72,72 +72,87 @@ TEST(TypedefTest, inherited_annotations) {
   const t_type* p2(&t2);
   const t_type* p3(&t3);
 
-  EXPECT_EQ(p1->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(p2->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(p3->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo2"}), "");
+  EXPECT_EQ(p1->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(p2->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(p3->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p1, {"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p2, {"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p3, {"foo1", "foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo1"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo1"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo1"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo2"}), "");
 
-  t2.set_annotation("foo2", "a");
-  EXPECT_EQ(p1->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(p2->get_annotation({"foo1", "foo2"}), "a");
-  EXPECT_EQ(p3->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1", "foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1", "foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo2"}), "a");
+  t2.set_unstructured_annotation("foo2", "a");
+  EXPECT_EQ(p1->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(p2->get_unstructured_annotation({"foo1", "foo2"}), "a");
+  EXPECT_EQ(p3->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p1, {"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p2, {"foo1", "foo2"}), "a");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p3, {"foo1", "foo2"}), "a");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo1"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo1"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo1"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo2"}), "a");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo2"}), "a");
 
-  t1.set_annotation("foo1", "b");
-  EXPECT_EQ(p1->get_annotation({"foo1", "foo2"}), "b");
-  EXPECT_EQ(p2->get_annotation({"foo1", "foo2"}), "a");
-  EXPECT_EQ(p3->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1", "foo2"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1", "foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1", "foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo2"}), "a");
+  t1.set_unstructured_annotation("foo1", "b");
+  EXPECT_EQ(p1->get_unstructured_annotation({"foo1", "foo2"}), "b");
+  EXPECT_EQ(p2->get_unstructured_annotation({"foo1", "foo2"}), "a");
+  EXPECT_EQ(p3->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p1, {"foo1", "foo2"}), "b");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p2, {"foo1", "foo2"}), "a");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p3, {"foo1", "foo2"}), "a");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo1"}), "b");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo1"}), "b");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo1"}), "b");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo2"}), "a");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo2"}), "a");
 
-  t2.set_annotation("foo1", "c");
-  EXPECT_EQ(p1->get_annotation({"foo1", "foo2"}), "b");
-  EXPECT_EQ(p2->get_annotation({"foo1", "foo2"}), "c");
-  EXPECT_EQ(p3->get_annotation({"foo1", "foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1", "foo2"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1", "foo2"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1", "foo2"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo2"}), "a");
+  t2.set_unstructured_annotation("foo1", "c");
+  EXPECT_EQ(p1->get_unstructured_annotation({"foo1", "foo2"}), "b");
+  EXPECT_EQ(p2->get_unstructured_annotation({"foo1", "foo2"}), "c");
+  EXPECT_EQ(p3->get_unstructured_annotation({"foo1", "foo2"}), "");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p1, {"foo1", "foo2"}), "b");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p2, {"foo1", "foo2"}), "c");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p3, {"foo1", "foo2"}), "c");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo1"}), "b");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo1"}), "c");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo1"}), "c");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo2"}), "a");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo2"}), "a");
 
-  t3.set_annotation("foo2", "d");
-  EXPECT_EQ(p1->get_annotation({"foo1", "foo2"}), "b");
-  EXPECT_EQ(p2->get_annotation({"foo1", "foo2"}), "c");
-  EXPECT_EQ(p3->get_annotation({"foo1", "foo2"}), "d");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1", "foo2"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1", "foo2"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1", "foo2"}), "d");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo1"}), "b");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo1"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo1"}), "c");
-  EXPECT_EQ(t_typedef::get_first_annotation(p1, {"foo2"}), "");
-  EXPECT_EQ(t_typedef::get_first_annotation(p2, {"foo2"}), "a");
-  EXPECT_EQ(t_typedef::get_first_annotation(p3, {"foo2"}), "d");
+  t3.set_unstructured_annotation("foo2", "d");
+  EXPECT_EQ(p1->get_unstructured_annotation({"foo1", "foo2"}), "b");
+  EXPECT_EQ(p2->get_unstructured_annotation({"foo1", "foo2"}), "c");
+  EXPECT_EQ(p3->get_unstructured_annotation({"foo1", "foo2"}), "d");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p1, {"foo1", "foo2"}), "b");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p2, {"foo1", "foo2"}), "c");
+  EXPECT_EQ(
+      t_typedef::get_first_unstructured_annotation(p3, {"foo1", "foo2"}), "d");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo1"}), "b");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo1"}), "c");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo1"}), "c");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p1, {"foo2"}), "");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p2, {"foo2"}), "a");
+  EXPECT_EQ(t_typedef::get_first_unstructured_annotation(p3, {"foo2"}), "d");
 }

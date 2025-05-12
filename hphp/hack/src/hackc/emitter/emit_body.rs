@@ -9,8 +9,8 @@ use ast_scope::ScopeItem;
 use bitflags::bitflags;
 use emit_pos::emit_pos;
 use emit_statement::emit_final_stmts;
-use env::emitter::Emitter;
 use env::Env;
+use env::emitter::Emitter;
 use error::Error;
 use error::Result;
 use ffi::Maybe::*;
@@ -34,8 +34,8 @@ use hhbc::TypedValue;
 use hhbc::UpperBound;
 use hhbc_string_utils as string_utils;
 use indexmap::IndexSet;
-use instruction_sequence::instr;
 use instruction_sequence::InstrSeq;
+use instruction_sequence::instr;
 use oxidized::aast;
 use oxidized::aast_defs::DocComment;
 use oxidized::ast;
@@ -155,12 +155,15 @@ pub fn emit_body<'b, 'd>(
     } else {
         None
     };
+    let is_asio_low_pri = hhbc::has_asio_low_pri(&attributes);
+
     let instrs = make_body_instrs(
         emitter,
         &mut env,
         &params,
         &tparams,
         body,
+        is_asio_low_pri,
         is_generator,
         deprecation_info,
         args.pos,
@@ -196,6 +199,7 @@ fn make_body_instrs<'a, 'd>(
     params: &[(Param, Option<(Label, ast::Expr)>)],
     tparams: &[ast::Tparam],
     body: &[ast::Stmt],
+    is_asio_low_pri: bool,
     is_generator: bool,
     deprecation_info: Option<&[TypedValue]>,
     pos: &Pos,
@@ -216,6 +220,7 @@ fn make_body_instrs<'a, 'd>(
         env,
         params,
         tparams,
+        is_asio_low_pri,
         is_generator,
         deprecation_info,
         pos,
@@ -237,12 +242,21 @@ fn make_header_content<'a, 'd>(
     env: &mut Env<'a>,
     params: &[(Param, Option<(Label, ast::Expr)>)],
     tparams: &[ast::Tparam],
+    is_asio_low_pri: bool,
     is_generator: bool,
     deprecation_info: Option<&[TypedValue]>,
     pos: &Pos,
     ast_params: &[ast::FunParam],
     flags: Flags,
 ) -> Result<InstrSeq> {
+    assert!(
+        !(is_generator && is_asio_low_pri),
+        "generator cannot be low pri"
+    );
+    assert!(
+        !is_asio_low_pri || flags.contains(Flags::ASYNC),
+        "only async functions can be marked low pri"
+    );
     let method_prolog = if flags.contains(Flags::NATIVE) {
         instr::empty()
     } else {
@@ -251,6 +265,12 @@ fn make_header_content<'a, 'd>(
 
     let deprecation_warning =
         emit_deprecation_info(&env.scope, deprecation_info, emitter.systemlib())?;
+
+    let asio_info = if is_asio_low_pri {
+        InstrSeq::gather(vec![instr::await_low_pri(), instr::pop_c()])
+    } else {
+        instr::empty()
+    };
 
     let generator_info = if is_generator {
         InstrSeq::gather(vec![instr::create_cont(), instr::pop_c()])
@@ -261,6 +281,7 @@ fn make_header_content<'a, 'd>(
     Ok(InstrSeq::gather(vec![
         method_prolog,
         deprecation_warning,
+        asio_info,
         generator_info,
     ]))
 }

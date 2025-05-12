@@ -20,7 +20,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -89,6 +88,7 @@
 #include <thrift/lib/cpp2/server/ThreadManagerLoggingWrapper.h>
 #include <thrift/lib/cpp2/server/ThriftServerConfig.h>
 #include <thrift/lib/cpp2/server/TransportRoutingHandler.h>
+#include <thrift/lib/cpp2/server/metrics/InterceptorMetricCallback.h>
 #include <thrift/lib/cpp2/server/metrics/StreamMetricCallback.h>
 #include <thrift/lib/cpp2/transport/rocket/Types.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/parser/AllocatingParserStrategy.h>
@@ -109,6 +109,8 @@ THRIFT_FLAG_DECLARE_bool(dump_snapshot_on_long_shutdown);
 THRIFT_FLAG_DECLARE_bool(server_check_unimplemented_extra_interfaces);
 THRIFT_FLAG_DECLARE_bool(enable_io_queue_lag_detection);
 THRIFT_FLAG_DECLARE_bool(enforce_queue_concurrency_resource_pools);
+THRIFT_FLAG_DECLARE_bool(
+    init_decorated_processor_factory_only_resource_pools_checks);
 
 namespace wangle {
 class ConnectionManager;
@@ -137,8 +139,8 @@ enum class EffectiveTicketSeedStrategy {
   FILE
 };
 
-typedef wangle::Pipeline<folly::IOBufQueue&, std::unique_ptr<folly::IOBuf>>
-    Pipeline;
+using Pipeline =
+    wangle::Pipeline<folly::IOBufQueue&, std::unique_ptr<folly::IOBuf>>;
 
 class ThriftTlsConfig : public wangle::CustomConfig {
  public:
@@ -199,16 +201,14 @@ class ThriftServerStopController final {
 using IsOverloadedFunc = folly::Function<bool(
     const transport::THeader::StringToStringMap&, const std::string&) const>;
 
-typedef std::function<void(
+using getHandlerFunc = std::function<void(
     folly::EventBase*,
     wangle::ConnectionManager*,
     std::shared_ptr<folly::AsyncTransport>,
-    std::unique_ptr<folly::IOBuf>)>
-    getHandlerFunc;
+    std::unique_ptr<folly::IOBuf>)>;
 
-typedef std::function<void(
-    const apache::thrift::transport::THeader*, const folly::SocketAddress*)>
-    GetHeaderHandlerFunc;
+using GetHeaderHandlerFunc = std::function<void(
+    const apache::thrift::transport::THeader*, const folly::SocketAddress*)>;
 
 template <typename T>
 class ThriftServerAsyncProcessorFactory : public AsyncProcessorFactory {
@@ -310,6 +310,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     bool resourcePoolEnablementLocked{false};
     bool resourcePoolRuntimeRequested{false};
     bool resourcePoolRuntimeDisabled{false};
+    std::string resourcePoolRuntimeDisabledReason{};
     bool resourcePoolEnabled{false};
 
     bool resourcePoolEnabledGflag{false};
@@ -318,6 +319,12 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     bool checkComplete{false};
     bool isProcessorFactoryThriftGenerated{false};
 
+    bool moduleListFinalized{false};
+
+    bool setupThreadManagerCalledByUser{false};
+    bool runtimeResourcePoolsChecksCalledByUser{false};
+
+    std::vector<std::pair<std::string, std::string>> toStringPairs() const;
     std::string explain() const;
   };
 
@@ -545,6 +552,11 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
    * checks.
    */
   bool runtimeResourcePoolsChecks();
+
+ private:
+  bool runtimeResourcePoolsChecksImpl();
+
+ public:
   /**
    * Ensure that this Thrift Server has ResourcePools set up. If there is
    * already a non-empty ResourcePoolSet, nothing will be done. Otherwise, the
@@ -577,7 +589,8 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
 
   // Used to disable resource pool at run time. This
   // should only be used by thrift team.
-  void runtimeDisableResourcePoolsDeprecated() {
+  void runtimeDisableResourcePoolsDeprecated(
+      const std::string& reason = "Unknown") {
     if (runtimeServerActions_.resourcePoolRuntimeDisabled) {
       return;
     }
@@ -588,6 +601,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
       return;
     }
     runtimeServerActions_.resourcePoolRuntimeDisabled = true;
+    runtimeServerActions_.resourcePoolRuntimeDisabledReason = reason;
   }
 
   bool runtimeDisableResourcePoolsSet() {
@@ -665,7 +679,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
           threadManager) {
     setThreadManagerInternal(threadManager);
     if (!THRIFT_FLAG(allow_set_thread_manager_resource_pools)) {
-      runtimeDisableResourcePoolsDeprecated();
+      runtimeDisableResourcePoolsDeprecated("setThreadManager");
     }
     runtimeServerActions_.userSuppliedThreadManager = true;
   }
@@ -682,7 +696,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
       std::shared_ptr<apache::thrift::concurrency::ThreadManager>
           threadManager) {
     setThreadManagerInternal(threadManager);
-    runtimeDisableResourcePoolsDeprecated();
+    runtimeDisableResourcePoolsDeprecated("setThreadManager_deprecated");
     runtimeServerActions_.userSuppliedThreadManager = true;
   }
 
@@ -701,7 +715,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
       setThreadManagerInternal(
           std::make_shared<concurrency::ThreadManagerExecutorAdapter>(
               folly::getKeepAliveToken(executor), std::move(opts)));
-      runtimeDisableResourcePoolsDeprecated();
+      runtimeDisableResourcePoolsDeprecated("setThreadManagerFromExecutor");
       runtimeServerActions_.userSuppliedThreadManager = true;
     }
   }
@@ -902,6 +916,11 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
 
   void disableInfoLogging() { infoLoggingEnabled_ = false; }
 
+  void setCPUConcurrencyController(
+      std::shared_ptr<CPUConcurrencyController> controller) {
+    cpuConcurrencyController_ = std::move(controller);
+  }
+
  private:
   friend ThriftServerConfig& detail::getThriftServerConfig(ThriftServer&);
 
@@ -963,6 +982,10 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
   std::shared_ptr<StreamMetricCallback> streamMetricCallback_{
       std::make_shared<NoopStreamMetricCallback>()};
 
+  // Interface for instrumenting interceptors
+  std::shared_ptr<InterceptorMetricCallback> interceptorMetricCallback_{
+      std::make_shared<NoopInterceptorMetricCallback>()};
+
   //! The type of thread manager to create.
   ThreadManagerType threadManagerType_{ThreadManagerType::PRIORITY};
 
@@ -1015,7 +1038,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
       mockCPUConcurrencyControllerConfig_{std::nullopt};
   folly::observer::Observer<CPUConcurrencyController::Config>
   makeCPUConcurrencyControllerConfigInternal();
-  CPUConcurrencyController cpuConcurrencyController_;
+  std::shared_ptr<CPUConcurrencyController> cpuConcurrencyController_;
 
   //! The server's listening addresses
   std::vector<folly::SocketAddress> addresses_;
@@ -1077,13 +1100,16 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     return adaptiveConcurrencyController_;
   }
 
-  CPUConcurrencyController& getCPUConcurrencyController() final {
-    return cpuConcurrencyController_;
+  CPUConcurrencyController* getCPUConcurrencyController() final {
+    return cpuConcurrencyController_.get();
   }
 
-  const CPUConcurrencyController& getCPUConcurrencyController() const final {
-    return cpuConcurrencyController_;
+  const CPUConcurrencyController* getCPUConcurrencyController() const final {
+    return cpuConcurrencyController_.get();
   }
+
+  bool notifyCPUConcurrencyControllerOnRequestLoadShed(
+      std::optional<CPUConcurrencyController::Method> method);
 
   void setMockCPUConcurrencyControllerConfig(
       CPUConcurrencyController::Config config) {
@@ -1109,6 +1135,32 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
   void setMaxRequests(uint32_t maxRequests) override {
     thriftConfig_.setMaxRequests(
         folly::observer::makeStaticObserver(std::optional{maxRequests}),
+        AttributeSource::OVERRIDE);
+  }
+
+  /**
+   * Get the maximum number of requests that this server's resource pool may
+   * execute concurrently. When the maximum is reached, resource pools will
+   * queue requests until they can be processed without exceeding the maximum.
+   *
+   * @return current setting
+   */
+  uint32_t getConcurrencyLimit() const override {
+    return thriftConfig_.getConcurrencyLimit().get();
+  }
+
+  /**
+   * Set the maximum number of requests that this server's resource pool may
+   * execute concurrently.
+   *
+   * @param concurrencyLimit new setting for concurrency limit.
+   */
+  void setConcurrencyLimit(uint32_t concurrencyLimit) override {
+    folly::call_once(cancelSetMaxRequestsCallbackHandleFlag_, [this]() {
+      setMaxRequestsCallbackHandle.cancel();
+    });
+    thriftConfig_.setConcurrencyLimit(
+        folly::observer::makeStaticObserver(std::optional{concurrencyLimit}),
         AttributeSource::OVERRIDE);
   }
 
@@ -1232,6 +1284,33 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
   void setMaxQps(uint32_t maxQps) override {
     thriftConfig_.setMaxQps(
         folly::observer::makeStaticObserver(std::optional{maxQps}),
+        AttributeSource::OVERRIDE);
+  }
+
+  /**
+   * Get the maximum requests that may begin being processing in a given
+   * one-second window before additional requests are queued. Only applies when
+   * using TokenBucketConcurrencyController.
+   *
+   * @return current setting
+   */
+  uint32_t getExecutionRate() const override {
+    return thriftConfig_.getExecutionRate().get();
+  }
+
+  /**
+   * Set the maximum requests that may begin being processing in a given
+   * one-second window before additional requests are queued. Only applies when
+   * using TokenBucketConcurrencyController.
+   *
+   * @param executionRate new setting for execution rate.
+   */
+  void setExecutionRate(uint32_t executionRate) override {
+    folly::call_once(cancelSetMaxQpsCallbackHandleFlag_, [this]() {
+      setMaxQpsCallbackHandle.cancel();
+    });
+    thriftConfig_.setExecutionRate(
+        folly::observer::makeStaticObserver(std::optional{executionRate}),
         AttributeSource::OVERRIDE);
   }
 
@@ -1819,6 +1898,30 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
   // evb->worker eventbase local
   folly::EventBaseLocal<Cpp2Worker*> evbToWorker_;
 
+  // setMaxRequestsCallbackHandle should be cancelled, unsyncing maxRequests
+  // from resource pools, when setConcurrencyLimit is explicitly called.
+  folly::once_flag cancelSetMaxRequestsCallbackHandleFlag_;
+
+  // If the service might rely on the synced maxRequests, then we need to log.
+  // Logging only needs to happen once.
+  folly::once_flag serviceMightRelyOnSyncedMaxRequestsFlag_;
+
+  // If the service relies on the synced maxRequests, then we need to log.
+  // Logging only needs to happen once.
+  folly::once_flag serviceReliesOnSyncedMaxRequestsFlag_;
+
+  // setMaxQpsCallbackHandle should be cancelled, unsyncing maxQps from resource
+  // pools, when setExecutionRate is explicitly called.
+  folly::once_flag cancelSetMaxQpsCallbackHandleFlag_;
+
+  // If the service might rely on the synced maxQps, then we need to log.
+  // Logging only needs to happen once.
+  folly::once_flag serviceMightRelyOnSyncedMaxQpsFlag_;
+
+  // If the service relies on the synced maxQps, then we need to log. Logging
+  // only needs to happen once.
+  folly::once_flag serviceReliesOnSyncedMaxQpsFlag_;
+
   struct IdleServerAction : public folly::HHWheelTimer::Callback {
     IdleServerAction(
         ThriftServer& server,
@@ -1899,6 +2002,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
   void callOnStartServing();
   void callOnStopRequested();
 
+  void ensureDecoratedProcessorFactoryInitialized();
   void ensureProcessedServiceDescriptionInitialized();
 
   bool serverRanWithDCHECK();
@@ -1929,10 +2033,14 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
 
   bool setupThreadManagerCalled_ = false;
 
+  bool initDecoratedProcessorFactoryOnlyResourcePools_ = false;
+
  protected:
   folly::observer::CallbackHandle getSSLCallbackHandle();
+  folly::observer::CallbackHandle setConcurrencyLimitCallbackHandle{};
   folly::observer::CallbackHandle setMaxRequestsCallbackHandle{};
   folly::observer::CallbackHandle setMaxQpsCallbackHandle{};
+  folly::observer::CallbackHandle setExecutionRateCallbackHandle{};
 
  public:
   /**
@@ -2064,19 +2172,16 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
         coalescedLegacyEventHandlers;
     std::vector<std::shared_ptr<server::TServerEventHandler>>
         coalescedLegacyServerEventHandlers;
-    std::vector<ServiceInterceptorInfo> coalescedServiceInterceptors;
+    std::vector<std::shared_ptr<ServiceInterceptorBase>>
+        coalescedServiceInterceptors;
   };
   static ProcessedModuleSet processModulesSpecification(ModulesSpecification&&);
 
   struct ProcessedServiceDescription {
     ProcessedModuleSet modules;
-    std::unique_ptr<AsyncProcessorFactory> decoratedProcessorFactory;
 
-    ProcessedServiceDescription(
-        ProcessedModuleSet moduleSet,
-        std::unique_ptr<AsyncProcessorFactory> processorFactory)
-        : modules(std::move(moduleSet)),
-          decoratedProcessorFactory(std::move(processorFactory)) {}
+    explicit ProcessedServiceDescription(ProcessedModuleSet moduleSet)
+        : modules(std::move(moduleSet)) {}
 
     ProcessedServiceDescription(ProcessedServiceDescription&& modules) =
         default;
@@ -2123,12 +2228,24 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
       return ptr;
     }
   };
+  std::unique_ptr<AsyncProcessorFactory> decoratedProcessorFactory_;
   ProcessedServiceDescription::UniquePtr processedServiceDescription_{nullptr};
 
  public:
   void addModule(std::unique_ptr<ServerModule> module) {
     CHECK(configMutable());
+
     auto name = module->getName();
+    if (runtimeServerActions_.setupThreadManagerCalledByUser ||
+        runtimeServerActions_.runtimeResourcePoolsChecksCalledByUser) {
+      THRIFT_SERVER_EVENT(addModuleAfterSetup).log(*this, [=]() {
+        return folly::dynamic::object("module_name", name);
+      });
+    }
+
+    THRIFT_SERVER_EVENT(addModule).log(
+        *this, [=]() { return folly::dynamic::object("module_name", name); });
+
     if (unprocessedModulesSpecification_.names.count(name)) {
       throw std::invalid_argument(
           fmt::format("Duplicate module name: {}", name));
@@ -2136,6 +2253,20 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     unprocessedModulesSpecification_.infos.emplace_back(
         ModulesSpecification::Info{std::move(module), std::move(name)});
   }
+
+  bool hasModule(const std::string_view name) const noexcept {
+    CHECK(processedServiceDescription_)
+        << "Server must be set up before calling this method";
+    for (const auto& moduleInfo :
+         processedServiceDescription_->modules.modules) {
+      if (moduleInfo.name == name) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const std::vector<std::string> getInstalledServerModuleNames() const noexcept;
 
  private:
   /**
@@ -2171,6 +2302,8 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
       RoundRobinRequestPile::Options options);
 
   void scheduleInMemoryTicketSeeds();
+
+  folly::SocketOptionMap socketOptions_;
 
  public:
   ~ThriftServer() override;
@@ -2283,6 +2416,15 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     acceptPool_ = pool;
   }
 
+  // Set socket options to be applied to all server sockets
+  void setSocketOptions(const folly::SocketOptionMap& options) {
+    socketOptions_ = options;
+  }
+
+  // Get current socket options
+  const folly::SocketOptionMap& getSocketOptions() const {
+    return socketOptions_;
+  }
   /**
    * Generally the acceptor should not do any work other than
    * accepting connections, so use this with care.
@@ -2464,6 +2606,10 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
         std::make_shared<ThriftTlsConfig>(thriftTlsConfig_);
     config->socketMaxReadsPerEvent = socketMaxReadsPerEvent_;
 
+    // Apply socket options if any are set
+    if (!socketOptions_.empty()) {
+      config->setSocketOptions(socketOptions_);
+    }
     config->useZeroCopy = !!zeroCopyEnableFunc_;
     config->preferIoUring = preferIoUring_;
     return config;
@@ -2641,6 +2787,10 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
    */
   void setup();
 
+ private:
+  void setupThreadManagerImpl();
+
+ public:
   /**
    * Create and start the default thread manager unless it already exists.
    */
@@ -2667,7 +2817,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
         AttributeSource::OVERRIDE);
   }
 
-  [[deprecated("Use addPreprocess instead")]] void setIsOverloaded(
+  [[deprecated("Use addPreprocessFunc instead")]] void setIsOverloaded(
       IsOverloadedFunc isOverloaded) {
     THRIFT_SERVER_EVENT(call.setIsOverloaded).log(*this);
     isOverloaded_ = std::move(isOverloaded);
@@ -2678,7 +2828,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
   // Do not try to access ThreadManager in this function as
   // ThreadManagers are being deprecated from thrift server
   // e.g. don't call getThreadManager() inside this
-  [[deprecated("Use addPreprocess instead")]] void setPreprocess(
+  [[deprecated("Use addPreprocessFunc instead")]] void setPreprocess(
       PreprocessFunc preprocess) {
     THRIFT_SERVER_EVENT(call.setPreprocess).log(*this);
 
@@ -2804,11 +2954,7 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
    *    │ (setControlInterface)  │
    *    └────────────────────────┘
    */
-  AsyncProcessorFactory& getDecoratedProcessorFactory() const {
-    CHECK(processedServiceDescription_)
-        << "Server must be set up before calling this method";
-    return *processedServiceDescription_->decoratedProcessorFactory;
-  }
+  AsyncProcessorFactory& getDecoratedProcessorFactory() const;
 
   /**
    * Returns an AsyncProcessor from getDecoratedProcessorFactory() without any
@@ -2835,14 +2981,24 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
    * Gets all ServiceInterceptors installed on this ThriftServer instance via
    * addModule().
    */
-  const std::vector<ServiceInterceptorInfo>& getServiceInterceptors()
-      const override {
+  const std::vector<std::shared_ptr<ServiceInterceptorBase>>&
+  getServiceInterceptors() const override {
     if (auto* description = processedServiceDescription_.get()) {
       return description->modules.coalescedServiceInterceptors;
     }
-    static const folly::Indestructible<std::vector<ServiceInterceptorInfo>>
+    static const folly::Indestructible<
+        std::vector<std::shared_ptr<ServiceInterceptorBase>>>
         kEmpty;
     return kEmpty;
+  }
+
+  /**
+   * Get the InterceptorMetricCallback instance installed on this ThriftServer
+   * instance
+   */
+  InterceptorMetricCallback& getInterceptorMetricCallback() const override {
+    DCHECK(interceptorMetricCallback_);
+    return *interceptorMetricCallback_;
   }
 
   /**
@@ -2862,6 +3018,26 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     std::shared_ptr<SecurityServerInterface> security;
   };
 
+ private:
+  bool allowDebugInterface_{true};
+  bool allowMonitoringInterface_{true};
+  bool allowProfilingInterface_{true};
+
+  void allowDebugInterface(bool value) { allowDebugInterface_ = value; }
+
+  bool allowDebugInterface() const { return allowDebugInterface_; }
+
+  void allowMonitoringInterface(bool value) {
+    allowMonitoringInterface_ = value;
+  }
+
+  bool allowMonitoringInterface() const { return allowMonitoringInterface_; }
+
+  void allowProfilingInterface(bool value) { allowProfilingInterface_ = value; }
+
+  bool allowProfilingInterface() const { return allowProfilingInterface_; }
+
+ public:
   // ThriftServer by defaults uses a global ShutdownSocketSet, so all socket's
   // FDs are registered there. But in some tests you might want to simulate 2
   // ThriftServer running in different processes, so their ShutdownSocketSet are
@@ -2915,6 +3091,9 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
         headers_ = std::move(*requestPayload->metadata.otherMetadata());
       }
       clientId_ = metadata.clientId().to_optional();
+      tenantId_ = metadata.tenantId().to_optional();
+      rpcPriority_ = metadata.priority().to_optional();
+
       serviceTraceMeta_ = metadata.serviceTraceMeta().to_optional();
       auto req = stub.getRequest();
       DCHECK(
@@ -2959,6 +3138,12 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     const auto& clientId() const { return clientId_; }
     auto& clientId() { return clientId_; }
 
+    const auto& tenantId() const { return tenantId_; }
+    auto& tenantId() { return tenantId_; }
+
+    const auto& rpcPriority() const { return rpcPriority_; }
+    auto& rpcPriority() { return rpcPriority_; }
+
     const auto& serviceTraceMeta() const { return serviceTraceMeta_; }
     auto& serviceTraceMeta() { return serviceTraceMeta_; }
 
@@ -2970,6 +3155,8 @@ class ThriftServer : public apache::thrift::concurrency::Runnable,
     folly::IOBuf payload_;
     transport::THeader::StringToStringMap headers_;
     std::optional<std::string> clientId_;
+    std::optional<std::string> tenantId_;
+    std::optional<RpcPriority> rpcPriority_;
     std::optional<std::string> serviceTraceMeta_;
     folly::SocketAddress peerAddress_;
     folly::SocketAddress localAddress_;

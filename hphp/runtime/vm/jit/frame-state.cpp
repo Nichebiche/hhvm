@@ -18,27 +18,21 @@
 
 #include "hphp/runtime/vm/jit/alias-class.h"
 #include "hphp/runtime/vm/jit/analysis.h"
-#include "hphp/runtime/vm/jit/cfg.h"
 #include "hphp/runtime/vm/jit/ir-instruction.h"
 #include "hphp/runtime/vm/jit/irgen-call.h"
 #include "hphp/runtime/vm/jit/location.h"
 #include "hphp/runtime/vm/jit/memory-effects.h"
-#include "hphp/runtime/vm/jit/simplify.h"
 #include "hphp/runtime/vm/jit/ssa-tmp.h"
 #include "hphp/runtime/vm/jit/stack-offsets.h"
 #include "hphp/runtime/vm/jit/translator.h"
 #include "hphp/runtime/vm/jit/type-array-elem.h"
-#include "hphp/runtime/vm/resumable.h"
 
-#include "hphp/util/dataflow-worklist.h"
 #include "hphp/util/match.h"
 #include "hphp/util/trace.h"
 
 #include <boost/range/adaptor/reversed.hpp>
 
-#include <algorithm>
-
-TRACE_SET_MOD(hhir_fsm);
+TRACE_SET_MOD(hhir_fsm)
 
 namespace HPHP::jit::irgen {
 
@@ -122,7 +116,7 @@ bool merge_memory_stack_into(StackStateMap& dst, const StackStateMap& src) {
   auto changed = false;
   // Throw away any information only known in dst.
   for (auto& [dIdx, dState] : dst) {
-    if (src.count(dIdx) == 0) {
+    if (!src.contains(dIdx)) {
       dState = StackState{};
       changed = true;
     }
@@ -206,7 +200,7 @@ bool merge_into(FrameState& dst, const FrameState& src) {
   for (auto& it : dst.locals) {
     auto const id = it.first;
     auto& dState = it.second;
-    if (src.locals.count(id) == 0) {
+    if (!src.locals.contains(id)) {
       dState = LocalState{};
       changed = true;
     }
@@ -303,12 +297,10 @@ void FrameStateMgr::update(const IRInstruction* inst) {
   }
 
   auto const setFrameCtx = [&] (const SSATmp* fp, SSATmp* ctx) {
-    for (auto& frame : m_stack) {
-      if (frame.fpValue != fp) continue;
-      frame.ctx = ctx;
-      frame.ctxType = ctx->type();
-      frame.origCtxType = ctx->type();
-    }
+    if (cur().fpValue != fp) return;
+    cur().ctx = ctx;
+    cur().ctxType = ctx->type();
+    cur().origCtxType = ctx->type();
   };
 
   switch (inst->op()) {
@@ -437,17 +429,15 @@ void FrameStateMgr::update(const IRInstruction* inst) {
   case AssertType: {
     auto const oldVal = inst->src(0);
     auto const newVal = inst->dst();
-    for (auto& frame : m_stack) {
-      for (auto& it : frame.locals) {
-        refineValue(it.second, oldVal, newVal);
-      }
-      for (auto& it : frame.stack) {
-        refineValue(it.second, oldVal, newVal);
-      }
-      if (frame.ctx && canonical(frame.ctx) == canonical(inst->src(0))) {
-        frame.ctx = inst->dst();
-        frame.ctxType = inst->dst()->type();
-      }
+    for (auto& it : cur().locals) {
+      refineValue(it.second, oldVal, newVal);
+    }
+    for (auto& it : cur().stack) {
+      refineValue(it.second, oldVal, newVal);
+    }
+    if (cur().ctx && canonical(cur().ctx) == canonical(inst->src(0))) {
+      cur().ctx = inst->dst();
+      cur().ctxType = inst->dst()->type();
     }
     // MInstrState can only be live for the current frame.
     refineMBaseValue(oldVal, newVal);
@@ -762,7 +752,7 @@ void FrameStateMgr::handleConservatively(const IRInstruction* inst) {
   ITRACE(4, "FrameStateMgr::handleConservatively: {}\n", jit::show(effects));
   Indent _i;
 
-  match<void>(
+  match(
     effects,
     [&] (const GeneralEffects& x) {
       store(x.stores);
@@ -839,7 +829,7 @@ PostConditions FrameStateMgr::collectPostConds() {
 // Per-block state.
 
 bool FrameStateMgr::hasStateFor(Block* block) const {
-  return m_states.count(block);
+  return m_states.contains(block);
 }
 
 void FrameStateMgr::startBlock(Block* block, bool hasUnprocessedPred) {
@@ -967,6 +957,27 @@ void FrameStateMgr::clearForUnprocessedPred() {
   // Forget any information about stack values in memory.
   for (auto& it : cur().stack) {
     it.second = StackState{};
+  }
+
+  // These values must go toward their conservative state.
+  clearCtx();
+  clearLocals();
+  clearMInstr();
+}
+
+/*
+ * Modify state to conservative values, allowing the current exception handler
+ * block to be shared.
+ */
+void FrameStateMgr::clearForEH() {
+  ITRACE(1, "clearForEH\n");
+
+  // Forget any non-trivial information about stack values in memory.
+  for (auto& it : cur().stack) {
+    auto const value = it.second.value;
+    it.second = StackState{};
+    it.second.value = value;
+    if (it.second.value != nullptr) it.second.type = value->type();
   }
 
   // These values must go toward their conservative state.
@@ -1350,10 +1361,10 @@ LocalState FrameStateMgr::local(uint32_t id) const {
 bool FrameStateMgr::tracked(Location l) const {
   switch (l.tag()) {
     case LTag::Local:
-      return cur().locals.count(l.localId()) > 0;
+      return cur().locals.contains(l.localId());
     case LTag::Stack: {
       auto const sbRel = l.stackIdx();
-      return cur().stack.count(sbRel) > 0;
+      return cur().stack.contains(sbRel);
     }
     case LTag::MBase:
       return true;

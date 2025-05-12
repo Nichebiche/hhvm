@@ -37,12 +37,14 @@ type env = {
   in_try: bool;
   in_lambda: bool;
   in_expr_tree: expr_tree_env option;
+  in_macro_splice: Typing_local_types.t option;
   inside_constructor: bool;
   checked: Tast.check_status;
   tracing_info: Decl_counters.tracing_info option;
   tpenv: Type_parameter_env.t;
   log_levels: int SMap.t;
   inference_env: Typing_inference_env.t;
+  rank: int;
   allow_wildcards: bool;
   big_envs: (Pos.t * env) list ref;
   fun_tast_info: Tast.fun_tast_info option;
@@ -70,6 +72,7 @@ and genv = {
   this_internal: bool;
   this_support_dynamic_type: bool;
   no_auto_likes: bool;
+  needs_concrete: bool;
 }
 
 let initial_local tpenv =
@@ -89,6 +92,7 @@ let empty ?origin ?(mode = FileInfo.Mstrict) ctx file ~droot =
     in_try = false;
     in_lambda = false;
     in_expr_tree = None;
+    in_macro_splice = None;
     inside_constructor = false;
     checked = Tast.COnce;
     decl_env = { Decl_env.mode; droot; droot_member = None; ctx };
@@ -119,10 +123,12 @@ let empty ?origin ?(mode = FileInfo.Mstrict) ctx file ~droot =
         this_internal = false;
         this_support_dynamic_type = false;
         no_auto_likes = false;
+        needs_concrete = false;
       };
     tpenv = Type_parameter_env.empty;
     log_levels = TypecheckerOptions.log_levels (Provider_context.get_tcopt ctx);
     inference_env = Typing_inference_env.empty_inference_env;
+    rank = 0;
     allow_wildcards = false;
     big_envs = ref [];
     fun_tast_info = None;
@@ -148,22 +154,22 @@ let get_pos_and_kind_of_generic env name =
   | Some r -> Some r
   | None -> Type_parameter_env.get_with_pos name env.tpenv
 
-let get_lower_bounds env name tyargs =
+let get_lower_bounds env name =
   let tpenv = get_tpenv env in
-  let local = Type_parameter_env.get_lower_bounds tpenv name tyargs in
-  let global = Type_parameter_env.get_lower_bounds env.tpenv name tyargs in
+  let local = Type_parameter_env.get_lower_bounds tpenv name in
+  let global = Type_parameter_env.get_lower_bounds env.tpenv name in
   Typing_set.union local global
 
-let get_upper_bounds env name tyargs =
+let get_upper_bounds env name =
   let tpenv = get_tpenv env in
-  let local = Type_parameter_env.get_upper_bounds tpenv name tyargs in
-  let global = Type_parameter_env.get_upper_bounds env.tpenv name tyargs in
+  let local = Type_parameter_env.get_upper_bounds tpenv name in
+  let global = Type_parameter_env.get_upper_bounds env.tpenv name in
   Typing_set.union local global
 
 (* Get bounds that are both an upper and lower of a given generic *)
-let get_equal_bounds env name tyargs =
-  let lower = get_lower_bounds env name tyargs in
-  let upper = get_upper_bounds env name tyargs in
+let get_equal_bounds env name =
+  let lower = get_lower_bounds env name in
+  let upper = get_upper_bounds env name in
   Typing_set.inter lower upper
 
 let get_tparams_in_ty_and_acc env acc ty =
@@ -171,7 +177,7 @@ let get_tparams_in_ty_and_acc env acc ty =
     object (this)
       inherit [SSet.t] Type_visitor.locl_type_visitor
 
-      method! on_tgeneric acc _ s _ =
+      method! on_tgeneric acc _ s =
         (* Not traversing args, although they may contain Tgenerics (higher kinds only) *)
         SSet.add s acc
 
@@ -185,3 +191,9 @@ let get_tparams_in_ty_and_acc env acc ty =
     end
   in
   (tparams_visitor env)#on_type acc ty
+
+let get_rank { rank; _ } = rank
+
+let increment_rank env = { env with rank = env.rank + 1 }
+
+let decrement_rank env = { env with rank = env.rank - 1 }

@@ -248,11 +248,12 @@ type t = {
       (** POC: @ljw - if true, only exit quarantine when entering a new one *)
   lsp_invalidation: bool;
       (** POC: @ljw - controls how quarantine invalidates folded decls *)
-  invalidate_all_folded_decls_upon_file_change: bool;  (** POC: @catg *)
   autocomplete_sort_text: bool;
       (** POC: @mckenzie - if true, autocomplete sorts using sort text attribute *)
   hack_warnings: bool;  (** POC: @catg - turn on hack warnings. *)
   warnings_default_all: bool;
       (** If true, `hh` is equivalent to `hh -Wall`, i.e. warnings are shown.
         Otherwise, `hh` is equivalent to `hh -Wnone`, i.e. warnings are not shown. *)
+  warnings_in_sandcastle: bool;
+  use_oxidized_by_ref_decls: bool;
 }

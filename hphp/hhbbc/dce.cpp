@@ -23,10 +23,10 @@
 #include <algorithm>
 #include <set>
 
-#include <boost/dynamic_bitset.hpp>
 #include <boost/container/flat_map.hpp>
 
 #include <folly/gen/Base.h>
+#include <folly/CPortability.h>
 #include <folly/gen/String.h>
 
 #include "hphp/runtime/base/array-iterator.h"
@@ -36,23 +36,17 @@
 #include "hphp/util/trace.h"
 
 #include "hphp/hhbbc/analyze.h"
-#include "hphp/hhbbc/cfg-opts.h"
 #include "hphp/hhbbc/cfg.h"
 #include "hphp/hhbbc/func-util.h"
 #include "hphp/hhbbc/interp-state.h"
 #include "hphp/hhbbc/interp.h"
 #include "hphp/hhbbc/optimize.h"
-#include "hphp/hhbbc/options.h"
 #include "hphp/hhbbc/representation.h"
-#include "hphp/hhbbc/type-structure.h"
 #include "hphp/hhbbc/type-system.h"
-#include "hphp/hhbbc/unit-util.h"
-
-#include "hphp/runtime/base/vanilla-dict.h"
 
 namespace HPHP::HHBBC {
 
-TRACE_SET_MOD(hhbbc_dce);
+TRACE_SET_MOD(hhbbc_dce)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -170,6 +164,11 @@ TRACE_SET_MOD(hhbbc_dce);
  *   block boundaries.
  *
  */
+
+//////////////////////////////////////////////////////////////////////
+
+const StaticString s_unreachable("static analysis error: supposedly "
+                                 "unreachable code was reached");
 
 namespace {
 
@@ -1588,6 +1587,7 @@ void dce(Env& env, const bc::AwaitAll& op) {
   pinLocals(env, env.states.mayReadLocalSet());
   no_dce(env, op);
 }
+void dce(Env& env, const bc::AwaitLowPri& op) { no_dce(env, op); }
 void dce(Env& env, const bc::BaseGL& op) { no_dce(env, op); }
 void dce(Env& env, const bc::BaseH& op) { no_dce(env, op); }
 void dce(Env& env, const bc::BreakTraceHint& op) { no_dce(env, op); }
@@ -1606,6 +1606,7 @@ void dce(Env& env, const bc::ClsCns& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ClsCnsD& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ClsCnsL& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ClassGetTS& op) { no_dce(env, op); }
+void dce(Env& env, const bc::ClassGetTSWithGenerics& op) { no_dce(env, op); }
 void dce(Env& env, const bc::CnsE& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ContCheck& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ContCurrent& op) { no_dce(env, op); }
@@ -1672,6 +1673,7 @@ void dce(Env& env, const bc::Nop& op) { no_dce(env, op); }
 void dce(Env& env, const bc::OODeclExists& op) { no_dce(env, op); }
 void dce(Env& env, const bc::Print& op) { no_dce(env, op); }
 void dce(Env& env, const bc::RecordReifiedGeneric& op) { no_dce(env, op); }
+void dce(Env& env, const bc::ReifiedInit& op) { no_dce(env, op); }
 void dce(Env& env, const bc::Req& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ReqDoc& op) { no_dce(env, op); }
 void dce(Env& env, const bc::ReqOnce& op) { no_dce(env, op); }
@@ -1714,6 +1716,7 @@ void dce(Env& env, const bc::VerifyParamTypeTS& op) { no_dce(env, op); }
 void dce(Env& env, const bc::VerifyRetNonNullC& op) { no_dce(env, op); }
 void dce(Env& env, const bc::VerifyRetTypeC& op) { no_dce(env, op); }
 void dce(Env& env, const bc::VerifyRetTypeTS& op) { no_dce(env, op); }
+void dce(Env& env, const bc::VerifyTypeTS& op) { no_dce(env, op); }
 void dce(Env& env, const bc::WHResult& op) { no_dce(env, op); }
 void dce(Env& env, const bc::Yield& op) { no_dce(env, op); }
 void dce(Env& env, const bc::YieldK& op) { no_dce(env, op); }
@@ -2537,7 +2540,10 @@ void apply_remapping(const FuncAnalysis& ainfo, php::WideFunc& func,
         UNUSED auto& op = o.opcode; IMM_##imms; \
         break; \
       }
+      FOLLY_PUSH_WARNING
+      FOLLY_CLANG_DISABLE_WARNING("-Wunused-value")
       switch (o.op) { OPCODES }
+      FOLLY_POP_WARNING
 #undef O
 
 #undef IMM_BLA

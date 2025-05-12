@@ -16,21 +16,17 @@
 
 #include "hphp/runtime/base/concurrent-shared-store.h"
 
-#include "hphp/runtime/base/apc-handle-defs.h"
 #include "hphp/runtime/base/apc-object.h"
 #include "hphp/runtime/base/apc-stats.h"
 #include "hphp/runtime/base/request-id.h"
 #include "hphp/runtime/base/variable-serializer.h"
-#include "hphp/runtime/base/variable-unserializer.h"
 #include "hphp/runtime/ext/apc/ext_apc.h"
 
 #include "hphp/util/logger.h"
-#include "hphp/util/timer.h"
 #include "hphp/util/trace.h"
 
 #include <atomic>
 #include <mutex>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -41,7 +37,7 @@ using folly::SharedMutex;
 
 namespace HPHP {
 
-TRACE_SET_MOD(apc);
+TRACE_SET_MOD(apc)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -417,9 +413,7 @@ bool ConcurrentTableSharedStore::eraseImpl(const char* key,
 
   FTRACE(2, "Remove {} {}\n", acc->first, show(acc->second));
   auto const var = storeVal.data();
-  auto const e = storeVal.rawExpire();
-  APCStats::getAPCStats().removeAPCValue(storeVal.dataSize, var,
-                                          e == 0, expired);
+  APCStats::getAPCStats().removeAPCValue(storeVal.dataSize, var, expired);
   var->unreferenceRoot(storeVal.dataSize);
 
   APCStats::getAPCStats().removeKey(strlen(acc->first));
@@ -519,7 +513,7 @@ bool ConcurrentTableSharedStore::handlePromoteObj(const String& key,
   if (handle == svar && handle->kind() == APCKind::SerializedObject) {
     sval.setHandle(converted);
     APCStats::getAPCStats().updateAPCValue(
-      converted, size, handle, sval.dataSize, sval.rawExpire() == 0, false);
+      converted, size, handle, sval.dataSize, false);
     handle->unreferenceRoot(sval.dataSize);
     sval.dataSize = size;
     return true;
@@ -685,7 +679,7 @@ int64_t ConcurrentTableSharedStore::inc(const String& key, int64_t step,
                                       true /* pure doesn't matter for ints */);
   APCStats::getAPCStats().updateAPCValue(pair.handle, pair.size,
                                          oldHandle, sval.dataSize,
-                                         sval.rawExpire() == 0, false);
+                                         false);
   oldHandle->unreferenceRoot(sval.dataSize);
   sval.setHandle(pair.handle);
   sval.dataSize = pair.size;
@@ -716,7 +710,7 @@ bool ConcurrentTableSharedStore::cas(const String& key, int64_t old,
                                       false, false /* no pure cas variant */);
   APCStats::getAPCStats().updateAPCValue(pair.handle, pair.size,
                                          oldHandle, sval.dataSize,
-                                         sval.rawExpire() == 0, false);
+                                         false);
   oldHandle->unreferenceRoot(sval.dataSize);
   sval.setHandle(pair.handle);
   sval.dataSize = pair.size;
@@ -870,16 +864,16 @@ bool ConcurrentTableSharedStore::storeImpl(const String& key,
     if (current) {
       if (sval->rawExpire() == 0 && adjustedMaxTTL != 0) {
         APCStats::getAPCStats().removeAPCValue(
-          sval->dataSize, current, true, sval->expired());
-        APCStats::getAPCStats().addAPCValue(svar.handle, svar.size, false);
+          sval->dataSize, current, sval->expired());
+        APCStats::getAPCStats().addAPCValue(svar.handle, svar.size);
       } else {
         APCStats::getAPCStats().updateAPCValue(
           svar.handle, svar.size, current, sval->dataSize,
-          sval->rawExpire() == 0, sval->expired());
+          sval->expired());
       }
       current->unreferenceRoot(sval->dataSize);
     } else {
-      APCStats::getAPCStats().addAPCValue(svar.handle, svar.size, present);
+      APCStats::getAPCStats().addAPCValue(svar.handle, svar.size);
     }
 
     sval->set(svar.handle, expire_ttl, adjustedMaxTTL, bump_ttl);

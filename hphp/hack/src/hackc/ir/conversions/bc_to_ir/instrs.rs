@@ -9,6 +9,12 @@ use std::fmt::Display;
 use hhbc::Instruct;
 use hhbc::Opcode;
 use hhbc::Pseudo;
+use ir::BytesId;
+use ir::FCallArgsFlags;
+use ir::Instr;
+use ir::LocalId;
+use ir::TryCatchId;
+use ir::ValueId;
 use ir::instr;
 use ir::instr::CmpOp;
 use ir::instr::MemberKey;
@@ -17,12 +23,6 @@ use ir::print::FmtLocId;
 use ir::print::FmtRawBid;
 use ir::print::FmtRawVid;
 use ir::print::FmtSep;
-use ir::BytesId;
-use ir::FCallArgsFlags;
-use ir::Instr;
-use ir::LocalId;
-use ir::TryCatchId;
-use ir::ValueId;
 use log::trace;
 
 use crate::context::Addr;
@@ -408,7 +408,7 @@ fn member_op_mutates_stack_base(op: &instr::MemberOp) -> bool {
     };
 
     let base_key_is_element_access = op.intermediate_ops.first().map_or_else(
-        || op.final_op.key().map_or(true, |k| k.is_element_access()),
+        || op.final_op.key().is_none_or(|k| k.is_element_access()),
         |dim| dim.key.is_element_access(),
     );
 
@@ -930,6 +930,7 @@ fn convert_opcode(ctx: &mut Context<'_>, opcode: &Opcode) -> bool {
         Opcode::AssertRATStk => todo!(),
         Opcode::Await => simple!(Hhbc::Await),
         Opcode::AwaitAll => simple!(Hhbc::AwaitAll),
+        Opcode::AwaitLowPri => simple!(Hhbc::AwaitLowPri),
         Opcode::BareThis => simple!(Hhbc::BareThis),
         Opcode::BitAnd => simple!(Hhbc::BitAnd),
         Opcode::BitNot => simple!(Hhbc::BitNot),
@@ -955,6 +956,7 @@ fn convert_opcode(ctx: &mut Context<'_>, opcode: &Opcode) -> bool {
         Opcode::CheckClsRGSoft => simple!(Hhbc::CheckClsRGSoft),
         Opcode::CheckThis => simple!(Hhbc::CheckThis),
         Opcode::ClassGetC => simple!(Hhbc::ClassGetC),
+        Opcode::ClassGetTS => simple!(Hhbc::ClassGetTS),
         Opcode::ClassHasReifiedGenerics => simple!(Hhbc::ClassHasReifiedGenerics),
         Opcode::ClassName => simple!(Hhbc::ClassName),
         Opcode::Clone => simple!(Hhbc::Clone),
@@ -1052,6 +1054,7 @@ fn convert_opcode(ctx: &mut Context<'_>, opcode: &Opcode) -> bool {
         #[rustfmt::skip]
         Opcode::RaiseClassStringConversionNotice => simple!(Hhbc::RaiseClassStringConversionNotice),
         Opcode::RecordReifiedGeneric => simple!(Hhbc::RecordReifiedGeneric),
+        Opcode::ReifiedInit => simple!(Hhbc::ReifiedInit),
         Opcode::ResolveClass => simple!(Hhbc::ResolveClass),
         Opcode::ResolveClsMethod => simple!(Hhbc::ResolveClsMethod),
         Opcode::ResolveClsMethodD => simple!(Hhbc::ResolveClsMethodD),
@@ -1093,13 +1096,14 @@ fn convert_opcode(ctx: &mut Context<'_>, opcode: &Opcode) -> bool {
         Opcode::VerifyRetNonNullC => todo!(),
         Opcode::VerifyRetTypeC => simple!(Hhbc::VerifyRetTypeC),
         Opcode::VerifyRetTypeTS => simple!(Hhbc::VerifyRetTypeTS),
+        Opcode::VerifyTypeTS => simple!(Hhbc::VerifyTypeTS),
         Opcode::WHResult => simple!(Hhbc::WHResult),
         Opcode::Yield => simple!(Hhbc::Yield),
         Opcode::YieldK => simple!(Hhbc::YieldK),
 
-        Opcode::ClassGetTS => {
+        Opcode::ClassGetTSWithGenerics => {
             let s1 = ctx.pop();
-            let vid = ctx.emit(Instr::Hhbc(Hhbc::ClassGetTS(s1, ctx.loc)));
+            let vid = ctx.emit(Instr::Hhbc(Hhbc::ClassGetTSWithGenerics(s1, ctx.loc)));
             ctx.emit_selects(vid, 2);
             Action::None
         }

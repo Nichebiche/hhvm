@@ -23,6 +23,7 @@ namespace apache::thrift {
 
 template <>
 class Client<::facebook::thrift::test::AdapterService> : public apache::thrift::GeneratedAsyncClient {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::facebook::thrift::test::AdapterService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
  public:
   using apache::thrift::GeneratedAsyncClient::GeneratedAsyncClient;
 
@@ -95,7 +96,7 @@ class Client<::facebook::thrift::test::AdapterService> : public apache::thrift::
     auto wrappedCallback = apache::thrift::RequestClientCallback::Ptr(cancellableCallback ? (apache::thrift::RequestClientCallback*)cancellableCallback.get() : &callback);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie();
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_count(*rpcOptions, header, ctx.get(), std::move(wrappedCallback));
@@ -150,7 +151,7 @@ class Client<::facebook::thrift::test::AdapterService> : public apache::thrift::
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_count(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_count(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback);
+  void fbthrift_send_count(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> countCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<::facebook::thrift::test::CountingStruct> fbthrift_semifuture_count(apache::thrift::RpcOptions& rpcOptions);
@@ -215,7 +216,7 @@ class Client<::facebook::thrift::test::AdapterService> : public apache::thrift::
     auto wrappedCallback = apache::thrift::RequestClientCallback::Ptr(cancellableCallback ? (apache::thrift::RequestClientCallback*)cancellableCallback.get() : &callback);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie(p_arg);
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_adaptedTypes(*rpcOptions, header, ctx.get(), std::move(wrappedCallback), p_arg);
@@ -270,7 +271,7 @@ class Client<::facebook::thrift::test::AdapterService> : public apache::thrift::
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_adaptedTypes(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack, const ::facebook::thrift::test::HeapAllocated& p_arg);
   template <typename RpcOptions>
-  void fbthrift_send_adaptedTypes(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback);
+  void fbthrift_send_adaptedTypes(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> adaptedTypesCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<::facebook::thrift::test::HeapAllocated> fbthrift_semifuture_adaptedTypes(apache::thrift::RpcOptions& rpcOptions, const ::facebook::thrift::test::HeapAllocated& p_arg);

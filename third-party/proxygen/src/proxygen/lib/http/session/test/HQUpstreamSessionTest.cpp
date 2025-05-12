@@ -28,6 +28,7 @@
 #include <proxygen/lib/http/session/test/MockSessionObserver.h>
 #include <proxygen/lib/http/session/test/TestUtils.h>
 #include <quic/api/test/MockQuicSocket.h>
+#include <quic/priority/HTTPPriorityQueue.h>
 #include <wangle/acceptor/ConnectionManager.h>
 
 using namespace proxygen;
@@ -305,8 +306,8 @@ TEST_P(HQUpstreamSessionTest, PriorityUpdateIntoTransport) {
   auto handler = openTransaction();
   auto req = getGetRequest();
   req.getHeaders().add(HTTP_HEADER_PRIORITY, "u=3, i");
-  EXPECT_CALL(*socketDriver_->getSocket(),
-              setStreamPriority(_, quic::Priority(3, true)));
+  socketDriver_->expectSetPriority(handler->txn_->getID(),
+                                   quic::HTTPPriorityQueue::Priority(3, true));
   handler->txn_->sendHeadersWithEOM(req);
 
   handler->expectHeaders();
@@ -319,8 +320,8 @@ TEST_P(HQUpstreamSessionTest, PriorityUpdateIntoTransport) {
                *std::get<0>(resp),
                std::move(std::get<1>(resp)),
                true);
-  EXPECT_CALL(*socketDriver_->getSocket(),
-              setStreamPriority(_, quic::Priority(5, false)));
+  socketDriver_->expectSetPriority(handler->txn_->getID(),
+                                   quic::HTTPPriorityQueue::Priority(5, false));
   flushAndLoop();
   hqSession_->closeWhenIdle();
 }
@@ -392,9 +393,8 @@ TEST_P(HQUpstreamSessionTest, SendPriorityUpdate) {
   handler->txn_->sendHeaders(getGetRequest());
   handler->expectHeaders();
   handler->expectBody([&]() {
-    EXPECT_CALL(
-        *socketDriver_->getSocket(),
-        setStreamPriority(handler->txn_->getID(), quic::Priority(5, true)));
+    socketDriver_->expectSetPriority(
+        handler->txn_->getID(), quic::HTTPPriorityQueue::Priority(5, true));
     handler->txn_->updateAndSendPriority(HTTPPriority(5, true));
   });
   handler->txn_->sendEOM();
@@ -415,9 +415,8 @@ TEST_P(HQUpstreamSessionTest, SkipPriorityUpdateAfterSeenEOM) {
   handler->expectHeaders();
   handler->expectBody();
   handler->expectEOM([&]() {
-    EXPECT_CALL(
-        *socketDriver_->getSocket(),
-        setStreamPriority(handler->txn_->getID(), quic::Priority(5, true)))
+    EXPECT_CALL(*socketDriver_->getSocket(),
+                setStreamPriority(handler->txn_->getID(), testing::_))
         .Times(0);
     handler->txn_->updateAndSendPriority(HTTPPriority(5, true));
   });
@@ -2245,23 +2244,38 @@ class HQUpstreamSessionTestWebTransport : public HQUpstreamSessionTest {
   WebTransport* wt_{nullptr};
 };
 
+class MockDeliveryCallback : public WebTransport::ByteEventCallback {
+ public:
+  MOCK_METHOD(void, onByteEvent, (quic::StreamId, uint64_t), (noexcept));
+
+  MOCK_METHOD(void,
+              onByteEventCanceled,
+              (quic::StreamId, uint64_t),
+              (noexcept));
+};
+
 TEST_P(HQUpstreamSessionTestWebTransport, BidirectionalStream) {
   InSequence enforceOrder;
   // Create a bidi WT stream
   auto stream = wt_->createBidiStream().value();
   auto id = stream.readHandle->getID();
   // small write
-  stream.writeHandle->writeStreamData(makeBuf(10), false);
+  auto mockCallback1 = std::make_unique<StrictMock<MockDeliveryCallback>>();
+  EXPECT_CALL(*mockCallback1, onByteEvent(id, 10)).Times(1);
+  stream.writeHandle->writeStreamData(makeBuf(10), false, mockCallback1.get());
   eventBase_.loopOnce();
 
   // shrink the fcw to force it to block
   socketDriver_->setStreamFlowControlWindow(id, 100);
   bool writeComplete = false;
-  stream.writeHandle->writeStreamData(makeBuf(65536), false);
+  auto mockCallback2 = std::make_unique<StrictMock<MockDeliveryCallback>>();
+  EXPECT_CALL(*mockCallback2, onByteEvent(id, 65536 + 10)).Times(1);
+  stream.writeHandle->writeStreamData(
+      makeBuf(65536), false, mockCallback2.get());
   stream.writeHandle->awaitWritable().value().via(&eventBase_).then([&](auto) {
     VLOG(4) << "big write complete";
     // after it completes, write FIN
-    stream.writeHandle->writeStreamData(nullptr, true);
+    stream.writeHandle->writeStreamData(nullptr, true, nullptr);
 #if 0
         stream.writeHandle
             .value()

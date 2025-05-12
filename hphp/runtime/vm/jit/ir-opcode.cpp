@@ -16,15 +16,7 @@
 
 #include "hphp/runtime/vm/jit/ir-opcode.h"
 
-#include "hphp/runtime/base/string-data.h"
-#include "hphp/runtime/vm/jit/cfg.h"
 #include "hphp/runtime/vm/jit/extra-data.h"
-#include "hphp/runtime/vm/jit/ir-instruction.h"
-#include "hphp/runtime/vm/jit/ir-unit.h"
-#include "hphp/runtime/vm/jit/ssa-tmp.h"
-#include "hphp/runtime/vm/jit/print.h"
-#include "hphp/runtime/vm/jit/type.h"
-#include "hphp/runtime/vm/runtime.h"
 
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/trace.h"
@@ -32,7 +24,7 @@
 namespace HPHP::jit {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 #define NF     0
 #define PRc    ProducesRC
@@ -410,6 +402,7 @@ bool opcodeMayRaise(Opcode opc) {
   case RaiseTooManyArg:
   case RaiseWarning:
   case RecordReifiedGenericsAndGetTSList:
+  case ReifiedInit:
   case ResolveTypeStruct:
   case ReturnHook:
   case SameArrLike:
@@ -450,7 +443,6 @@ bool opcodeMayRaise(Opcode opc) {
   case ThrowMustBeReadonlyException:
   case ThrowMustBeValueTypeException:
   case ThrowOutOfBounds:
-  case ThrowParameterWrongType:
   case ThrowReadonlyMismatch:
   case ThrowUndefPropException:
   case ThrowUninitLoc:
@@ -472,6 +464,7 @@ bool opcodeMayRaise(Opcode opc) {
   case VerifyPropFailHard:
   case VerifyReifiedLocalType:
   case VerifyReifiedReturnType:
+  case VerifyType:
   case VerifyRet:
   case VerifyRetCallable:
   case VerifyRetCls:
@@ -585,8 +578,10 @@ bool opcodeMayRaise(Opcode opc) {
   case CountVec:
   case CountWHNotDone:
   case CreateAFWH:
+  case CreateAFWHL:
   case CreateAGWH:
   case CreateAGen:
+  case CreateFSWH:
   case CreateGen:
   case CreateSSWH:
   case DbgAssertFunc:
@@ -636,7 +631,6 @@ bool opcodeMayRaise(Opcode opc) {
   case EnterFrame:
   case EnterInlineFrame:
   case EnterPrologue:
-  case EnterTCUnwind:
   case EnterTranslation:
   case EqArrayDataPtr:
   case EqBool:
@@ -730,6 +724,7 @@ bool opcodeMayRaise(Opcode opc) {
   case LdARFlags:
   case LdARFunc:
   case LdBindAddr:
+  case LdClosureArg:
   case LdClosureCls:
   case LdClosureThis:
   case LdClsCns:
@@ -942,6 +937,7 @@ bool opcodeMayRaise(Opcode opc) {
   case StStkRange:
   case StTVInRDS:
   case StTypeAt:
+  case StUnwinderExn:
   case StVMFP:
   case StVMPC:
   case StVMRegState:

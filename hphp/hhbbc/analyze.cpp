@@ -33,19 +33,15 @@
 #include "hphp/hhbbc/options.h"
 #include "hphp/hhbbc/representation.h"
 #include "hphp/hhbbc/cfg.h"
-#include "hphp/hhbbc/unit-util.h"
-#include "hphp/hhbbc/cfg-opts.h"
 #include "hphp/hhbbc/class-util.h"
 #include "hphp/hhbbc/func-util.h"
 #include "hphp/hhbbc/options-util.h"
-
-#include "hphp/runtime/vm/reified-generics.h"
 
 namespace HPHP::HHBBC {
 
 namespace {
 
-TRACE_SET_MOD(hhbbc);
+TRACE_SET_MOD(hhbbc)
 
 struct KnownArgs {
   Type context;
@@ -1023,11 +1019,11 @@ ClassAnalysis analyze_class(const IIndex& index, const Context& ctx) {
         t = TBottom;
       } else if (!(prop.attrs & AttrSystemInitialValue)) {
         t = adjust_type_for_prop(
-            index, *ctx.cls, prop.typeConstraints.mainPtr(), t);
+            index, *ctx.cls, &prop.typeConstraints, t);
       }
       auto& elem = clsAnalysis.privateProperties[prop.name];
       elem.ty = std::move(t);
-      elem.tc = prop.typeConstraints.mainPtr();
+      elem.tc = &prop.typeConstraints;
       elem.attrs = prop.attrs;
       elem.everModified = false;
     } else {
@@ -1039,10 +1035,10 @@ ClassAnalysis analyze_class(const IIndex& index, const Context& ctx) {
         : (prop.attrs & AttrSystemInitialValue)
           ? cellTy
           : adjust_type_for_prop(
-              index, *ctx.cls, prop.typeConstraints.mainPtr(), cellTy);
+              index, *ctx.cls, &prop.typeConstraints, cellTy);
       auto& elem = clsAnalysis.privateStatics[prop.name];
       elem.ty = std::move(t);
-      elem.tc = prop.typeConstraints.mainPtr();
+      elem.tc = &prop.typeConstraints;
       elem.attrs = prop.attrs;
       elem.everModified = false;
     }
@@ -1424,7 +1420,7 @@ void PropagatedStates::next() {
   // The undo log shouldn't be empty, and we should be at a mark
   // (which marks instruction boundary).
   assertx(!m_undos.events.empty());
-  assertx(boost::get<StateMutationUndo::Mark>(&m_undos.events.back()));
+  assertx(std::get_if<StateMutationUndo::Mark>(&m_undos.events.back()));
 
   m_lastPush.reset();
   m_afterLocals.clear();
@@ -1490,7 +1486,7 @@ locally_propagated_states(const Index& index,
     auto const stepFlags = step(interp, op);
     // Store the step flags in the mark we recorded before the
     // interpret.
-    auto& mark = boost::get<StateMutationUndo::Mark>(undos.events[markIdx]);
+    auto& mark = std::get<StateMutationUndo::Mark>(undos.events[markIdx]);
     mark.wasPEI = stepFlags.wasPEI;
     mark.mayReadLocalSet = stepFlags.mayReadLocalSet;
     mark.unreachable = state.unreachable;
@@ -1788,6 +1784,9 @@ std::tuple<Type, bool, bool> verify_param_type(const IIndex& index,
   assertx(paramId < ctx.func->params.size());
   auto const& pinfo = ctx.func->params[paramId];
 
+  // Inputs of out-only parameters are not enforced.
+  if (pinfo.outOnly) return { t, true, true };
+
   auto refined = TInitCell;
   auto noop = true;
   auto effectFree = true;
@@ -1831,15 +1830,27 @@ std::tuple<Type, bool, bool> verify_param_type(const IIndex& index,
 
 Type adjust_type_for_prop(const IIndex& index,
                           const php::Class& propCls,
-                          const TypeConstraint* tc,
+                          const TypeIntersectionConstraint* tcs,
                           const Type& ty) {
-  if (!tc) return ty;
-  assertx(tc->validForProp());
+  if (!tcs) return ty;
+  auto result = ty;
+  for (auto const& tc : tcs->range()) {
+    result = adjust_type_for_prop(index, propCls, tc, result);
+    if (result.is(BBottom)) return result;
+  }
+  return result;
+}
+
+Type adjust_type_for_prop(const IIndex& index,
+                          const php::Class& propCls,
+                          const TypeConstraint& tc,
+                          const Type& ty) {
+  assertx(tc.validForProp());
   if (Cfg::Eval::CheckPropTypeHints <= 2) return ty;
   auto lookup = lookup_constraint(
     index,
     Context { nullptr, nullptr, &propCls },
-    *tc,
+    tc,
     ty
   );
   auto upper = unctx(lookup.upper);
@@ -1926,6 +1937,72 @@ res::Class builtin_class(const IIndex& index, SString name) {
     name
   );
   return *rcls;
+}
+
+Type return_type_from_constraints(
+  const php::Func& f,
+  const std::function<Optional<res::Class>(SString)>& resolve,
+  const std::function<Optional<Type>()>& self
+) {
+  if (f.isMemoizeWrapper) return TInitCell;
+
+  if (f.isGenerator) {
+    if (f.isAsync) {
+      // Async generators always return AsyncGenerator object.
+      return objExact(res::Class::get(s_AsyncGenerator.get()));
+    }
+    // Non-async generators always return Generator object.
+    return objExact(res::Class::get(s_Generator.get()));
+  }
+
+  auto const make_type = [&] (const TypeConstraint& tc) {
+    auto lookup = type_from_constraint(tc, TInitCell, resolve, self);
+    if (lookup.coerceClassToString == TriBool::Yes) {
+      lookup.upper = promote_classish(std::move(lookup.upper));
+    } else if (lookup.coerceClassToString == TriBool::Maybe) {
+      lookup.upper |= TSStr;
+    }
+
+    if (f.isNative &&
+      lookup.upper.subtypeOf(BStr | BObj | BRes | BArrLike)
+    ) {
+      // TODO: T220184756 Remove implicit assumption that non-simple
+      // types (ones that are represented by pointers) can always
+      // possibly be null
+      lookup.upper = opt(std::move(lookup.upper));
+    }
+    return unctx(std::move(lookup.upper));
+  };
+
+  auto const process = [&] (const TypeIntersectionConstraint& tcs) {
+    auto ret = TInitCell;
+    for (auto const& tc : tcs.range()) {
+      ret = intersection_of(std::move(ret), make_type(tc));
+    }
+    return ret;
+  };
+
+  auto ret = process(f.retTypeConstraints);
+  if (f.hasInOutArgs && !ret.is(BBottom)) {
+    std::vector<Type> types;
+    types.reserve(f.params.size() + 1);
+    types.emplace_back(std::move(ret));
+    for (auto const& p : f.params) {
+      if (!p.inout) continue;
+      auto t = process(p.typeConstraints);
+      if (t.is(BBottom)) return TBottom;
+      types.emplace_back(std::move(t));
+    }
+    std::reverse(begin(types)+1, end(types));
+    ret = vec(std::move(types));
+  }
+
+  if (f.isAsync) {
+    // Async functions always return WaitH<T>, where T is the type
+    // returned internally.
+    return wait_handle(std::move(ret));
+  }
+  return ret;
 }
 
 //////////////////////////////////////////////////////////////////////

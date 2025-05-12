@@ -30,7 +30,6 @@ module Cls = Folded_class
 module Hashtbl = Stdlib.Hashtbl
 module Option = Stdlib.Option
 module GlobalAccessCheck = Error_codes.GlobalAccessCheck
-module SN = Naming_special_names
 
 (* Recognize common patterns for global access (only writes for now). *)
 type global_access_pattern =
@@ -443,13 +442,13 @@ let rec grab_class_elts_from_ty ~static ?(seen = SSet.empty) env ty prop_id =
       tyl
   (* Generic types can be treated similarly to an intersection type
      where we find the first prop that works from the upper bounds *)
-  | Tgeneric (name, tyargs) ->
+  | Tgeneric name ->
     (* Avoid circular generics with a set *)
     if SSet.mem name seen then
       []
     else
       let new_seen = SSet.add name seen in
-      let upper_bounds = Tast_env.get_upper_bounds env name tyargs in
+      let upper_bounds = Tast_env.get_upper_bounds env name in
       find_first_in_list ~seen:new_seen (Typing_set.elements upper_bounds)
       |> Option.value ~default:[]
   | Tdependent (_, ty) ->
@@ -521,16 +520,9 @@ let rec print_global_expr env expr =
    name, otherwise return None. *)
 let check_func_is_memoized func_expr env =
   let open Typing_defs in
-  let rec find_fty ty =
-    match get_node ty with
-    | Tnewtype (name, _, ty) when String.equal name SN.Classes.cSupportDyn ->
-      find_fty ty
-    | Tfun fty -> Some fty
-    | _ -> None
-  in
   let (func_ty, _, te) = func_expr in
-  match find_fty func_ty with
-  | Some fty when get_ft_is_memoized fty -> Some (print_global_expr env te)
+  match Tast_env.get_underlying_function_type env func_ty with
+  | Some (_, fty) when get_ft_is_memoized fty -> Some (print_global_expr env te)
   | _ -> None
 
 (* Check if type is a collection. *)
@@ -585,13 +577,13 @@ let rec has_no_object_ref_ty env (seen : SSet.t) ty =
   | Tclass ((_, id), _, tyl)
     when is_value_collection_ty env ty || String.equal id "\\HH\\Awaitable" ->
     List.for_all tyl ~f:(fun l -> has_no_object_ref_ty env seen l)
-  | Tgeneric (name, tyargs) ->
+  | Tgeneric name ->
     (* Avoid circular generics with a set *)
     if SSet.mem name seen then
       false
     else
       let new_seen = SSet.add name seen in
-      let upper_bounds = Tast_env.get_upper_bounds env name tyargs in
+      let upper_bounds = Tast_env.get_upper_bounds env name in
       Typing_set.exists
         (fun l -> has_no_object_ref_ty env new_seen l)
         upper_bounds

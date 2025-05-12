@@ -188,8 +188,8 @@ function curl_multi_getcontent(resource $ch): ?string;
  */
 <<__Native>>
 function curl_multi_info_read(resource $mh,
-                              <<__OutOnly("KindOfInt64")>>
-                              inout mixed $msgs_in_queue): mixed;
+                              <<__OutOnly>>
+                              inout int $msgs_in_queue): mixed;
 
 /**
  * Returns a new cURL multi handle
@@ -355,14 +355,14 @@ function fb_curl_getopt(resource $ch, int $opt = 0): mixed;
  */
 <<__Native>>
 function fb_curl_multi_fdset(resource $mh,
-                              <<__OutOnly("varray")>>
-                             inout mixed $read_fd_set,
-                              <<__OutOnly("varray")>>
-                             inout mixed $write_fd_set,
-                              <<__OutOnly("varray")>>
-                             inout mixed $exc_fd_set,
-                              <<__OutOnly("KindOfInt64")>>
-                             inout ?int $max_fd): mixed;
+                              <<__OutOnly>>
+                             inout vec<resource> $read_fd_set,
+                              <<__OutOnly>>
+                             inout vec<resource> $write_fd_set,
+                              <<__OutOnly>>
+                             inout vec<resource> $exc_fd_set,
+                              <<__OutOnly>>
+                             inout int $max_fd): mixed;
 
 /**
 * Returns a new cURL share handle

@@ -20,7 +20,6 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -228,7 +227,8 @@ class mstch_factories {
 
 // Mstch object construction context.
 struct mstch_context : mstch_factories {
-  std::map<std::string, std::string> options;
+  using compiler_options_map = std::map<std::string, std::string, std::less<>>;
+  compiler_options_map options;
 
   std::unordered_map<std::string, std::shared_ptr<mstch_base>> enum_cache;
   std::unordered_map<std::string, std::shared_ptr<mstch_base>> struct_cache;
@@ -236,6 +236,8 @@ struct mstch_context : mstch_factories {
   std::unordered_map<std::string, std::shared_ptr<mstch_base>> program_cache;
 
   node_metadata_cache metadata_cache;
+
+  const whisker::prototype_database* prototypes = nullptr;
 
   /**
    * Sets or erases the option with the given `key` depending on the
@@ -305,13 +307,19 @@ class mstch_base : public mstch::object {
   mstch::node is_struct();
 
   mstch::node annotations(const t_named* annotated) {
-    return make_mstch_annotations(annotated->annotations());
+    return make_mstch_annotations(annotated->unstructured_annotations());
   }
 
   mstch::node structured_annotations(const t_named* annotated) {
     return make_mstch_array(
         annotated->structured_annotations(),
         *context_.structured_annotation_factory);
+  }
+
+  template <typename T>
+  whisker::object make_self(const T& node) {
+    return whisker::object(whisker::native_handle<T>(
+        whisker::manage_as_static(node), context_.prototypes->of<T>()));
   }
 
   template <typename Container, typename Factory, typename... Args>
@@ -435,6 +443,7 @@ class mstch_program : public mstch_base {
     register_methods(
         this,
         {
+            {"program:self", &mstch_program::self},
             {"program:name", &mstch_program::name},
             {"program:autogen_path", &mstch_program::autogen_path},
             {"program:includePrefix", &mstch_program::include_prefix},
@@ -460,6 +469,7 @@ class mstch_program : public mstch_base {
 
   virtual std::string get_program_namespace(const t_program*) { return {}; }
 
+  whisker::object self() { return make_self(*program_); }
   mstch::node name() { return program_->name(); }
   mstch::node autogen_path() {
     std::string path = program_->path();
@@ -481,7 +491,7 @@ class mstch_program : public mstch_base {
   mstch::node has_unions() {
     auto& structs = program_->structs_and_unions();
     return std::any_of(
-        structs.cbegin(), structs.cend(), std::mem_fn(&t_struct::is_union));
+        structs.cbegin(), structs.cend(), std::mem_fn(&t_structured::is_union));
   }
 
   mstch::node has_thrift_uris();
@@ -513,6 +523,7 @@ class mstch_service : public mstch_base {
     register_methods(
         this,
         {
+            {"service:self", &mstch_service::self},
             {"service:name", &mstch_service::name},
             {"service:functions", &mstch_service::functions},
             {"service:functions?", &mstch_service::has_functions},
@@ -557,6 +568,7 @@ class mstch_service : public mstch_base {
 
   virtual std::string get_service_namespace(const t_program*) { return {}; }
 
+  whisker::object self() { return make_self(*service_); }
   mstch::node name() { return service_->get_name(); }
   mstch::node has_functions() { return !get_functions().empty(); }
   mstch::node has_extends() { return service_->get_extends() != nullptr; }
@@ -596,8 +608,8 @@ class mstch_service : public mstch_base {
     return service_->is_serial_interaction();
   }
   mstch::node is_event_base_interaction() {
-    return service_->has_annotation("process_in_event_base") ||
-        service_->find_structured_annotation_or_null(kCppProcessInEbThreadUri);
+    return service_->has_unstructured_annotation("process_in_event_base") ||
+        service_->has_structured_annotation(kCppProcessInEbThreadUri);
   }
   mstch::node definition_key();
 
@@ -633,6 +645,7 @@ class mstch_function : public mstch_base {
     register_methods(
         this,
         {
+            {"function:self", &mstch_function::self},
             {"function:name", &mstch_function::name},
             {"function:oneway?", &mstch_function::oneway},
             {"function:return_type", &mstch_function::return_type},
@@ -688,6 +701,7 @@ class mstch_function : public mstch_base {
         });
   }
 
+  whisker::object self() { return make_self(*function_); }
   mstch::node name() { return function_->get_name(); }
   mstch::node oneway() {
     return function_->qualifier() == t_function_qualifier::oneway;
@@ -706,7 +720,7 @@ class mstch_function : public mstch_base {
           .get_enum_value()
           ->name();
     }
-    return function_->get_annotation("priority", "NORMAL");
+    return function_->get_unstructured_annotation("priority", "NORMAL");
   }
   mstch::node annotations() { return mstch_base::annotations(function_); }
 
@@ -812,6 +826,7 @@ class mstch_type : public mstch_base {
     register_methods(
         this,
         {
+            {"type:self", &mstch_type::self},
             {"type:name", &mstch_type::name},
             {"type:void?", &mstch_type::is_void},
             {"type:string?", &mstch_type::is_string},
@@ -828,7 +843,6 @@ class mstch_type : public mstch_base {
             {"type:struct?", &mstch_type::is_struct},
             {"type:union?", &mstch_type::is_union},
             {"type:enum?", &mstch_type::is_enum},
-            {"type:service?", &mstch_type::is_service},
             {"type:base?", &mstch_type::is_base},
             {"type:container?", &mstch_type::is_container},
             {"type:list?", &mstch_type::is_list},
@@ -843,9 +857,10 @@ class mstch_type : public mstch_base {
             {"type:value_type", &mstch_type::get_value_type},
             {"type:typedef_type", &mstch_type::get_typedef_type},
             {"type:typedef", &mstch_type::get_typedef},
-            {"type:interaction?", &mstch_type::is_interaction},
         });
   }
+
+  whisker::object self() { return make_self(*type_); }
   mstch::node name() { return type_->get_name(); }
   mstch::node is_void() { return resolved_type_->is_void(); }
   mstch::node is_string() { return resolved_type_->is_string(); }
@@ -867,12 +882,14 @@ class mstch_type : public mstch_base {
   mstch::node is_floating_point() {
     return resolved_type_->is_floating_point();
   }
+  // TODO(T219861020): Evaluate if unions should be here and rename method as
+  // neccessary.
   mstch::node is_struct() {
-    return resolved_type_->is_struct() || resolved_type_->is_exception();
+    return resolved_type_->is_struct_or_union() ||
+        resolved_type_->is_exception();
   }
   mstch::node is_union() { return resolved_type_->is_union(); }
   mstch::node is_enum() { return resolved_type_->is_enum(); }
-  mstch::node is_service() { return resolved_type_->is_service(); }
   mstch::node is_base() { return resolved_type_->is_primitive_type(); }
   mstch::node is_container() { return resolved_type_->is_container(); }
   mstch::node is_list() { return resolved_type_->is_list(); }
@@ -888,7 +905,6 @@ class mstch_type : public mstch_base {
   mstch::node get_value_type();
   mstch::node get_typedef_type();
   mstch::node get_typedef();
-  mstch::node is_interaction() { return type_->is_service(); }
 
  protected:
   const t_type* type_;
@@ -905,6 +921,7 @@ class mstch_typedef : public mstch_base {
     register_methods(
         this,
         {
+            {"typedef:self", &mstch_typedef::self},
             {"typedef:type", &mstch_typedef::type},
             {"typedef:name", &mstch_typedef::name},
             {"typedef:structured_annotations?",
@@ -913,6 +930,8 @@ class mstch_typedef : public mstch_base {
              &mstch_typedef::structured_annotations},
         });
   }
+
+  whisker::object self() { return make_self(*typedef_); }
   mstch::node type();
   mstch::node name() { return typedef_->name(); }
   mstch::node has_structured_annotations() {
@@ -936,6 +955,7 @@ class mstch_struct : public mstch_base {
     register_methods(
         this,
         {
+            {"struct:self", &mstch_struct::self},
             {"struct:name", &mstch_struct::name},
             {"struct:fields?", &mstch_struct::has_fields},
             {"struct:fields", &mstch_struct::fields},
@@ -974,6 +994,8 @@ class mstch_struct : public mstch_base {
       prev = curr;
     }
   }
+
+  whisker::object self() { return make_self(*struct_); }
   mstch::node name() { return struct_->get_name(); }
   mstch::node has_fields() { return struct_->has_fields(); }
   mstch::node fields();
@@ -1011,8 +1033,7 @@ class mstch_struct : public mstch_base {
   const std::vector<const t_field*>& get_members_in_key_order();
 
   field_range get_members_in_serialization_order() {
-    if (struct_->find_structured_annotation_or_null(
-            kSerializeInFieldIdOrderUri)) {
+    if (struct_->has_structured_annotation(kSerializeInFieldIdOrderUri)) {
       return get_members_in_key_order();
     }
 
@@ -1050,6 +1071,7 @@ class mstch_field : public mstch_base {
     register_methods(
         this,
         {
+            {"field:self", &mstch_field::self},
             {"field:name", &mstch_field::name},
             {"field:key", &mstch_field::key},
             {"field:value", &mstch_field::value},
@@ -1072,6 +1094,8 @@ class mstch_field : public mstch_base {
              &mstch_field::is_coding_error_action_report},
         });
   }
+
+  whisker::object self() { return make_self(*field_); }
   mstch::node name() { return field_->get_name(); }
   mstch::node key() { return field_->get_key(); }
   mstch::node value();
@@ -1119,7 +1143,7 @@ class mstch_field : public mstch_base {
         CodingErrorAction::Report);
   }
   bool has_compat_annotation(const char* uri) {
-    if (field_->find_structured_annotation_or_null(uri) != nullptr) {
+    if (field_->has_structured_annotation(uri)) {
       return true;
     }
     auto type = field_->get_type();
@@ -1130,12 +1154,10 @@ class mstch_field : public mstch_base {
       }
     }
     if (field_context_ != nullptr && field_context_->strct != nullptr) {
-      if (field_context_->strct->find_structured_annotation_or_null(uri) !=
-          nullptr) {
+      if (field_context_->strct->has_structured_annotation(uri)) {
         return true;
       }
-      if (field_context_->strct->program()->find_structured_annotation_or_null(
-              uri) != nullptr) {
+      if (field_context_->strct->program()->has_structured_annotation(uri)) {
         return true;
       }
     }
@@ -1200,6 +1222,7 @@ class mstch_enum : public mstch_base {
     register_methods(
         this,
         {
+            {"enum:self", &mstch_enum::self},
             {"enum:name", &mstch_enum::name},
             {"enum:values", &mstch_enum::values},
             {"enum:structured_annotations?",
@@ -1214,6 +1237,7 @@ class mstch_enum : public mstch_base {
         });
   }
 
+  whisker::object self() { return make_self(*enum_); }
   mstch::node name() { return enum_->get_name(); }
   mstch::node values();
   mstch::node unused_value() { return enum_->unused(); }
@@ -1225,10 +1249,10 @@ class mstch_enum : public mstch_base {
   }
   mstch::node is_enums_compat() { return has_compat_annotation(kEnumsUri); }
   bool has_compat_annotation(const char* uri) {
-    if (enum_->find_structured_annotation_or_null(uri) != nullptr) {
+    if (enum_->has_structured_annotation(uri)) {
       return true;
     }
-    if (enum_->program()->find_structured_annotation_or_null(uri) != nullptr) {
+    if (enum_->program()->has_structured_annotation(uri)) {
       return true;
     }
 
@@ -1281,10 +1305,12 @@ class mstch_enum_value : public mstch_base {
     register_methods(
         this,
         {
+            {"enum_value:self", &mstch_enum_value::self},
             {"enum_value:name", &mstch_enum_value::name},
             {"enum_value:value", &mstch_enum_value::value},
         });
   }
+  whisker::object self() { return make_self(*enum_value_); }
   mstch::node name() { return enum_value_->get_name(); }
   mstch::node value() { return enum_value_->get_value(); }
 
@@ -1311,6 +1337,7 @@ class mstch_const : public mstch_base {
     register_methods(
         this,
         {
+            {"constant:self", &mstch_const::self},
             {"constant:name", &mstch_const::name},
             {"constant:index", &mstch_const::index},
             {"constant:type", &mstch_const::type},
@@ -1319,6 +1346,8 @@ class mstch_const : public mstch_base {
             {"constant:field", &mstch_const::field},
         });
   }
+
+  whisker::object self() { return make_self(*const_); }
   mstch::node name() { return const_->get_name(); }
   mstch::node index() { return pos_.index; }
   mstch::node type();
@@ -1352,6 +1381,7 @@ class mstch_const_value : public mstch_base {
     register_methods(
         this,
         {
+            {"value:self", &mstch_const_value::self},
             {"value:bool?", &mstch_const_value::is_bool},
             {"value:double?", &mstch_const_value::is_double},
             {"value:integer?", &mstch_const_value::is_integer},
@@ -1383,6 +1413,7 @@ class mstch_const_value : public mstch_base {
         });
   }
 
+  whisker::object self() { return make_self(*const_value_); }
   mstch::node is_bool() { return type_ == cv::CV_BOOL; }
   mstch::node is_double() { return type_ == cv::CV_DOUBLE; }
   mstch::node is_integer() {
@@ -1494,7 +1525,7 @@ class mstch_structured_annotation : public mstch_base {
   }
 
   mstch::node is_const_struct() {
-    return const_.type()->get_true_type()->is_struct();
+    return const_.type()->get_true_type()->is_struct_or_union();
   }
 
  protected:

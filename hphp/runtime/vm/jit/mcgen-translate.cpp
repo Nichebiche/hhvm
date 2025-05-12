@@ -21,7 +21,6 @@
 
 #include "hphp/runtime/vm/jit/func-order.h"
 #include "hphp/runtime/vm/jit/inlining-decider.h"
-#include "hphp/runtime/vm/jit/irlower.h"
 #include "hphp/runtime/vm/jit/outlined-sequence-selector.h"
 #include "hphp/runtime/vm/jit/prof-data.h"
 #include "hphp/runtime/vm/jit/prof-data-serialize.h"
@@ -29,16 +28,12 @@
 #include "hphp/runtime/vm/jit/tc.h"
 #include "hphp/runtime/vm/jit/tc-record.h"
 #include "hphp/runtime/vm/jit/tc-region.h"
-#include "hphp/runtime/vm/jit/timer.h"
 #include "hphp/runtime/vm/jit/trans-db.h"
-#include "hphp/runtime/vm/jit/translate-region.h"
 #include "hphp/runtime/vm/jit/vasm-block-counters.h"
 #include "hphp/runtime/vm/jit/vm-protect.h"
-#include "hphp/runtime/vm/jit/vtune-jit.h"
 #include "hphp/runtime/vm/jit/write-lease.h"
 
 #include "hphp/runtime/vm/property-profile.h"
-#include "hphp/runtime/vm/runtime.h"
 #include "hphp/runtime/vm/treadmill.h"
 #include "hphp/runtime/vm/type-profile.h"
 
@@ -47,21 +42,21 @@
 #include "hphp/runtime/base/tracing.h"
 #include "hphp/runtime/base/vm-worker.h"
 #include "hphp/runtime/ext/server/ext_server.h"
-#include "hphp/runtime/server/http-server.h"
 
 #include "hphp/util/boot-stats.h"
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/job-queue.h"
 #include "hphp/util/logger.h"
+#if USE_JEMALLOC_EXTENT_HOOKS
 #include "hphp/util/managed-arena.h"
-#include "hphp/util/numa.h"
+#endif
 #include "hphp/util/trace.h"
 
 #include "hphp/zend/zend-strtod.h"
 
 #include <folly/system/ThreadName.h>
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 namespace HPHP::jit::mcgen {
 
@@ -389,7 +384,7 @@ void retranslateAll(bool skipSerialize) {
   } else {
     assertx(isJitDeserializing());
   }
-  setBaseInliningProfCount(globalProfData()->baseProfCount());
+  setInliningMetadata(globalProfData()->baseProfCount(), FuncOrder::getTargetCounts());
   auto const& sortedFuncs = FuncOrder::get();
   auto const nFuncs = sortedFuncs.size();
 
@@ -467,7 +462,7 @@ void retranslateAll(bool skipSerialize) {
           profData()->unsetOptimized(fid);
         }
         profData()->clearAllOptimizedSKs();
-        clearCachedInliningCost();
+        clearCachedInliningMetadata();
       }
       runParallelRetranslate();
     }

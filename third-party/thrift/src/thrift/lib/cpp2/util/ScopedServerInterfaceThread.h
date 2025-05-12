@@ -48,6 +48,8 @@ class ScopedServerInterfaceThread {
   using StreamFaultInjectionFunc =
       folly::Function<folly::Function<folly::exception_wrapper()>(
           folly::StringPiece methodName)>;
+  using InterceptorList =
+      std::shared_ptr<std::vector<std::shared_ptr<ClientInterceptorBase>>>;
 
   ScopedServerInterfaceThread(
       std::shared_ptr<AsyncProcessorFactory> apf,
@@ -106,12 +108,23 @@ class ScopedServerInterfaceThread {
       folly::Executor* callbackExecutor = nullptr,
       MakeChannelFunc channelFunc = RocketClientChannel::newChannel) const;
 
+  /**
+   * Like newClient but allows the user to provide client side interceptors
+   */
+  template <class AsyncClientT>
+  std::unique_ptr<AsyncClientT> newClientWithInterceptors(
+      folly::Executor* callbackExecutor = nullptr,
+      MakeChannelFunc channelFunc = RocketClientChannel::newChannel,
+      protocol::PROTOCOL_TYPES prot =
+          protocol::PROTOCOL_TYPES::T_BINARY_PROTOCOL,
+      InterceptorList interceptors = nullptr) const;
+
   static std::shared_ptr<RequestChannel> makeTestClientChannel(
       std::shared_ptr<AsyncProcessorFactory> apf,
       ScopedServerInterfaceThread::FaultInjectionFunc injectFault,
       ScopedServerInterfaceThread::StreamFaultInjectionFunc streamInjectFault =
           nullptr,
-      protocol::PROTOCOL_TYPES prot = protocol::T_COMPACT_PROTOCOL);
+      protocol::PROTOCOL_TYPES prot = protocol::T_BINARY_PROTOCOL);
 
  private:
   std::shared_ptr<ThriftServer> ts_;
@@ -121,7 +134,7 @@ class ScopedServerInterfaceThread {
       folly::Executor* callbackExecutor,
       MakeChannelFunc channelFunc,
       size_t numThreads = folly::hardware_concurrency(),
-      protocol::PROTOCOL_TYPES prot = protocol::T_COMPACT_PROTOCOL) const;
+      protocol::PROTOCOL_TYPES prot = protocol::T_BINARY_PROTOCOL) const;
 };
 
 namespace detail {

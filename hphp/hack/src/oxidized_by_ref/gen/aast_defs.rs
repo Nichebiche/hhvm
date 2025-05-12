@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<bb97aa8ba626827e7c22f56f78e10b10>>
+// @generated SignedSource<<ddc776cec14040805c51753e5314699a>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -829,6 +829,10 @@ pub struct ExpressionTree<'a, Ex, En> {
     ///     Foo::makeTree($v ==> $v->visitBinOp(...))
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     pub runtime_expr: &'a Expr<'a, Ex, En>,
+    /// For nested expression trees, what variables they use that should
+    /// be defined in the the enclosing environment.
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+    pub free_vars: Option<&'a [&'a Lid<'a>]>,
 }
 impl<'a, Ex: TrivialDrop, En: TrivialDrop> TrivialDrop for ExpressionTree<'a, Ex, En> {}
 arena_deserializer::impl_deserialize_in_arena!(ExpressionTree<'arena, Ex, En>);
@@ -888,12 +892,17 @@ pub struct EtSplice<'a, Ex, En> {
     pub extract_client_type: bool,
     /// Does the spliced_expr contain an await expression
     pub contains_await: bool,
-    /// Should the splice be interpreted as a "macro". That is, if spliced_expr has type
+    /// Some if the splice be interpreted as a "macro". That is, if spliced_expr has type
     /// Spliceable<t1, t2, t3>, in an enviroment with the macro variables bound to types
     /// Spliceable<t1, t2, u1>,..,Spliceable<t1, t2, un> then the splice should have
-    /// type Spliceable<t1, t2, (function (u1, .., un): t3)>
+    /// type Spliceable<t1, t2, (function (u1, .., un): t3)>.
+    /// None is the splice is not a macro.
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     pub macro_variables: Option<&'a [&'a Lid<'a>]>,
+    /// Splices are hoisted out and assigned to a temporary variable. This
+    /// records the name of the temporary
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+    pub temp_lid: &'a LocalId<'a>,
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     pub spliced_expr: &'a Expr<'a, Ex, En>,
 }
@@ -1934,6 +1943,10 @@ pub struct Efun<'a, Ex, En> {
     pub use_: &'a [&'a CaptureLid<'a, Ex>],
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     pub closure_class_name: Option<&'a str>,
+    /// An expression tree desugars into an expression containing an efun for
+    /// the virtualized expression. We need some special type checking support for
+    /// this case.
+    pub is_expr_tree_virtual_expr: bool,
 }
 impl<'a, Ex: TrivialDrop, En: TrivialDrop> TrivialDrop for Efun<'a, Ex, En> {}
 arena_deserializer::impl_deserialize_in_arena!(Efun<'arena, Ex, En>);
@@ -3204,6 +3217,8 @@ pub struct HintFun<'a> {
     #[rust_to_ocaml(attr = "transform.opaque")]
     pub is_readonly: Option<oxidized::ast_defs::ReadonlyKind>,
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+    pub tparams: &'a [&'a HintTparam<'a>],
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     pub param_tys: &'a [&'a Hint<'a>],
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     pub param_info: &'a [Option<&'a HfParamInfo<'a>>],
@@ -3219,6 +3234,34 @@ pub struct HintFun<'a> {
 }
 impl<'a> TrivialDrop for HintFun<'a> {}
 arena_deserializer::impl_deserialize_in_arena!(HintFun<'arena>);
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Eq,
+    FromOcamlRepIn,
+    Hash,
+    NoPosHash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    ToOcamlRep
+)]
+#[rust_to_ocaml(and)]
+#[rust_to_ocaml(prefix = "htp_")]
+#[repr(C)]
+pub struct HintTparam<'a> {
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+    pub name: Sid<'a>,
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+    pub user_attributes: &'a [Sid<'a>],
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+    pub constraints: &'a [(oxidized::ast_defs::ConstraintKind, &'a Hint<'a>)],
+}
+impl<'a> TrivialDrop for HintTparam<'a> {}
+arena_deserializer::impl_deserialize_in_arena!(HintTparam<'arena>);
 
 #[derive(
     Clone,

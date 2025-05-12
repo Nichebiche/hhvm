@@ -91,14 +91,11 @@ let get_last error_map =
 let iter t ~f =
   Relative_path.Map.iter t ~f:(fun _path errors -> List.iter errors ~f)
 
-external hash_error_for_saved_state : error -> int
-  = "hash_error_for_saved_state"
-
 module Error = struct
   type t = error [@@deriving ord]
 
   let hash_for_saved_state (error : t) : Warnings_saved_state.ErrorHash.t =
-    hash_error_for_saved_state error
+    User_error.hash_error_for_saved_state error
 end
 
 module ErrorSet = Stdlib.Set.Make (Error)
@@ -198,7 +195,6 @@ let try_with_result (f1 : unit -> 'res) (f2 : 'res -> error -> 'res) : 'res =
           explanation;
           quickfixes;
           custom_msgs;
-          flags;
           function_pos;
           is_fixmed = _;
         } ->
@@ -223,7 +219,6 @@ let try_with_result (f1 : unit -> 'res) (f2 : 'res -> error -> 'res) : 'res =
          explanation
          ~quickfixes
          ~custom_msgs
-         ~flags
          ?function_pos
 
 let try_with_result_pure ~fail f g =
@@ -327,7 +322,6 @@ let compare_internal (x : ('a, 'b) User_error.t) (y : ('a, 'b) User_error.t) :
           custom_msgs = _;
           quickfixes = _;
           is_fixmed = _;
-          flags = _;
           function_pos = _;
         } =
     x
@@ -342,7 +336,6 @@ let compare_internal (x : ('a, 'b) User_error.t) (y : ('a, 'b) User_error.t) :
           custom_msgs = _;
           quickfixes = _;
           is_fixmed = _;
-          flags = _;
           function_pos = _;
         } =
     y
@@ -708,7 +701,6 @@ let add_error_with_fixme_error error explanation ~fixme_pos =
           explanation = _;
           quickfixes;
           custom_msgs;
-          flags;
           function_pos;
           is_fixmed = _;
         } =
@@ -724,7 +716,6 @@ let add_error_with_fixme_error error explanation ~fixme_pos =
        Explanation.empty
        ~quickfixes
        ~custom_msgs
-       ~flags
        ?function_pos
 
 let add_applied_fixme error =
@@ -839,7 +830,6 @@ let add_error (error : error) =
           explanation;
           quickfixes;
           custom_msgs;
-          flags;
           function_pos;
           is_fixmed = _;
         } =
@@ -855,7 +845,6 @@ let add_error (error : error) =
       explanation
       ~quickfixes
       ~custom_msgs
-      ~flags
       ?function_pos
   in
 
@@ -953,6 +942,21 @@ let per_file_error_count ?(drop_fixmed = true) (errors : per_file_errors) : int
   in
   List.length errors
 
+let per_file_warning_count ?(drop_fixmed = true) (errors : per_file_errors) :
+    int =
+  let errors =
+    if drop_fixmed then
+      drop_fixmed_errors errors
+    else
+      errors
+  in
+  List.fold errors ~init:0 ~f:(fun acc (error : error) ->
+      acc
+      +
+      match error.User_error.severity with
+      | User_error.Warning -> 1
+      | User_error.Err -> 0)
+
 let get_file_errors ?(drop_fixmed = true) (t : t) (file : Relative_path.t) :
     per_file_errors =
   match Relative_path.Map.find_opt t file with
@@ -1001,6 +1005,11 @@ let error_count : t -> int =
   Relative_path.Map.fold errors ~init:0 ~f:(fun _path errors count ->
       count + per_file_error_count ~drop_fixmed:true errors)
 
+let warning_count : t -> int =
+ fun errors ->
+  Relative_path.Map.fold errors ~init:0 ~f:(fun _path errors count ->
+      count + per_file_warning_count ~drop_fixmed:true errors)
+
 exception Done of ISet.t
 
 (** This ignores warnings. *)
@@ -1033,6 +1042,7 @@ let as_telemetry_summary : t -> Telemetry.t =
  fun errors ->
   Telemetry.create ()
   |> Telemetry.int_ ~key:"count" ~value:(error_count errors)
+  |> Telemetry.int_ ~key:"warning_count" ~value:(warning_count errors)
   |> Telemetry.int_list
        ~key:"first_5_distinct_error_codes"
        ~value:
@@ -1334,7 +1344,6 @@ let convert_errors_to_string ?(include_filename = false) (errors : error list) :
               explanation = _;
               quickfixes = _;
               is_fixmed = _;
-              flags = _;
               function_pos = _;
             } =
         err

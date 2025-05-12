@@ -141,7 +141,8 @@ std::string quote(const std::string& data);
 
 std::string snakecase(const std::string& name);
 
-bool is_func_go_supported(const t_function* func);
+bool is_func_go_client_supported(const t_function* func);
+bool is_func_go_server_supported(const t_function* func);
 bool is_go_reserved_word(const std::string& value);
 
 bool is_type_go_struct(const t_type* type);
@@ -159,5 +160,8 @@ std::vector<t_struct*> get_service_req_resp_structs(const t_service* service);
 
 const std::string* get_go_name_annotation(const t_named* node);
 const std::string* get_go_tag_annotation(const t_named* node);
+
+int get_field_size(const t_field* field, bool is_inside_union);
+void optimize_fields_layout(std::vector<t_field*>& fields, bool is_union);
 
 } // namespace apache::thrift::compiler::go

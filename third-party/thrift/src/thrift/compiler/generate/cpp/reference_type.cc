@@ -24,7 +24,8 @@ namespace apache::thrift::compiler::gen::cpp {
 namespace {
 
 const std::string* find_ref_type_annot(const t_node& node) {
-  return node.find_annotation_or_null({"cpp.ref_type", "cpp2.ref_type"});
+  return node.find_unstructured_annotation_or_null(
+      {"cpp.ref_type", "cpp2.ref_type"});
 }
 
 // Since we can not include `thrift/annotation/cpp.thrift`
@@ -38,12 +39,12 @@ enum class RefType {
 } // namespace
 
 reference_type find_ref_type(const t_field& node) {
-  if (node.has_annotation({"cpp.box", "thrift.box"}) ||
-      node.find_structured_annotation_or_null(kBoxUri)) {
+  if (node.has_unstructured_annotation({"cpp.box", "thrift.box"}) ||
+      node.has_structured_annotation(kBoxUri)) {
     return reference_type::boxed;
   }
 
-  if (node.find_structured_annotation_or_null(kInternBoxUri)) {
+  if (node.has_structured_annotation(kInternBoxUri)) {
     return reference_type::boxed_intern;
   }
 
@@ -65,7 +66,7 @@ reference_type find_ref_type(const t_field& node) {
   }
 
   // Look for the generic annotations, which implies unique.
-  if (node.has_annotation({"cpp.ref", "cpp2.ref"})) {
+  if (node.has_unstructured_annotation({"cpp.ref", "cpp2.ref"})) {
     // TODO(afuller): Seems like this should really be a 'boxed' reference type
     // (e.g. a deep copy smart pointer) by default, so both recursion and copy
     // constructors would work. Maybe that would let us also remove most or all

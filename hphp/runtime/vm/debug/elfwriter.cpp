@@ -16,7 +16,6 @@
 #include "hphp/runtime/vm/debug/elfwriter.h"
 #include "hphp/runtime/vm/debug/gdb-jit.h"
 #include <elf.h>
-#include <gelf.h>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -36,7 +35,7 @@ using namespace HPHP::jit;
 namespace HPHP {
 namespace Debug {
 
-TRACE_SET_MOD(debuginfo);
+TRACE_SET_MOD(debuginfo)
 static const uint8_t CFA_OFFSET = 16;
 
 void ElfWriter::logError(const std::string& msg) {

@@ -143,7 +143,7 @@ struct Args_Raiser_doBland {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Raiser_doBland {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "Raiser.doBland"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -168,7 +168,7 @@ struct Args_Raiser_doRaise {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Raiser_doRaise {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "Raiser.doRaise"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -193,7 +193,7 @@ struct Args_Raiser_get200 {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Raiser_get200 {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "Raiser.get200"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -218,7 +218,7 @@ struct Args_Raiser_get500 {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Raiser_get500 {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "Raiser.get500"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -271,13 +271,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"Raiser";
         const METHOD_NAME: &::std::ffi::CStr = c"doBland";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"Raiser.doBland";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_Raiser_doBland = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_Raiser_doBland = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -300,12 +301,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "Raiser.doBland", exception = ?exn);
+                ::tracing::error!(method = "Raiser.doBland", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("Raiser.doBland", exn);
-                ::tracing::error!(method = "Raiser.doBland", panic = ?aexn);
+                ::tracing::error!(method = "Raiser.doBland", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::raiser::DoBlandExn::ApplicationException(aexn))
             }
         };
@@ -332,13 +333,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"Raiser";
         const METHOD_NAME: &::std::ffi::CStr = c"doRaise";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"Raiser.doRaise";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_Raiser_doRaise = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_Raiser_doRaise = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -361,12 +363,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "Raiser.doRaise", exception = ?exn);
+                ::tracing::error!(method = "Raiser.doRaise", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("Raiser.doRaise", exn);
-                ::tracing::error!(method = "Raiser.doRaise", panic = ?aexn);
+                ::tracing::error!(method = "Raiser.doRaise", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::raiser::DoRaiseExn::ApplicationException(aexn))
             }
         };
@@ -393,13 +395,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"Raiser";
         const METHOD_NAME: &::std::ffi::CStr = c"get200";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"Raiser.get200";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_Raiser_get200 = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_Raiser_get200 = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -422,12 +425,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "Raiser.get200", exception = ?exn);
+                ::tracing::error!(method = "Raiser.get200", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("Raiser.get200", exn);
-                ::tracing::error!(method = "Raiser.get200", panic = ?aexn);
+                ::tracing::error!(method = "Raiser.get200", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::raiser::Get200Exn::ApplicationException(aexn))
             }
         };
@@ -454,13 +457,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"Raiser";
         const METHOD_NAME: &::std::ffi::CStr = c"get500";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"Raiser.get500";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_Raiser_get500 = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_Raiser_get500 = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -483,12 +487,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "Raiser.get500", exception = ?exn);
+                ::tracing::error!(method = "Raiser.get500", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("Raiser.get500", exn);
-                ::tracing::error!(method = "Raiser.get500", panic = ?aexn);
+                ::tracing::error!(method = "Raiser.get500", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::raiser::Get500Exn::ApplicationException(aexn))
             }
         };

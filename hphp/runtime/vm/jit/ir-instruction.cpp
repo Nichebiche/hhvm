@@ -17,24 +17,18 @@
 #include "hphp/runtime/vm/jit/ir-instruction.h"
 
 #include "hphp/runtime/base/bespoke-array.h"
-#include "hphp/runtime/base/implicit-context.h"
-#include "hphp/runtime/base/repo-auth-type.h"
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
 #include "hphp/runtime/vm/func.h"
 
 #include "hphp/runtime/base/bespoke/logging-array.h"
 #include "hphp/runtime/base/bespoke/type-structure.h"
 
-#include "hphp/runtime/vm/jit/analysis.h"
-#include "hphp/runtime/vm/jit/block.h"
 #include "hphp/runtime/vm/jit/edge.h"
 #include "hphp/runtime/vm/jit/extra-data.h"
 #include "hphp/runtime/vm/jit/irgen-builtin.h"
 #include "hphp/runtime/vm/jit/irgen-call.h"
-#include "hphp/runtime/vm/jit/ir-instr-table.h"
 #include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/print.h"
-#include "hphp/runtime/vm/jit/simplify.h"
 #include "hphp/runtime/vm/jit/ssa-tmp.h"
 #include "hphp/runtime/vm/jit/type-array-elem.h"
 #include "hphp/runtime/vm/jit/type.h"
@@ -168,7 +162,7 @@ bool consumesRefImpl(const IRInstruction* inst, int srcNo) {
     case CallFuncEntry:
       return move != MustMove && srcNo == 2;
 
-    case EnterTCUnwind:
+    case EndCatch:
       return srcNo == 2;
 
     case RaiseTooManyArg:
@@ -215,6 +209,7 @@ bool consumesRefImpl(const IRInstruction* inst, int srcNo) {
       return srcNo == 3;
 
     case CreateSSWH:
+    case CreateFSWH:
       return srcNo == 0;
 
     case InitDictElem:
@@ -319,6 +314,7 @@ Type allocObjReturn(const IRInstruction* inst) {
       return Type::ExactObj(AsyncGenerator::classof());
 
     case CreateAFWH:
+    case CreateAFWHL:
       return Type::ExactObj(c_AsyncFunctionWaitHandle::classof());
 
     case CreateAGWH:
@@ -328,6 +324,7 @@ Type allocObjReturn(const IRInstruction* inst) {
       return Type::ExactObj(c_ConcurrentWaitHandle::classof());
 
     case CreateSSWH:
+    case CreateFSWH:
       return Type::ExactObj(c_StaticWaitHandle::classof());
 
     case FuncCred:

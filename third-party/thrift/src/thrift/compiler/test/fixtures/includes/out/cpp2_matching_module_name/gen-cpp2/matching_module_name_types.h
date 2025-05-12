@@ -4,15 +4,13 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
-
-
 #include "other/gen-cpp2/matching_module_name_types.h"
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct OtherStructField;
 } // namespace ident
@@ -22,11 +20,9 @@ namespace detail {
 APACHE_THRIFT_DEFINE_ACCESSOR(OtherStructField);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace matching_module_name {
@@ -63,32 +59,16 @@ class MyStruct final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "matching_module_name";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 1;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::OtherStructField
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::struct_t<::matching_module_name::OtherStruct>
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 1;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -129,64 +109,52 @@ class MyStruct final  {
   bool operator<(const MyStruct&) const;
 
   /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> OtherStructField_ref() const& {
+  template <typename..., typename fbthrift_T = ::matching_module_name::OtherStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> OtherStructField_ref() const& {
     return {this->__fbthrift_field_OtherStructField, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> OtherStructField_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_OtherStructField), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> OtherStructField_ref() & {
+  template <typename..., typename fbthrift_T = ::matching_module_name::OtherStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> OtherStructField_ref() & {
     return {this->__fbthrift_field_OtherStructField, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> OtherStructField_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_OtherStructField), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::matching_module_name::OtherStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> OtherStructField_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_OtherStructField), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> OtherStructField() const& {
+  template <typename..., typename fbthrift_T = ::matching_module_name::OtherStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> OtherStructField() const& {
     return {this->__fbthrift_field_OtherStructField, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> OtherStructField() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_OtherStructField), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> OtherStructField() & {
+  template <typename..., typename fbthrift_T = ::matching_module_name::OtherStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> OtherStructField() & {
     return {this->__fbthrift_field_OtherStructField, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "OtherStructField" } */
-  template <typename..., typename T = ::matching_module_name::OtherStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> OtherStructField() && {
-    return {static_cast<T&&>(this->__fbthrift_field_OtherStructField), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::matching_module_name::OtherStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> OtherStructField() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_OtherStructField), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "OtherStructField" } */
-  [[deprecated("Use `FOO.OtherStructField().value();` instead of `FOO.get_OtherStructField();`")]]
+  [[deprecated("Use `FOO.OtherStructField().value()` instead of `FOO.get_OtherStructField()`")]]
   const ::matching_module_name::OtherStruct& get_OtherStructField() const&;
 
   /** Glean { "field": "OtherStructField" } */
-  [[deprecated("Use `FOO.OtherStructField().value();` instead of `FOO.get_OtherStructField();`")]]
+  [[deprecated("Use `FOO.OtherStructField().value()` instead of `FOO.get_OtherStructField()`")]]
   ::matching_module_name::OtherStruct get_OtherStructField() &&;
 
   /** Glean { "field": "OtherStructField" } */
   template <typename T_MyStruct_OtherStructField_struct_setter = ::matching_module_name::OtherStruct>
-  [[deprecated("Use `FOO.OtherStructField() = BAR;` instead of `FOO.set_OtherStructField(BAR);`")]]
+  [[deprecated("Use `FOO.OtherStructField() = BAR` instead of `FOO.set_OtherStructField(BAR)`")]]
   ::matching_module_name::OtherStruct& set_OtherStructField(T_MyStruct_OtherStructField_struct_setter&& OtherStructField_) {
     OtherStructField_ref() = std::forward<T_MyStruct_OtherStructField_struct_setter>(OtherStructField_);
     return __fbthrift_field_OtherStructField;
@@ -218,3 +186,11 @@ unsigned long MyStruct::read(Protocol_* iprot) {
 
 
 } // namespace matching_module_name
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::matching_module_name::MyStruct, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 2077301330453708647;
+  static constexpr ::std::string_view definitionKey = {"\x6b\x35\xa5\xfe\x90\x2b\xb3\xa9\x34\xfa\x84\x86\x67\x48\x33\x7e", 16};
+};
+} // namespace apache::thrift::detail

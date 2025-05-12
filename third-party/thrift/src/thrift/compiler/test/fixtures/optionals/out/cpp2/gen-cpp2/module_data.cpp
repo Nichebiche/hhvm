@@ -6,32 +6,11 @@
  */
 
 #include "thrift/compiler/test/fixtures/optionals/gen-cpp2/module_data.h"
+#include "thrift/compiler/test/fixtures/optionals/gen-cpp2/module_constants.h"
 
 #include <thrift/lib/cpp2/gen/module_data_cpp.h>
 
-FOLLY_CLANG_DISABLE_WARNING("-Wunused-macros")
-
-#if defined(__GNUC__) && defined(__linux__) && !FOLLY_MOBILE
-// These attributes are applied to the static data members to ensure that they
-// are not stripped from the compiled binary, in order to keep them available
-// for use by debuggers at runtime.
-//
-// The "used" attribute is required to ensure the compiler always emits unused
-// data.
-//
-// The "section" attribute is required to stop the linker from stripping used
-// data. It works by forcing all of the data members (both used and unused ones)
-// into the same section. As the linker strips data on a per-section basis, it
-// is then unable to remove unused data without also removing used data.
-// This has a similar effect to the "retain" attribute, but works with older
-// toolchains.
-#define THRIFT_DATA_MEMBER [[gnu::used]] [[gnu::section(".rodata.thrift.data")]]
-#else
-#define THRIFT_DATA_MEMBER
-#endif
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 THRIFT_DATA_MEMBER const std::string_view TStructDataStorage<::cpp2::Color>::name = "Color";
 THRIFT_DATA_MEMBER const std::array<std::string_view, 4> TStructDataStorage<::cpp2::Color>::fields_names = { {
@@ -51,12 +30,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 4> TStructDataStorage<::cpp
   TType::T_DOUBLE,
   TType::T_DOUBLE,
   TType::T_DOUBLE,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 4> TStructDataStorage<::cpp2::Color>::storage_names = { {
-  "__fbthrift_field_red"sv,
-  "__fbthrift_field_green"sv,
-  "__fbthrift_field_blue"sv,
-  "__fbthrift_field_alpha"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 4> TStructDataStorage<::cpp2::Color>::isset_indexes = { {
   0,
@@ -86,13 +59,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 5> TStructDataStorage<::cpp
   TType::T_STRING,
   TType::T_STRING,
   TType::T_BOOL,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 5> TStructDataStorage<::cpp2::Vehicle>::storage_names = { {
-  "__fbthrift_field_color"sv,
-  "__fbthrift_field_licensePlate"sv,
-  "__fbthrift_field_description"sv,
-  "__fbthrift_field_name"sv,
-  "__fbthrift_field_hasAC"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 5> TStructDataStorage<::cpp2::Vehicle>::isset_indexes = { {
   0,
@@ -139,18 +105,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 10> TStructDataStorage<::cp
   TType::T_I32,
   TType::T_LIST,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 10> TStructDataStorage<::cpp2::Person>::storage_names = { {
-  "__fbthrift_field_id"sv,
-  "__fbthrift_field_name"sv,
-  "__fbthrift_field_age"sv,
-  "__fbthrift_field_address"sv,
-  "__fbthrift_field_favoriteColor"sv,
-  "__fbthrift_field_friends"sv,
-  "__fbthrift_field_bestFriend"sv,
-  "__fbthrift_field_petNames"sv,
-  "__fbthrift_field_afraidOfAnimal"sv,
-  "__fbthrift_field_vehicles"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 10> TStructDataStorage<::cpp2::Person>::isset_indexes = { {
   0,
   1,
@@ -164,5 +118,19 @@ THRIFT_DATA_MEMBER const std::array<int, 10> TStructDataStorage<::cpp2::Person>:
   9,
 }};
 
-} // namespace thrift
-} // namespace apache
+namespace detail {
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Color, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Vehicle, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Person, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Animal, true>::bundle)() =
+    nullptr;
+
+} // namespace detail
+} // namespace apache::thrift

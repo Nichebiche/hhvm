@@ -8,6 +8,7 @@
 
 #include <fizz/crypto/aead/IOBufUtil.h>
 #include <fizz/record/EncryptedRecordLayer.h>
+#include <fizz/record/RecordLayerUtils.h>
 
 namespace fizz {
 
@@ -118,26 +119,13 @@ EncryptedReadRecordLayer::ReadResult<TLSMessage> EncryptedReadRecordLayer::read(
   }
 
   TLSMessage msg{};
-  // Iterate over the buffers while trying to find
-  // the first non-zero octet. This is much faster than
-  // first iterating and then trimming.
-  auto currentBuf = decryptedBuf->get();
-  bool nonZeroFound = false;
-  do {
-    currentBuf = currentBuf->prev();
-    size_t i = currentBuf->length();
-    while (i > 0 && !nonZeroFound) {
-      nonZeroFound = (currentBuf->data()[i - 1] != 0);
-      i--;
-    }
-    if (nonZeroFound) {
-      msg.type = static_cast<ContentType>(currentBuf->data()[i]);
-    }
-    currentBuf->trimEnd(currentBuf->length() - i);
-  } while (!nonZeroFound && currentBuf != decryptedBuf->get());
-  if (!nonZeroFound) {
+  // Use the utility function to parse and remove content type
+  auto maybeContentType =
+      RecordLayerUtils::parseAndRemoveContentType(*decryptedBuf);
+  if (!maybeContentType) {
     throw std::runtime_error("No content type found");
   }
+  msg.type = *maybeContentType;
   msg.fragment = std::move(*decryptedBuf);
 
   switch (msg.type) {
@@ -172,9 +160,9 @@ TLSContent EncryptedWriteRecordLayer::write(
   folly::IOBufQueue queue;
   queue.append(std::move(msg.fragment));
   std::unique_ptr<folly::IOBuf> outBuf;
-  std::array<uint8_t, kEncryptedHeaderSize> headerBuf;
+  std::array<uint8_t, RecordLayerUtils::kEncryptedHeaderSize> headerBuf{};
   auto header = folly::IOBuf::wrapBufferAsValue(folly::range(headerBuf));
-  aead_->setEncryptedBufferHeadroom(kEncryptedHeaderSize);
+  aead_->setEncryptedBufferHeadroom(RecordLayerUtils::kEncryptedHeaderSize);
   while (!queue.empty()) {
     Buf dataBuf;
     uint16_t paddingSize;
@@ -217,28 +205,18 @@ TLSContent EncryptedWriteRecordLayer::write(
         dataBuf->computeChainDataLength() + aead_->getCipherOverhead();
     appender.writeBE<uint16_t>(ciphertextLength);
 
-    auto cipherText = aead_->encrypt(
+    auto recordBuf = RecordLayerUtils::writeEncryptedRecord(
         std::move(dataBuf),
-        useAdditionalData_ ? &header : nullptr,
+        aead_.get(),
+        &header,
         seqNum_++,
+        useAdditionalData_,
         options);
 
-    std::unique_ptr<folly::IOBuf> record;
-    if (!cipherText->isShared() &&
-        cipherText->headroom() >= kEncryptedHeaderSize) {
-      // prepend and then write it in
-      cipherText->prepend(kEncryptedHeaderSize);
-      memcpy(cipherText->writableData(), header.data(), header.length());
-      record = std::move(cipherText);
-    } else {
-      record = folly::IOBuf::copyBuffer(header.data(), header.length());
-      record->prependChain(std::move(cipherText));
-    }
-
     if (!outBuf) {
-      outBuf = std::move(record);
+      outBuf = std::move(recordBuf);
     } else {
-      outBuf->prependChain(std::move(record));
+      outBuf->prependChain(std::move(recordBuf));
     }
   }
 

@@ -24,6 +24,29 @@
 #include <thrift/lib/cpp2/async/ReplyInfo.h>
 #include <thrift/lib/cpp2/server/IResourcePoolAcceptor.h>
 
+// Default to ture, so it can be used for killswitch.
+THRIFT_FLAG_DEFINE_bool(thrift_enable_streaming_tracking, false);
+#if defined(__linux__) && !FOLLY_MOBILE
+/**
+ * TALK TO THE THRIFT TEAM
+ * BEFORE FLIPPING THIS FLAG!
+ */
+DEFINE_bool(
+    EXPERIMENTAL_thrift_enable_streaming_tracking,
+    true,
+    "Enable Thrift Streaming Tracking.");
+#else
+static constexpr bool FLAGS_EXPERIMENTAL_thrift_enable_streaming_tracking =
+    true;
+#endif
+
+namespace {
+bool isStreamTrackingEnabled() {
+  return FLAGS_EXPERIMENTAL_thrift_enable_streaming_tracking &&
+      THRIFT_FLAG(thrift_enable_streaming_tracking);
+}
+} // namespace
+
 namespace apache::thrift {
 
 thread_local RequestParams ServerInterface::requestParams_;
@@ -901,6 +924,7 @@ void HandlerCallbackBase::doExceptionWrapped(folly::exception_wrapper ew) {
 }
 
 void HandlerCallbackBase::sendReply(SerializedResponse response) {
+  this->ctx_.reset();
   folly::Optional<uint32_t> crc32c = checksumIfNeeded(response);
   auto payload = std::move(response).extractPayload(
       req_->includeEnvelope(),
@@ -922,6 +946,9 @@ void HandlerCallbackBase::sendReply(SerializedResponse response) {
 
 void HandlerCallbackBase::sendReply(
     ResponseAndServerStreamFactory&& responseAndStream) {
+  if (!isStreamTrackingEnabled()) {
+    this->ctx_.reset();
+  }
   folly::Optional<uint32_t> crc32c =
       checksumIfNeeded(responseAndStream.response);
   auto payload = std::move(responseAndStream.response)
@@ -934,6 +961,7 @@ void HandlerCallbackBase::sendReply(
   payload = transform(std::move(payload));
   auto& stream = responseAndStream.stream;
   stream.setInteraction(std::move(interaction_));
+  stream.setContextStack(std::move(this->ctx_));
   if (getEventBase()->isInEventBaseThread()) {
     StreamReplyInfo(
         std::move(req_), std::move(stream), std::move(payload), crc32c)();
@@ -951,6 +979,9 @@ void HandlerCallbackBase::sendReply(
     [[maybe_unused]] std::pair<
         SerializedResponse,
         apache::thrift::detail::SinkConsumerImpl>&& responseAndSinkConsumer) {
+  if (!isStreamTrackingEnabled()) {
+    this->ctx_.reset();
+  }
 #if FOLLY_HAS_COROUTINES
   folly::Optional<uint32_t> crc32c =
       checksumIfNeeded(responseAndSinkConsumer.first);
@@ -964,6 +995,7 @@ void HandlerCallbackBase::sendReply(
   payload = transform(std::move(payload));
   auto& sinkConsumer = responseAndSinkConsumer.second;
   sinkConsumer.interaction = std::move(interaction_);
+  sinkConsumer.contextStack = std::move(this->ctx_);
 
   if (getEventBase()->isInEventBaseThread()) {
     SinkConsumerReplyInfo(
@@ -1152,11 +1184,11 @@ HandlerCallbackBase::processServiceInterceptorsOnRequest(
   const apache::thrift::server::ServerConfigs* server =
       reqCtx_->getConnectionContext()->getWorkerContext()->getServerContext();
   DCHECK(server);
-  const std::vector<server::ServerConfigs::ServiceInterceptorInfo>&
-      serviceInterceptorsInfo = server->getServiceInterceptors();
+  const std::vector<std::shared_ptr<ServiceInterceptorBase>>&
+      serviceInterceptors = server->getServiceInterceptors();
   std::vector<std::pair<std::size_t, std::exception_ptr>> exceptions;
 
-  for (std::size_t i = 0; i < serviceInterceptorsInfo.size(); ++i) {
+  for (std::size_t i = 0; i < serviceInterceptors.size(); ++i) {
     auto* connectionCtx = reqCtx_->getConnectionContext();
     auto connectionInfo = ServiceInterceptorBase::ConnectionInfo{
         connectionCtx,
@@ -1167,10 +1199,11 @@ HandlerCallbackBase::processServiceInterceptorsOnRequest(
         arguments,
         serviceName_,
         definingServiceName_,
-        methodName_};
+        methodName_,
+        reqCtx_->getInterceptorFrameworkMetadata()};
     try {
-      co_await serviceInterceptorsInfo[i].interceptor->internal_onRequest(
-          std::move(connectionInfo), std::move(requestInfo));
+      co_await serviceInterceptors[i]->internal_onRequest(
+          connectionInfo, requestInfo, server->getInterceptorMetricCallback());
     } catch (...) {
       exceptions.emplace_back(i, folly::current_exception());
     }
@@ -1178,12 +1211,12 @@ HandlerCallbackBase::processServiceInterceptorsOnRequest(
   if (!exceptions.empty()) {
     std::string message = fmt::format(
         "ServiceInterceptor::onRequest threw exceptions:\n[{}] {}\n",
-        serviceInterceptorsInfo[exceptions[0].first].qualifiedName,
+        serviceInterceptors[exceptions[0].first]->getQualifiedName().get(),
         folly::exceptionStr(exceptions[0].second));
     for (std::size_t i = 1; i < exceptions.size(); ++i) {
       message += fmt::format(
           "[{}] {}\n",
-          serviceInterceptorsInfo[exceptions[i].first].qualifiedName,
+          serviceInterceptors[exceptions[i].first]->getQualifiedName().get(),
           folly::exceptionStr(exceptions[i].second));
     }
     co_yield folly::coro::co_error(TApplicationException(message));
@@ -1199,12 +1232,11 @@ HandlerCallbackBase::processServiceInterceptorsOnResponse(
   const apache::thrift::server::ServerConfigs* server =
       reqCtx_->getConnectionContext()->getWorkerContext()->getServerContext();
   DCHECK(server);
-  const std::vector<server::ServerConfigs::ServiceInterceptorInfo>&
-      serviceInterceptorsInfo = server->getServiceInterceptors();
+  const std::vector<std::shared_ptr<ServiceInterceptorBase>>&
+      serviceInterceptors = server->getServiceInterceptors();
   std::vector<std::pair<std::size_t, std::exception_ptr>> exceptions;
 
-  for (auto i = std::ptrdiff_t(serviceInterceptorsInfo.size()) - 1; i >= 0;
-       --i) {
+  for (auto i = std::ptrdiff_t(serviceInterceptors.size()) - 1; i >= 0; --i) {
     auto* connectionCtx = reqCtx_->getConnectionContext();
     auto connectionInfo = ServiceInterceptorBase::ConnectionInfo{
         connectionCtx,
@@ -1217,8 +1249,10 @@ HandlerCallbackBase::processServiceInterceptorsOnResponse(
         definingServiceName_,
         methodName_};
     try {
-      co_await serviceInterceptorsInfo[i].interceptor->internal_onResponse(
-          std::move(connectionInfo), std::move(responseInfo));
+      co_await serviceInterceptors[i]->internal_onResponse(
+          connectionInfo,
+          std::move(responseInfo),
+          server->getInterceptorMetricCallback());
     } catch (...) {
       exceptions.emplace_back(i, folly::current_exception());
     }
@@ -1227,12 +1261,12 @@ HandlerCallbackBase::processServiceInterceptorsOnResponse(
   if (!exceptions.empty()) {
     std::string message = fmt::format(
         "ServiceInterceptor::onResponse threw exceptions:\n[{}] {}\n",
-        serviceInterceptorsInfo[exceptions[0].first].qualifiedName,
+        serviceInterceptors[exceptions[0].first]->getQualifiedName().get(),
         folly::exceptionStr(exceptions[0].second));
     for (std::size_t i = 1; i < exceptions.size(); ++i) {
       message += fmt::format(
           "[{}] {}\n",
-          serviceInterceptorsInfo[exceptions[i].first].qualifiedName,
+          serviceInterceptors[exceptions[i].first]->getQualifiedName().get(),
           folly::exceptionStr(exceptions[i].second));
     }
     co_yield folly::coro::co_error(TApplicationException(message));

@@ -19,11 +19,8 @@
 #include <thrift/compiler/whisker/detail/overload.h>
 
 #include <cassert>
-#include <iterator>
 #include <ostream>
-#include <sstream>
 #include <type_traits>
-#include <unordered_set>
 
 #include <fmt/core.h>
 #include <fmt/ranges.h>
@@ -48,97 +45,93 @@ class to_string_visitor {
   template <
       typename T = object,
       typename = std::enable_if_t<std::is_same_v<T, object>>>
-  void visit(const T& value, tree_printer::scope scope) const {
+  void visit(const T& value, tree_printer::scope& scope) const {
     value.visit(
-        [&](const array& a) { visit_maybe_truncate(a, std::move(scope)); },
-        [&](const map& m) { visit_maybe_truncate(m, std::move(scope)); },
-        [&](const native_object::ptr& o) {
-          visit_maybe_truncate(o, std::move(scope));
-        },
-        [&](const native_function::ptr& f) {
-          visit_maybe_truncate(f, std::move(scope));
-        },
+        [&](const array::ptr& a) { visit_maybe_truncate(a, scope); },
+        [&](const map::ptr& m) { visit_maybe_truncate(m, scope); },
+        [&](const native_function::ptr& f) { visit_maybe_truncate(f, scope); },
+        [&](const native_handle<>& h) { visit_maybe_truncate(h, scope); },
         // All other types are printed inline so no truncation is necessary.
-        [&](auto&& alternative) { visit(alternative, std::move(scope)); });
+        [&](auto&& alternative) { visit(alternative, scope); });
   }
 
  private:
   template <typename T>
-  void visit_maybe_truncate(const T& value, tree_printer::scope scope) const {
+  void visit_maybe_truncate(const T& value, tree_printer::scope& scope) const {
     if (at_max_depth(scope)) {
-      scope.println("...");
+      scope.print("...");
       return;
     }
     visit(value, scope);
   }
 
-  void visit(i64 value, tree_printer::scope scope) const {
+  void visit(i64 value, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("i64({})", value);
+    scope.print("i64({})", value);
   }
 
-  void visit(f64 value, tree_printer::scope scope) const {
+  void visit(f64 value, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("f64({})", value);
+    scope.print("f64({})", value);
   }
 
-  void visit(const std::string& value, tree_printer::scope scope) const {
+  void visit(const std::string& value, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("'{}'", tree_printer::escape(value));
+    scope.print("'{}'", tree_printer::escape(value));
   }
 
-  void visit(bool value, tree_printer::scope scope) const {
+  void visit(bool value, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("{}", value ? "true" : "false");
+    scope.print("{}", value ? "true" : "false");
   }
 
-  void visit(null, tree_printer::scope scope) const {
+  void visit(null, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("null");
+    scope.print("null");
   }
 
-  void visit(const array& arr, tree_printer::scope scope) const {
+  void visit(const map::ptr& m, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("array (size={})", arr.size());
-    for (std::size_t i = 0; i < arr.size(); ++i) {
-      auto element_scope = scope.open_transparent_property();
-      element_scope.println("[{}]", i);
-      visit(arr[i], element_scope.open_node());
+    m->print_to(scope, opts_);
+  }
+
+  void visit(const array::ptr& a, tree_printer::scope& scope) const {
+    require_within_max_depth(scope);
+    a->print_to(scope, opts_);
+  }
+
+  void visit(const native_function::ptr& f, tree_printer::scope& scope) const {
+    require_within_max_depth(scope);
+    f->print_to(scope, opts_);
+  }
+
+  void visit(const native_handle<>& handle, tree_printer::scope& scope) const {
+    require_within_max_depth(scope);
+    scope.print("<native_handle type='{}'>", demangle(handle.type()));
+    if (const prototype<>::ptr& proto = handle.proto()) {
+      visit_maybe_truncate(proto, scope.make_child());
     }
   }
 
-  void visit(const map& m, tree_printer::scope scope) const {
+  void visit(const prototype<>::ptr& proto, tree_printer::scope& scope) const {
     require_within_max_depth(scope);
-    scope.println("map (size={})", m.size());
-    for (const auto& [key, value] : m) {
-      auto element_scope = scope.open_transparent_property();
-      element_scope.println("'{}'", key);
-      visit(value, element_scope.open_node());
+    std::set<std::string> keys = proto->keys();
+    scope.print("<prototype (size={})>", keys.size());
+    for (const auto& key : keys) {
+      scope.make_child("'{}'", key);
     }
-  }
-
-  void visit(const native_object::ptr& o, tree_printer::scope scope) const {
-    require_within_max_depth(scope);
-    o->print_to(std::move(scope), opts_);
-  }
-
-  void visit(const native_function::ptr& f, tree_printer::scope scope) const {
-    require_within_max_depth(scope);
-    f->print_to(std::move(scope), opts_);
-  }
-
-  void visit(const native_handle<>& handle, tree_printer::scope scope) const {
-    require_within_max_depth(scope);
-    scope.println("<native_handle type='{}'>", demangle(handle.type()));
+    if (const prototype<>::ptr& parent = proto->parent()) {
+      visit_maybe_truncate(parent, scope.make_child());
+    }
   }
 
   [[nodiscard]] bool at_max_depth(const tree_printer::scope& scope) const {
-    return scope.semantic_depth() == opts_.max_depth;
+    return scope.depth() == opts_.max_depth;
   }
 
   void require_within_max_depth(
       [[maybe_unused]] const tree_printer::scope& scope) const {
-    assert(scope.semantic_depth() <= opts_.max_depth);
+    assert(scope.depth() <= opts_.max_depth);
   }
 
   const object_print_options& opts_;
@@ -146,170 +139,186 @@ class to_string_visitor {
 
 } // namespace
 
-namespace detail {
-bool array_eq(const array& lhs, const array& rhs) {
-  return lhs == rhs;
-}
-bool array_eq(const array& lhs, const native_object::array_like::ptr& rhs) {
-  if (rhs == nullptr) {
-    return false;
-  }
-  std::size_t size = lhs.size();
-  if (size != rhs->size()) {
-    return false;
-  }
-  for (std::size_t i = 0; i < size; ++i) {
-    if (lhs[i] != *rhs->at(i)) {
-      return false;
+namespace {
+class basic_map final : public map {
+ public:
+  std::optional<object> lookup_property(
+      std::string_view identifier) const final {
+    if (auto found = raw_.find(identifier); found != raw_.end()) {
+      return found->second;
     }
-  }
-  return true;
-}
-bool array_eq(const native_object::array_like::ptr& lhs, const array& rhs) {
-  return array_eq(rhs, lhs);
-}
-bool array_eq(
-    const native_object::array_like::ptr& lhs,
-    const native_object::array_like::ptr& rhs) {
-  if (lhs == nullptr) {
-    return false;
-  }
-  if (rhs == nullptr) {
-    return false;
-  }
-  std::size_t size = lhs->size();
-  if (size != rhs->size()) {
-    return false;
-  }
-  for (std::size_t i = 0; i < size; ++i) {
-    object::ptr lhs_value = lhs->at(i);
-    object::ptr rhs_value = rhs->at(i);
-    // Within size so it must not be null.
-    assert(lhs_value != nullptr);
-    assert(rhs_value != nullptr);
-    if (*lhs_value != *rhs_value) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool map_eq(const map& lhs, const map& rhs) {
-  return lhs == rhs;
-}
-bool map_eq(const map& lhs, const native_object::map_like::ptr& rhs) {
-  if (rhs == nullptr) {
-    return false;
-  }
-  auto rhs_keys = rhs->keys();
-  if (!rhs_keys.has_value()) {
-    // Not enumerable
-    return false;
-  }
-  if (lhs.size() != rhs_keys->size()) {
-    return false;
+    return std::nullopt;
   }
 
-  for (const auto& [key, lhs_value] : lhs) {
-    if (rhs_keys->find(key) == rhs_keys->end()) {
-      return false;
+  std::optional<std::set<std::string>> keys() const final {
+    std::set<std::string> keys;
+    for (const auto& [key, _] : raw_) {
+      keys.insert(key);
     }
-    auto rhs_value = rhs->lookup_property(key);
-    // Key was enumerated so it must not be null.
-    assert(rhs_value != nullptr);
-    if (lhs_value != *rhs_value) {
-      return false;
-    }
-  }
-  return true;
-}
-bool map_eq(const native_object::map_like::ptr& lhs, const map& rhs) {
-  return map_eq(rhs, lhs);
-}
-bool map_eq(
-    const native_object::map_like::ptr& lhs,
-    const native_object::map_like::ptr& rhs) {
-  if (lhs == nullptr || rhs == nullptr) {
-    return false;
+    return keys;
   }
 
-  auto lhs_keys = lhs->keys();
-  auto rhs_keys = rhs->keys();
+  void print_to(tree_printer::scope& scope, const object_print_options& options)
+      const final {
+    default_print_to("map", *keys(), scope, options);
+  }
+
+  std::string describe_type() const final {
+    // The built-in map type does not need to be more descriptive.
+    return "map";
+  }
+
+  explicit basic_map(map::raw raw) : raw_(std::move(raw)) {}
+
+ private:
+  map::raw raw_;
+};
+} // namespace
+/* static */ map::ptr map::of(map::raw raw) {
+  return std::make_shared<basic_map>(std::move(raw));
+}
+
+void map::print_to(
+    tree_printer::scope& scope, const object_print_options& options) const {
+  std::optional<std::set<std::string>> property_names = keys();
+  if (!property_names.has_value()) {
+    scope.print("map [custom] (not enumerable)");
+    return;
+  }
+  default_print_to(
+      "map [custom]", std::move(property_names).value(), scope, options);
+}
+
+std::string map::describe_type() const {
+  return fmt::format("map [custom]='{}'>", demangle(typeid(*this)));
+}
+
+bool operator==(const map& lhs, const map& rhs) {
+  if (std::addressof(lhs) == std::addressof(rhs)) {
+    return true;
+  }
+
+  auto lhs_keys = lhs.keys();
+  auto rhs_keys = rhs.keys();
   const bool keys_equal =
       lhs_keys.has_value() && rhs_keys.has_value() && *lhs_keys == *rhs_keys;
   if (!keys_equal) {
     return false;
   }
   for (const std::string& key : *lhs_keys) {
-    object::ptr lhs_value = lhs->lookup_property(key);
-    object::ptr rhs_value = rhs->lookup_property(key);
+    std::optional<object> lhs_value = lhs.lookup_property(key);
+    std::optional<object> rhs_value = rhs.lookup_property(key);
+    // These should always be present because we are only attempting to fetch
+    // enumerable keys.
+    assert(lhs_value.has_value());
+    assert(rhs_value.has_value());
     if (*lhs_value != *rhs_value) {
       return false;
     }
   }
   return true;
 }
-} // namespace detail
 
-void native_object::map_like::default_print_to(
+void map::default_print_to(
     std::string_view name,
     const std::set<std::string>& property_names,
-    tree_printer::scope scope,
+    tree_printer::scope& scope,
     const object_print_options& options) const {
-  assert(scope.semantic_depth() <= options.max_depth);
+  assert(scope.depth() <= options.max_depth);
   const auto size = property_names.size();
-  scope.println("{} (size={})", name, size);
+  scope.print("{} (size={})", name, size);
 
   for (const std::string& key : property_names) {
     auto cached = lookup_property(key);
-    assert(cached != nullptr);
-    auto element_scope = scope.open_transparent_property();
-    element_scope.println("'{}'", key);
-    whisker::print_to(*cached, element_scope.open_node(), options);
+    assert(cached.has_value());
+    tree_printer::scope& element_scope = scope.make_child();
+    element_scope.print("'{}' → ", key);
+    whisker::print_to(*cached, element_scope, options);
   }
 }
 
-void native_object::array_like::default_print_to(
+namespace {
+class basic_array final : public array {
+ public:
+  std::size_t size() const final { return raw_.size(); }
+  object at(std::size_t index) const final { return raw_.at(index); }
+
+  void print_to(tree_printer::scope& scope, const object_print_options& options)
+      const final {
+    default_print_to("array", scope, options);
+  }
+
+  std::string describe_type() const final {
+    // The built-in array type does not need to be more descriptive.
+    return "array";
+  }
+
+  explicit basic_array(array::raw raw) : raw_(std::move(raw)) {}
+
+ private:
+  array::raw raw_;
+};
+} // namespace
+/* static */ array::ptr array::of(array::raw raw) {
+  return std::make_shared<basic_array>(std::move(raw));
+}
+
+void array::print_to(
+    tree_printer::scope& scope, const object_print_options& options) const {
+  default_print_to("array [custom]", scope, options);
+}
+
+std::string array::describe_type() const {
+  return fmt::format("array [custom]='{}'", demangle(typeid(*this)));
+}
+
+bool operator==(const array& lhs, const array& rhs) {
+  if (std::addressof(lhs) == std::addressof(rhs)) {
+    return true;
+  }
+
+  std::size_t size = lhs.size();
+  if (size != rhs.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < size; ++i) {
+    object lhs_value = lhs.at(i);
+    object rhs_value = rhs.at(i);
+    if (lhs_value != rhs_value) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void array::default_print_to(
     std::string_view name,
-    tree_printer::scope scope,
+    tree_printer::scope& scope,
     const object_print_options& options) const {
-  assert(scope.semantic_depth() <= options.max_depth);
+  assert(scope.depth() <= options.max_depth);
 
   const auto sz = size();
-  scope.println("{} (size={})", name, sz);
+  scope.print("{} (size={})", name, sz);
   for (std::size_t i = 0; i < sz; ++i) {
-    auto element_scope = scope.open_transparent_property();
-    element_scope.println("[{}]", i);
-    whisker::print_to(*at(i), element_scope.open_node(), options);
+    tree_printer::scope& element_scope = scope.make_child();
+    element_scope.print("[{}] ", i);
+    whisker::print_to(at(i), element_scope, options);
   }
-}
-
-void native_object::print_to(
-    tree_printer::scope scope, const object_print_options&) const {
-  scope.println("<native_object>");
-}
-
-std::string native_object::describe_type() const {
-  return fmt::format("<native_object type='{}'>", demangle(typeid(*this)));
-}
-
-bool native_object::operator==(const native_object& other) const {
-  if (&other == this) {
-    return true;
-  }
-  if (detail::array_eq(as_array_like(), other.as_array_like())) {
-    return true;
-  }
-  return detail::map_eq(as_map_like(), other.as_map_like());
 }
 
 void native_function::print_to(
-    tree_printer::scope scope, const object_print_options&) const {
-  scope.println("<native_function>");
+    tree_printer::scope& scope, const object_print_options&) const {
+  scope.print("<native_function>");
 }
 
 std::string native_function::describe_type() const {
   return fmt::format("<native_function type='{}'>", demangle(typeid(*this)));
+}
+
+/* static */ prototype<>::ptr prototype<>::from(
+    descriptors_map descriptors, prototype::ptr parent) {
+  return std::make_shared<basic_prototype<>>(
+      std::move(descriptors), std::move(parent));
 }
 
 std::string detail::describe_native_handle_for_type(
@@ -331,11 +340,8 @@ std::string object::describe_type() const {
       [](const string&) -> std::string { return "string"; },
       [](boolean) -> std::string { return "boolean"; },
       [](null) -> std::string { return "null"; },
-      [](const array&) -> std::string { return "array"; },
-      [](const map&) -> std::string { return "map"; },
-      [](const native_object::ptr& o) -> std::string {
-        return o->describe_type();
-      },
+      [](const array::ptr& a) -> std::string { return a->describe_type(); },
+      [](const map::ptr& m) -> std::string { return m->describe_type(); },
       [](const native_function::ptr& f) -> std::string {
         return f->describe_type();
       },
@@ -345,110 +351,20 @@ std::string object::describe_type() const {
 }
 
 std::string to_string(const object& obj, const object_print_options& options) {
-  std::ostringstream out;
-  print_to(obj, tree_printer::scope::make_root(out), options);
-  return std::move(out).str();
+  auto scope = tree_printer::scope::make_root();
+  print_to(obj, scope, options);
+  return tree_printer::to_string(scope);
 }
 
 void print_to(
     const object& obj,
-    tree_printer::scope scope,
+    tree_printer::scope& scope,
     const object_print_options& options) {
-  to_string_visitor(options).visit(obj, std::move(scope));
+  to_string_visitor(options).visit(obj, scope);
 }
 
 std::ostream& operator<<(std::ostream& out, const object& o) {
   return out << to_string(o);
-}
-
-object make::proxy(const object::ptr& source) {
-  namespace w = whisker::make;
-  return source->visit(
-      [](whisker::i64 value) -> object { return w::i64(value); },
-      [](whisker::f64 value) -> object { return w::f64(value); },
-      [](whisker::string value) -> object {
-        return w::string(std::move(value));
-      },
-      [](whisker::boolean value) -> object { return w::boolean(value); },
-      [](whisker::null) -> object { return w::null; },
-      [&](const whisker::array& value) -> object {
-        class proxy_array final
-            : public whisker::native_object,
-              public whisker::native_object::array_like,
-              public std::enable_shared_from_this<proxy_array> {
-         public:
-          explicit proxy_array(managed_ptr<whisker::array>&& arr)
-              : array_(std::move(arr)) {}
-
-          whisker::native_object::array_like::ptr as_array_like() const final {
-            return shared_from_this();
-          }
-          std::size_t size() const final { return array_->size(); }
-          object::ptr at(std::size_t index) const final {
-            return manage_derived_ref(array_, array_->at(index));
-          }
-
-          void print_to(
-              tree_printer::scope scope,
-              const object_print_options& options) const final {
-            // This matches the builtin behavior of whisker::array
-            default_print_to("array", std::move(scope), options);
-          }
-
-         private:
-          managed_ptr<whisker::array> array_;
-        };
-        return w::make_native_object<proxy_array>(
-            manage_derived_ref(source, value));
-      },
-      [&](const whisker::map& value) -> object {
-        class proxy_map final : public whisker::native_object,
-                                public whisker::native_object::map_like,
-                                public std::enable_shared_from_this<proxy_map> {
-         public:
-          explicit proxy_map(managed_ptr<whisker::map>&& m)
-              : map_(std::move(m)) {}
-
-          whisker::native_object::map_like::ptr as_map_like() const final {
-            return shared_from_this();
-          }
-          object::ptr lookup_property(std::string_view identifier) const final {
-            if (auto property = map_->find(identifier);
-                property != map_->end()) {
-              return manage_derived_ref(map_, property->second);
-            }
-            return nullptr;
-          }
-          std::optional<std::set<std::string>> keys() const final {
-            std::set<std::string> property_names;
-            for (const auto& [key, _] : *map_) {
-              property_names.insert(key);
-            }
-            return property_names;
-          }
-
-          void print_to(
-              tree_printer::scope scope,
-              const object_print_options& options) const final {
-            // This matches the builtin behavior of whisker::map
-            default_print_to("map", *keys(), std::move(scope), options);
-          }
-
-         private:
-          managed_ptr<whisker::map> map_;
-        };
-        return w::make_native_object<proxy_map>(
-            manage_derived_ref(source, value));
-      },
-      [](const whisker::native_object::ptr& value) -> object {
-        return w::native_object(value);
-      },
-      [](const whisker::native_function::ptr& value) -> object {
-        return w::native_function(value);
-      },
-      [](const whisker::native_handle<>& value) -> object {
-        return object(whisker::native_handle<>(value));
-      });
 }
 
 } // namespace whisker

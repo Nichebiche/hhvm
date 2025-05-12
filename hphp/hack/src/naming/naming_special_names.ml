@@ -65,6 +65,8 @@ module Classes = struct
 
   let cClassname = "\\HH\\classname"
 
+  let cConcrete = "\\HH\\concrete"
+
   let cTypename = "\\HH\\typename"
 
   let cIDisposable = "\\IDisposable"
@@ -261,6 +263,8 @@ end
 module UserAttributes = struct
   let uaOverride = "__Override"
 
+  let uaNeedsConcrete = "__NeedsConcrete"
+
   let uaConsistentConstruct = "__ConsistentConstruct"
 
   let uaConst = "__Const"
@@ -294,6 +298,8 @@ module UserAttributes = struct
   let uaEnforceable = "__Enforceable"
 
   let uaExplicit = "__Explicit"
+
+  let uaNoDisjointUnion = "__NoDisjointUnion"
 
   let uaNonDisjoint = "__NonDisjoint"
 
@@ -391,6 +397,10 @@ module UserAttributes = struct
     "__UNSAFE_AllowMultipleInstantiations"
 
   let uaPackageOverride = "__PackageOverride"
+
+  let uaSimpliHack = "__SimpliHack"
+
+  let uaAsioLowPri = "__AsioLowPri"
 
   type attr_info = {
     contexts: string list;
@@ -624,8 +634,9 @@ module UserAttributes = struct
               contexts = [cls];
               autocomplete = true;
               doc =
-                "Allows a user to get a pointer to this class from a string of its name."
-                ^ " HHVM will warn or error (depending on settings) on dynamic references without this attribute.";
+                "Allows a user to get a pointer to this class from a string using `HH\\classname_to_class()`."
+                ^ " HHVM will raise a notice if this attribute is not present. For migration, this can also be"
+                ^ " set to soft logging by passing an integer sample rate (1 of N) as an argument.";
             } );
           ( uaReifiable,
             {
@@ -675,6 +686,14 @@ module UserAttributes = struct
               doc =
                 "Associates this class with a native data type (usually a C++ class)."
                 ^ " When instantiating this class, the corresponding native object will also be allocated.";
+            } );
+          ( uaNoDisjointUnion,
+            {
+              contexts = [typeparam];
+              autocomplete = true;
+              doc =
+                "Requires this type parameter to NOT have a union type where the types in the union are disjoint from each other, e.g., `(int | string)`."
+                ^ " This prevents Hack from inferring completely unrelated types.";
             } );
           ( uaNonDisjoint,
             {
@@ -829,6 +848,29 @@ module UserAttributes = struct
               autocomplete = true;
               doc =
                 "Overrides the PACKAGES.toml declaration, grouping the file into the specified package.";
+            } );
+          ( uaNeedsConcrete,
+            {
+              contexts = [mthd];
+              autocomplete =
+                false
+                (* TODO(T213971384): set to `true` when safe abstract features are ready for WWW devs to use *);
+              doc =
+                "Indicates that the method can only be called on concrete classes. Inside the method, `static` refers to a concrete class.";
+            } );
+          ( uaSimpliHack,
+            {
+              contexts = SMap.keys @@ AttributeKinds.plain_english_map;
+              (* We want this to be able to attached to any valid location for an attribute *)
+              autocomplete = false;
+              doc = "Demo for SimpliHack";
+            } );
+          ( uaAsioLowPri,
+            {
+              contexts = [fn; mthd];
+              autocomplete = false;
+              doc =
+                "Marks the function as low priority. Will suspend eager execution into a low priority awaitable.";
             } );
         ])
 
@@ -998,6 +1040,8 @@ module StdlibFunctions = struct
   let array_unmark_legacy = "\\HH\\array_unmark_legacy"
 
   let is_any_array = "\\HH\\is_any_array"
+
+  let get_class_from_type = "\\HH\\ReifiedGenerics\\get_class_from_type"
 
   (* All Id funcions that Typing.dispatch_call handles specially *)
   let special_dispatch =
@@ -1212,6 +1256,8 @@ module Shapes = struct
   let toArray = "toArray"
 
   let toDict = "toDict"
+
+  let put = "put"
 end
 
 module Hips = struct
@@ -1377,4 +1423,10 @@ module ExpressionTrees = struct
   let splice = "splice"
 
   let dollardollarTmpVar = "$0dollardollar"
+end
+
+module SimpliHack = struct
+  let prefix = "\\HH\\SimpliHack\\"
+
+  let file = prefix ^ "file"
 end

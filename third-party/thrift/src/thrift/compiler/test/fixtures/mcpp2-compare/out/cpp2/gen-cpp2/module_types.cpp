@@ -140,6 +140,7 @@ void swap([[maybe_unused]] Empty& a, [[maybe_unused]] Empty& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Empty::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Empty::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Empty::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -148,6 +149,7 @@ template void Empty::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Empty::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Empty::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Empty::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void Empty::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t Empty::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t Empty::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -227,6 +229,7 @@ void swap([[maybe_unused]] ASimpleStruct& a, [[maybe_unused]] ASimpleStruct& b) 
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ASimpleStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ASimpleStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ASimpleStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -235,6 +238,7 @@ template void ASimpleStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*
 template uint32_t ASimpleStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ASimpleStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ASimpleStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void ASimpleStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t ASimpleStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t ASimpleStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -318,6 +322,7 @@ void swap([[maybe_unused]] ASimpleStructNoexcept& a, [[maybe_unused]] ASimpleStr
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ASimpleStructNoexcept::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ASimpleStructNoexcept::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ASimpleStructNoexcept::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -326,6 +331,7 @@ template void ASimpleStructNoexcept::readNoXfer<>(apache::thrift::CompactProtoco
 template uint32_t ASimpleStructNoexcept::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ASimpleStructNoexcept::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ASimpleStructNoexcept::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void ASimpleStructNoexcept::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t ASimpleStructNoexcept::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t ASimpleStructNoexcept::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -392,10 +398,10 @@ MyStruct& MyStruct::operator=(const MyStruct& other) {
 MyStruct::MyStruct() :
     __fbthrift_field_MyBoolField(),
     __fbthrift_field_MyIntField(static_cast<::std::int64_t>(12)),
-    __fbthrift_field_MyStringField(apache::thrift::StringTraits<std::string>::fromStringLiteral("test")),
-    __fbthrift_field_MyMapEnumAndInt(std::initializer_list<::std::map<::some::valid::ns::MyEnumA, ::std::string>::value_type>{ {  ::some::valid::ns::MyEnumA::fieldA, apache::thrift::StringTraits<std::string>::fromStringLiteral("fieldA") },
-  {  ::some::valid::ns::MyEnumA::fieldC, apache::thrift::StringTraits<std::string>::fromStringLiteral("fieldC") },
-  { static_cast< ::some::valid::ns::MyEnumA>(9), apache::thrift::StringTraits<std::string>::fromStringLiteral("nothing") } }) {
+    __fbthrift_field_MyStringField(apache::thrift::StringTraits<::std::string>::fromStringLiteral("test")),
+    __fbthrift_field_MyMapEnumAndInt(std::initializer_list<::std::map<::some::valid::ns::MyEnumA, ::std::string>::value_type>{ {  ::some::valid::ns::MyEnumA::fieldA, apache::thrift::StringTraits<::std::string>::fromStringLiteral("fieldA") },
+  {  ::some::valid::ns::MyEnumA::fieldC, apache::thrift::StringTraits<::std::string>::fromStringLiteral("fieldC") },
+  { static_cast< ::some::valid::ns::MyEnumA>(9), apache::thrift::StringTraits<::std::string>::fromStringLiteral("nothing") } }) {
   ::apache::thrift::adapt_detail::construct<::CustomProtocolAdapter, 10>(__fbthrift_field_MyCustomField, *this);
   ::apache::thrift::adapt_detail::construct<::CustomProtocolAdapter, 11>(__fbthrift_field_MyOptCustomField, *this);
 }
@@ -468,11 +474,11 @@ void MyStruct::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_MyBoolField = bool();
   this->__fbthrift_field_MyIntField = ::std::int64_t();
-  this->__fbthrift_field_MyStringField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_MyStringField2 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_MyBinaryField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_MyBinaryField2 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_MyBinaryField3 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_MyStringField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_MyStringField2 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_MyBinaryField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_MyBinaryField2 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_MyBinaryField3 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_MyBinaryListField4.clear();
   this->__fbthrift_field_MyMapEnumAndInt.clear();
   ::apache::thrift::adapt_detail::clear<::CustomProtocolAdapter, 10>(__fbthrift_field_MyCustomField, *this);
@@ -554,6 +560,7 @@ void swap([[maybe_unused]] MyStruct& a, [[maybe_unused]] MyStruct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -562,6 +569,7 @@ template void MyStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void MyStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -692,6 +700,7 @@ void swap(SimpleUnion& a, SimpleUnion& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void SimpleUnion::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t SimpleUnion::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t SimpleUnion::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -700,6 +709,7 @@ template void SimpleUnion::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t SimpleUnion::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t SimpleUnion::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t SimpleUnion::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void SimpleUnion::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t SimpleUnion::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t SimpleUnion::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -1096,6 +1106,7 @@ void swap(ComplexUnion& a, ComplexUnion& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ComplexUnion::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ComplexUnion::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ComplexUnion::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1104,6 +1115,7 @@ template void ComplexUnion::readNoXfer<>(apache::thrift::CompactProtocolReader*)
 template uint32_t ComplexUnion::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ComplexUnion::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ComplexUnion::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void ComplexUnion::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t ComplexUnion::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t ComplexUnion::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -1326,8 +1338,8 @@ void AnException::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_code = ::std::int32_t();
   this->__fbthrift_field_req_code = ::std::int32_t();
-  this->__fbthrift_field_message2 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_req_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message2 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_req_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_exception_list.clear();
   this->__fbthrift_field_exception_set.clear();
   this->__fbthrift_field_exception_map.clear();
@@ -1489,6 +1501,7 @@ void swap([[maybe_unused]] AnException& a, [[maybe_unused]] AnException& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void AnException::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t AnException::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t AnException::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1497,6 +1510,7 @@ template void AnException::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t AnException::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t AnException::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t AnException::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void AnException::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t AnException::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t AnException::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -1599,7 +1613,7 @@ void AnotherException::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_code = ::std::int32_t();
   this->__fbthrift_field_req_code = ::std::int32_t();
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -1645,6 +1659,7 @@ void swap([[maybe_unused]] AnotherException& a, [[maybe_unused]] AnotherExceptio
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void AnotherException::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t AnotherException::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t AnotherException::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1653,6 +1668,7 @@ template void AnotherException::readNoXfer<>(apache::thrift::CompactProtocolRead
 template uint32_t AnotherException::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t AnotherException::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t AnotherException::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void AnotherException::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t AnotherException::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t AnotherException::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -1708,9 +1724,9 @@ containerStruct::containerStruct() :
   static_cast<::std::int32_t>(2),
   static_cast<::std::int32_t>(3),
   static_cast<::std::int32_t>(4) }),
-    fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")),
-    req_fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")),
-    opt_fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")),
+    fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")),
+    req_fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")),
+    opt_fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")),
     fieldF(std::initializer_list<::std::vector<::std::int32_t>>{ std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(1),
   static_cast<::std::int32_t>(3),
   static_cast<::std::int32_t>(5),
@@ -1722,11 +1738,11 @@ containerStruct::containerStruct() :
   static_cast<::std::int32_t>(10),
   static_cast<::std::int32_t>(12) } }),
     fieldI(true),
-    fieldJ(std::initializer_list<::std::map<::std::string, ::std::vector<::std::int32_t>>::value_type>{ { apache::thrift::StringTraits<std::string>::fromStringLiteral("subfieldA"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(1),
+    fieldJ(std::initializer_list<::std::map<::std::string, ::std::vector<::std::int32_t>>::value_type>{ { apache::thrift::StringTraits<::std::string>::fromStringLiteral("subfieldA"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(1),
   static_cast<::std::int32_t>(4),
   static_cast<::std::int32_t>(8),
   static_cast<::std::int32_t>(12) } },
-  { apache::thrift::StringTraits<std::string>::fromStringLiteral("subfieldB"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(2),
+  { apache::thrift::StringTraits<::std::string>::fromStringLiteral("subfieldB"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(2),
   static_cast<::std::int32_t>(5),
   static_cast<::std::int32_t>(9),
   static_cast<::std::int32_t>(13) } } }),
@@ -1747,7 +1763,7 @@ containerStruct::containerStruct() :
 containerStruct::~containerStruct() {}
 
 
-containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA__arg, bool req_fieldA__arg, bool opt_fieldA__arg, ::std::map<::std::string, bool> fieldB__arg, ::std::map<::std::string, bool> req_fieldB__arg, ::std::map<::std::string, bool> opt_fieldB__arg, ::std::set<::std::int32_t> fieldC__arg, ::std::set<::std::int32_t> req_fieldC__arg, ::std::set<::std::int32_t> opt_fieldC__arg, ::std::string fieldD__arg, ::std::string fieldE__arg, ::std::string req_fieldE__arg, ::std::string opt_fieldE__arg, ::std::vector<::std::vector<::std::int32_t>> fieldF__arg, ::std::map<::std::string, ::std::map<::std::string, ::std::map<::std::string, ::std::int32_t>>> fieldG__arg, ::std::vector<::std::set<::std::int32_t>> fieldH__arg, bool fieldI__arg, ::std::map<::std::string, ::std::vector<::std::int32_t>> fieldJ__arg, ::std::vector<::std::vector<::std::vector<::std::vector<::std::int32_t>>>> fieldK__arg, ::std::set<::std::set<::std::set<bool>>> fieldL__arg, ::std::map<::std::set<::std::vector<::std::int32_t>>, ::std::map<::std::vector<::std::set<::std::string>>, ::std::string>> fieldM__arg, ::some::valid::ns::simpleTypeDef fieldN__arg, ::some::valid::ns::complexStructTypeDef fieldO__arg, ::std::vector<::some::valid::ns::mostComplexTypeDef> fieldP__arg, ::some::valid::ns::MyEnumA fieldQ__arg, ::some::valid::ns::MyEnumA fieldR__arg, ::some::valid::ns::MyEnumA req_fieldR__arg, ::some::valid::ns::MyEnumA opt_fieldR__arg, ::some::valid::ns::MyEnumA fieldS__arg, ::std::vector<::some::valid::ns::MyEnumA> fieldT__arg, ::std::vector<::some::valid::ns::MyEnumA> fieldU__arg, ::some::valid::ns::MyStruct fieldV__arg, ::some::valid::ns::MyStruct req_fieldV__arg, ::some::valid::ns::MyStruct opt_fieldV__arg, ::std::set<::some::valid::ns::MyStruct> fieldW__arg, ::some::valid::ns::ComplexUnion fieldX__arg, ::some::valid::ns::ComplexUnion req_fieldX__arg, ::some::valid::ns::ComplexUnion opt_fieldX__arg, ::std::vector<::some::valid::ns::ComplexUnion> fieldY__arg, ::some::valid::ns::unionTypeDef fieldZ__arg, ::std::vector<::some::valid::ns::unionTypeDef> fieldAA__arg, ::std::map<::some::valid::ns::IndirectionB, ::some::valid::ns::IndirectionC> fieldAB__arg, ::some::valid::ns::MyEnumB fieldAC__arg, ::a::different::ns::AnEnum fieldAD__arg, ::std::map<::std::string, ::std::int32_t> fieldAE__arg, ::some::valid::ns::IndirectionD fieldSD__arg) :
+containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA__arg, bool req_fieldA__arg, bool opt_fieldA__arg, ::std::map<::std::string, bool> fieldB__arg, ::std::map<::std::string, bool> req_fieldB__arg, ::std::map<::std::string, bool> opt_fieldB__arg, ::std::set<::std::int32_t> fieldC__arg, ::std::set<::std::int32_t> req_fieldC__arg, ::std::set<::std::int32_t> opt_fieldC__arg, ::std::string fieldD__arg, ::std::string fieldE__arg, ::std::string req_fieldE__arg, ::std::string opt_fieldE__arg, ::std::vector<::std::vector<::std::int32_t>> fieldF__arg, ::std::map<::std::string, ::std::map<::std::string, ::std::map<::std::string, ::std::int32_t>>> fieldG__arg, ::std::vector<::std::set<::std::int32_t>> fieldH__arg, bool fieldI__arg, ::std::map<::std::string, ::std::vector<::std::int32_t>> fieldJ__arg, ::std::vector<::std::vector<::std::vector<::std::vector<::std::int32_t>>>> fieldK__arg, ::std::set<::std::set<::std::set<bool>>> fieldL__arg, ::std::map<::std::set<::std::vector<::std::int32_t>>, ::std::map<::std::vector<::std::set<::std::string>>, ::std::string>> fieldM__arg, ::some::valid::ns::simpleTypeDef fieldN__arg, ::some::valid::ns::complexStructTypeDef fieldO__arg, ::std::vector<::some::valid::ns::mostComplexTypeDef> fieldP__arg, ::some::valid::ns::MyEnumA fieldQ__arg, ::some::valid::ns::MyEnumA fieldR__arg, ::some::valid::ns::MyEnumA req_fieldR__arg, ::some::valid::ns::MyEnumA opt_fieldR__arg, ::some::valid::ns::MyEnumA fieldS__arg, ::std::vector<::some::valid::ns::MyEnumA> fieldT__arg, ::std::vector<::some::valid::ns::MyEnumA> fieldU__arg, ::some::valid::ns::MyStruct fieldV__arg, ::some::valid::ns::MyStruct req_fieldV__arg, ::some::valid::ns::MyStruct opt_fieldV__arg, ::std::set<::some::valid::ns::MyStruct> fieldW__arg, ::some::valid::ns::ComplexUnion fieldX__arg, ::some::valid::ns::ComplexUnion req_fieldX__arg, ::some::valid::ns::ComplexUnion opt_fieldX__arg, ::std::vector<::some::valid::ns::ComplexUnion> fieldY__arg, ::some::valid::ns::unionTypeDef fieldZ__arg, ::std::vector<::some::valid::ns::unionTypeDef> fieldAA__arg, ::some::valid::ns::MyEnumB fieldAC__arg, ::a::different::ns::AnEnum fieldAD__arg, ::std::map<::std::string, ::std::int32_t> fieldAE__arg) :
     fieldA(std::move(fieldA__arg)),
     req_fieldA(std::move(req_fieldA__arg)),
     opt_fieldA(std::move(opt_fieldA__arg)),
@@ -1789,11 +1805,9 @@ containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA
     fieldY(std::move(fieldY__arg)),
     fieldZ(std::move(fieldZ__arg)),
     fieldAA(std::move(fieldAA__arg)),
-    fieldAB(std::move(fieldAB__arg)),
     fieldAC(std::move(fieldAC__arg)),
     fieldAD(std::move(fieldAD__arg)),
-    fieldAE(std::move(fieldAE__arg)),
-    fieldSD(std::move(fieldSD__arg)) { 
+    fieldAE(std::move(fieldAE__arg)) { 
   __isset.set(folly::index_constant<0>(), true);
   __isset.set(folly::index_constant<1>(), true);
   __isset.set(folly::index_constant<2>(), true);
@@ -1831,8 +1845,6 @@ containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA
   __isset.set(folly::index_constant<34>(), true);
   __isset.set(folly::index_constant<35>(), true);
   __isset.set(folly::index_constant<36>(), true);
-  __isset.set(folly::index_constant<37>(), true);
-  __isset.set(folly::index_constant<38>(), true);
 }
 
 
@@ -1847,10 +1859,10 @@ void containerStruct::__fbthrift_clear() {
   this->fieldC.clear();
   this->req_fieldC.clear();
   this->opt_fieldC.clear();
-  this->fieldD = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->req_fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->opt_fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->fieldD = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->req_fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->opt_fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->fieldF.clear();
   this->fieldG.clear();
   this->fieldH.clear();
@@ -1879,11 +1891,9 @@ void containerStruct::__fbthrift_clear() {
   this->fieldY.clear();
   this->fieldZ.clear();
   this->fieldAA.clear();
-  this->fieldAB.clear();
   this->fieldAC = ::some::valid::ns::MyEnumB();
   this->fieldAD = ::a::different::ns::AnEnum();
   this->fieldAE.clear();
-  ::apache::thrift::apply_indirection(this->fieldSD) = apache::thrift::StringTraits<::folly::remove_cvref_t<::folly::invoke_result_t<::apache::thrift::detail::apply_indirection_fn, FooBar const&>>>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -2225,14 +2235,6 @@ const ::std::vector<::some::valid::ns::unionTypeDef>& containerStruct::get_field
   return static_cast<::std::vector<::some::valid::ns::unionTypeDef>&&>(fieldAA);
 }
 
-const ::std::map<::some::valid::ns::IndirectionB, ::some::valid::ns::IndirectionC>& containerStruct::get_fieldAB() const& {
-  return fieldAB;
-}
-
-::std::map<::some::valid::ns::IndirectionB, ::some::valid::ns::IndirectionC> containerStruct::get_fieldAB() && {
-  return static_cast<::std::map<::some::valid::ns::IndirectionB, ::some::valid::ns::IndirectionC>&&>(fieldAB);
-}
-
 ::some::valid::ns::MyEnumB containerStruct::get_fieldAC() const {
   return fieldAC;
 }
@@ -2302,14 +2304,13 @@ void swap([[maybe_unused]] containerStruct& a, [[maybe_unused]] containerStruct&
   swap(a.fieldY, b.fieldY);
   swap(a.fieldZ, b.fieldZ);
   swap(a.fieldAA, b.fieldAA);
-  swap(a.fieldAB, b.fieldAB);
   swap(a.fieldAC, b.fieldAC);
   swap(a.fieldAD, b.fieldAD);
   swap(a.fieldAE, b.fieldAE);
-  swap(a.fieldSD, b.fieldSD);
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void containerStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t containerStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t containerStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2318,6 +2319,7 @@ template void containerStruct::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t containerStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t containerStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t containerStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void containerStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t containerStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t containerStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -2528,6 +2530,7 @@ void swap([[maybe_unused]] MyIncludedStruct& a, [[maybe_unused]] MyIncludedStruc
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyIncludedStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyIncludedStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyIncludedStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2536,6 +2539,7 @@ template void MyIncludedStruct::readNoXfer<>(apache::thrift::CompactProtocolRead
 template uint32_t MyIncludedStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyIncludedStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyIncludedStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void MyIncludedStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t MyIncludedStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t MyIncludedStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -2607,17 +2611,16 @@ AnnotatedStruct::AnnotatedStruct() :
     req_ref_type_const(std::make_shared<::some::valid::ns::containerStruct>()),
     req_ref_type_unique(std::make_unique<::std::vector<::std::string>>()),
     base_type(),
-    indirection_a(),
-    iobuf_type_val(apache::thrift::StringTraits<folly::IOBuf>::fromStringLiteral("value")),
-    iobuf_ptr_val(apache::thrift::StringTraits<std::unique_ptr<folly::IOBuf>>::fromStringLiteral("value2")),
-    struct_struct(::apache::thrift::detail::make_structured_constant<::some::valid::ns::containerStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::fieldD>(apache::thrift::StringTraits<std::string>::fromStringLiteral("some string")), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::fieldI>(false))) {
+    iobuf_type_val(apache::thrift::StringTraits<::some::valid::ns::IOBuf>::fromStringLiteral("value")),
+    iobuf_ptr_val(apache::thrift::StringTraits<::some::valid::ns::IOBufPtr>::fromStringLiteral("value2")),
+    struct_struct(::apache::thrift::detail::make_structured_constant<::some::valid::ns::containerStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::fieldD>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("some string")), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::fieldI>(false))) {
 }
 
 
 AnnotatedStruct::~AnnotatedStruct() {}
 
 
-AnnotatedStruct::AnnotatedStruct(apache::thrift::FragileConstructor, ::some::valid::ns::containerStruct no_annotation__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> cpp_unique_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> cpp2_unique_ref__arg, ::std::unique_ptr<::std::map<::std::int32_t, ::std::vector<::std::string>>> container_with_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> req_cpp_unique_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> req_cpp2_unique_ref__arg, ::std::unique_ptr<::std::vector<::std::string>> req_container_with_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> opt_cpp_unique_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> opt_cpp2_unique_ref__arg, ::std::unique_ptr<::std::set<::std::int32_t>> opt_container_with_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> ref_type_unique__arg, ::std::shared_ptr<::some::valid::ns::containerStruct> ref_type_shared__arg, ::std::shared_ptr<const ::std::map<::std::int32_t, ::std::vector<::std::string>>> ref_type_const__arg, ::std::shared_ptr<::some::valid::ns::containerStruct> req_ref_type_shared__arg, ::std::shared_ptr<const ::some::valid::ns::containerStruct> req_ref_type_const__arg, ::std::unique_ptr<::std::vector<::std::string>> req_ref_type_unique__arg, ::std::shared_ptr<const ::some::valid::ns::containerStruct> opt_ref_type_const__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> opt_ref_type_unique__arg, ::std::shared_ptr<::std::set<::std::int32_t>> opt_ref_type_shared__arg, ::some::valid::ns::CppFakeI32 base_type__arg, ::some::valid::ns::FollySmallVectorI64 list_type__arg, ::some::valid::ns::SortedVectorSetString set_type__arg, ::some::valid::ns::FakeMap map_type__arg, ::some::valid::ns::UnorderedMapStruct map_struct_type__arg, ::some::valid::ns::IOBuf iobuf_type__arg, ::some::valid::ns::IOBufPtr iobuf_ptr__arg, std::list<::std::int32_t> list_i32_template__arg, std::deque<::std::string> list_string_template__arg, folly::sorted_vector_set<::std::string> set_template__arg, folly::sorted_vector_map<::std::int64_t, ::std::string> map_template__arg, ::some::valid::ns::std_list typedef_list_template__arg, ::some::valid::ns::std_deque typedef_deque_template__arg, ::some::valid::ns::folly_set typedef_set_template__arg, ::some::valid::ns::folly_map typedef_map_template__arg, ::some::valid::ns::IndirectionA indirection_a__arg, ::std::vector<::some::valid::ns::IndirectionB> indirection_b__arg, ::std::set<::some::valid::ns::IndirectionC> indirection_c__arg, ::some::valid::ns::IOBuf iobuf_type_val__arg, ::some::valid::ns::IOBufPtr iobuf_ptr_val__arg, ::some::valid::ns::containerStruct struct_struct__arg) :
+AnnotatedStruct::AnnotatedStruct(apache::thrift::FragileConstructor, ::some::valid::ns::containerStruct no_annotation__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> cpp_unique_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> cpp2_unique_ref__arg, ::std::unique_ptr<::std::map<::std::int32_t, ::std::vector<::std::string>>> container_with_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> req_cpp_unique_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> req_cpp2_unique_ref__arg, ::std::unique_ptr<::std::vector<::std::string>> req_container_with_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> opt_cpp_unique_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> opt_cpp2_unique_ref__arg, ::std::unique_ptr<::std::set<::std::int32_t>> opt_container_with_ref__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> ref_type_unique__arg, ::std::shared_ptr<::some::valid::ns::containerStruct> ref_type_shared__arg, ::std::shared_ptr<const ::std::map<::std::int32_t, ::std::vector<::std::string>>> ref_type_const__arg, ::std::shared_ptr<::some::valid::ns::containerStruct> req_ref_type_shared__arg, ::std::shared_ptr<const ::some::valid::ns::containerStruct> req_ref_type_const__arg, ::std::unique_ptr<::std::vector<::std::string>> req_ref_type_unique__arg, ::std::shared_ptr<const ::some::valid::ns::containerStruct> opt_ref_type_const__arg, ::std::unique_ptr<::some::valid::ns::containerStruct> opt_ref_type_unique__arg, ::std::shared_ptr<::std::set<::std::int32_t>> opt_ref_type_shared__arg, ::some::valid::ns::CppFakeI32 base_type__arg, ::some::valid::ns::FollySmallVectorI64 list_type__arg, ::some::valid::ns::SortedVectorSetString set_type__arg, ::some::valid::ns::FakeMap map_type__arg, ::some::valid::ns::UnorderedMapStruct map_struct_type__arg, ::some::valid::ns::IOBuf iobuf_type__arg, ::some::valid::ns::IOBufPtr iobuf_ptr__arg, std::list<::std::int32_t> list_i32_template__arg, std::deque<::std::string> list_string_template__arg, folly::sorted_vector_set<::std::string> set_template__arg, folly::sorted_vector_map<::std::int64_t, ::std::string> map_template__arg, ::some::valid::ns::std_list typedef_list_template__arg, ::some::valid::ns::std_deque typedef_deque_template__arg, ::some::valid::ns::folly_set typedef_set_template__arg, ::some::valid::ns::folly_map typedef_map_template__arg, ::some::valid::ns::IOBuf iobuf_type_val__arg, ::some::valid::ns::IOBufPtr iobuf_ptr_val__arg, ::some::valid::ns::containerStruct struct_struct__arg) :
     no_annotation(std::move(no_annotation__arg)),
     cpp_unique_ref(std::move(cpp_unique_ref__arg)),
     cpp2_unique_ref(std::move(cpp2_unique_ref__arg)),
@@ -2652,9 +2655,6 @@ AnnotatedStruct::AnnotatedStruct(apache::thrift::FragileConstructor, ::some::val
     typedef_deque_template(std::move(typedef_deque_template__arg)),
     typedef_set_template(std::move(typedef_set_template__arg)),
     typedef_map_template(std::move(typedef_map_template__arg)),
-    indirection_a(std::move(indirection_a__arg)),
-    indirection_b(std::move(indirection_b__arg)),
-    indirection_c(std::move(indirection_c__arg)),
     iobuf_type_val(std::move(iobuf_type_val__arg)),
     iobuf_ptr_val(std::move(iobuf_ptr_val__arg)),
     struct_struct(std::move(struct_struct__arg)) { 
@@ -2677,9 +2677,6 @@ AnnotatedStruct::AnnotatedStruct(apache::thrift::FragileConstructor, ::some::val
   __isset.set(folly::index_constant<16>(), true);
   __isset.set(folly::index_constant<17>(), true);
   __isset.set(folly::index_constant<18>(), true);
-  __isset.set(folly::index_constant<19>(), true);
-  __isset.set(folly::index_constant<20>(), true);
-  __isset.set(folly::index_constant<21>(), true);
 }
 
 
@@ -2709,8 +2706,8 @@ void AnnotatedStruct::__fbthrift_clear() {
   this->set_type.clear();
   this->map_type.clear();
   this->map_struct_type.clear();
-  this->iobuf_type = apache::thrift::StringTraits<folly::IOBuf>::fromStringLiteral("");
-  this->iobuf_ptr = apache::thrift::StringTraits<std::unique_ptr<folly::IOBuf>>::fromStringLiteral("");
+  this->iobuf_type = apache::thrift::StringTraits<::some::valid::ns::IOBuf>::fromStringLiteral("");
+  this->iobuf_ptr = apache::thrift::StringTraits<::some::valid::ns::IOBufPtr>::fromStringLiteral("");
   this->list_i32_template.clear();
   this->list_string_template.clear();
   this->set_template.clear();
@@ -2719,11 +2716,8 @@ void AnnotatedStruct::__fbthrift_clear() {
   this->typedef_deque_template.clear();
   this->typedef_set_template.clear();
   this->typedef_map_template.clear();
-  ::apache::thrift::apply_indirection(this->indirection_a) = 0;
-  this->indirection_b.clear();
-  this->indirection_c.clear();
-  this->iobuf_type_val = apache::thrift::StringTraits<folly::IOBuf>::fromStringLiteral("");
-  this->iobuf_ptr_val = apache::thrift::StringTraits<std::unique_ptr<folly::IOBuf>>::fromStringLiteral("");
+  this->iobuf_type_val = apache::thrift::StringTraits<::some::valid::ns::IOBuf>::fromStringLiteral("");
+  this->iobuf_ptr_val = apache::thrift::StringTraits<::some::valid::ns::IOBufPtr>::fromStringLiteral("");
   ::apache::thrift::clear(this->struct_struct);
   __isset = {};
 }
@@ -2853,31 +2847,6 @@ const ::some::valid::ns::folly_map& AnnotatedStruct::get_typedef_map_template() 
   return static_cast<::some::valid::ns::folly_map&&>(typedef_map_template);
 }
 
-::some::valid::ns::IndirectionA AnnotatedStruct::get_indirection_a() const {
-  return indirection_a;
-}
-
-::some::valid::ns::IndirectionA& AnnotatedStruct::set_indirection_a(::some::valid::ns::IndirectionA indirection_a_) {
-  indirection_a_ref() = indirection_a_;
-  return indirection_a;
-}
-
-const ::std::vector<::some::valid::ns::IndirectionB>& AnnotatedStruct::get_indirection_b() const& {
-  return indirection_b;
-}
-
-::std::vector<::some::valid::ns::IndirectionB> AnnotatedStruct::get_indirection_b() && {
-  return static_cast<::std::vector<::some::valid::ns::IndirectionB>&&>(indirection_b);
-}
-
-const ::std::set<::some::valid::ns::IndirectionC>& AnnotatedStruct::get_indirection_c() const& {
-  return indirection_c;
-}
-
-::std::set<::some::valid::ns::IndirectionC> AnnotatedStruct::get_indirection_c() && {
-  return static_cast<::std::set<::some::valid::ns::IndirectionC>&&>(indirection_c);
-}
-
 const ::some::valid::ns::containerStruct& AnnotatedStruct::get_struct_struct() const& {
   return struct_struct;
 }
@@ -2922,15 +2891,13 @@ void swap([[maybe_unused]] AnnotatedStruct& a, [[maybe_unused]] AnnotatedStruct&
   swap(a.typedef_deque_template, b.typedef_deque_template);
   swap(a.typedef_set_template, b.typedef_set_template);
   swap(a.typedef_map_template, b.typedef_map_template);
-  swap(a.indirection_a, b.indirection_a);
-  swap(a.indirection_b, b.indirection_b);
-  swap(a.indirection_c, b.indirection_c);
   swap(a.iobuf_type_val, b.iobuf_type_val);
   swap(a.iobuf_ptr_val, b.iobuf_ptr_val);
   swap(a.struct_struct, b.struct_struct);
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void AnnotatedStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t AnnotatedStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t AnnotatedStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2939,6 +2906,7 @@ template void AnnotatedStruct::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t AnnotatedStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t AnnotatedStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t AnnotatedStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void AnnotatedStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t AnnotatedStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t AnnotatedStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -3157,6 +3125,7 @@ void swap([[maybe_unused]] ComplexContainerStruct& a, [[maybe_unused]] ComplexCo
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ComplexContainerStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ComplexContainerStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ComplexContainerStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3165,6 +3134,7 @@ template void ComplexContainerStruct::readNoXfer<>(apache::thrift::CompactProtoc
 template uint32_t ComplexContainerStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ComplexContainerStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ComplexContainerStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void ComplexContainerStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t ComplexContainerStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t ComplexContainerStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -3262,6 +3232,7 @@ void swap([[maybe_unused]] FloatStruct& a, [[maybe_unused]] FloatStruct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void FloatStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t FloatStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t FloatStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3270,6 +3241,7 @@ template void FloatStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t FloatStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t FloatStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t FloatStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void FloatStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t FloatStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t FloatStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -3397,6 +3369,7 @@ void swap(FloatUnion& a, FloatUnion& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void FloatUnion::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t FloatUnion::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t FloatUnion::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3405,6 +3378,7 @@ template void FloatUnion::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t FloatUnion::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t FloatUnion::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t FloatUnion::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void FloatUnion::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t FloatUnion::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t FloatUnion::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;
@@ -3485,6 +3459,7 @@ void swap([[maybe_unused]] AllRequiredNoExceptMoveCtrStruct& a, [[maybe_unused]]
   swap(a.__fbthrift_field_intField, b.__fbthrift_field_intField);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void AllRequiredNoExceptMoveCtrStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t AllRequiredNoExceptMoveCtrStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t AllRequiredNoExceptMoveCtrStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3493,6 +3468,7 @@ template void AllRequiredNoExceptMoveCtrStruct::readNoXfer<>(apache::thrift::Com
 template uint32_t AllRequiredNoExceptMoveCtrStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t AllRequiredNoExceptMoveCtrStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t AllRequiredNoExceptMoveCtrStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void AllRequiredNoExceptMoveCtrStruct::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t AllRequiredNoExceptMoveCtrStruct::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t AllRequiredNoExceptMoveCtrStruct::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;

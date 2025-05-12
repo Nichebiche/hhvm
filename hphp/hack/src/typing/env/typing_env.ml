@@ -93,6 +93,8 @@ let expand_var env r v =
   let (inference_env, ty_solution) = Inf.expand_var env.inference_env r v in
   ({ env with inference_env }, ty_solution)
 
+let rank_of_tvar { inference_env; _ } tvid = Inf.get_rank inference_env tvid
+
 let fresh_type_reason ?variance env p r =
   log_env_change_ "fresh_type_reason" env
   @@
@@ -106,6 +108,18 @@ let fresh_type env p =
   @@
   let (inference_env, res) =
     Inf.fresh_type env.inference_env env.tvar_id_provider p
+  in
+  ({ env with inference_env }, res)
+
+let fresh_type_invariant_with_rank env rank p =
+  log_env_change_ "fresh_type_invariant_with_rank" env
+  @@
+  let (inference_env, res) =
+    Inf.fresh_type_invariant_with_rank
+      env.inference_env
+      env.tvar_id_provider
+      rank
+      p
   in
   ({ env with inference_env }, res)
 
@@ -408,11 +422,8 @@ let add_upper_bound_global env name ty =
   let tpenv =
     let (env, ty) = expand_type env ty in
     match deref ty with
-    | (r, Tgeneric (formal_super, [])) ->
-      TPEnv.add_lower_bound env.tpenv formal_super (mk (r, Tgeneric (name, [])))
-    | (_r, Tgeneric (_formal_super, _targs)) ->
-      (* TODO(T70068435) Revisit this when implementing bounds on HK generic vars *)
-      env.tpenv
+    | (r, Tgeneric formal_super) ->
+      TPEnv.add_lower_bound env.tpenv formal_super (mk (r, Tgeneric name))
     | _ -> env.tpenv
   in
   { env with tpenv = TPEnv.add_upper_bound tpenv name ty }
@@ -421,11 +432,8 @@ let add_lower_bound_global env name ty =
   let tpenv =
     let (env, ty) = expand_type env ty in
     match deref ty with
-    | (r, Tgeneric (formal_super, [])) ->
-      TPEnv.add_upper_bound env.tpenv formal_super (mk (r, Tgeneric (name, [])))
-    | (_r, Tgeneric (_formal_super, _targs)) ->
-      (* TODO(T70068435) Revisit this when implementing bounds on HK generic vars *)
-      env.tpenv
+    | (r, Tgeneric formal_super) ->
+      TPEnv.add_upper_bound env.tpenv formal_super (mk (r, Tgeneric name))
     | _ -> env.tpenv
   in
   { env with tpenv = TPEnv.add_lower_bound tpenv name ty }
@@ -504,6 +512,7 @@ let add_fresh_generic_parameter env pos prefix ~reified ~enforceable ~newable =
         newable;
         require_dynamic = true;
         parameters = [];
+        rank = 0;
       }
   in
   add_fresh_generic_parameter_by_kind env pos prefix kind
@@ -529,6 +538,7 @@ let get_tpenv_tparams env =
               require_dynamic = _;
               (* FIXME what to do here? it seems dangerous to just traverse *)
               parameters = _;
+              rank = _;
             }
           acc ->
         let folder ty acc =
@@ -624,63 +634,6 @@ let make_depend_on_current_module env =
     Typing_env_types.(env.genv.current_module)
     ~f:(fun (_, mid) -> Deps.make_depend_on_module_name env mid)
 
-let mark_members_declared_in_depgraph env (c : _ Aast.class_) =
-  let {
-    c_span = _;
-    c_annotation = _;
-    c_mode = _;
-    c_final = _;
-    c_is_xhp = _;
-    c_has_xhp_keyword = _;
-    c_kind = _;
-    c_name = (_p, class_name);
-    c_tparams = _;
-    c_extends = _;
-    c_uses = _;
-    c_xhp_attr_uses = _;
-    c_xhp_category = _;
-    c_reqs = _;
-    c_implements = _;
-    c_consts;
-    c_typeconsts;
-    c_vars;
-    c_methods;
-    c_xhp_children = _;
-    c_xhp_attrs;
-    c_namespace = _;
-    c_user_attributes = _;
-    c_file_attributes = _;
-    c_docs_url = _;
-    c_enum = _;
-    c_doc_comment = _;
-    c_emit_id = _;
-    c_internal = _;
-    c_module = _;
-    c_package = _;
-  } =
-    c
-  in
-  List.iter c_consts ~f:(fun { cc_id = (_p, name); _ } ->
-      Deps.mark_class_constant_declared env class_name name);
-  List.iter c_typeconsts ~f:(fun { c_tconst_name = (_p, name); _ } ->
-      Deps.mark_typeconst_declared env class_name name);
-  List.iter c_vars ~f:(fun { cv_id = (_p, name); cv_is_static; _ } ->
-      Deps.mark_property_declared env ~is_static:cv_is_static class_name name);
-  List.iter c_methods ~f:(fun { m_name = (_p, name); m_static; _ } ->
-      if String.equal Naming_special_names.Members.__construct name then
-        Deps.mark_constructor_declared env class_name
-      else
-        Deps.mark_method_declared env ~is_static:m_static class_name name);
-  List.iter c_xhp_attrs ~f:(fun (_ty, { cv_id = (_p, name); _ }, _tag, _el) ->
-      Deps.mark_xhp_attribute_declared env class_name name);
-  ()
-
-let add_non_external_deps env (c : _ Aast.class_) =
-  make_depend_on_current_module env;
-  if TypecheckerOptions.optimized_member_fanout (get_tcopt env) then
-    mark_members_declared_in_depgraph env c;
-  ()
-
 let set_internal env b = { env with genv = { env.genv with this_internal = b } }
 
 let get_internal env = env.genv.this_internal
@@ -697,9 +650,25 @@ let is_package_loaded env package = SSet.mem package env.loaded_packages
 
 let package_v2 env = TypecheckerOptions.package_v2 @@ get_tcopt env
 
-let package_v2_bypass_package_check_for_class_const env =
-  TypecheckerOptions.package_v2_bypass_package_check_for_class_const
+let package_v2_allow_typedef_violations env =
+  TypecheckerOptions.package_v2_allow_typedef_violations @@ get_tcopt env
+
+let package_v2_allow_classconst_violations env =
+  TypecheckerOptions.package_v2_allow_classconst_violations @@ get_tcopt env
+
+let package_v2_allow_reifiable_tconst_violations env =
+  TypecheckerOptions.package_v2_allow_reifiable_tconst_violations
   @@ get_tcopt env
+
+let package_v2_allow_all_tconst_violations env =
+  TypecheckerOptions.package_v2_allow_all_tconst_violations @@ get_tcopt env
+
+let package_v2_allow_reified_generics_violations env =
+  TypecheckerOptions.package_v2_allow_reified_generics_violations
+  @@ get_tcopt env
+
+let package_v2_allow_all_generics_violations env =
+  TypecheckerOptions.package_v2_allow_all_generics_violations @@ get_tcopt env
 
 let load_packages env packages =
   { env with loaded_packages = SSet.union env.loaded_packages packages }
@@ -798,13 +767,13 @@ let get_class (env : env) (name : Decl_provider.type_key) : Cls.t Decl_entry.t =
   Deps.make_depend_on_class env name res;
   res
 
-let get_parent env ~skip_constructor_dep ~is_req name : Cls.t Decl_entry.t =
+let get_parent env ~skip_constructor_dep name : Cls.t Decl_entry.t =
   let res = get_class env name in
-  Deps.make_depend_on_parent env ~skip_constructor_dep ~is_req name res;
+  Deps.make_depend_on_parent env ~skip_constructor_dep name res;
   res
 
-let add_parent_dep env ~skip_constructor_dep ~is_req name : unit =
-  let _ = get_parent env ~skip_constructor_dep ~is_req name in
+let add_parent_dep env ~skip_constructor_dep name : unit =
+  let _ = get_parent env ~skip_constructor_dep name in
   ()
 
 let get_class_or_typedef env x :
@@ -813,6 +782,14 @@ let get_class_or_typedef env x :
     Decl_entry.map (get_typedef env x) ~f:(fun td -> TypedefResult td)
   else
     Decl_entry.map (get_class env x) ~f:(fun cd -> ClassResult cd)
+
+let get_class_or_typedef_tparams env x =
+  match get_class_or_typedef env x with
+  | Decl_entry.Found (TypedefResult { td_tparams; _ }) -> td_tparams
+  | Decl_entry.Found (ClassResult cls) -> Cls.tparams cls
+  | Decl_entry.DoesNotExist
+  | Decl_entry.NotYetAvailable ->
+    []
 
 let get_fun env x =
   let res =
@@ -965,9 +942,6 @@ let get_construct env class_ =
   Deps.make_depend_on_constructor env class_;
   Cls.construct class_
 
-let add_not_subtype_dep env type_name : unit =
-  Deps.add_not_subtype_dep env type_name
-
 let get_return env = env.genv.return
 
 let set_return env x =
@@ -1017,37 +991,6 @@ let with_origin2 env origin f =
   let env = { env with tracing_info = ti1 } in
   (env, r1, r2)
 
-let inside_expr_tree env expr_tree_hint =
-  let outer_locals =
-    match next_cont_opt env with
-    | None -> LID.Map.empty
-    | Some cont -> cont.LEnvC.local_types
-  in
-  { env with in_expr_tree = Some { dsl = expr_tree_hint; outer_locals } }
-
-let outside_expr_tree env = { env with in_expr_tree = None }
-
-let with_inside_expr_tree env expr_tree_hint f =
-  let old_in_expr_tree = env.in_expr_tree in
-  let env = inside_expr_tree env expr_tree_hint in
-  let (env, r1, r2) = f env in
-  let env = { env with in_expr_tree = old_in_expr_tree } in
-  (env, r1, r2)
-
-let with_outside_expr_tree env f =
-  let old_in_expr_tree = env.in_expr_tree in
-  let dsl =
-    match old_in_expr_tree with
-    | Some { dsl = cls; outer_locals = _ } -> Some cls
-    | _ -> None
-  in
-  let env = outside_expr_tree env in
-  let (env, r1, r2) = f env dsl in
-  let env = { env with in_expr_tree = old_in_expr_tree } in
-  (env, r1, r2)
-
-let is_in_expr_tree env = Option.is_some env.in_expr_tree
-
 let is_static env = env.genv.static
 
 let get_val_kind env = env.genv.val_kind
@@ -1090,6 +1033,9 @@ let set_support_dynamic_type env b =
 let set_no_auto_likes env b =
   { env with genv = { env.genv with no_auto_likes = b } }
 
+let set_needs_concrete env b =
+  { env with genv = { env.genv with needs_concrete = b } }
+
 let set_everything_sdt env b =
   map_tcopt
     ~f:(fun tcopt ->
@@ -1100,6 +1046,29 @@ let set_everything_sdt env b =
 let get_support_dynamic_type env = env.genv.this_support_dynamic_type
 
 let get_no_auto_likes env = env.genv.no_auto_likes
+
+let containing_class_is_final_and_concrete env =
+  let is_final_non_abstract class_ =
+    Cls.final class_ && (not @@ Cls.abstract class_)
+  in
+  let is_final_non_consistent_construct class_ =
+    match snd @@ Cls.construct class_ with
+    | FinalClass -> true
+    | Inconsistent
+    | ConsistentConstruct ->
+      false
+  in
+  match get_self_class env |> Decl_entry.to_option with
+  | Some class_ ->
+    is_final_non_abstract class_ || is_final_non_consistent_construct class_
+  | None -> false
+
+let static_points_to_concrete_class env =
+  (* if we're in a __NeedsConcrete method, `static` points to a concrete class *)
+  env.genv.needs_concrete
+  (* if we're in an instance method or constructor then the class must be instantiable and therefore concrete *)
+  || (not @@ is_static env)
+  || containing_class_is_final_and_concrete env
 
 let set_self env self_id self_ty =
   let genv = env.genv in
@@ -1153,7 +1122,15 @@ let make_expression_id env = Expression_id.make env.expression_id_provider
  * that the local currently has, and an expression_id generated from
  * the last assignment to this local.
  *)
-let set_local ?(immutable = false) ~is_defined ~bound_ty env x new_type pos =
+let set_local
+    ?(immutable = false)
+    ?macro_splice_vars
+    ~is_defined
+    ~bound_ty
+    env
+    x
+    new_type
+    pos =
   let new_type =
     match get_node new_type with
     | Tunion [ty] -> ty
@@ -1175,7 +1152,14 @@ let set_local ?(immutable = false) ~is_defined ~bound_ty env x new_type pos =
     in
     let local =
       Typing_local_types.
-        { ty = new_type; defined = is_defined; bound_ty; pos; eid = expr_id }
+        {
+          ty = new_type;
+          defined = is_defined;
+          bound_ty;
+          pos;
+          eid = expr_id;
+          macro_splice_vars;
+        }
     in
     set_local_ env x local
 
@@ -1283,6 +1267,7 @@ let get_local_in_ctx ~undefined_err_fun env x ctx_opt =
           bound_ty = None;
           pos = Pos.none;
           eid = make_expression_id env;
+          macro_splice_vars = None;
         }
   | Some ctx ->
     let lcl = LID.Map.find_opt x ctx.LEnvC.local_types in
@@ -1314,6 +1299,7 @@ let get_local_ty_in_ctx ~undefined_err_fun env x ctx_opt =
           bound_ty = None;
           pos = Pos.none;
           eid = make_expression_id env;
+          macro_splice_vars = None;
         } )
   | Some local ->
     let open Typing_local_types in
@@ -1370,9 +1356,13 @@ let set_local_expr_id env x new_eid =
   | Some next_cont -> begin
     let open Typing_local_types in
     match LID.Map.find_opt x next_cont.LEnvC.local_types with
-    | Some Typing_local_types.{ ty; defined; bound_ty; pos; eid }
+    | Some
+        Typing_local_types.
+          { ty; defined; bound_ty; pos; eid; macro_splice_vars }
       when not (Expression_id.equal eid new_eid) ->
-      let local = { ty; defined; bound_ty; pos; eid = new_eid } in
+      let local =
+        { ty; defined; bound_ty; pos; eid = new_eid; macro_splice_vars }
+      in
       let per_cont_env = LEnvC.add_to_cont C.Next x local per_cont_env in
       let env = { env with lenv = { env.lenv with per_cont_env } } in
       if Expression_id.is_immutable eid then
@@ -1652,16 +1642,7 @@ and get_tyvars_i env (ty : internal_type) =
           (env, Tvid.Set.empty, Tvid.Set.empty)
       end
     | Tdependent (_, ty) -> get_tyvars env ty
-    | Tgeneric (_, tyl) ->
-      (* TODO(T69931993) Once implementing variance support for HK types, query
-         tyvar env here for list of variances *)
-      let variancel =
-        List.replicate ~num:(List.length tyl) Ast_defs.Invariant
-      in
-      get_tyvars_variance_list
-        (env, Tvid.Set.empty, Tvid.Set.empty)
-        variancel
-        tyl
+    | Tgeneric _ -> (env, Tvid.Set.empty, Tvid.Set.empty)
     | Tclass ((_, cid), _, tyl) ->
       if List.is_empty tyl then
         (env, Tvid.Set.empty, Tvid.Set.empty)
@@ -1685,7 +1666,6 @@ and get_tyvars_i env (ty : internal_type) =
       ( env,
         Tvid.Set.union positive1 positive2,
         Tvid.Set.union negative1 negative2 )
-    | Tunapplied_alias _ -> (env, Tvid.Set.empty, Tvid.Set.empty)
     | Tlabel _name -> (env, Tvid.Set.empty, Tvid.Set.empty)
     | Taccess (ty, _ids) -> get_tyvars env ty
     | Tclass_ptr ty -> get_tyvars env ty)
@@ -2047,3 +2027,77 @@ let update_ity_reason t ity ~f =
   match ity with
   | LoclType lty -> LoclType (update_reason t lty ~f)
   | ConstraintType cty -> ConstraintType (update_cty_reason t cty ~f)
+
+let inside_expr_tree env expr_tree_hint =
+  let outer_locals =
+    match next_cont_opt env with
+    | None -> LID.Map.empty
+    | Some cont -> cont.LEnvC.local_types
+  in
+  { env with in_expr_tree = Some { dsl = expr_tree_hint; outer_locals } }
+
+let outside_expr_tree env ~macro_variables =
+  let (env, macro_locals) =
+    match macro_variables with
+    | None -> (env, None)
+    | Some lids ->
+      let (env, local_env) =
+        List.fold_left_env
+          env
+          lids
+          ~init:Typing_local_types.empty
+          ~f:(fun env locals (pos, local_id) ->
+            let (env, ty) = fresh_type_invariant env pos in
+            let local =
+              Typing_local_types.
+                {
+                  ty;
+                  defined = true;
+                  bound_ty = None;
+                  pos;
+                  eid = Expression_id.make env.expression_id_provider;
+                  macro_splice_vars = None;
+                }
+            in
+            (env, Typing_local_types.add_to_local_types local_id local locals))
+      in
+      (env, Some local_env)
+  in
+  { env with in_expr_tree = None; in_macro_splice = macro_locals }
+
+let with_inside_expr_tree env expr_tree_hint f =
+  let old_in_expr_tree = env.in_expr_tree in
+  let env = inside_expr_tree env expr_tree_hint in
+  let (env, r1, r2) = f env in
+  let env = { env with in_expr_tree = old_in_expr_tree } in
+  (env, r1, r2)
+
+let with_outside_expr_tree env ~macro_variables f =
+  let old_in_expr_tree = env.in_expr_tree in
+  let old_in_macro_splice = env.in_macro_splice in
+  let dsl =
+    match old_in_expr_tree with
+    | Some { dsl = cls; outer_locals = _ } -> Some cls
+    | _ -> None
+  in
+  let env = outside_expr_tree env ~macro_variables in
+  let (env, r1, r2) = f env dsl in
+  let new_macro_type_mapping =
+    Option.map
+      ~f:
+        (Local_id.Map.map (fun local ->
+             Typing_local_types.(local.pos, local.ty)))
+      env.in_macro_splice
+  in
+  let env =
+    {
+      env with
+      in_expr_tree = old_in_expr_tree;
+      in_macro_splice = old_in_macro_splice;
+    }
+  in
+  (env, r1, r2, new_macro_type_mapping)
+
+let is_in_expr_tree env = Option.is_some env.in_expr_tree
+
+let rank_of_tparam env tparam = Type_parameter_env.get_rank env.tpenv tparam

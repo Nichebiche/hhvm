@@ -67,7 +67,7 @@
 namespace HPHP {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhbc);
+TRACE_SET_MOD(hhbc)
 const StaticString s_TrivialHHVMBuiltinWrapper("TrivialHHVMBuiltinWrapper");
 
 std::atomic<bool> Func::s_treadmill;
@@ -622,13 +622,13 @@ void Func::prettyPrint(std::ostream& out, const PrintOpts& opts) const {
           out << " " << tc.displayName(cls(), true);
         }
       }
-      if (param.userType) {
-        out << " (" << param.userType->data() << ")";
+      if (auto userType = param.userType.ptr(unit())) {
+        out << " (" << userType->data() << ")";
       }
       if (param.funcletOff != kInvalidOffset) {
         out << " DV" << " at " << param.funcletOff;
-        if (param.phpCode) {
-          out << " = " << param.phpCode->data();
+        if (auto phpCode = param.phpCode.ptr(unit())) {
+          out << " = " << phpCode->data();
         }
       }
       out << std::endl;
@@ -719,7 +719,7 @@ Func::SharedData::SharedData(BCPtr bc, Offset bclen,
   : m_bc(bc.isPtr() ? BCPtr::FromPtr(allocateBCRegion(bc.ptr(), bclen)) : bc)
   , m_preClass(preClass)
   , m_line1(line1)
-  , m_originalFilename(nullptr)
+  , m_originalUnit(nullptr)
   , m_cti_base(0)
   , m_numLocals(0)
   , m_numIterators(0)

@@ -15,9 +15,11 @@
 
 # pyre-strict
 
+import types
 import unittest
 
 from testing.types import Color, HardError, SimpleError, UnfriendlyError, UnusedError
+from thrift.lib.py3.test.auto_migrate.auto_migrate_util import is_auto_migrated
 
 from thrift.lib.py3.test.exception_helper import (
     simulate_HardError,
@@ -77,6 +79,9 @@ class ExceptionTests(unittest.TestCase):
         x = UnusedError(msg)
         y = UnusedError(message=msg)
         self.assertEqual(x, y)
+        self.assertEqual(x.args, (msg,))
+        self.assertEqual(x.message, msg)
+        self.assertEqual(str(x), msg)
         self.assertEqual(x.args, y.args)
         self.assertEqual(x.message, y.message)
         self.assertEqual(str(x), str(x))
@@ -101,6 +106,8 @@ class ExceptionTests(unittest.TestCase):
         self.assertEqual(w.code, 0)
         # pyre-fixme[19]: Expected 0 positional arguments.
         x = HardError(msg, code)
+        self.assertEqual(x.args, (msg, code))
+        self.assertEqual(str(x), msg)
         # pyre-fixme[19]: Expected 0 positional arguments.
         y = HardError(msg, code=code)
         self.assertEqual(x, y)
@@ -181,3 +188,47 @@ class ExceptionTests(unittest.TestCase):
         self.assertFalse(issubclass(int, HardError))
         self.assertFalse(issubclass(int, GeneratedError))
         self.assertFalse(issubclass(HardError, Struct))
+
+    def test_subclass_not_allow_inheritance(self) -> None:
+        thrift_python_err = (
+            r"Inheritance from generated thrift exception .+ is deprecated"
+        )
+        cython_err = (
+            r"type '.+' is not an acceptable base type"
+            if not hasattr(HardError, "_FBTHRIFT__PYTHON_CLASS")
+            else r"Inheritance of thrift-generated .+ from TestSubclass is deprecated."
+        )
+        err_regex = thrift_python_err if is_auto_migrated() else cython_err
+
+        with self.assertRaisesRegex(TypeError, err_regex):
+            types.new_class("TestSubclass", bases=(HardError,))
+
+    def test_subclass_allow_inheritance(self) -> None:
+        c = SubclassError(message="halp")
+        self.assertIsInstance(c, UnusedError)
+        self.assertIsInstance(c, GeneratedError)
+        self.assertIsInstance(UnusedError(), GeneratedError)
+        self.assertEqual(c.message, "halp")
+
+        for catch in (SubclassError, UnusedError, GeneratedError):
+            with self.assertRaises(catch):
+                raise SubclassError()
+
+    def test_subclass_allow_inheritance_ancestor(self) -> None:
+        c = SubSubclassError(message="halp")
+        self.assertIsInstance(c, SubclassError)
+        self.assertIsInstance(c, UnusedError)
+        self.assertIsInstance(c, GeneratedError)
+        self.assertEqual(c.message, "halp")
+
+        for catch in (SubSubclassError, SubclassError, UnusedError, GeneratedError):
+            with self.assertRaises(catch):
+                raise SubSubclassError()
+
+
+class SubclassError(UnusedError):
+    pass
+
+
+class SubSubclassError(SubclassError):
+    pass

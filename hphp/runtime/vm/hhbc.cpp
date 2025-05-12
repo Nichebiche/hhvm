@@ -23,7 +23,6 @@
 #include "hphp/runtime/base/array-iterator.h"
 #include "hphp/runtime/base/repo-auth-type.h"
 #include "hphp/runtime/base/stats.h"
-#include "hphp/runtime/base/zend-string.h"
 #include "hphp/runtime/vm/class-meth-data-ref.h"
 #include "hphp/runtime/vm/func-emitter.h"
 #include "hphp/runtime/vm/hhbc-codec.h"
@@ -658,15 +657,10 @@ void staticStreamer(const TypedValue* tv, std::string& out) {
   not_reached();
 }
 
-std::string instrToString(PC it, Either<const Func*, const FuncEmitter*> f) {
+std::string instrToString(PC it, Either<const Func*, const FuncEmitter*> f, Either<const Unit*, const UnitEmitter*> u) {
   std::string out;
   PC iStart = it;
   Op op = decode_op(it);
-
-  auto u = f.match(
-    [](const Func* f) -> Either<const Unit*, const UnitEmitter*> { return f->unit(); },
-    [](const FuncEmitter* fe) -> Either<const Unit*, const UnitEmitter*> { return &fe->ue(); }
-  );
 
   auto readRATA = [&] {
     if (auto func = f.left()) {
@@ -691,14 +685,14 @@ std::string instrToString(PC it, Either<const Func*, const FuncEmitter*> f) {
   auto lookupLitstrId = [u](Id id) {
     return u.match(
       [id](const Unit* u) { return u->lookupLitstrId(id); },
-      [id](const UnitEmitter* ue) { return ue->lookupLitstr(id); }
+      [id](const UnitEmitter* ue) { return ue->lookupLitstrId(id); }
     );
   };
 
   auto lookupArrayId = [u](Id id) {
     return u.match(
       [id](const Unit* u) { return u->lookupArrayId(id); },
-      [id](const UnitEmitter* ue) { return ue->lookupArray(id); }
+      [id](const UnitEmitter* ue) { return ue->lookupArrayId(id); }
     );
   };
 
@@ -851,6 +845,10 @@ OPCODES
     default: assertx(false);
   };
   return out;
+}
+
+std::string instrToString(PC it, const Func* func) {
+  return instrToString(it, func, func->unit());
 }
 
 EXTERNALLY_VISIBLE
@@ -1119,11 +1117,13 @@ bool instrMayVMCall(Op opcode) {
 }
 
 bool instrIsNonCallControlFlow(Op opcode) {
-  if (!instrIsControlFlow(opcode) || instrIsVMCall(opcode)) return false;
+  if (!instrIsControlFlow(opcode) || 
+      instrIsVMCall(opcode) || 
+      isAwait(opcode)) {
+    return false;
+  }
 
   switch (opcode) {
-    case OpAwait:
-    case OpAwaitAll:
     case OpYield:
     case OpYieldK:
       return false;
@@ -1183,7 +1183,7 @@ std::string show(const LocalRange& range) {
 
 std::string show(uint32_t numArgs, const uint8_t* boolVecArgs) {
   if (!boolVecArgs) return "";
-  std::string out = "";
+  std::string out;
   uint8_t tmp = 0;
   for (auto i = 0; i < numArgs; ++i) {
     if (i % 8 == 0) tmp = *(boolVecArgs++);

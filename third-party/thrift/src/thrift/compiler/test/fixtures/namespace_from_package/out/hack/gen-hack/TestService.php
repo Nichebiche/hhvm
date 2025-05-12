@@ -71,17 +71,13 @@ trait TestServiceClientBase {
    *   init(1: i64 int1);
    */
   public async function init(int $int1): Awaitable<int> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \test\namespace_from_package\module\TestService_init_args::fromShape(shape(
       'int1' => $int1,
     ));
     await $this->asyncHandler_->genBefore(TestServiceStaticMetadata::THRIFT_SVC_NAME, "init", $args);
     $currentseqid = $this->sendImplHelper($args, "init", false, TestServiceStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\test\namespace_from_package\module\TestService_init_result::class, "init", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\test\namespace_from_package\module\TestService_init_result::class, "init", false, $currentseqid, $rpc_options))[0];
   }
 
 }

@@ -86,7 +86,7 @@ ECHConfig getInvalidVECHConfig() {
 }
 
 hpke::SetupResult constructSetupResult(
-    const SupportedECHConfig& supportedConfig) {
+    const NegotiatedECHConfig& supportedConfig) {
   auto kex = std::make_unique<MockOpenSSLECKeyExchange256>();
   auto privateKey = getPrivateKey(kP256Key);
   kex->setPrivateKey(std::move(privateKey));
@@ -98,7 +98,7 @@ hpke::SetupResult constructSetupResult(
 
 OuterECHClientHello getTestOuterECHClientHelloWithInner(ClientHello chloInner) {
   auto configContent = getECHConfigContent();
-  SupportedECHConfig supportedConfig{
+  NegotiatedECHConfig supportedConfig{
       getECHConfig(),
       configContent.key_config.config_id,
       configContent.maximum_name_length,
@@ -125,8 +125,8 @@ OuterECHClientHello getTestOuterECHClientHello() {
 void checkSupportedConfigValid(
     const std::vector<ECHConfig>& configs,
     std::unique_ptr<folly::IOBuf> expectedECHConfigContent) {
-  folly::Optional<SupportedECHConfig> result =
-      selectECHConfig(configs, supportedKEMs, supportedAeads);
+  folly::Optional<NegotiatedECHConfig> result =
+      negotiateECHConfig(configs, supportedKEMs, supportedAeads);
   EXPECT_TRUE(result.hasValue());
 
   ECHConfig gotConfig = std::move(result.value().config);
@@ -213,8 +213,8 @@ TEST(EncryptionTest, TestInvalidECHConfigContent) {
   std::vector<ECHConfig> configs;
   configs.push_back(std::move(invalidConfig));
 
-  folly::Optional<SupportedECHConfig> result =
-      selectECHConfig(configs, supportedKEMs, supportedAeads);
+  folly::Optional<NegotiatedECHConfig> result =
+      negotiateECHConfig(configs, supportedKEMs, supportedAeads);
 
   EXPECT_FALSE(result.hasValue());
 }
@@ -237,8 +237,8 @@ TEST(EncryptionTest, TestUnsupportedMandatoryExtension) {
   invalid.ech_config_content = encode(std::move(invalidConfigContent));
   configs.push_back(std::move(invalid));
 
-  folly::Optional<SupportedECHConfig> result =
-      selectECHConfig(configs, supportedKEMs, supportedAeads);
+  folly::Optional<NegotiatedECHConfig> result =
+      negotiateECHConfig(configs, supportedKEMs, supportedAeads);
 
   // Expect no result thanks to mandatory extension.
   EXPECT_FALSE(result.hasValue());
@@ -261,8 +261,8 @@ TEST(EncryptionTest, TestInvalidSelectECHConfigContent) {
   std::vector<ECHConfig> configs;
   configs.push_back(getInvalidVECHConfig());
 
-  folly::Optional<SupportedECHConfig> result =
-      selectECHConfig(configs, supportedKEMs, supportedAeads);
+  folly::Optional<NegotiatedECHConfig> result =
+      negotiateECHConfig(configs, supportedKEMs, supportedAeads);
 
   EXPECT_FALSE(result.hasValue());
 }
@@ -871,9 +871,9 @@ TEST(EncryptionTest, TestGenerateGreasePsk) {
   EXPECT_EQ(greasePsk->identities.size(), psk->identities.size());
   EXPECT_EQ(greasePsk->binders.size(), psk->binders.size());
   for (size_t i = 0; i < greasePsk->identities.size(); i++) {
-    auto idSz = psk->identities[i].psk_identity->computeChainDataLength();
     auto binderSz = psk->binders[i].binder->computeChainDataLength();
-    auto randomId = folly::IOBuf::copyBuffer(std::string(idSz, 0x44));
+    // We set fixed size (16 bytes) identity for grease PSK
+    auto randomId = folly::IOBuf::copyBuffer(std::string(16, 0x44));
     auto randomBinder = folly::IOBuf::copyBuffer(std::string(binderSz, 0x44));
     EXPECT_TRUE(
         folly::IOBufEqualTo()(greasePsk->identities[i].psk_identity, randomId));

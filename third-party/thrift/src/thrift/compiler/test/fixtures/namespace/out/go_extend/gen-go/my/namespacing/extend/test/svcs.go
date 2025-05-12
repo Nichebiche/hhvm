@@ -9,6 +9,7 @@ package test
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     test0 "my/namespacing/test"
@@ -20,8 +21,9 @@ var _ = test0.GoUnusedProtection__
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type ExtendTestService interface {
@@ -32,8 +34,11 @@ type ExtendTestService interface {
 }
 
 type ExtendTestServiceClientInterface interface {
-    thrift.ClientInterface
-    ExtendTestService
+    io.Closer
+    // Inherited/extended service
+    test0.HsTestServiceClientInterface
+
+    Check(ctx context.Context, struct1 *test0.HsFoo) (bool, error)
 }
 
 type ExtendTestServiceClient struct {
@@ -51,8 +56,12 @@ func NewExtendTestServiceChannelClient(channel thrift.RequestChannel) *ExtendTes
     }
 }
 
-func NewExtendTestServiceClient(prot thrift.Protocol) *ExtendTestServiceClient {
-    return NewExtendTestServiceChannelClient(thrift.NewSerialChannel(prot))
+func NewExtendTestServiceClient(prot thrift.DO_NOT_USE_ChannelWrapper) *ExtendTestServiceClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewExtendTestServiceChannelClient(channel)
 }
 
 func (c *ExtendTestServiceClient) Close() error {
@@ -60,15 +69,15 @@ func (c *ExtendTestServiceClient) Close() error {
 }
 
 func (c *ExtendTestServiceClient) Check(ctx context.Context, struct1 *test0.HsFoo) (bool, error) {
-    in := &reqExtendTestServiceCheck{
+    fbthriftReq := &reqExtendTestServiceCheck{
         Struct1: struct1,
     }
-    out := newRespExtendTestServiceCheck()
-    err := c.ch.Call(ctx, "check", in, out)
-    if err != nil {
-        return false, err
+    fbthriftResp := newRespExtendTestServiceCheck()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "check", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return false, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
@@ -98,16 +107,16 @@ type procFuncExtendTestServiceCheck struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncExtendTestServiceCheck)(nil)
 
-func (p *procFuncExtendTestServiceCheck) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncExtendTestServiceCheck) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqExtendTestServiceCheck()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncExtendTestServiceCheck) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncExtendTestServiceCheck) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -115,16 +124,16 @@ func (p *procFuncExtendTestServiceCheck) Write(seqId int32, result thrift.Writab
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("check", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("check", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

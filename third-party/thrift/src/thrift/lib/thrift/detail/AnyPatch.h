@@ -22,14 +22,13 @@
 #include <thrift/lib/cpp2/Adapter.h>
 #include <thrift/lib/cpp2/op/detail/BasePatch.h>
 #include <thrift/lib/cpp2/op/detail/StructPatch.h>
+#include <thrift/lib/cpp2/protocol/Patch.h>
 #include <thrift/lib/cpp2/type/Type.h>
 #include <thrift/lib/thrift/detail/DynamicPatch.h>
 #include <thrift/lib/thrift/gen-cpp2/any_patch_detail_types.h>
 #include <thrift/lib/thrift/gen-cpp2/any_rep_types.h>
 
-namespace apache {
-namespace thrift {
-namespace op {
+namespace apache::thrift::op {
 namespace detail {
 
 template <typename Patch>
@@ -137,7 +136,7 @@ class AnyPatch : public BaseClearPatch<Patch, AnyPatch<Patch>> {
   using Base::assign;
   using Base::clear;
 
-  /// @copybrief AssignPatch::customVisit
+  /// @copybrief StructPatch::customVisit
   ///
   /// Users should provide a visitor with the following methods
   ///
@@ -157,7 +156,7 @@ class AnyPatch : public BaseClearPatch<Patch, AnyPatch<Patch>> {
       v.patchIfTypeIs(type::Type{}, protocol::DynamicPatch{});
       v.ensureAny(type::AnyStruct{});
     }
-    if (!Base::template customVisitAssignAndClear(v)) {
+    if (!Base::customVisitAssignAndClear(v)) {
       // patchIfTypeIsPrior
       for (const auto& [type, patch] : data_.patchIfTypeIsPrior().value()) {
         v.patchIfTypeIs(type, patch);
@@ -301,6 +300,8 @@ class AnyPatch : public BaseClearPatch<Patch, AnyPatch<Patch>> {
   }
   auto toSafePatch() const { return toSafePatchImpl<AnySafePatch>(*this); }
 
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const;
+
  private:
   using Base::assignOr;
   using Base::data_;
@@ -394,6 +395,4 @@ template <typename T>
 using AnyPatchAdapter = InlineAdapter<AnyPatch<T>>;
 
 } // namespace detail
-} // namespace op
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::op

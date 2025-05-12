@@ -9,6 +9,7 @@ package module
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,8 +19,9 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type GetEntity interface {
@@ -48,8 +50,29 @@ type GetEntity interface {
 }
 
 type GetEntityClientInterface interface {
-    thrift.ClientInterface
-    GetEntity
+    io.Closer
+    GetEntity(ctx context.Context, r *GetEntityRequest) (*GetEntityResponse, error)
+    GetBool(ctx context.Context) (bool, error)
+    GetByte(ctx context.Context) (int8, error)
+    GetI16(ctx context.Context) (int16, error)
+    GetI32(ctx context.Context) (int32, error)
+    GetI64(ctx context.Context) (int64, error)
+    GetDouble(ctx context.Context) (float64, error)
+    GetString(ctx context.Context) (string, error)
+    GetBinary(ctx context.Context) ([]byte, error)
+    GetMap(ctx context.Context) (map[string]string, error)
+    GetSet(ctx context.Context) ([]string, error)
+    GetList(ctx context.Context) ([]string, error)
+    GetLegacyStuff(ctx context.Context, numPos int64, numNeg1 int64, numNeg2 int64) (int32, error)
+    GetCtxCollision(ctx1 context.Context, ctx int64) (int32, error)
+    GetCtx1Collision(ctx2 context.Context, ctx int64, ctx1 int64) (int32, error)
+    GetContextCollision(ctx context.Context, context_ int64) (int32, error)
+    GetOutCollision(ctx context.Context, out int64) (int32, error)
+    GetOut1Collision(ctx context.Context, out int64, out1 int64) (int32, error)
+    GetInCollision(ctx context.Context, in int64) (int32, error)
+    GetIn1Collision(ctx context.Context, in int64, in1 int64) (int32, error)
+    GetErrCollision(ctx context.Context, err int64) (int32, error)
+    GetErr1Collision(ctx context.Context, err int64, err1 int64) (int32, error)
 }
 
 type GetEntityClient struct {
@@ -64,8 +87,12 @@ func NewGetEntityChannelClient(channel thrift.RequestChannel) *GetEntityClient {
     }
 }
 
-func NewGetEntityClient(prot thrift.Protocol) *GetEntityClient {
-    return NewGetEntityChannelClient(thrift.NewSerialChannel(prot))
+func NewGetEntityClient(prot thrift.DO_NOT_USE_ChannelWrapper) *GetEntityClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewGetEntityChannelClient(channel)
 }
 
 func (c *GetEntityClient) Close() error {
@@ -73,269 +100,269 @@ func (c *GetEntityClient) Close() error {
 }
 
 func (c *GetEntityClient) GetEntity(ctx context.Context, r *GetEntityRequest) (*GetEntityResponse, error) {
-    in := &reqGetEntityGetEntity{
+    fbthriftReq := &reqGetEntityGetEntity{
         R: r,
     }
-    out := newRespGetEntityGetEntity()
-    err := c.ch.Call(ctx, "getEntity", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespGetEntityGetEntity()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getEntity", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetBool(ctx context.Context) (bool, error) {
-    in := &reqGetEntityGetBool{
+    fbthriftReq := &reqGetEntityGetBool{
     }
-    out := newRespGetEntityGetBool()
-    err := c.ch.Call(ctx, "getBool", in, out)
-    if err != nil {
-        return false, err
+    fbthriftResp := newRespGetEntityGetBool()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getBool", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return false, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetByte(ctx context.Context) (int8, error) {
-    in := &reqGetEntityGetByte{
+    fbthriftReq := &reqGetEntityGetByte{
     }
-    out := newRespGetEntityGetByte()
-    err := c.ch.Call(ctx, "getByte", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetByte()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getByte", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetI16(ctx context.Context) (int16, error) {
-    in := &reqGetEntityGetI16{
+    fbthriftReq := &reqGetEntityGetI16{
     }
-    out := newRespGetEntityGetI16()
-    err := c.ch.Call(ctx, "getI16", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetI16()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getI16", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetI32(ctx context.Context) (int32, error) {
-    in := &reqGetEntityGetI32{
+    fbthriftReq := &reqGetEntityGetI32{
     }
-    out := newRespGetEntityGetI32()
-    err := c.ch.Call(ctx, "getI32", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetI32()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getI32", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetI64(ctx context.Context) (int64, error) {
-    in := &reqGetEntityGetI64{
+    fbthriftReq := &reqGetEntityGetI64{
     }
-    out := newRespGetEntityGetI64()
-    err := c.ch.Call(ctx, "getI64", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetI64()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getI64", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetDouble(ctx context.Context) (float64, error) {
-    in := &reqGetEntityGetDouble{
+    fbthriftReq := &reqGetEntityGetDouble{
     }
-    out := newRespGetEntityGetDouble()
-    err := c.ch.Call(ctx, "getDouble", in, out)
-    if err != nil {
-        return 0.0, err
+    fbthriftResp := newRespGetEntityGetDouble()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getDouble", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0.0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetString(ctx context.Context) (string, error) {
-    in := &reqGetEntityGetString{
+    fbthriftReq := &reqGetEntityGetString{
     }
-    out := newRespGetEntityGetString()
-    err := c.ch.Call(ctx, "getString", in, out)
-    if err != nil {
-        return "", err
+    fbthriftResp := newRespGetEntityGetString()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getString", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return "", fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetBinary(ctx context.Context) ([]byte, error) {
-    in := &reqGetEntityGetBinary{
+    fbthriftReq := &reqGetEntityGetBinary{
     }
-    out := newRespGetEntityGetBinary()
-    err := c.ch.Call(ctx, "getBinary", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespGetEntityGetBinary()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getBinary", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetMap(ctx context.Context) (map[string]string, error) {
-    in := &reqGetEntityGetMap{
+    fbthriftReq := &reqGetEntityGetMap{
     }
-    out := newRespGetEntityGetMap()
-    err := c.ch.Call(ctx, "getMap", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespGetEntityGetMap()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getMap", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetSet(ctx context.Context) ([]string, error) {
-    in := &reqGetEntityGetSet{
+    fbthriftReq := &reqGetEntityGetSet{
     }
-    out := newRespGetEntityGetSet()
-    err := c.ch.Call(ctx, "getSet", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespGetEntityGetSet()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getSet", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetList(ctx context.Context) ([]string, error) {
-    in := &reqGetEntityGetList{
+    fbthriftReq := &reqGetEntityGetList{
     }
-    out := newRespGetEntityGetList()
-    err := c.ch.Call(ctx, "getList", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespGetEntityGetList()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getList", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetLegacyStuff(ctx context.Context, numPos int64, numNeg1 int64, numNeg2 int64) (int32, error) {
-    in := &reqGetEntityGetLegacyStuff{
+    fbthriftReq := &reqGetEntityGetLegacyStuff{
         NumPos: numPos,
         NumNeg1: numNeg1,
         NumNeg2: numNeg2,
     }
-    out := newRespGetEntityGetLegacyStuff()
-    err := c.ch.Call(ctx, "getLegacyStuff", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetLegacyStuff()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getLegacyStuff", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetCtxCollision(ctx1 context.Context, ctx int64) (int32, error) {
-    in := &reqGetEntityGetCtxCollision{
+    fbthriftReq := &reqGetEntityGetCtxCollision{
         Ctx: ctx,
     }
-    out := newRespGetEntityGetCtxCollision()
-    err := c.ch.Call(ctx1, "getCtxCollision", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetCtxCollision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx1, "getCtxCollision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetCtx1Collision(ctx2 context.Context, ctx int64, ctx1 int64) (int32, error) {
-    in := &reqGetEntityGetCtx1Collision{
+    fbthriftReq := &reqGetEntityGetCtx1Collision{
         Ctx: ctx,
         Ctx1: ctx1,
     }
-    out := newRespGetEntityGetCtx1Collision()
-    err := c.ch.Call(ctx2, "getCtx1Collision", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetCtx1Collision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx2, "getCtx1Collision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetContextCollision(ctx context.Context, context_ int64) (int32, error) {
-    in := &reqGetEntityGetContextCollision{
+    fbthriftReq := &reqGetEntityGetContextCollision{
         Context: context_,
     }
-    out := newRespGetEntityGetContextCollision()
-    err := c.ch.Call(ctx, "getContextCollision", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetContextCollision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getContextCollision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetOutCollision(ctx context.Context, out int64) (int32, error) {
-    in := &reqGetEntityGetOutCollision{
+    fbthriftReq := &reqGetEntityGetOutCollision{
         Out: out,
     }
-    out1 := newRespGetEntityGetOutCollision()
-    err := c.ch.Call(ctx, "getOutCollision", in, out1)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetOutCollision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getOutCollision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out1.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetOut1Collision(ctx context.Context, out int64, out1 int64) (int32, error) {
-    in := &reqGetEntityGetOut1Collision{
+    fbthriftReq := &reqGetEntityGetOut1Collision{
         Out: out,
         Out1: out1,
     }
-    out2 := newRespGetEntityGetOut1Collision()
-    err := c.ch.Call(ctx, "getOut1Collision", in, out2)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetOut1Collision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getOut1Collision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out2.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetInCollision(ctx context.Context, in int64) (int32, error) {
-    in1 := &reqGetEntityGetInCollision{
+    fbthriftReq := &reqGetEntityGetInCollision{
         In: in,
     }
-    out := newRespGetEntityGetInCollision()
-    err := c.ch.Call(ctx, "getInCollision", in1, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetInCollision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getInCollision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetIn1Collision(ctx context.Context, in int64, in1 int64) (int32, error) {
-    in2 := &reqGetEntityGetIn1Collision{
+    fbthriftReq := &reqGetEntityGetIn1Collision{
         In: in,
         In1: in1,
     }
-    out := newRespGetEntityGetIn1Collision()
-    err := c.ch.Call(ctx, "getIn1Collision", in2, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespGetEntityGetIn1Collision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getIn1Collision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetErrCollision(ctx context.Context, err int64) (int32, error) {
-    in := &reqGetEntityGetErrCollision{
+    fbthriftReq := &reqGetEntityGetErrCollision{
         Err: err,
     }
-    out := newRespGetEntityGetErrCollision()
-    err1 := c.ch.Call(ctx, "getErrCollision", in, out)
-    if err1 != nil {
-        return 0, err1
+    fbthriftResp := newRespGetEntityGetErrCollision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getErrCollision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *GetEntityClient) GetErr1Collision(ctx context.Context, err int64, err1 int64) (int32, error) {
-    in := &reqGetEntityGetErr1Collision{
+    fbthriftReq := &reqGetEntityGetErr1Collision{
         Err: err,
         Err1: err1,
     }
-    out := newRespGetEntityGetErr1Collision()
-    err2 := c.ch.Call(ctx, "getErr1Collision", in, out)
-    if err2 != nil {
-        return 0, err2
+    fbthriftResp := newRespGetEntityGetErr1Collision()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "getErr1Collision", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
 type GetEntityProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            GetEntity
+    handler              GetEntity
 }
 
 func NewGetEntityProcessor(handler GetEntity) *GetEntityProcessor {
@@ -427,16 +454,16 @@ type procFuncGetEntityGetEntity struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetEntity)(nil)
 
-func (p *procFuncGetEntityGetEntity) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetEntity) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetEntity()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetEntity) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetEntity) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -444,16 +471,16 @@ func (p *procFuncGetEntityGetEntity) Write(seqId int32, result thrift.WritableSt
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getEntity", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getEntity", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -479,16 +506,16 @@ type procFuncGetEntityGetBool struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetBool)(nil)
 
-func (p *procFuncGetEntityGetBool) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetBool) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetBool()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetBool) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetBool) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -496,16 +523,16 @@ func (p *procFuncGetEntityGetBool) Write(seqId int32, result thrift.WritableStru
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getBool", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getBool", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -530,16 +557,16 @@ type procFuncGetEntityGetByte struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetByte)(nil)
 
-func (p *procFuncGetEntityGetByte) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetByte) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetByte()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetByte) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetByte) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -547,16 +574,16 @@ func (p *procFuncGetEntityGetByte) Write(seqId int32, result thrift.WritableStru
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getByte", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getByte", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -581,16 +608,16 @@ type procFuncGetEntityGetI16 struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetI16)(nil)
 
-func (p *procFuncGetEntityGetI16) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetI16) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetI16()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetI16) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetI16) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -598,16 +625,16 @@ func (p *procFuncGetEntityGetI16) Write(seqId int32, result thrift.WritableStruc
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getI16", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getI16", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -632,16 +659,16 @@ type procFuncGetEntityGetI32 struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetI32)(nil)
 
-func (p *procFuncGetEntityGetI32) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetI32) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetI32()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetI32) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetI32) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -649,16 +676,16 @@ func (p *procFuncGetEntityGetI32) Write(seqId int32, result thrift.WritableStruc
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getI32", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getI32", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -683,16 +710,16 @@ type procFuncGetEntityGetI64 struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetI64)(nil)
 
-func (p *procFuncGetEntityGetI64) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetI64) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetI64()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetI64) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetI64) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -700,16 +727,16 @@ func (p *procFuncGetEntityGetI64) Write(seqId int32, result thrift.WritableStruc
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getI64", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getI64", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -734,16 +761,16 @@ type procFuncGetEntityGetDouble struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetDouble)(nil)
 
-func (p *procFuncGetEntityGetDouble) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetDouble) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetDouble()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetDouble) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetDouble) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -751,16 +778,16 @@ func (p *procFuncGetEntityGetDouble) Write(seqId int32, result thrift.WritableSt
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getDouble", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getDouble", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -785,16 +812,16 @@ type procFuncGetEntityGetString struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetString)(nil)
 
-func (p *procFuncGetEntityGetString) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetString) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetString()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetString) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetString) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -802,16 +829,16 @@ func (p *procFuncGetEntityGetString) Write(seqId int32, result thrift.WritableSt
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getString", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getString", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -836,16 +863,16 @@ type procFuncGetEntityGetBinary struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetBinary)(nil)
 
-func (p *procFuncGetEntityGetBinary) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetBinary) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetBinary()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetBinary) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetBinary) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -853,16 +880,16 @@ func (p *procFuncGetEntityGetBinary) Write(seqId int32, result thrift.WritableSt
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getBinary", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getBinary", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -887,16 +914,16 @@ type procFuncGetEntityGetMap struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetMap)(nil)
 
-func (p *procFuncGetEntityGetMap) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetMap) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetMap()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetMap) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetMap) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -904,16 +931,16 @@ func (p *procFuncGetEntityGetMap) Write(seqId int32, result thrift.WritableStruc
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getMap", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getMap", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -938,16 +965,16 @@ type procFuncGetEntityGetSet struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetSet)(nil)
 
-func (p *procFuncGetEntityGetSet) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetSet) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetSet()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetSet) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetSet) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -955,16 +982,16 @@ func (p *procFuncGetEntityGetSet) Write(seqId int32, result thrift.WritableStruc
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getSet", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getSet", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -989,16 +1016,16 @@ type procFuncGetEntityGetList struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetList)(nil)
 
-func (p *procFuncGetEntityGetList) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetList) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetList()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetList) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetList) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1006,16 +1033,16 @@ func (p *procFuncGetEntityGetList) Write(seqId int32, result thrift.WritableStru
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getList", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getList", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1040,16 +1067,16 @@ type procFuncGetEntityGetLegacyStuff struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetLegacyStuff)(nil)
 
-func (p *procFuncGetEntityGetLegacyStuff) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetLegacyStuff) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetLegacyStuff()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetLegacyStuff) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetLegacyStuff) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1057,16 +1084,16 @@ func (p *procFuncGetEntityGetLegacyStuff) Write(seqId int32, result thrift.Writa
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getLegacyStuff", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getLegacyStuff", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1092,16 +1119,16 @@ type procFuncGetEntityGetCtxCollision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetCtxCollision)(nil)
 
-func (p *procFuncGetEntityGetCtxCollision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetCtxCollision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetCtxCollision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetCtxCollision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetCtxCollision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1109,16 +1136,16 @@ func (p *procFuncGetEntityGetCtxCollision) Write(seqId int32, result thrift.Writ
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getCtxCollision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getCtxCollision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1144,16 +1171,16 @@ type procFuncGetEntityGetCtx1Collision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetCtx1Collision)(nil)
 
-func (p *procFuncGetEntityGetCtx1Collision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetCtx1Collision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetCtx1Collision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetCtx1Collision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetCtx1Collision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1161,16 +1188,16 @@ func (p *procFuncGetEntityGetCtx1Collision) Write(seqId int32, result thrift.Wri
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getCtx1Collision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getCtx1Collision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1196,16 +1223,16 @@ type procFuncGetEntityGetContextCollision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetContextCollision)(nil)
 
-func (p *procFuncGetEntityGetContextCollision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetContextCollision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetContextCollision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetContextCollision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetContextCollision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1213,16 +1240,16 @@ func (p *procFuncGetEntityGetContextCollision) Write(seqId int32, result thrift.
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getContextCollision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getContextCollision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1248,16 +1275,16 @@ type procFuncGetEntityGetOutCollision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetOutCollision)(nil)
 
-func (p *procFuncGetEntityGetOutCollision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetOutCollision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetOutCollision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetOutCollision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetOutCollision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1265,16 +1292,16 @@ func (p *procFuncGetEntityGetOutCollision) Write(seqId int32, result thrift.Writ
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getOutCollision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getOutCollision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1300,16 +1327,16 @@ type procFuncGetEntityGetOut1Collision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetOut1Collision)(nil)
 
-func (p *procFuncGetEntityGetOut1Collision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetOut1Collision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetOut1Collision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetOut1Collision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetOut1Collision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1317,16 +1344,16 @@ func (p *procFuncGetEntityGetOut1Collision) Write(seqId int32, result thrift.Wri
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getOut1Collision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getOut1Collision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1352,16 +1379,16 @@ type procFuncGetEntityGetInCollision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetInCollision)(nil)
 
-func (p *procFuncGetEntityGetInCollision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetInCollision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetInCollision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetInCollision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetInCollision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1369,16 +1396,16 @@ func (p *procFuncGetEntityGetInCollision) Write(seqId int32, result thrift.Writa
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getInCollision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getInCollision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1404,16 +1431,16 @@ type procFuncGetEntityGetIn1Collision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetIn1Collision)(nil)
 
-func (p *procFuncGetEntityGetIn1Collision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetIn1Collision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetIn1Collision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetIn1Collision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetIn1Collision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1421,16 +1448,16 @@ func (p *procFuncGetEntityGetIn1Collision) Write(seqId int32, result thrift.Writ
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getIn1Collision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getIn1Collision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1456,16 +1483,16 @@ type procFuncGetEntityGetErrCollision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetErrCollision)(nil)
 
-func (p *procFuncGetEntityGetErrCollision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetErrCollision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetErrCollision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetErrCollision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetErrCollision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1473,16 +1500,16 @@ func (p *procFuncGetEntityGetErrCollision) Write(seqId int32, result thrift.Writ
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getErrCollision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getErrCollision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -1508,16 +1535,16 @@ type procFuncGetEntityGetErr1Collision struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncGetEntityGetErr1Collision)(nil)
 
-func (p *procFuncGetEntityGetErr1Collision) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncGetEntityGetErr1Collision) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqGetEntityGetErr1Collision()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncGetEntityGetErr1Collision) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncGetEntityGetErr1Collision) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -1525,16 +1552,16 @@ func (p *procFuncGetEntityGetErr1Collision) Write(seqId int32, result thrift.Wri
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("getErr1Collision", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("getErr1Collision", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

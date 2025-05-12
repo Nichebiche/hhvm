@@ -15,18 +15,22 @@
  */
 
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp2/Flags.h>
 #include <thrift/lib/cpp2/patch/DynamicPatch.h>
 #include <thrift/lib/cpp2/patch/detail/PatchBadge.h>
 #include <thrift/lib/cpp2/patch/test/gen-cpp2/gen_patch_DynamicPatchTest_types.h>
 #include <thrift/lib/cpp2/patch/test/gen-cpp2/gen_patch_OldTerseWrite_types.h>
+#include <thrift/lib/cpp2/protocol/CompactProtocol.h>
+#include <thrift/lib/cpp2/protocol/Patch.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/thrift/gen-cpp2/any_patch_types.h>
 
 namespace apache::thrift::protocol {
+
+THRIFT_PLUGGABLE_FUNC_SET(bool, useAssignPatchInDiffVisitorForAnyLikeStruct) {
+  return true;
+}
+
 using detail::badge;
-THRIFT_FLAG_DECLARE_bool(
-    thrift_patch_diff_visitor_ensure_on_potential_terse_write_field);
 
 class DemoDiffVisitor : public DiffVisitorBase {
  public:
@@ -87,10 +91,17 @@ TYPED_TEST_SUITE(DynamicPatchesTest, DynamicPatches);
 
 TYPED_TEST(DynamicPatchesTest, Clear) {
   TypeParam patch;
-  patch.clear(badge);
+  patch.clear();
   const auto& obj = patch.toObject();
   EXPECT_EQ(obj.size(), 1);
   EXPECT_EQ(obj.at(static_cast<FieldId>(op::PatchOp::Clear)).as_bool(), true);
+}
+
+DynamicPatch roundTrip(const DynamicPatch& patch) {
+  DynamicPatch ret;
+  ret.decode<apache::thrift::CompactProtocolReader>(
+      *patch.encode<apache::thrift::CompactProtocolWriter>());
+  return ret;
 }
 
 template <class Tag, class PatchType, class T = type::native_type<Tag>>
@@ -103,6 +114,9 @@ void testOneWay(T src, T dst) {
   EXPECT_TRUE(patch.holds_alternative<PatchType>(badge));
   auto other =
       detail::createPatchFromObject<PatchType>(badge, patch.toObject());
+  EXPECT_EQ(other.toObject(), patch.toObject());
+  EXPECT_EQ(patch.empty(), src == dst);
+  auto other2 = roundTrip(patch);
   EXPECT_EQ(other.toObject(), patch.toObject());
   EXPECT_EQ(patch.empty(), src == dst);
 }
@@ -170,7 +184,7 @@ void testMapAndObject(
   EXPECT_EQ(patch.empty(), src == dst);
 
   if (mightBeUnion) {
-    EXPECT_TRUE(patch.holds_alternative<DynamicUnknownPatch>(badge));
+    EXPECT_TRUE(patch.isPatchTypeAmbiguous());
     auto other = detail::createPatchFromObject<DynamicUnknownPatch>(
         badge, patch.toObject());
     EXPECT_EQ(other.toObject(), patch.toObject());
@@ -235,17 +249,15 @@ class MaskAndValueCallback : public DiffVisitorBase {
     return {};
   }
   DynamicListPatch diffList(
-      const detail::ValueList& src, const detail::ValueList& dst) override {
+      const ValueList& src, const ValueList& dst) override {
     cb_(getCurrentPath(), src, dst);
     return {};
   }
-  DynamicSetPatch diffSet(
-      const detail::ValueSet& src, const detail::ValueSet& dst) override {
+  DynamicSetPatch diffSet(const ValueSet& src, const ValueSet& dst) override {
     cb_(getCurrentPath(), src, dst);
     return {};
   }
-  DynamicMapPatch diffMap(
-      const detail::ValueMap& src, const detail::ValueMap& dst) override {
+  DynamicMapPatch diffMap(const ValueMap& src, const ValueMap& dst) override {
     cb_(getCurrentPath(), src, dst);
     return DiffVisitorBase::diffMap(src, dst);
   }
@@ -364,8 +376,8 @@ TEST(DiffVisitorTest, path) {
             break;
           case FieldId{3}:
             if (m == allMask()) {
-              EXPECT_TRUE((std::is_same_v<T, detail::ValueMap>));
-              if constexpr (std::is_same_v<T, detail::ValueMap>) {
+              EXPECT_TRUE((std::is_same_v<T, ValueMap>));
+              if constexpr (std::is_same_v<T, ValueMap>) {
                 EXPECT_EQ(&from, &src[fieldId].as_map());
                 EXPECT_EQ(&to, &dst[fieldId].as_map());
               }
@@ -454,10 +466,10 @@ TEST(DiffVisitorTest, Union) {
 
 TEST(DynamicPatch, List) {
   DynamicListPatch p;
-  p.push_back(badge, asValueStruct<type::i32_t>(1));
-  p.push_back(badge, asValueStruct<type::i32_t>(2));
+  p.push_back(asValueStruct<type::i32_t>(1));
+  p.push_back(asValueStruct<type::i32_t>(2));
 
-  detail::ValueList l;
+  ValueList l;
 
   p.apply(badge, l);
   EXPECT_EQ(l.size(), 2);
@@ -471,41 +483,160 @@ TEST(DynamicPatch, List) {
   EXPECT_EQ(l[2].as_i32(), 1);
   EXPECT_EQ(l[3].as_i32(), 2);
 
-  p.assign(badge, {asValueStruct<type::i32_t>(5)});
+  p.assign({asValueStruct<type::i32_t>(5)});
   p.apply(badge, l);
   EXPECT_EQ(l.size(), 1);
   EXPECT_EQ(l[0].as_i32(), 5);
 
-  p.clear(badge);
+  p.clear();
   p.apply(badge, l);
   EXPECT_TRUE(l.empty());
 }
 
+TEST(DynamicPatch, InvalidListPatch) {
+  {
+    DynamicListPatch p;
+    EXPECT_THROW(
+        p.assign(
+            {asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)}),
+        std::runtime_error);
+  }
+  {
+    DynamicListPatch p;
+    p.push_back(asValueStruct<type::i32_t>(1));
+    EXPECT_THROW(
+        p.push_back(asValueStruct<type::i64_t>(2)), std::runtime_error);
+  }
+  {
+    DynamicListPatch p;
+    p.assign(asValueStruct<type::list<type::i32_t>>({1}).as_list());
+    EXPECT_THROW(
+        p.push_back(asValueStruct<type::i64_t>(2)), std::runtime_error);
+  }
+}
+
 TEST(DynamicPatch, Set) {
   DynamicSetPatch p;
-  p.insert(badge, asValueStruct<type::i32_t>(1));
-  p.insert(badge, asValueStruct<type::i32_t>(2));
+  p.insert(asValueStruct<type::i32_t>(1));
+  p.insert(asValueStruct<type::i32_t>(2));
 
-  detail::ValueSet s;
-
-  p.apply(badge, s);
-  EXPECT_EQ(s.size(), 2);
-  EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(1)));
-  EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(2)));
+  ValueSet s;
 
   p.apply(badge, s);
   EXPECT_EQ(s.size(), 2);
   EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(1)));
   EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(2)));
 
-  p.assign(badge, {asValueStruct<type::i32_t>(5)});
+  p.apply(badge, s);
+  EXPECT_EQ(s.size(), 2);
+  EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(1)));
+  EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(2)));
+
+  p.assign({asValueStruct<type::i32_t>(5)});
   p.apply(badge, s);
   EXPECT_EQ(s.size(), 1);
   EXPECT_TRUE(s.contains(asValueStruct<type::i32_t>(5)));
 
-  p.clear(badge);
+  p.clear();
   p.apply(badge, s);
   EXPECT_TRUE(s.empty());
+}
+
+TEST(DynamicPatch, InvalidSetPatch) {
+  {
+    DynamicSetPatch p;
+    EXPECT_THROW(
+        p.assign(
+            {asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)}),
+        std::runtime_error);
+  }
+  {
+    DynamicSetPatch p;
+    p.insert(asValueStruct<type::i32_t>(1));
+    EXPECT_THROW(p.insert(asValueStruct<type::i64_t>(2)), std::runtime_error);
+  }
+  {
+    DynamicSetPatch p;
+    p.assign(asValueStruct<type::set<type::i32_t>>({1}).as_set());
+    EXPECT_THROW(p.insert(asValueStruct<type::i64_t>(2)), std::runtime_error);
+  }
+}
+
+TEST(DynamicPatch, InvalidMapPatch) {
+  {
+    DynamicMapPatch p;
+    EXPECT_THROW(
+        p.assign(
+
+            {{asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)},
+             {asValueStruct<type::i32_t>(2), asValueStruct<type::i32_t>(1)}}),
+        std::runtime_error);
+  }
+  {
+    DynamicMapPatch p;
+    EXPECT_THROW(
+        p.putMulti(
+            {{asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)},
+             {asValueStruct<type::i32_t>(2), asValueStruct<type::i32_t>(1)}}),
+        std::runtime_error);
+  }
+  {
+    DynamicMapPatch p;
+    EXPECT_THROW(
+        p.tryPutMulti(
+            {{asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)},
+             {asValueStruct<type::i32_t>(2), asValueStruct<type::i32_t>(1)}}),
+        std::runtime_error);
+  }
+  auto testInvalidMapPatch = [](auto& p) {
+    EXPECT_THROW(
+        p.insert_or_assign(
+            asValueStruct<type::i64_t>(1), asValueStruct<type::i32_t>(1)),
+        std::runtime_error);
+    EXPECT_THROW(
+        p.insert_or_assign(
+            asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)),
+        std::runtime_error);
+    EXPECT_THROW(
+        p.tryPutMulti(
+            {{asValueStruct<type::i64_t>(1), asValueStruct<type::i32_t>(1)}}),
+        std::runtime_error);
+    EXPECT_THROW(
+        p.tryPutMulti(
+            {{asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)}}),
+        std::runtime_error);
+    EXPECT_THROW(
+        p.putMulti(
+            {{asValueStruct<type::i64_t>(1), asValueStruct<type::i32_t>(1)}}),
+        std::runtime_error);
+    EXPECT_THROW(
+        p.putMulti(
+            {{asValueStruct<type::i32_t>(1), asValueStruct<type::i64_t>(1)}}),
+        std::runtime_error);
+  };
+  {
+    DynamicMapPatch p;
+    p.insert_or_assign(
+        asValueStruct<type::i32_t>(1), asValueStruct<type::i32_t>(1));
+    testInvalidMapPatch(p);
+  }
+  {
+    DynamicMapPatch p;
+    p.assign({{asValueStruct<type::i32_t>(1), asValueStruct<type::i32_t>(1)}});
+    testInvalidMapPatch(p);
+  }
+  {
+    DynamicMapPatch p;
+    p.putMulti(
+        {{asValueStruct<type::i32_t>(1), asValueStruct<type::i32_t>(1)}});
+    testInvalidMapPatch(p);
+  }
+  {
+    DynamicMapPatch p;
+    p.tryPutMulti(
+        {{asValueStruct<type::i32_t>(1), asValueStruct<type::i32_t>(1)}});
+    testInvalidMapPatch(p);
+  }
 }
 
 struct StringVsBinaryTest : testing::Test {
@@ -530,8 +661,8 @@ struct StringVsBinaryTest : testing::Test {
     s.binarySet()->insert("foo");
     staticStringSetPatch.erase("foo");
     staticBinarySetPatch.erase("foo");
-    dynamicStringSetPatch.erase(badge, stringFoo());
-    dynamicBinarySetPatch.erase(badge, binaryFoo());
+    dynamicStringSetPatch.erase(stringFoo());
+    dynamicBinarySetPatch.erase(binaryFoo());
     stringSetValue.emplace_set().insert(stringFoo());
     binarySetValue.emplace_set().insert(binaryFoo());
   }
@@ -601,13 +732,13 @@ TEST_F(StringVsBinaryTest, PatchingStringWithStringApplyPatch) {
 }
 
 TEST(DynamicPatch, Map) {
-  detail::ValueMap m;
+  ValueMap m;
   m[asValueStruct<type::i32_t>(1)] = asValueStruct<type::i32_t>(10);
   m[asValueStruct<type::i32_t>(2)] = asValueStruct<type::i32_t>(20);
 
   {
     DynamicMapPatch patch;
-    patch.erase(badge, asValueStruct<type::i32_t>(1));
+    patch.erase(asValueStruct<type::i32_t>(1));
     patch.apply(badge, m);
     EXPECT_EQ(m.size(), 1);
     EXPECT_EQ(
@@ -617,20 +748,20 @@ TEST(DynamicPatch, Map) {
     DynamicMapPatch patch;
     op::I32Patch p;
     p += 100;
-    patch.patchByKey(badge, asValueStruct<type::i32_t>(1), DynamicPatch{p});
+    patch.patchByKey(asValueStruct<type::i32_t>(1), DynamicPatch{p});
     p += 100;
-    patch.patchByKey(badge, asValueStruct<type::i32_t>(2), DynamicPatch{p});
+    patch.patchByKey(asValueStruct<type::i32_t>(2), DynamicPatch{p});
     patch.apply(badge, m);
     EXPECT_EQ(m.size(), 1);
     EXPECT_EQ(
         m.at(asValueStruct<type::i32_t>(2)), asValueStruct<type::i32_t>(220));
   }
-  detail::ValueMap add;
+  ValueMap add;
   add[asValueStruct<type::i32_t>(2)] = asValueStruct<type::i32_t>(200);
   add[asValueStruct<type::i32_t>(3)] = asValueStruct<type::i32_t>(300);
   {
     DynamicMapPatch patch;
-    patch.tryPutMulti(badge, add);
+    patch.tryPutMulti(add);
     patch.apply(badge, m);
     EXPECT_EQ(m.size(), 2);
     EXPECT_EQ(
@@ -640,7 +771,7 @@ TEST(DynamicPatch, Map) {
   }
   {
     DynamicMapPatch patch;
-    patch.putMulti(badge, add);
+    patch.putMulti(add);
     patch.apply(badge, m);
     EXPECT_EQ(m.size(), 2);
     EXPECT_EQ(
@@ -649,12 +780,12 @@ TEST(DynamicPatch, Map) {
         m.at(asValueStruct<type::i32_t>(3)), asValueStruct<type::i32_t>(300));
   }
   {
-    detail::ValueSet remove;
+    ValueSet remove;
     remove.insert(asValueStruct<type::i32_t>(3));
     remove.insert(asValueStruct<type::i32_t>(4));
 
     DynamicMapPatch patch;
-    patch.removeMulti(badge, remove);
+    patch.removeMulti(remove);
     patch.apply(badge, m);
     EXPECT_EQ(m.size(), 1);
     EXPECT_EQ(
@@ -662,7 +793,7 @@ TEST(DynamicPatch, Map) {
   }
   {
     DynamicMapPatch patch;
-    patch.clear(badge);
+    patch.clear();
     patch.apply(badge, m);
     EXPECT_TRUE(m.empty());
   }
@@ -670,17 +801,15 @@ TEST(DynamicPatch, Map) {
 
 TEST(DynamicPatch, TestEmptyPatch) {
   Object obj;
-  DynamicPatch patch;
-  patch.fromObject(badge, obj);
-  EXPECT_TRUE(patch.holds_alternative<DynamicUnknownPatch>(badge));
+  DynamicPatch patch = DynamicPatch::fromObject(obj);
+  EXPECT_TRUE(patch.isPatchTypeAmbiguous());
 }
 
 TEST(DynamicPatch, TestClearPatch) {
   Object obj;
   obj[static_cast<FieldId>(op::PatchOp::Clear)].emplace_bool(true);
-  DynamicPatch patch;
-  patch.fromObject(badge, obj);
-  EXPECT_TRUE(patch.holds_alternative<DynamicUnknownPatch>(badge));
+  DynamicPatch patch = DynamicPatch::fromObject(obj);
+  EXPECT_TRUE(patch.isPatchTypeAmbiguous());
 }
 
 template <class Tag, class PatchType = op::patch_type<Tag>>
@@ -688,28 +817,41 @@ void testDynamicUnknownPatch(const auto& t) {
   auto v = asValueStruct<Tag>(t);
   Object obj;
   obj[static_cast<FieldId>(op::PatchOp::Assign)] = v;
-  DynamicPatch assignPatch;
-  assignPatch.fromObject(badge, obj);
+  DynamicPatch assignPatch = DynamicPatch::fromObject(obj);
   EXPECT_TRUE(assignPatch.holds_alternative<PatchType>(badge));
 
   obj = {};
-  DynamicUnknownPatch emptyPatch;
-  emptyPatch.fromObject(badge, obj);
-  emptyPatch.apply(badge, v);
+  DynamicPatch emptyPatch = DynamicPatch::fromObject(obj);
+  emptyPatch.apply(v);
+  EXPECT_EQ(v, asValueStruct<Tag>(t));
+  EXPECT_TRUE(emptyPatch.isPatchTypeAmbiguous());
+  emptyPatch.getStoredPatchByTag<Tag>();
+  EXPECT_FALSE(emptyPatch.isPatchTypeAmbiguous());
+  emptyPatch.apply(v);
   EXPECT_EQ(v, asValueStruct<Tag>(t));
 
+  auto checkClearPatch = [&]() {
+    if (std::is_base_of_v<type::struct_c, Tag>) {
+      // If Tag is a struct, `clear` will remove all fields in protocol::Value,
+      // which won't match static patch behavior which only removes optional
+      // field.
+      EXPECT_TRUE(v.as_object().empty());
+    } else {
+      EXPECT_EQ(v, asValueStruct<Tag>({}));
+    }
+  };
+
   obj[static_cast<FieldId>(op::PatchOp::Clear)].emplace_bool(true);
-  DynamicUnknownPatch clearPatch;
-  clearPatch.fromObject(badge, obj);
-  clearPatch.apply(badge, v);
-  if (std::is_base_of_v<type::struct_c, Tag>) {
-    // If Tag is a struct, `clear` will remove all fields in protocol::Value,
-    // which won't match static patch behavior which only removes optional
-    // field.
-    EXPECT_TRUE(v.as_object().empty());
-  } else {
-    EXPECT_EQ(v, asValueStruct<Tag>({}));
-  }
+  DynamicPatch clearPatch = DynamicPatch::fromObject(obj);
+  clearPatch.apply(v);
+  checkClearPatch();
+  EXPECT_TRUE(clearPatch.isPatchTypeAmbiguous());
+
+  v = asValueStruct<Tag>(t);
+  clearPatch.getStoredPatchByTag<Tag>();
+  EXPECT_FALSE(clearPatch.isPatchTypeAmbiguous());
+  clearPatch.apply(v);
+  checkClearPatch();
 }
 
 TEST(DynamicPatch, Unknown) {
@@ -730,35 +872,51 @@ TEST(DynamicPatch, Unknown) {
   testDynamicUnknownPatch<type::union_t<MyUnion>, DynamicUnknownPatch>(u);
 }
 
+TEST(DynamicPatch, FromAnyPatch) {
+  op::AnyPatch anyPatch;
+  anyPatch.assign(type::AnyData::toAny<type::union_t<MyUnion>>({}).toThrift());
+  DynamicPatch dynPatch = DynamicPatch::fromObject(anyPatch.toObject());
+  EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+
+  // Assert it is an AnyPatch.
+  MyUnionPatch patch;
+  patch.patch<ident::s>() = "hello world";
+  dynPatch.getStoredPatchByTag<type::struct_t<type::AnyStruct>>().patchIfTypeIs(
+      patch);
+  auto anyValue = asValueStruct<type::struct_t<type::AnyStruct>>({});
+  dynPatch.apply(anyValue);
+
+  auto any = fromValueStruct<type::struct_t<type::AnyStruct>>(anyValue);
+  MyUnion u = type::AnyData{any}.get<type::union_t<MyUnion>>();
+  EXPECT_TRUE(u.s_ref().has_value());
+  EXPECT_EQ(u.s_ref().value(), "hello world");
+}
+
 TEST(DynamicPatch, FromSetOrMapPatch) {
   Object obj;
   obj[static_cast<FieldId>(op::PatchOp::Remove)].emplace_set() = {
       asValueStruct<type::i32_t>(1)};
   {
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
-    EXPECT_TRUE(patch.holds_alternative<DynamicUnknownPatch>(badge));
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
+    EXPECT_TRUE(patch.isPatchTypeAmbiguous());
   }
   {
     obj[static_cast<FieldId>(op::PatchOp::Add)].emplace_set() = {
         asValueStruct<type::i32_t>(1)};
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
     EXPECT_TRUE(patch.holds_alternative<DynamicSetPatch>(badge));
   }
   {
     obj.erase(static_cast<FieldId>(op::PatchOp::Add));
     obj[static_cast<FieldId>(op::PatchOp::Put)].emplace_set() = {
         asValueStruct<type::i32_t>(1)};
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
     EXPECT_TRUE(patch.holds_alternative<DynamicSetPatch>(badge));
   }
   {
     obj[static_cast<FieldId>(op::PatchOp::Put)].emplace_map() = {
         {asValueStruct<type::i32_t>(1), asValueStruct<type::i32_t>(2)}};
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
     EXPECT_TRUE(patch.holds_alternative<DynamicMapPatch>(badge));
   }
 }
@@ -774,22 +932,24 @@ TEST(DynamicPatch, FromStructOrUnionPatch) {
       .emplace_object()[FieldId{2}] =
       asValueStruct<type::infer_tag<op::I32Patch>>(fieldPatch);
   {
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
-    EXPECT_TRUE(patch.holds_alternative<DynamicUnknownPatch>(badge));
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
+    EXPECT_TRUE(patch.isPatchTypeAmbiguous());
 
     MyUnion u;
     u.i_ref() = 5;
     auto value = asValueStruct<type::union_t<MyUnion>>(u);
-    patch.apply(badge, value);
+    patch.apply(value);
     EXPECT_EQ(value.as_object()[FieldId{2}].as_i32(), 25);
+
+    patch.get<DynamicUnknownPatch>().assign(Object{});
+    patch.apply(value);
+    EXPECT_TRUE(value.as_object().empty());
   }
   {
     obj[static_cast<FieldId>(op::PatchOp::EnsureUnion)]
         .emplace_object()[FieldId{2}]
         .emplace_i32(1);
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
     EXPECT_TRUE(patch.holds_alternative<DynamicUnionPatch>(badge));
   }
   {
@@ -797,8 +957,7 @@ TEST(DynamicPatch, FromStructOrUnionPatch) {
     obj[static_cast<FieldId>(op::PatchOp::EnsureStruct)]
         .emplace_object()[FieldId{1}]
         .emplace_i32(1);
-    DynamicPatch patch;
-    patch.fromObject(badge, obj);
+    DynamicPatch patch = DynamicPatch::fromObject(obj);
     EXPECT_TRUE(patch.holds_alternative<DynamicStructPatch>(badge));
   }
 }
@@ -808,7 +967,7 @@ TEST(PatchMergeTest, DynamicStructPatch) {
 
   op::I32Patch foo;
   foo += 1;
-  p.patchIfSet<type::i32_t>(badge, FieldId{1}).merge(foo);
+  p.patchIfSet<type::i32_t>(FieldId{1}).merge(foo);
 
   Object obj;
   obj[FieldId(1)].emplace_i32(3);
@@ -825,7 +984,7 @@ TEST(PatchMergeTest, DynamicStructPatch) {
   obj[FieldId(1)].emplace_i32(3);
 
   // patch becomes += 2
-  p.patchIfSet<type::i32_t>(badge, FieldId{1}).merge(foo);
+  p.patchIfSet<type::i32_t>(FieldId{1}).merge(foo);
 
   p.apply(badge, obj);
   EXPECT_EQ(obj[FieldId(1)].as_i32(), 5);
@@ -835,15 +994,15 @@ TEST(PatchMergeTest, DynamicStructPatch) {
   // In dynamic patch, we only use Remove operation to remove field
   // Clear operation will just set field to intrinsic default
   foo.clear();
-  p.patchIfSet<type::i32_t>(badge, FieldId{1}).merge(foo);
+  p.patchIfSet<type::i32_t>(FieldId{1}).merge(foo);
   p.apply(badge, obj);
   EXPECT_EQ(obj[FieldId(1)].as_i32(), 0);
 
-  p.remove(badge, FieldId(1));
+  p.remove(FieldId(1));
   p.apply(badge, obj);
   EXPECT_FALSE(obj.contains(FieldId(1)));
 
-  p.ensure(badge, FieldId(1), detail::asValueStruct<type::i32_t>(10));
+  p.ensure(FieldId(1), detail::asValueStruct<type::i32_t>(10));
   p.apply(badge, obj);
   EXPECT_EQ(obj[FieldId(1)].as_i32(), 10);
   p.apply(badge, obj);
@@ -881,6 +1040,119 @@ class AnyDiffVisitor : public DiffVisitorBase {
   }
 };
 
+TEST(DynamicPatchTest, ToPatchType) {
+  EXPECT_EQ(
+      toPatchType(type::Type::get<type::struct_t<MyStruct>>()),
+      type::Type::get<type::infer_tag<MyStructPatch>>());
+  EXPECT_EQ(
+      toPatchType(type::Type::get<type::union_t<MyUnion>>()),
+      type::Type::get<type::infer_tag<MyUnionPatch>>());
+}
+
+TEST(DynamicPatchTest, InvalidToPatchType) {
+  type::Type type = type::Type::get<type::union_t<MyUnion>>();
+  type.toThrift().name()->unionType_ref()->scopedName_ref() = "scoped.name";
+  EXPECT_THROW(toPatchType(type), std::runtime_error);
+  EXPECT_THROW(
+      toPatchType(type::Type::get<type::infer_tag<MyStructPatch>>()),
+      std::runtime_error);
+  EXPECT_THROW(
+      toPatchType(type::Type::get<type::struct_t<MyStructSafePatch>>()),
+      std::runtime_error);
+  EXPECT_THROW(toPatchType(type::Type::get<type::i32_t>()), std::runtime_error);
+}
+
+TEST(DynamicPatchTest, FromPatchType) {
+  EXPECT_EQ(
+      type::Type::get<type::struct_t<MyStruct>>(),
+      fromPatchType(type::Type::get<type::infer_tag<MyStructPatch>>(), false));
+  EXPECT_EQ(
+      type::Type::get<type::union_t<MyUnion>>(),
+      fromPatchType(type::Type::get<type::infer_tag<MyUnionPatch>>(), true));
+  type::Type type = type::Type::get<type::union_t<MyUnion>>();
+  type.toThrift().name()->unionType_ref()->scopedName_ref() = "scoped.name";
+  EXPECT_THROW(fromPatchType(type, true), std::runtime_error);
+  EXPECT_THROW(
+      fromPatchType(type::Type::get<type::infer_tag<MyStruct>>(), false),
+      std::invalid_argument);
+  // mimic if Patch is mistakenly stored as struct in type.
+  EXPECT_THROW(
+      fromPatchType(type::Type::get<type::infer_tag<MyUnion>>(), false),
+      std::runtime_error);
+  EXPECT_THROW(
+      fromPatchType(type::Type::get<type::i32_t>(), false), std::runtime_error);
+}
+
+TEST(DynamicPatchTest, ToSafePatchType) {
+  EXPECT_EQ(
+      toSafePatchType(type::Type::get<type::struct_t<MyStruct>>()),
+      type::Type::get<type::struct_t<MyStructSafePatch>>());
+  EXPECT_EQ(
+      toSafePatchType(type::Type::get<type::union_t<MyUnion>>()),
+      type::Type::get<type::struct_t<MyUnionSafePatch>>());
+  EXPECT_THROW(
+      toSafePatchType(type::Type::get<type::i32_t>()), std::runtime_error);
+  type::Type unionScopedName = type::Type::get<type::union_t<MyUnion>>();
+  unionScopedName.toThrift().name()->unionType_ref()->scopedName_ref() =
+      "scoped.name";
+  EXPECT_THROW(toSafePatchType(unionScopedName), std::runtime_error);
+  EXPECT_THROW(
+      toSafePatchType(type::Type::get<type::infer_tag<MyStructPatch>>()),
+      std::runtime_error);
+  EXPECT_THROW(
+      toSafePatchType(type::Type::get<type::struct_t<MyStructSafePatch>>()),
+      std::runtime_error);
+}
+
+TEST(DynamicPatchTest, FromSafePatchType) {
+  EXPECT_EQ(
+      type::Type::get<type::struct_t<MyStruct>>(),
+      fromSafePatchType(
+          type::Type::get<type::struct_t<MyStructSafePatch>>(), false));
+  EXPECT_EQ(
+      type::Type::get<type::union_t<MyUnion>>(),
+      fromSafePatchType(
+          type::Type::get<type::struct_t<MyUnionSafePatch>>(), true));
+  EXPECT_THROW(
+      fromSafePatchType(type::Type::get<type::i32_t>(), false),
+      std::runtime_error);
+  type::Type unionScopedName = type::Type::get<type::union_t<MyUnion>>();
+  unionScopedName.toThrift().name()->unionType_ref()->scopedName_ref() =
+      "scoped.name";
+  EXPECT_THROW(fromSafePatchType(unionScopedName, true), std::runtime_error);
+  EXPECT_THROW(
+      fromSafePatchType(type::Type::get<type::infer_tag<MyStruct>>(), false),
+      std::invalid_argument);
+  // mimic if SafePatch is mistakenly stored as struct in type.
+  EXPECT_THROW(
+      fromSafePatchType(type::Type::get<type::infer_tag<MyUnion>>(), false),
+      std::runtime_error);
+  EXPECT_THROW(
+      fromSafePatchType(type::Type::get<type::i32_t>(), false),
+      std::runtime_error);
+}
+
+TEST(DynamicPatchTest, PatchTypeConversion) {
+  // SafePatch -> Patch
+  EXPECT_EQ(
+      type::Type::get<type::struct_t<MyStructSafePatch>>(),
+      toSafePatchType(fromPatchType(
+          type::Type::get<type::infer_tag<MyStructPatch>>(), false)));
+  EXPECT_EQ(
+      type::Type::get<type::struct_t<MyUnionSafePatch>>(),
+      toSafePatchType(fromPatchType(
+          type::Type::get<type::infer_tag<MyUnionPatch>>(), true)));
+  // Patch -> SafePatch
+  EXPECT_EQ(
+      type::Type::get<type::infer_tag<MyStructPatch>>(),
+      toPatchType(fromSafePatchType(
+          type::Type::get<type::struct_t<MyStructSafePatch>>(), false)));
+  EXPECT_EQ(
+      type::Type::get<type::infer_tag<MyUnionPatch>>(),
+      toPatchType(fromSafePatchType(
+          type::Type::get<type::struct_t<MyUnionSafePatch>>(), true)));
+}
+
 TEST(DynamicPatchTest, AnyPatch) {
   StructWithAny src, dst;
 
@@ -897,7 +1169,7 @@ TEST(DynamicPatchTest, AnyPatch) {
   auto patch =
       AnyDiffVisitor{}.diff(srcValue.as_object(), dstValue.as_object());
 
-  patch.apply(badge, srcValue);
+  patch.apply(srcValue);
   EXPECT_EQ(srcValue, dstValue);
 }
 
@@ -913,10 +1185,22 @@ TEST(DynamicPatchTest, AnyPatch) {
 //   different.
 struct CheckAssign {
   void assign(auto&&) {}
-  void assign(detail::Badge, const auto& v) {
+  // Check whether the address of the first element is expected.
+  // This ensures that we moved the assign data to the patch (not copied).
+  void assign(const ValueList& v) {
     EXPECT_EQ(v.size(), 100);
-    // Check whether the address of the first element is expected.
-    // This ensures that we moved the assign data to the patch (not copied).
+    EXPECT_EQ(&*v.begin(), expected);
+  }
+  void assign(const ValueSet& v) {
+    EXPECT_EQ(v.size(), 100);
+    EXPECT_EQ(&*v.begin(), expected);
+  }
+  void assign(const ValueMap& v) {
+    EXPECT_EQ(v.size(), 100);
+    EXPECT_EQ(&*v.begin(), expected);
+  }
+  void assign(const Object& v) {
+    EXPECT_EQ(v.size(), 100);
     EXPECT_EQ(&*v.begin(), expected);
   }
   void push_back(auto&&...) {}
@@ -946,36 +1230,28 @@ void testMergeMovedPatch(T t) {
   CheckAssign checkAssign{&*t.begin()};
 
   Patch p1, p2;
-  p1.assign(badge, std::move(t)); // we moved `t` into p1's assign field
-  p1.customVisit(badge, checkAssign);
+  // we moved `t` into p1's assign field
+  p1.assign(std::move(t));
+
+  p1.customVisit(checkAssign);
 
   p2.merge(badge, std::move(p1)); // we moved assign field from p1 to p2
-  p2.customVisit(badge, checkAssign);
+  p2.customVisit(checkAssign);
 
   DynamicPatch dp{std::move(p2)};
-  dp.visitPatch(
-      badge,
-      folly::overload(
-          [&](const DynamicListPatch& patch) {
-            patch.customVisit(badge, checkAssign);
-          },
-          [&](const DynamicSetPatch& patch) {
-            patch.customVisit(badge, checkAssign);
-          },
-          [&](const DynamicMapPatch& patch) {
-            patch.customVisit(badge, checkAssign);
-          },
-          [&](const DynamicStructPatch& patch) {
-            patch.customVisit(badge, checkAssign);
-          },
-          [&](const auto&) {
-            folly::throw_exception<std::runtime_error>("not reachable.");
-          }));
+  dp.visitPatch(folly::overload(
+      [&](const DynamicListPatch& patch) { patch.customVisit(checkAssign); },
+      [&](const DynamicSetPatch& patch) { patch.customVisit(checkAssign); },
+      [&](const DynamicMapPatch& patch) { patch.customVisit(checkAssign); },
+      [&](const DynamicStructPatch& patch) { patch.customVisit(checkAssign); },
+      [&](const auto&) {
+        folly::throw_exception<std::runtime_error>("not reachable.");
+      }));
   dp.customVisit(badge, checkAssign);
 }
 
 TEST(DynamicPatchTest, MergeMovedListPatch) {
-  detail::ValueList l;
+  ValueList l;
   for (int i = 0; i < 100; i++) {
     l.emplace_back().emplace_i32(i);
   }
@@ -983,7 +1259,7 @@ TEST(DynamicPatchTest, MergeMovedListPatch) {
 }
 
 TEST(DynamicPatchTest, MergeMovedSetPatch) {
-  detail::ValueSet s;
+  ValueSet s;
   for (int i = 0; i < 100; i++) {
     Value v;
     v.emplace_i32(i);
@@ -993,7 +1269,7 @@ TEST(DynamicPatchTest, MergeMovedSetPatch) {
 }
 
 TEST(DynamicPatchTest, MergeMovedMapPatch) {
-  detail::ValueMap m;
+  ValueMap m;
   for (int i = 0; i < 100; i++) {
     Value v;
     v.emplace_i32(i);
@@ -1011,8 +1287,6 @@ TEST(DynamicPatchTest, MergeMovedStructPatch) {
 }
 
 TEST(DemoDiffVisitor, TerseWriteFieldMismatch1) {
-  THRIFT_FLAG_SET_MOCK(
-      thrift_patch_diff_visitor_ensure_on_potential_terse_write_field, true);
   using test::Foo;
   Foo src, dst;
   dst.bar() = "123";
@@ -1038,8 +1312,6 @@ TEST(DemoDiffVisitor, TerseWriteFieldMismatch1) {
 }
 
 TEST(DemoDiffVisitor, TerseWriteFieldMismatch2) {
-  THRIFT_FLAG_SET_MOCK(
-      thrift_patch_diff_visitor_ensure_on_potential_terse_write_field, true);
   using test::Foo;
   Foo src, dst;
   dst.bar() = "123";
@@ -1060,6 +1332,366 @@ TEST(DemoDiffVisitor, TerseWriteFieldMismatch2) {
   protocol::applyPatch(patch.toObject(), srcVal);
 
   EXPECT_EQ(srcVal, dstVal);
+}
+
+template <class P1, class P2>
+void testUnmergeablePatches(P1 p1, P2 p2) {
+  {
+    DynamicPatch src(p1), dst(p2);
+    EXPECT_THROW(dst.merge(src), std::runtime_error);
+  }
+  {
+    DynamicPatch src(p2), dst(p1);
+    EXPECT_THROW(dst.merge(src), std::runtime_error);
+  }
+}
+
+TEST(DynamicPatch, MergingIncompatiblePatch) {
+  {
+    op::I32Patch p1;
+    p1 = 10;
+    op::I64Patch p2;
+    p2 += 20;
+    testUnmergeablePatches(p1, p2);
+  }
+  {
+    test::FooPatch patch;
+    patch.patchIfSet<ident::bar>() = "123";
+
+    op::AnyPatch p1;
+    p1.patchIfTypeIs(patch);
+
+    DynamicUnknownPatch p2;
+    p2.fromObject(badge, patch.toObject());
+
+    // p1 is AnyPatch, p2 is StructPatch. They are not mergeable.
+    testUnmergeablePatches(p1, p2);
+  }
+}
+
+TEST(DynamicPatch, InvalidGetStoredPatchByTag) {
+  {
+    MyUnionPatch patch;
+    patch.patchIfSet<ident::s>() = "hello world";
+    DynamicPatch dynPatch = DynamicPatch::fromObject(patch.toObject());
+    EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+    EXPECT_THROW(
+        dynPatch.getStoredPatchByTag<type::map_c>(), std::runtime_error);
+    EXPECT_THROW(
+        dynPatch.getStoredPatchByTag<type::i32_t>(), std::runtime_error);
+  }
+  {
+    DynamicMapPatch patch;
+    patch.removeMulti({asValueStruct<type::i32_t>(42)});
+    DynamicPatch dynPatch = DynamicPatch::fromObject(patch.toObject());
+    EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+    EXPECT_THROW(
+        dynPatch.getStoredPatchByTag<type::struct_c>(), std::runtime_error);
+    EXPECT_THROW(
+        dynPatch.getStoredPatchByTag<type::i32_t>(), std::runtime_error);
+  }
+}
+
+TEST(DynamicPatch, DynamicSafePatch) {
+  MyUnion obj;
+  obj.s_ref().emplace("123");
+
+  MyUnionPatch patch;
+  patch.patchIfSet<ident::s>() = "hello world";
+  MyUnionSafePatch safePatch = patch.toSafePatch();
+
+  // store SafePatch in Thrift Any
+  type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+  // round trip
+  DynamicPatch dynPatch = DynamicPatch::fromSafePatch(safePatchAny);
+  EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+  type::AnyStruct rSafePatchAny =
+      dynPatch.toSafePatch(type::Type::get<type::union_t<MyUnion>>());
+
+  // apply patch
+  MyUnionSafePatch rSafePatch = type::AnyData{std::move(rSafePatchAny)}
+                                    .get<type::struct_t<MyUnionSafePatch>>();
+  EXPECT_EQ(rSafePatch.version(), 1);
+  MyUnionPatch rpatch = MyUnionPatch::fromSafePatch(rSafePatch);
+  rpatch.apply(obj);
+
+  EXPECT_EQ(obj.s_ref().value(), "hello world");
+}
+
+TEST(DynamicPatch, DynamicSafePatchInvalid) {
+  MyUnionSafePatch safePatch;
+  safePatch.version() = 42;
+
+  // store SafePatch in Thrift Any
+  type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+  EXPECT_THROW(
+      (void)DynamicPatch::fromSafePatch(safePatchAny), std::runtime_error);
+}
+
+TEST(DynamicPatch, DynamicSafePatchV2) {
+  {
+    op::AnyPatch anyPatch;
+    anyPatch.ensureAny(type::AnyData::toAny(MyUnion{}).toThrift());
+
+    DynamicPatch dynPatch{std::move(anyPatch)};
+    type::AnyStruct safePatchAny =
+        dynPatch.toSafePatch(type::Type::get<type::union_t<MyUnion>>());
+
+    MyUnionSafePatch safePatch = type::AnyData{std::move(safePatchAny)}
+                                     .get<type::struct_t<MyUnionSafePatch>>();
+    EXPECT_EQ(safePatch.version(), 2);
+  }
+  {
+    op::AnyPatch anyPatch;
+    // clear is V1 operation
+    anyPatch.clear();
+
+    DynamicPatch dynPatch{std::move(anyPatch)};
+    type::AnyStruct safePatchAny =
+        dynPatch.toSafePatch(type::Type::get<type::union_t<MyUnion>>());
+
+    MyUnionSafePatch safePatch = type::AnyData{std::move(safePatchAny)}
+                                     .get<type::struct_t<MyUnionSafePatch>>();
+    EXPECT_EQ(safePatch.version(), 1);
+  }
+  {
+    MyStructPatch patch;
+    patch.patchIfSet<ident::any>().ensureAny(
+        type::AnyData::toAny(MyUnion{}).toThrift());
+    MyStructSafePatch safePatch = patch.toSafePatch();
+    type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+    // Round trip
+    DynamicPatch dynPatch = DynamicPatch::fromSafePatch(safePatchAny);
+    type::AnyStruct rSafePatchAny =
+        dynPatch.toSafePatch(type::Type::get<type::struct_t<MyStruct>>());
+    MyStructSafePatch rSafePatch =
+        type::AnyData{std::move(rSafePatchAny)}
+            .get<type::struct_t<MyStructSafePatch>>();
+    EXPECT_EQ(rSafePatch.version(), 2);
+  }
+  {
+    MyStructPatch patch;
+    patch.patchIfSet<ident::any>().ensureAny(
+        type::AnyData::toAny(MyUnion{}).toThrift());
+    MyStructSafePatch safePatch = patch.toSafePatch();
+    type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+    // Round trip
+    DynamicPatch dynPatch = DynamicPatch::fromSafePatch(safePatchAny);
+    type::AnyStruct rSafePatchAny =
+        dynPatch.toSafePatch(type::Type::get<type::struct_t<MyStruct>>());
+    MyStructSafePatch rSafePatch =
+        type::AnyData{std::move(rSafePatchAny)}
+            .get<type::struct_t<MyStructSafePatch>>();
+    EXPECT_EQ(rSafePatch.version(), 2);
+  }
+  {
+    MyUnionPatch patch;
+    patch.patchIfSet<ident::strct>().patchIfSet<ident::any>().ensureAny(
+        type::AnyData::toAny(MyUnion{}).toThrift());
+    MyUnionSafePatch safePatch = patch.toSafePatch();
+    type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+    // round trip
+    DynamicPatch dynPatch = DynamicPatch::fromSafePatch(safePatchAny);
+    EXPECT_TRUE(dynPatch.isPatchTypeAmbiguous());
+    type::AnyStruct rSafePatchAny =
+        dynPatch.toSafePatch(type::Type::get<type::union_t<MyUnion>>());
+
+    // apply patch
+    MyUnionSafePatch rSafePatch = type::AnyData{std::move(rSafePatchAny)}
+                                      .get<type::struct_t<MyUnionSafePatch>>();
+    EXPECT_EQ(rSafePatch.version(), 2);
+  }
+  {
+    MyUnionPatch patch;
+    patch.patchIfSet<ident::m>()
+        .patchByKey(42)
+        .patchIfSet<ident::any>()
+        .ensureAny(type::AnyData::toAny(MyUnion{}).toThrift());
+    MyUnionSafePatch safePatch = patch.toSafePatch();
+    type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+    // Round trip
+    DynamicPatch dynPatch = DynamicPatch::fromSafePatch(safePatchAny);
+    type::AnyStruct rSafePatchAny =
+        dynPatch.toSafePatch(type::Type::get<type::union_t<MyUnion>>());
+    MyUnionSafePatch rSafePatch = type::AnyData{std::move(rSafePatchAny)}
+                                      .get<type::struct_t<MyUnionSafePatch>>();
+    EXPECT_EQ(rSafePatch.version(), 2);
+  }
+}
+
+TEST(DynamicPatch, applyToDataFieldInsideAny) {
+  MyUnion obj;
+  obj.s_ref().emplace("123");
+
+  MyUnionPatch patch;
+  patch.patchIfSet<ident::s>() = "hello world";
+  MyUnionSafePatch safePatch = patch.toSafePatch();
+
+  // store obj in Thrift Any
+  type::AnyStruct objAny = type::AnyData::toAny(obj).toThrift();
+
+  // store SafePatch in Thrift Any
+  type::AnyStruct safePatchAny = type::AnyData::toAny(safePatch).toThrift();
+
+  // apply patch
+  DynamicPatch dynPatch = DynamicPatch::fromSafePatch(safePatchAny);
+  dynPatch.applyToDataFieldInsideAny(objAny);
+
+  EXPECT_EQ(
+      type::AnyData{objAny}.get<type::union_t<MyUnion>>().s_ref().value(),
+      "hello world");
+}
+
+TEST(DynamicPatchTest, Any) {
+  constexpr auto kAssignOp = static_cast<FieldId>(op::PatchOp::Assign);
+  constexpr auto kRemoveOp = static_cast<FieldId>(op::PatchOp::Remove);
+  constexpr auto kEnsureStructOp =
+      static_cast<FieldId>(op::PatchOp::EnsureStruct);
+  constexpr auto kPatchPriorOp = static_cast<FieldId>(op::PatchOp::PatchPrior);
+  constexpr auto kPatchAfterOp = static_cast<FieldId>(op::PatchOp::PatchAfter);
+
+  MyUnion src, dst;
+  src.s_ref() = "123";
+  dst.s_ref() = "1234";
+
+  auto any = type::AnyData::toAny(src).toThrift();
+  const auto srcObj =
+      asValueStruct<type::struct_t<type::AnyStruct>>(any).as_object();
+
+  any = type::AnyData::toAny(dst).toThrift();
+  const auto dstObj =
+      asValueStruct<type::struct_t<type::AnyStruct>>(any).as_object();
+
+  {
+    auto src2 = srcObj;
+    auto dst2 = dstObj;
+
+    // If src and dst look like thrift.Any, we only use Assign operator
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_EQ(dynPatch.size(), 1);
+    EXPECT_TRUE(dynPatch.contains(kAssignOp));
+
+    src2[FieldId{3}].emplace_binary(folly::IOBuf::wrapBufferAsValue("123", 3));
+    dst2[FieldId{3}].emplace_binary(folly::IOBuf::wrapBufferAsValue("1234", 4));
+
+    // We don't check the content, we only check whether type matches.
+    patch = DemoDiffVisitor{}.diff(src2, dst2);
+    dynPatch = patch.toObject();
+    EXPECT_EQ(dynPatch.size(), 1);
+    EXPECT_TRUE(dynPatch.contains(kAssignOp));
+
+    src2[FieldId{5}].emplace_bool();
+    dst2[FieldId{5}].emplace_bool();
+
+    // Struct with extra fields still look like Any
+    patch = DemoDiffVisitor{}.diff(src2, dst2);
+    dynPatch = patch.toObject();
+    EXPECT_EQ(dynPatch.size(), 1);
+    EXPECT_TRUE(dynPatch.contains(kAssignOp));
+  }
+
+  {
+    auto src2 = srcObj;
+    auto dst2 = dstObj;
+    src2[FieldId{1}].emplace_binary();
+    dst2[FieldId{1}].emplace_binary();
+
+    // If src does not look like thrift.Any, we can use any operations.
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_TRUE(dynPatch.contains(kPatchPriorOp));
+  }
+
+  {
+    auto src2 = srcObj;
+    auto dst2 = dstObj;
+    src2[FieldId{2}].emplace_binary();
+    dst2[FieldId{2}].emplace_binary();
+
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_TRUE(dynPatch.contains(kPatchPriorOp));
+  }
+
+  {
+    auto src2 = srcObj;
+    auto dst2 = dstObj;
+    src2[FieldId{3}].emplace_object()[FieldId{1}].emplace_i32(123);
+    dst2[FieldId{3}].emplace_object()[FieldId{1}].emplace_i32(1234);
+
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_TRUE(dynPatch.contains(kPatchPriorOp));
+  }
+
+  {
+    auto src2 = srcObj;
+    const auto& dst2 = dstObj;
+    src2.erase(FieldId{3});
+
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_TRUE(dynPatch.contains(kEnsureStructOp));
+    EXPECT_TRUE(dynPatch.contains(kPatchAfterOp));
+  }
+
+  {
+    const auto& src2 = srcObj;
+    auto dst2 = dstObj;
+    dst2.erase(FieldId{3});
+
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_TRUE(dynPatch.contains(kRemoveOp));
+  }
+
+  {
+    auto src2 = srcObj;
+    const auto& dst2 = dstObj;
+    src2[FieldId{4}].emplace_bool();
+
+    auto patch = DemoDiffVisitor{}.diff(src2, dst2);
+    auto dynPatch = patch.toObject();
+    EXPECT_TRUE(dynPatch.contains(kPatchPriorOp));
+  }
+}
+
+struct EnsureAndPatchVisitor {
+  void assign(const auto&) { EXPECT_FALSE(true); }
+  void clear() { EXPECT_FALSE(true); }
+  void patchIfSet(FieldId id, const auto&) { patchIds.insert(id); }
+  void ensure(FieldId id, const Value&) { ensureIds.insert(id); }
+  void remove(FieldId) { EXPECT_FALSE(true); }
+
+  std::set<FieldId> ensureIds;
+  std::set<FieldId> patchIds;
+};
+
+TEST(DynamicPatchTest, convertAssignPatchToFieldPatch) {
+  protocol::Object obj;
+  obj[FieldId{1}].emplace_i32(1);
+  obj[FieldId{2}].emplace_i32(2);
+  DynamicStructPatch patch;
+  patch.ensureAndAssignFieldsFromObject(obj);
+
+  EnsureAndPatchVisitor visitor;
+  patch.customVisit(visitor);
+
+  auto check = [](const auto& ids) {
+    EXPECT_EQ(ids.size(), 2);
+    EXPECT_TRUE(ids.contains(FieldId{1}));
+    EXPECT_TRUE(ids.contains(FieldId{2}));
+  };
+
+  check(visitor.ensureIds);
+  check(visitor.patchIds);
 }
 
 } // namespace apache::thrift::protocol

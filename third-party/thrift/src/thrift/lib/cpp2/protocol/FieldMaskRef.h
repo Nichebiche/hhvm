@@ -16,9 +16,8 @@
 
 #pragma once
 
-#include <map>
+#include <optional>
 #include <string_view>
-#include <unordered_set>
 
 #include <thrift/lib/cpp2/protocol/detail/FieldMask.h>
 #include <thrift/lib/thrift/gen-cpp2/protocol_types.h>
@@ -30,31 +29,66 @@ namespace apache::thrift::protocol {
 // from excludes mask, the mask actually represents the complement set.
 class MaskRef {
  public:
+  // TODO(dokwon): Consider requiring is_exclusion to explicitly specified in
+  // the constructor.
+  explicit MaskRef(const Mask& m) : mask(m), is_exclusion(false) {}
+  MaskRef(const Mask& m, bool exclusion) : mask(m), is_exclusion(exclusion) {}
+
   const Mask& mask;
-  bool is_exclusion = false; // Whether the mask comes from excludes mask
+  bool is_exclusion; // Whether the mask comes from excludes mask
 
   // Get nested MaskRef with the given field id. If the id does not exist in the
-  // map, it returns noneMask or allMask depending on whether the field should
-  // be included.
+  // field mask, it returns noneMask or allMask depending on whether the field
+  // should be included.
+  //
   // Throws a runtime exception if the mask is not a field mask.
   MaskRef get(FieldId id) const;
 
   // Get nested MaskRef with the given map id. If the id does not exist in the
-  // map, it returns noneMask or allMask depending on whether the field
-  // should be included.
-  // Throws a runtime exception if the mask is not a map mask.
+  // integer map mask, it returns noneMask or allMask depending on whether the
+  // field should be included.
+  //
+  // Throws a runtime exception if the mask is not an integer map mask.
   MaskRef get(detail::MapId id) const;
 
   // Get nested MaskRef with the given string key. If the string key does not
-  // exist in the map, it returns noneMask or allMask depending on whether the
-  // field should be included. Throws a runtime exception if the mask is not a
-  // map mask.
+  // exist in the string map mask, it returns noneMask or allMask depending on
+  // whether the field should be included.
+  //
+  // Throws a runtime exception if the mask is not a string map mask.
   MaskRef get(const std::string& key) const;
+  MaskRef get(std::string_view key) const;
 
   // Get nested MaskRef for the given type. If the type does not exist in the
-  // map, it returns noneMask or allMask depending on whether the field should
-  // be included. Throws a runtime exception if the mask is not a type map mask.
+  // type mask, it returns noneMask or allMask depending on whether the field
+  // should be included.
+  //
+  // Throws a runtime exception if the mask is not a type mask.
   MaskRef get(const type::Type& type) const;
+
+  // Get nested MaskRef with the given field id. If the id does not exist in the
+  // field mask, it returns empty optional.
+  //
+  // Throws a runtime exception if the mask is not a field mask.
+  std::optional<MaskRef> tryGet(FieldId id) const;
+
+  // Get nested MaskRef with the given map id. If the id does not exist in the
+  // integer map mask, it returns empty optional.
+  //
+  // Throws a runtime exception if the mask is not an integer map mask.
+  std::optional<MaskRef> tryGet(detail::MapId id) const;
+
+  // Get nested MaskRef with the given string key. If the string key does not
+  // exist in the string map mask, it returns empty optional.
+  //
+  // Throws a runtime exception if the mask is not a string map mask.
+  std::optional<MaskRef> tryGet(const std::string& key) const;
+
+  // Get nested MaskRef for the given type. If the type does not exist in the
+  // type mask, it returns empty optional.
+  //
+  // Throws a runtime exception if the mask is not a type mask.
+  std::optional<MaskRef> tryGet(const type::Type& type) const;
 
   // This API is reserved for internal use only.
   MaskRef getViaIdenticalType_INTERNAL_DO_NOT_USE(const type::Type& type) const;
@@ -65,28 +99,52 @@ class MaskRef {
   // Returns whether the ref includes no fields.
   bool isNoneMask() const;
 
-  // Returns whether the ref includes all fields.
+  // Returns whether the ref includes all map keys.
+  //
+  // Note, allMask is not considered here.
   bool isAllMapMask() const;
 
-  // Returns whether the ref includes no fields.
+  // Returns whether the ref includes no map keys.
+  //
+  // Note, noneMask is not considered here.
   bool isNoneMapMask() const;
+
+  // Returns whether the ref includes all type entries.
+  //
+  // Note, allMask is not considered here.
+  bool isAllTypeMask() const;
+
+  // Returns whether the ref includes no type entries.
+  //
+  // Note, noneMask is not considered here.
+  bool isNoneTypeMask() const;
 
   // Returns whether the ref is logically exclusive in context.
   bool isExclusive() const;
 
   // Returns true if the mask is a field mask.
+  //
+  // Note, allMask and noneMask are also field masks.
   bool isFieldMask() const;
 
   // Returns true if the mask is a map mask.
+  //
+  // Note, allMask and noneMask are not a map mask.
   bool isMapMask() const;
 
   // Returns true if the mask is an integer map mask.
+  //
+  // Note, allMask and noneMask are not an integer map mask.
   bool isIntegerMapMask() const;
 
   // Returns true if the mask is a string map mask.
+  //
+  // Note, allMask and noneMask are not a string map mask.
   bool isStringMapMask() const;
 
   // Returns true if the mask is a type-map mask (i.e. AnyMask)
+  //
+  // Note, allMask and noneMask are not a type mask.
   bool isTypeMask() const;
 
   // Removes masked fields in schemaless Thrift Value
@@ -125,7 +183,7 @@ class MaskRef {
     if (auto includes = mask.includes_ref()) {
       return includes->size();
     } else {
-      return op::size_v<T> - mask.excludes_ref()->size();
+      return op::num_fields<T> - mask.excludes_ref()->size();
     }
   }
 

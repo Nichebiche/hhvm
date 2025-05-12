@@ -28,6 +28,7 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BigValueRoute.h>
 #include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
@@ -80,6 +81,11 @@ RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
 extern template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
+makeBigValueRoute<carbon::test::CarbonTestRouterInfo>(
+RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json);
+
+extern template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
 makeBlackholeRoute<carbon::test::CarbonTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
@@ -91,11 +97,6 @@ const folly::dynamic& json);
 
 extern template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
 makeErrorRoute<carbon::test::CarbonTestRouterInfo>(
-RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
-const folly::dynamic& json);
-
-extern template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
-makeHashRoute<carbon::test::CarbonTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
@@ -149,6 +150,12 @@ makeRandomRoute<carbon::test::CarbonTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
+template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
+makeHashRoute<carbon::test::CarbonTestRouterInfo>(
+RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json,
+ProxyBase& proxy);
+
 extern template class ExtraRouteHandleProviderIf<carbon::test::CarbonTestRouterInfo>;
 
 } // namespace mcrouter
@@ -168,14 +175,10 @@ CarbonTestRouterInfo::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<CarbonTestRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<CarbonTestRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<CarbonTestRouterInfo>},
+      {"BigValueRoute", &makeBigValueRoute<CarbonTestRouterInfo>},
       {"BlackholeRoute", &makeBlackholeRoute<CarbonTestRouterInfo>},
       {"DevNullRoute", &makeDevNullRoute<CarbonTestRouterInfo>},
       {"ErrorRoute", &makeErrorRoute<CarbonTestRouterInfo>},
-      {"HashRoute",
-       [](RouteHandleFactory<RouteHandleIf>& factory,
-          const folly::dynamic& json) {
-         return makeHashRoute<CarbonTestRouterInfo>(factory, json);
-       }},
       {"HostIdRoute", &makeHostIdRoute<CarbonTestRouterInfo>},
       {"LatencyInjectionRoute",
        &makeLatencyInjectionRoute<CarbonTestRouterInfo>},
@@ -195,8 +198,11 @@ CarbonTestRouterInfo::buildRouteMap() {
 
 /* static */ CarbonTestRouterInfo::RouteHandleFactoryMapWithProxy
 CarbonTestRouterInfo::buildRouteMapWithProxy() {
-  return RouteHandleFactoryMapWithProxy();
-}
+  RouteHandleFactoryMapWithProxy map {
+      {"HashRoute", &makeHashRoute<CarbonTestRouterInfo>},
+  };
+  return map;
+  }
 
 /* static */ CarbonTestRouterInfo::RouteHandleFactoryMapForWrapper
 CarbonTestRouterInfo::buildRouteMapForWrapper() {

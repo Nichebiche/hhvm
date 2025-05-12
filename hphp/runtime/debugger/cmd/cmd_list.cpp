@@ -16,7 +16,6 @@
 
 #include "hphp/runtime/debugger/cmd/cmd_list.h"
 
-#include <sys/types.h>
 #include <sys/stat.h>
 
 #include "hphp/runtime/base/array-iterator.h"
@@ -33,7 +32,7 @@
 namespace HPHP::Eval {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(debugger);
+TRACE_SET_MOD(debugger)
 
 // Always called from send and implements specific
 // logic for serializing a list command to send via Thrift.

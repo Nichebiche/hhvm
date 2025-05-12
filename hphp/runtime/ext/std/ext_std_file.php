@@ -357,8 +357,8 @@ function ftruncate(resource $handle, int $size): bool;
 <<__Native>>
 function flock(resource $handle,
                int $operation,
-               <<__OutOnly("KindOfBoolean")>>
-               inout mixed $wouldblock): bool;
+               <<__OutOnly>>
+               inout bool $wouldblock): bool;
 
 /**
  * fputcsv() formats a line (passed as a fields array) as CSV and write it

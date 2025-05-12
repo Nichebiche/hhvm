@@ -59,11 +59,7 @@ let init (root : Path.t) (naming_table_path : string option) :
   Relative_path.set_path_prefix Relative_path.Hhi (Hhi.get_hhi_root ());
 
   let (server_config, server_local_config) =
-    ServerConfig.load
-      ~silent:true
-      ~from:""
-      ~cli_config_overrides:[]
-      ~ai_options:None
+    ServerConfig.load ~silent:true ~from:"" ~cli_config_overrides:[]
   in
   let popt = ServerConfig.parser_options server_config in
   let tcopt =
@@ -286,11 +282,7 @@ let () =
       (Path.make "tmpdir_NOT_USED");
     Relative_path.set_path_prefix Relative_path.Hhi (Hhi.get_hhi_root ());
     let (server_config, _server_local_config) =
-      ServerConfig.load
-        ~silent:true
-        ~from:""
-        ~ai_options:None
-        ~cli_config_overrides:[]
+      ServerConfig.load ~silent:true ~from:"" ~cli_config_overrides:[]
     in
     let tcopt = ServerConfig.typechecker_options server_config in
     tcopt
@@ -304,8 +296,6 @@ let () =
         {
           everything_sdt = popt.ParserOptions.everything_sdt;
           implicit_inherit_sdt = GlobalOptions.(tcopt.tco_implicit_inherit_sdt);
-          enable_strict_const_semantics =
-            GlobalOptions.(tcopt.tco_enable_strict_const_semantics);
         }
       (DeclParserOptions.from_parser_options popt)
       !num_partitions

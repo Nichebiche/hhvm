@@ -261,15 +261,21 @@ cdef make_fget_error(i):
 
 class GeneratedErrorMeta(type):
     def __new__(cls, name, bases, dct):
-        fields = dct.pop('_fbthrift_SPEC')
+        for base in bases:
+            if getattr(base, '_fbthrift_allow_inheritance_DO_NOT_USE', False):
+                return super().__new__(cls, name, bases, dct)
+            raise TypeError(
+                f"Inheritance from generated thrift exception {name} is deprecated."
+            )
+        fields = dct.pop('_fbthrift_SPEC', ())
         num_fields = len(fields)
         dct["_fbthrift_struct_info"] = StructInfo(name, fields)
         for i, f in enumerate(fields):
             dct[f.py_name] = make_fget_error(i)
-        bases = (GeneratedError, )
+        all_bases = bases if bases else (GeneratedError,) 
         if "_fbthrift_abstract_base_class" in dct:
-            bases += (dct.pop("_fbthrift_abstract_base_class"),)
-        return super().__new__(cls, name, bases, dct)
+            all_bases += (dct.pop("_fbthrift_abstract_base_class"),)
+        return super().__new__(cls, name, all_bases, dct)
 
     def _fbthrift_fill_spec(cls):
         (<StructInfo>cls._fbthrift_struct_info)._fill_struct_info()
@@ -338,13 +344,14 @@ cdef class GeneratedError(Error):
         self._fbthrift_populate_field_values()
         return size
 
-    cdef void _fbthrift_populate_field_values(self):
+    cdef int _fbthrift_populate_field_values(self) except -1:
         cdef StructInfo info = self._fbthrift_struct_info
         args = []
         for index, type_info in enumerate(info.type_infos):
             data = self._fbthrift_data[index + 1]
             args.append(None if data is None else type_info.to_python_value(data))
         self.args = args
+        return 0
 
     def __repr__(self):
         fields = ", ".join(f"{name}={repr(value)}" for name, value in self)
@@ -389,7 +396,7 @@ cdef class GeneratedError(Error):
         return hash(value_tuple if value_tuple else type(self))
 
     @classmethod
-    def _fbthrift_create(cls, data):
+    def _fbthrift_from_internal_data(cls, data):
         cdef GeneratedError inst = cls.__new__(cls)
         inst._fbthrift_data = data
         inst._fbthrift_populate_field_values()

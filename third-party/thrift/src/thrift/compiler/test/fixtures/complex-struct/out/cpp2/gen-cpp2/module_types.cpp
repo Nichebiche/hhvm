@@ -106,7 +106,7 @@ void MyStructFloatFieldThrowExp::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_myLongField = ::std::int64_t();
   this->__fbthrift_field_MyByteField = ::std::int8_t();
-  this->__fbthrift_field_myStringField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_myStringField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_myFloatField = float();
   __isset = {};
 }
@@ -163,6 +163,7 @@ void swap([[maybe_unused]] MyStructFloatFieldThrowExp& a, [[maybe_unused]] MyStr
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStructFloatFieldThrowExp::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStructFloatFieldThrowExp::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStructFloatFieldThrowExp::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -171,6 +172,7 @@ template void MyStructFloatFieldThrowExp::readNoXfer<>(apache::thrift::CompactPr
 template uint32_t MyStructFloatFieldThrowExp::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStructFloatFieldThrowExp::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStructFloatFieldThrowExp::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -284,6 +286,7 @@ void swap([[maybe_unused]] MyStructMapFloatThrowExp& a, [[maybe_unused]] MyStruc
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStructMapFloatThrowExp::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStructMapFloatThrowExp::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStructMapFloatThrowExp::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -292,6 +295,7 @@ template void MyStructMapFloatThrowExp::readNoXfer<>(apache::thrift::CompactProt
 template uint32_t MyStructMapFloatThrowExp::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStructMapFloatThrowExp::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStructMapFloatThrowExp::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -471,7 +475,7 @@ MyStruct::MyStruct(apache::thrift::FragileConstructor, ::std::int64_t MyIntField
 void MyStruct::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_MyIntField = ::std::int64_t();
-  this->__fbthrift_field_MyStringField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_MyStringField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_myEnum = ::cpp2::MyEnum();
   this->__fbthrift_field_MyBoolField = bool();
   this->__fbthrift_field_MyByteField = ::std::int8_t();
@@ -772,6 +776,7 @@ void swap([[maybe_unused]] MyStruct& a, [[maybe_unused]] MyStruct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -780,6 +785,7 @@ template void MyStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -837,7 +843,7 @@ SimpleStruct::SimpleStruct(const SimpleStruct&) = default;
 SimpleStruct& SimpleStruct::operator=(const SimpleStruct&) = default;
 SimpleStruct::SimpleStruct() :
     __fbthrift_field_age(static_cast<::std::int64_t>(60)),
-    __fbthrift_field_name(apache::thrift::StringTraits<std::string>::fromStringLiteral("Batman")) {
+    __fbthrift_field_name(apache::thrift::StringTraits<::std::string>::fromStringLiteral("Batman")) {
 }
 
 
@@ -868,7 +874,7 @@ SimpleStruct::SimpleStruct(apache::thrift::FragileConstructor, ::std::int64_t ag
 void SimpleStruct::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_age = ::std::int64_t();
-  this->__fbthrift_field_name = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_name = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -904,6 +910,7 @@ void swap([[maybe_unused]] SimpleStruct& a, [[maybe_unused]] SimpleStruct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void SimpleStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t SimpleStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t SimpleStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -912,6 +919,7 @@ template void SimpleStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*)
 template uint32_t SimpleStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t SimpleStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t SimpleStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -954,39 +962,39 @@ defaultStruct::defaultStruct() :
     __fbthrift_field_myLongDF(),
     __fbthrift_field_portDFset(static_cast<::std::int32_t>(3456)),
     __fbthrift_field_portNum(),
-    __fbthrift_field_myBinaryDFset(apache::thrift::StringTraits<std::string>::fromStringLiteral("abc")),
+    __fbthrift_field_myBinaryDFset(apache::thrift::StringTraits<::std::string>::fromStringLiteral("abc")),
     __fbthrift_field_myByteDFSet(static_cast<::std::int8_t>(17)),
     __fbthrift_field_myByte(),
     __fbthrift_field_myDoubleDFset(static_cast<double>(99.7678)),
     __fbthrift_field_myDoubleDFZero(static_cast<double>(0)),
     __fbthrift_field_myDouble(),
-    __fbthrift_field_field3(std::initializer_list<::std::map<::std::int32_t, ::std::string>::value_type>{ { static_cast<::std::int32_t>(15), apache::thrift::StringTraits<std::string>::fromStringLiteral("a_value") },
-  { static_cast<::std::int32_t>(2), apache::thrift::StringTraits<std::string>::fromStringLiteral("b_value") } }),
+    __fbthrift_field_field3(std::initializer_list<::std::map<::std::int32_t, ::std::string>::value_type>{ { static_cast<::std::int32_t>(15), apache::thrift::StringTraits<::std::string>::fromStringLiteral("a_value") },
+  { static_cast<::std::int32_t>(2), apache::thrift::StringTraits<::std::string>::fromStringLiteral("b_value") } }),
     __fbthrift_field_myList(std::initializer_list<::cpp2::MyEnum>{  ::cpp2::MyEnum::MyValue1,
    ::cpp2::MyEnum::MyValue1,
    ::cpp2::MyEnum::MyValue2 }),
-    __fbthrift_field_mySet(std::initializer_list<::std::string>{ apache::thrift::StringTraits<std::string>::fromStringLiteral("house"),
-  apache::thrift::StringTraits<std::string>::fromStringLiteral("car"),
-  apache::thrift::StringTraits<std::string>::fromStringLiteral("dog") }),
-    __fbthrift_field_simpleStruct(::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(40)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("John")))),
-    __fbthrift_field_listStructDFset(std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(40)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("IronMan"))),
-  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(999)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("Thanos"))) }),
+    __fbthrift_field_mySet(std::initializer_list<::std::string>{ apache::thrift::StringTraits<::std::string>::fromStringLiteral("house"),
+  apache::thrift::StringTraits<::std::string>::fromStringLiteral("car"),
+  apache::thrift::StringTraits<::std::string>::fromStringLiteral("dog") }),
+    __fbthrift_field_simpleStruct(::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(40)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("John")))),
+    __fbthrift_field_listStructDFset(std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(40)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("IronMan"))),
+  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(999)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("Thanos"))) }),
     __fbthrift_field_myUnion(::apache::thrift::detail::make_structured_constant<::cpp2::MyUnion>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::myEnum>( ::cpp2::MyEnum::MyValue2))),
     __fbthrift_field_listUnionDFset(std::initializer_list<::cpp2::MyUnion>{ ::apache::thrift::detail::make_structured_constant<::cpp2::MyUnion>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::myEnum>( ::cpp2::MyEnum::MyValue2)),
   ::apache::thrift::detail::make_structured_constant<::cpp2::MyUnion>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::intValue>(static_cast<::std::int32_t>(123))) }),
-    __fbthrift_field_mapNestlistStructDfSet(std::initializer_list<::std::map<::std::int32_t, ::std::vector<::cpp2::SimpleStruct>>::value_type>{ { static_cast<::std::int32_t>(1), std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(40)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("IronMan"))),
-  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(999)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("Thanos"))) } },
-  { static_cast<::std::int32_t>(2), std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(28)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("BatMan"))),
-  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(12)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("Robin"))) } },
-  { static_cast<::std::int32_t>(5), std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(12)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("RatMan"))),
-  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(6)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<std::string>::fromStringLiteral("Catman"))) } } }),
-    __fbthrift_field_mapJavaTypeDFset(std::initializer_list<::cpp2::map_i64_string_5732::value_type>{ { static_cast<::std::int64_t>(15), apache::thrift::StringTraits<std::string>::fromStringLiteral("a_value") },
-  { static_cast<::std::int64_t>(2), apache::thrift::StringTraits<std::string>::fromStringLiteral("b_value") } }),
-    __fbthrift_field_enumMapDFset(std::initializer_list<::std::map<::std::string, ::std::map<::std::int32_t, ::cpp2::MyEnum>>::value_type>{ { apache::thrift::StringTraits<std::string>::fromStringLiteral("SANDY BRIDGE"), std::initializer_list<::std::map<::std::int32_t, ::cpp2::MyEnum>::value_type>{ { static_cast<::std::int32_t>(16),  ::cpp2::MyEnum::MyValue1 },
+    __fbthrift_field_mapNestlistStructDfSet(std::initializer_list<::std::map<::std::int32_t, ::std::vector<::cpp2::SimpleStruct>>::value_type>{ { static_cast<::std::int32_t>(1), std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(40)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("IronMan"))),
+  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(999)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("Thanos"))) } },
+  { static_cast<::std::int32_t>(2), std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(28)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("BatMan"))),
+  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(12)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("Robin"))) } },
+  { static_cast<::std::int32_t>(5), std::initializer_list<::cpp2::SimpleStruct>{ ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(12)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("RatMan"))),
+  ::apache::thrift::detail::make_structured_constant<::cpp2::SimpleStruct>(::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::age>(static_cast<::std::int64_t>(6)), ::apache::thrift::detail::wrap_struct_argument<::apache::thrift::ident::name>(apache::thrift::StringTraits<::std::string>::fromStringLiteral("Catman"))) } } }),
+    __fbthrift_field_mapJavaTypeDFset(std::initializer_list<::cpp2::map_i64_string_5732::value_type>{ { static_cast<::std::int64_t>(15), apache::thrift::StringTraits<::std::string>::fromStringLiteral("a_value") },
+  { static_cast<::std::int64_t>(2), apache::thrift::StringTraits<::std::string>::fromStringLiteral("b_value") } }),
+    __fbthrift_field_enumMapDFset(std::initializer_list<::std::map<::std::string, ::std::map<::std::int32_t, ::cpp2::MyEnum>>::value_type>{ { apache::thrift::StringTraits<::std::string>::fromStringLiteral("SANDY BRIDGE"), std::initializer_list<::std::map<::std::int32_t, ::cpp2::MyEnum>::value_type>{ { static_cast<::std::int32_t>(16),  ::cpp2::MyEnum::MyValue1 },
   { static_cast<::std::int32_t>(144),  ::cpp2::MyEnum::MyValue1 } } },
-  { apache::thrift::StringTraits<std::string>::fromStringLiteral("IVY BRIDGE"), std::initializer_list<::std::map<::std::int32_t, ::cpp2::MyEnum>::value_type>{ { static_cast<::std::int32_t>(32),  ::cpp2::MyEnum::MyValue2 },
+  { apache::thrift::StringTraits<::std::string>::fromStringLiteral("IVY BRIDGE"), std::initializer_list<::std::map<::std::int32_t, ::cpp2::MyEnum>::value_type>{ { static_cast<::std::int32_t>(32),  ::cpp2::MyEnum::MyValue2 },
   { static_cast<::std::int32_t>(144),  ::cpp2::MyEnum::MyValue2 } } },
-  { apache::thrift::StringTraits<std::string>::fromStringLiteral("HASWELL"), std::initializer_list<::std::map<::std::int32_t, ::cpp2::MyEnum>::value_type>{ { static_cast<::std::int32_t>(32),  ::cpp2::MyEnum::MyValue3 },
+  { apache::thrift::StringTraits<::std::string>::fromStringLiteral("HASWELL"), std::initializer_list<::std::map<::std::int32_t, ::cpp2::MyEnum>::value_type>{ { static_cast<::std::int32_t>(32),  ::cpp2::MyEnum::MyValue3 },
   { static_cast<::std::int32_t>(128),  ::cpp2::MyEnum::MyValue3 },
   { static_cast<::std::int32_t>(256),  ::cpp2::MyEnum::MyValue3 } } } }) {
 }
@@ -1102,8 +1110,8 @@ void defaultStruct::__fbthrift_clear() {
   this->__fbthrift_field_myLongDF = ::std::int64_t();
   this->__fbthrift_field_portDFset = ::std::int32_t();
   this->__fbthrift_field_portNum = ::std::int32_t();
-  this->__fbthrift_field_myBinaryDFset = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_myBinary = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_myBinaryDFset = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_myBinary = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_myByteDFSet = ::std::int8_t();
   this->__fbthrift_field_myByte = ::std::int8_t();
   this->__fbthrift_field_myDoubleDFset = double();
@@ -1335,6 +1343,7 @@ void swap([[maybe_unused]] defaultStruct& a, [[maybe_unused]] defaultStruct& b) 
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void defaultStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t defaultStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t defaultStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1343,6 +1352,7 @@ template void defaultStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*
 template uint32_t defaultStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t defaultStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t defaultStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -1472,8 +1482,8 @@ void MyStructTypeDef::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_myLongField = ::std::int64_t();
   this->__fbthrift_field_myLongTypeDef = ::cpp2::longTypeDef();
-  this->__fbthrift_field_myStringField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_myStringTypedef = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_myStringField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_myStringTypedef = apache::thrift::StringTraits<::cpp2::stringTypedef>::fromStringLiteral("");
   this->__fbthrift_field_myMapField.clear();
   this->__fbthrift_field_myMapTypedef.clear();
   this->__fbthrift_field_myListField.clear();
@@ -1570,6 +1580,7 @@ void swap([[maybe_unused]] MyStructTypeDef& a, [[maybe_unused]] MyStructTypeDef&
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStructTypeDef::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStructTypeDef::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStructTypeDef::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1578,6 +1589,7 @@ template void MyStructTypeDef::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t MyStructTypeDef::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStructTypeDef::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStructTypeDef::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -1641,6 +1653,7 @@ void swap([[maybe_unused]] MyDataItem& a, [[maybe_unused]] MyDataItem& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyDataItem::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyDataItem::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyDataItem::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1649,6 +1662,7 @@ template void MyDataItem::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyDataItem::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyDataItem::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyDataItem::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -1811,6 +1825,7 @@ void swap(MyUnion& a, MyUnion& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyUnion::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyUnion::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyUnion::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1819,6 +1834,7 @@ template void MyUnion::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyUnion::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyUnion::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyUnion::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -1981,6 +1997,7 @@ void swap(MyUnionFloatFieldThrowExp& a, MyUnionFloatFieldThrowExp& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyUnionFloatFieldThrowExp::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyUnionFloatFieldThrowExp::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyUnionFloatFieldThrowExp::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1989,6 +2006,7 @@ template void MyUnionFloatFieldThrowExp::readNoXfer<>(apache::thrift::CompactPro
 template uint32_t MyUnionFloatFieldThrowExp::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyUnionFloatFieldThrowExp::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyUnionFloatFieldThrowExp::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2336,6 +2354,7 @@ void swap([[maybe_unused]] ComplexNestedStruct& a, [[maybe_unused]] ComplexNeste
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ComplexNestedStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ComplexNestedStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ComplexNestedStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2344,6 +2363,7 @@ template void ComplexNestedStruct::readNoXfer<>(apache::thrift::CompactProtocolR
 template uint32_t ComplexNestedStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ComplexNestedStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ComplexNestedStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2453,7 +2473,7 @@ void TypeRemapped::__fbthrift_clear() {
   this->__fbthrift_field_lsMap.clear();
   this->__fbthrift_field_ioMap.clear();
   this->__fbthrift_field_BigInteger = ::cpp2::i32_1194();
-  this->__fbthrift_field_binaryTestBuffer = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binaryTestBuffer = apache::thrift::StringTraits<::cpp2::binary_4918>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -2507,6 +2527,7 @@ void swap([[maybe_unused]] TypeRemapped& a, [[maybe_unused]] TypeRemapped& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void TypeRemapped::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t TypeRemapped::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t TypeRemapped::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2515,6 +2536,7 @@ template void TypeRemapped::readNoXfer<>(apache::thrift::CompactProtocolReader*)
 template uint32_t TypeRemapped::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t TypeRemapped::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t TypeRemapped::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -2591,6 +2613,7 @@ void swap([[maybe_unused]] emptyXcep& a, [[maybe_unused]] emptyXcep& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void emptyXcep::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t emptyXcep::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t emptyXcep::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2599,6 +2622,7 @@ template void emptyXcep::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t emptyXcep::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t emptyXcep::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t emptyXcep::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -2663,7 +2687,7 @@ reqXcep::reqXcep(apache::thrift::FragileConstructor, ::std::string message__arg,
 
 void reqXcep::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_errorCode = ::std::int32_t();
 }
 
@@ -2698,6 +2722,7 @@ void swap([[maybe_unused]] reqXcep& a, [[maybe_unused]] reqXcep& b) {
   swap(a.__fbthrift_field_errorCode, b.__fbthrift_field_errorCode);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void reqXcep::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t reqXcep::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t reqXcep::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2706,6 +2731,7 @@ template void reqXcep::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t reqXcep::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t reqXcep::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t reqXcep::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -2774,7 +2800,7 @@ optXcep::optXcep(apache::thrift::FragileConstructor, ::std::string message__arg,
 
 void optXcep::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_errorCode = ::std::int32_t();
   __isset = {};
 }
@@ -2824,6 +2850,7 @@ void swap([[maybe_unused]] optXcep& a, [[maybe_unused]] optXcep& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void optXcep::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t optXcep::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t optXcep::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2832,6 +2859,7 @@ template void optXcep::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t optXcep::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t optXcep::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t optXcep::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -2916,7 +2944,7 @@ complexException::complexException(apache::thrift::FragileConstructor, ::std::st
 
 void complexException::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_listStrings.clear();
   this->__fbthrift_field_errorEnum = ::cpp2::MyEnum();
   ::apache::thrift::clear(this->__fbthrift_field_unionError);
@@ -2993,6 +3021,7 @@ void swap([[maybe_unused]] complexException& a, [[maybe_unused]] complexExceptio
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void complexException::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t complexException::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t complexException::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3001,6 +3030,7 @@ template void complexException::readNoXfer<>(apache::thrift::CompactProtocolRead
 template uint32_t complexException::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t complexException::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t complexException::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -3614,6 +3644,7 @@ void swap([[maybe_unused]] Containers& a, [[maybe_unused]] Containers& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Containers::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Containers::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Containers::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3622,6 +3653,7 @@ template void Containers::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Containers::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Containers::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Containers::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<

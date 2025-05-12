@@ -18,7 +18,6 @@ pub enum DepType {
     Fun = 1,
     Type = 2,
     Extends = 3,
-    RequireExtends = 4,
     Const = 5,
     Constructor = 6,
     Prop = 7,
@@ -30,6 +29,7 @@ pub enum DepType {
     Module = 13,
     Declares = 14,
     NotSubtype = 15,
+    File = 16,
 }
 
 impl DepType {
@@ -43,7 +43,6 @@ impl DepType {
             1 => Some(DepType::Fun),
             2 => Some(DepType::Type),
             3 => Some(DepType::Extends),
-            4 => Some(DepType::RequireExtends),
             5 => Some(DepType::Const),
             6 => Some(DepType::Constructor),
             7 => Some(DepType::Prop),
@@ -55,6 +54,7 @@ impl DepType {
             13 => Some(DepType::Module),
             14 => Some(DepType::Declares),
             15 => Some(DepType::NotSubtype),
+            16 => Some(DepType::File),
             _ => None,
         }
     }

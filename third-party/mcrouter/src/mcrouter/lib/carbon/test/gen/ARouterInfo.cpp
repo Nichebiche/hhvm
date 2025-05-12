@@ -28,6 +28,7 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BigValueRoute.h>
 #include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
@@ -80,6 +81,11 @@ RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
 extern template carbon::test::A::ARouterInfo::RouteHandlePtr
+makeBigValueRoute<carbon::test::A::ARouterInfo>(
+RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json);
+
+extern template carbon::test::A::ARouterInfo::RouteHandlePtr
 makeBlackholeRoute<carbon::test::A::ARouterInfo>(
 RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
@@ -91,11 +97,6 @@ const folly::dynamic& json);
 
 extern template carbon::test::A::ARouterInfo::RouteHandlePtr
 makeErrorRoute<carbon::test::A::ARouterInfo>(
-RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
-const folly::dynamic& json);
-
-extern template carbon::test::A::ARouterInfo::RouteHandlePtr
-makeHashRoute<carbon::test::A::ARouterInfo>(
 RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
@@ -149,6 +150,12 @@ makeRandomRoute<carbon::test::A::ARouterInfo>(
 RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
+template carbon::test::A::ARouterInfo::RouteHandlePtr
+makeHashRoute<carbon::test::A::ARouterInfo>(
+RouteHandleFactory<carbon::test::A::ARouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json,
+ProxyBase& proxy);
+
 extern template class ExtraRouteHandleProviderIf<carbon::test::A::ARouterInfo>;
 
 } // namespace mcrouter
@@ -169,14 +176,10 @@ ARouterInfo::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<ARouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<ARouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<ARouterInfo>},
+      {"BigValueRoute", &makeBigValueRoute<ARouterInfo>},
       {"BlackholeRoute", &makeBlackholeRoute<ARouterInfo>},
       {"DevNullRoute", &makeDevNullRoute<ARouterInfo>},
       {"ErrorRoute", &makeErrorRoute<ARouterInfo>},
-      {"HashRoute",
-       [](RouteHandleFactory<RouteHandleIf>& factory,
-          const folly::dynamic& json) {
-         return makeHashRoute<ARouterInfo>(factory, json);
-       }},
       {"HostIdRoute", &makeHostIdRoute<ARouterInfo>},
       {"LatencyInjectionRoute",
        &makeLatencyInjectionRoute<ARouterInfo>},
@@ -196,8 +199,11 @@ ARouterInfo::buildRouteMap() {
 
 /* static */ ARouterInfo::RouteHandleFactoryMapWithProxy
 ARouterInfo::buildRouteMapWithProxy() {
-  return RouteHandleFactoryMapWithProxy();
-}
+  RouteHandleFactoryMapWithProxy map {
+      {"HashRoute", &makeHashRoute<ARouterInfo>},
+  };
+  return map;
+  }
 
 /* static */ ARouterInfo::RouteHandleFactoryMapForWrapper
 ARouterInfo::buildRouteMapForWrapper() {

@@ -23,9 +23,7 @@
 
 #include <thrift/conformance/stresstest/util/IoUringUtil.h>
 
-namespace apache {
-namespace thrift {
-namespace stress {
+namespace apache::thrift::stress {
 
 void ClientThreadMemoryStats::combine(const ClientThreadMemoryStats& other) {
   threadStart += other.threadStart;
@@ -55,7 +53,11 @@ class WarmupDoneTimeout : public folly::HHWheelTimer::Callback {
 };
 
 std::unique_ptr<folly::EventBaseBackendBase> getIOUringBackend() {
+#if FOLLY_HAS_LIBURING
   return std::make_unique<folly::IoUringBackend>(getIoUringOptions());
+#else
+  LOG(FATAL) << "IoUring not supported";
+#endif
 }
 
 std::unique_ptr<folly::EventBaseBackendBase> getDefaultBackend() {
@@ -271,6 +273,4 @@ void ClientRunner::resetStats() {
   }
 }
 
-} // namespace stress
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::stress

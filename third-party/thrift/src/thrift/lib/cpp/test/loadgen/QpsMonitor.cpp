@@ -18,7 +18,6 @@
 
 #include <thrift/lib/cpp/test/loadgen/QpsMonitor.h>
 
-#include <thrift/lib/cpp/concurrency/Util.h>
 #include <thrift/lib/cpp/test/loadgen/LoadConfig.h>
 
 #include <stdio.h>
@@ -26,14 +25,13 @@
 #include <chrono>
 
 using namespace boost;
-using namespace apache::thrift::concurrency;
 
 namespace apache {
 namespace thrift {
 namespace loadgen {
 
 enum {
-  US_PER_S = concurrency::Util::US_PER_S,
+  US_PER_S = std::micro::den,
 };
 
 QpsMonitor::QpsMonitor(const std::shared_ptr<LoadConfig>& config)

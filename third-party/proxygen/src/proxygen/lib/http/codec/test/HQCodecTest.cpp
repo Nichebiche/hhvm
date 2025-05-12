@@ -415,8 +415,8 @@ TEST_F(HQCodecTest, qpackError) {
 }
 
 TEST_F(HQCodecTest, qpackErrorShort) {
-  uint8_t bad[] = {0x00}; // LR, no delta base
-  hq::writeHeaders(queue_, folly::IOBuf::wrapBuffer(bad, 1));
+  std::array<uint8_t, 1> bad = {0x00}; // LR, no delta base
+  hq::writeHeaders(queue_, folly::IOBuf::wrapBuffer(bad.data(), bad.size()));
   downstreamCodec_->onIngress(*queue_.front());
   EXPECT_EQ(callbacks_.lastParseError->getHttp3ErrorCode(),
             HTTP3::ErrorCode::HTTP_QPACK_DECOMPRESSION_FAILED);
@@ -813,7 +813,8 @@ TEST_F(HQCodecTest, HighAscii) {
   EXPECT_EQ(callbacks_.headersComplete, 0);
   EXPECT_EQ(callbacks_.messageComplete, 0);
   EXPECT_EQ(callbacks_.streamErrors, 4);
-  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(), kErrorParseHeader);
+  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(),
+            kErrorHeaderContentValidation);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
   callbacks_.reset();
 
@@ -832,7 +833,8 @@ TEST_F(HQCodecTest, HighAscii) {
   EXPECT_EQ(callbacks_.headersComplete, 1);
   EXPECT_EQ(callbacks_.messageComplete, 0);
   EXPECT_EQ(callbacks_.streamErrors, 1);
-  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(), kErrorParseHeader);
+  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(),
+            kErrorHeaderContentValidation);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
 }
 
@@ -887,7 +889,7 @@ struct FrameAllowedParams {
 
 std::string frameParamsToTestName(
     const testing::TestParamInfo<FrameAllowedParams>& info) {
-  std::string testName = "";
+  std::string testName;
   switch (info.param.codecType) {
     case CodecType::CONTROL_UPSTREAM:
       testName = "UpstreamControl";

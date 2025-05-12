@@ -15,7 +15,6 @@
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence, Set as pySet, Sized
 import warnings
-from types import MappingProxyType
 
 from folly.iobuf cimport cIOBuf, IOBuf, from_unique_ptr
 from libcpp.utility cimport move as cmove
@@ -32,9 +31,7 @@ from cython.operator cimport dereference as deref
 import copy
 import cython
 import enum
-import functools
 import itertools
-import threading
 import typing
 
 from folly cimport cFollyIsDebug
@@ -47,35 +44,24 @@ cdef extern from *:
     #undef _serialize
     """
 
+_fbthrift__PY3_STRUCTURED = None
 
-def _is_py3_struct(obj):
-    try:
-        import thrift.py3.types
-        return isinstance(obj, thrift.py3.types.Struct)
-    except ImportError:
-        return False
+cdef class _fbthrift_UnmatchableType:
+    pass
 
-def _is_py3_enum(obj):
-    # py3 enums now use thrift-python Enum base class
-    return isinstance(obj, Enum) and obj.__class__.__module__.endswith(".types")
+cdef _is_py3_structured(obj):
+    global _fbthrift__PY3_STRUCTURED
+    if _fbthrift__PY3_STRUCTURED is None:
+        try:
+            from thrift.py3.types import Struct
+            from thrift.py3.exceptions import GeneratedError
+            _fbthrift__PY3_STRUCTURED = (Struct, GeneratedError)
+        except ImportError:
+            _fbthrift__PY3_STRUCTURED = _fbthrift_UnmatchableType
 
-def _make_noncached_property(getter_function, struct_class, field_name):
-    prop = property(getter_function)
-    prop.__set_name__(struct_class, field_name)
-    return prop
+    return isinstance(obj, _fbthrift__PY3_STRUCTURED)
+    
 
-try:
-    import cinder
-    def _make_cached_property(getter_function, struct_class, field_name):
-        return cinder.cached_property(
-            getter_function,
-            getattr(struct_class, field_name)
-        )
-except ImportError:
-    # On MacOS/Windows where Cinder is not available, degrade to not-cached property.
-    # Field values are always cached in Cython level, we just lose the Python level cache.
-    def _make_cached_property(getter_function, struct_class, field_name):
-        return _make_noncached_property(getter_function, struct_class, field_name)
 
 cdef public api object deepcopy(object obj):
     """
@@ -135,21 +121,30 @@ cdef class TypeInfoBase:
 @cython.final
 cdef class TypeInfo(TypeInfoBase):
     @staticmethod
-    cdef create(const cTypeInfo& cpp_obj, pytypes, str singleton_name):
+    cdef create(
+        const cTypeInfo& cpp_obj,
+        type true_pytype,
+        tuple allowed_pytypes,
+        str singleton_name
+    ):
         cdef TypeInfo inst = TypeInfo.__new__(TypeInfo)
         inst.cpp_obj = &cpp_obj
-        inst.pytypes = pytypes
+        inst.true_pytype = true_pytype
+        inst.allowed_pytypes = (true_pytype,) + allowed_pytypes
         inst.singleton_name = singleton_name
         return inst
 
     # validate and convert to format serializer may understand
-    cpdef to_internal_data(self, object value):
-        if not isinstance(value, self.pytypes):
+    cpdef to_internal_data(TypeInfo self, object value):
+        cdef type value_type = type(value)
+        if value_type is self.true_pytype:
+            return value
+        if not issubclass(value_type, self.allowed_pytypes):
             raise TypeError(
-                f'value {value} is not a {self.pytypes !r}, is actually of type '
+                f'value {value} is not a {self.allowed_pytypes !r}, is actually of type '
                 f'{type(value)}'
             )
-        return value
+        return self.true_pytype(value)
 
     # convert deserialized data to user format
     cpdef to_python_value(self, object value):
@@ -169,7 +164,7 @@ cdef class TypeInfo(TypeInfoBase):
             return False
 
         return (self.cpp_obj.type == (<TypeInfo>other).cpp_obj.type and
-                self.pytypes == (<TypeInfo>other).pytypes)
+                self.allowed_pytypes == (<TypeInfo>other).allowed_pytypes)
 
     def __reduce__(self):
         # For primitives use the singleton pickling strategy (i.e. return the name of a global variable)
@@ -189,8 +184,14 @@ cdef class IntegerTypeInfo(TypeInfoBase):
 
     # validate and convert to format serializer may understand
     cpdef to_internal_data(self, object value):
-        if not isinstance(value, pint):
-            raise TypeError(f"value {value} is not a <class 'int'>, is actually of type {type(value)}")
+        cdef type value_type = type(value)
+        if value_type is not pint:
+            if not issubclass(value_type, pint):
+                raise TypeError(
+                    f"value {value} is not a <class 'int'>, is actually of type {value_type}"
+                )
+            # convert IntEnum and other int-extending types
+            value = int(value)
         cdef int64_t cvalue = value
         if cvalue > self.max_value or cvalue < self.min_value:
             raise OverflowError()
@@ -306,15 +307,15 @@ cdef class IOBufTypeInfo(TypeInfoBase):
         return self.singleton_name
 
 
-typeinfo_bool = TypeInfo.create(boolTypeInfo, (pbool,), "typeinfo_bool")
+typeinfo_bool = TypeInfo.create(boolTypeInfo, pbool, (), "typeinfo_bool")
 typeinfo_byte = IntegerTypeInfo.create(byteTypeInfo, -128, 127, "typeinfo_byte")
 typeinfo_i16 = IntegerTypeInfo.create(i16TypeInfo, -1<<15, (1<<15)-1, "typeinfo_i16")
 typeinfo_i32 = IntegerTypeInfo.create(i32TypeInfo, -1<<31, (1<<31)-1, "typeinfo_i32")
 typeinfo_i64 = IntegerTypeInfo.create(i64TypeInfo, -1<<63, (1<<63)-1, "typeinfo_i64")
-typeinfo_double = TypeInfo.create(doubleTypeInfo, (pfloat, pint), "typeinfo_double")
-typeinfo_float = TypeInfo.create(floatTypeInfo, (pfloat, pint), "typeinfo_float")
+typeinfo_double = TypeInfo.create(doubleTypeInfo, pfloat, (pint,), "typeinfo_double")
+typeinfo_float = TypeInfo.create(floatTypeInfo, pfloat, (pint,), "typeinfo_float")
 typeinfo_string = StringTypeInfo.create(stringTypeInfo, "typeinfo_string")
-typeinfo_binary = TypeInfo.create(binaryTypeInfo, (bytes,), "typeinfo_binary")
+typeinfo_binary = TypeInfo.create(binaryTypeInfo, bytes, (), "typeinfo_binary")
 typeinfo_iobuf = IOBufTypeInfo.create(iobufTypeInfo, "typeinfo_iobuf")
 
 
@@ -616,7 +617,25 @@ cdef class ListTypeInfo(TypeInfoBase):
 
     cdef to_internal_from_values(self, object values, TypeInfoBase val_type_info):
         cdef size_t idx = 0
-        cdef tuple tpl = PyTuple_New(len(values))
+        cdef int value_len
+        try:
+            value_len = len(values)
+        except TypeError:
+            try:
+                warnings.warn(
+                    f"list type should be a Sequence with length, got {type(values)}",
+                    RuntimeWarning,
+                )
+                # if there's no length, convert iterable to list
+                # if it's not an iterable, then raise TypeError
+                values = list(values)
+                value_len = len(values)
+            except Exception:
+                raise TypeError(
+                    f"values must be a Sequence with length, got {type(values)}"
+                )
+
+        cdef tuple tpl = PyTuple_New(value_len)
         for idx, value in enumerate(values):
             internal_data = val_type_info.to_internal_data(value)
             Py_INCREF(internal_data)
@@ -819,12 +838,15 @@ cdef class StructTypeInfo(TypeInfoBase):
               py3 to thrift-python conversion, if applicable).
         """
         if not isinstance(value, self._class):
-            if not _is_py3_struct(value):
-                raise TypeError(f"value {value} is not a {self._class !r}, is actually of type {type(value)}.")
+            if _is_py3_structured(value):
+                value = value._to_python()
+            else:
+                raise TypeError(
+                    f"value {value} is not a {self._class !r}, is actually of type {type(value)}."
+                )
 
-            value = value._to_python()
             if not isinstance(value, self._class):
-                raise TypeError(f"value {value} is a py3 struct of type {type(value)}, cannot be converted to {self._class !r}.")
+                raise TypeError(f"value {value} of type {type(value)}, cannot be converted to {self._class !r}.")
 
         if isinstance(value, Struct):
             return (<Struct>value)._fbthrift_data
@@ -835,8 +857,10 @@ cdef class StructTypeInfo(TypeInfoBase):
         raise TypeError(f"{self._class} not supported")
 
     # convert deserialized data to user format
-    cpdef to_python_value(self, object value):
-        return self._class._fbthrift_create(value)
+    cpdef to_python_value(self, value):
+        if value is None:
+            raise TypeError("StructTypeInfo.to_python_value requires valid internal data tuple, not None")
+        return self._class._fbthrift_from_internal_data(value)
 
     def to_container_value(self, object value not None):
         if not isinstance(value, self._class):
@@ -882,12 +906,7 @@ cdef class EnumTypeInfo(TypeInfoBase):
             return int(value)
 
         if not isinstance(value, self._class):
-            if not _is_py3_enum(value):
-                raise TypeError(f"value {value} is not '{self._class}', is actually of type {type(value)}.")
-
-            value = value._to_python()
-            if not isinstance(value, self._class):
-                raise TypeError(f"value {value} is a py3 enum of type {type(value)}, cannot be converted to {self._class !r}.")
+            raise TypeError(f"value {value} is not '{self._class}', is actually of type {type(value)}.")
 
         return value._fbthrift_value_
 
@@ -1008,7 +1027,7 @@ cdef class StructOrUnion:
         raise NotImplementedError("Not implemented on base StructOrUnion class")
     cdef uint32_t _deserialize(Struct self, folly.iobuf.IOBuf buf, Protocol proto) except? 0:
         raise NotImplementedError("Not implemented on base StructOrUnion class")
-    cdef _fbthrift_get_field_value(self, int16_t index):
+    cdef _fbthrift_get_cached_field_value(self, int16_t index):
         raise NotImplementedError("Not implemented on base StructOrUnion class")
 
     @staticmethod
@@ -1023,8 +1042,8 @@ cdef class StructOrUnion:
 
 def _unpickle_struct(klass, bytes data):
     cdef IOBuf iobuf = IOBuf(data)
-    inst = klass.__new__(klass)
-    (<Struct>inst)._deserialize(iobuf, Protocol.COMPACT)
+    cdef Struct inst = klass._fbthrift_new()
+    inst._deserialize(iobuf, Protocol.COMPACT)
     return inst
 
 cdef api object _get_fbthrift_data(object struct_or_union):
@@ -1076,18 +1095,19 @@ cdef class Struct(StructOrUnion):
                 arguments during initialization.
         """
         cdef StructInfo struct_info = self._fbthrift_struct_info
-        self._initStructTupleWithValues(kwargs)
         self._fbthrift_field_cache = PyTuple_New(len(struct_info.fields))
 
     def __init__(self, **kwargs):
+        self._initStructTupleWithValues(kwargs)
         self._fbthrift_populate_primitive_fields()
 
     def __call__(self, **kwargs):
         if not kwargs:
             return self
         cdef StructInfo struct_info = self._fbthrift_struct_info
-        tp = type(self)
-        cdef Struct new_inst = tp.__new__(tp)
+        klass = type(self)
+        # NB: optimization opportunity here: pass **kwargs to fbthrift_new
+        cdef Struct new_inst = klass._fbthrift_new()
         not_found = object()
         isset_flags = self._fbthrift_data[0]
 
@@ -1185,7 +1205,7 @@ cdef class Struct(StructOrUnion):
         self._fbthrift_populate_primitive_fields()
         return len
 
-    cdef _fbthrift_get_field_value(self, int16_t index):
+    cdef _fbthrift_get_cached_field_value(self, int16_t index):
         cdef PyObject* cached_value = PyTuple_GET_ITEM(
             self._fbthrift_field_cache, index
         )
@@ -1193,8 +1213,8 @@ cdef class Struct(StructOrUnion):
             return <object>cached_value
 
         cdef StructInfo struct_info = self._fbthrift_struct_info
-        field_info = struct_info.fields[index]
-        field_id = field_info.id
+        cdef FieldInfo field_info = struct_info.fields[index]
+        cdef int field_id = field_info.id
         adapter_info = field_info.adapter_info
         data = self._fbthrift_data[index + 1]
         if data is not None:
@@ -1228,7 +1248,7 @@ cdef class Struct(StructOrUnion):
           * `__call__()`, after creating a new instance and processing all
             previous and new values. This method is called on the new instance.
           * `_deserialize()`
-          * `Struct._fbthrift_create()`
+          * `Struct._fbthrift_from_internal_data()`
         """
         for index, name, type_info in self._fbthrift_primitive_types:
             data = self._fbthrift_data[index + 1]
@@ -1267,10 +1287,13 @@ cdef class Struct(StructOrUnion):
         for name, value in kwargs.items():
             field_index = struct_info.name_to_index.get(name)
             if field_index is None:
-                raise TypeError(
-                    f"{type(self)} initialization error: unknown keyword argument "
-                    f"'{name}'."
-                )
+                # try mangled name if leading dunder prefix
+                field_index = _get_index_if_mangled(struct_info, self, name)
+                if field_index is None:
+                    raise TypeError(
+                        f"'{type(self).__name__}' initialization error: unknown keyword argument "
+                        f"'{name}'."
+                    )
 
             if value is None:
                 continue
@@ -1310,11 +1333,28 @@ cdef class Struct(StructOrUnion):
                 struct_info.cpp_obj.get().getStructInfo()
         )
 
+    # Initializes Struct _fbthrift_data from already valid internal `fbthrift_data`
+    # Used for lazy initialization of struct-type field on first access
+    # On completion:
+    #   - iternal data `_fbthrift_data` is valid
+    #   - `_fbthrift_field_cache` contains no cached values
+    #   - primitive attributes are set 
     @classmethod
-    def _fbthrift_create(cls, data):
+    def _fbthrift_from_internal_data(cls, tuple fbthrift_data not None):
         cdef Struct inst = cls.__new__(cls)
-        inst._fbthrift_data = data
+        inst._fbthrift_data = fbthrift_data
         inst._fbthrift_populate_primitive_fields()
+        return inst
+
+    # Initializes Struct to partially valid state.
+    # On completion:
+    #   - Struct internal data `_fbthrift_data` is valid
+    #   - Struct `_fbthrift_field_cache` contains no cached values
+    #   - caller is responsible for calling `_fbthrift_populate_primitive_fields`
+    @classmethod
+    def _fbthrift_new(cls, **kwargs):
+        cdef Struct inst = cls.__new__(cls)
+        inst._initStructTupleWithValues(kwargs)
         return inst
 
     @staticmethod
@@ -1388,6 +1428,13 @@ cdef tuple _validate_union_init_kwargs(
         assert current_field_value is not None
         return (current_field_enum, current_field_value)
 
+# attributes that start with __ are mangled to _{{struct:name}}__{{field:py_name}}
+cdef inline _get_index_if_mangled(StructInfo struct_info, instance, str name) noexcept:
+    if not name.startswith("__"):
+        return None
+    cdef str mangle = f"_{instance.__class__.__name__}{name}"
+    return struct_info.name_to_index.get(mangle)
+
 cdef class Union(StructOrUnion):
     """
     Base class for all generated (immutable) thrift-python unions.
@@ -1433,8 +1480,9 @@ cdef class Union(StructOrUnion):
                 f"'{field_enum.name}': {exc}"
             ) from exc
 
+    # Initializes Union _fbthrift_data from already valid internal `fbthrift_data`
     @classmethod
-    def _fbthrift_create(cls, data):
+    def _fbthrift_from_internal_data(cls, tuple data not None):
         cdef Union inst = cls.__new__(cls)
         inst._fbthrift_data = data
         inst._fbthrift_update_current_field_attributes()
@@ -1511,7 +1559,7 @@ cdef class Union(StructOrUnion):
         self._fbthrift_update_current_field_attributes()
         return size
 
-    cdef _fbthrift_get_field_value(self, int16_t field_id):
+    cdef _fbthrift_get_cached_field_value(self, int16_t field_id):
         """
         Returns the value of the field with the given `field_id` if it is indeed the
         field that is (currently) set for this union. Otherwise, raises AttributeError.
@@ -1567,6 +1615,9 @@ cdef class Union(StructOrUnion):
             return union_instance
         cdef UnionInfo union_info = cls._fbthrift_struct_info
         for type_value, typeinfo in union_info.type_infos.items():
+            # stricter type checking for consistency with py3
+            if _strict_type_info_mismatch(value, typeinfo):
+                continue
             try:
                 value = union_instance._fbthrift_to_internal_data(type_value, value)
             except (TypeError, OverflowError):
@@ -1626,17 +1677,18 @@ cdef class Union(StructOrUnion):
 cdef inline int _fbthrift_get_Union_type_int(Union u):
     return u._fbthrift_data[0]
 
-cdef _make_fget_struct(i):
-    """
-    Returns a function that takes a `Struct` instance and returns the value of
-    the field with index `i`, or `None` if n/a.
+# stricter type checking for Union.fromValue for easily confused types
+#   - typeinfo_int accidentally accepts bool because bool subclasses int
+#   - typeinfo_float accepts int since int in range can be converted to double
+# returns True if value is convertible to type_info but is not strict match
+# returns False if no mismatch; there may be mismatch detectable by TypeError
+cdef inline pbool _strict_type_info_mismatch(value, type_info):
+    if isinstance(type_info, IntegerTypeInfo):
+        return isinstance(value, (float, bool))
+    if type_info is typeinfo_float or type_info is typeinfo_double:
+        return not isinstance(value, float)
+    return False
 
-    The field must be either a non-primitive or adapted type.
-
-    The value is returned in "Python value" representation (as opposed to
-    "internal data representation", see `*TypeInfo` classes.
-    """
-    return lambda self: (<Struct>self)._fbthrift_get_field_value(i)
 
 cdef _make_fget_union(field_id, adapter_info):
     """
@@ -1654,13 +1706,13 @@ cdef _make_fget_union(field_id, adapter_info):
         adapter_class, transitive_annotation = adapter_info
         return property(lambda self:
             adapter_class.from_thrift_field(
-                (<Union>self)._fbthrift_get_field_value(field_id),
+                (<Union>self)._fbthrift_get_cached_field_value(field_id),
                 field_id,
                 self,
                 transitive_annotation=transitive_annotation(),
             )
         )
-    return property(lambda self: (<Union>self)._fbthrift_get_field_value(field_id))
+    return property(lambda self: (<Union>self)._fbthrift_get_cached_field_value(field_id))
 
 
 def _make_readonly_setattr():
@@ -1671,6 +1723,26 @@ def _make_readonly_setattr():
         raise AttributeError(f"Cannot set attribute '{name}' in Thrift struct '{type(self)}'.")
 
     return _readonly_setattr
+
+cdef class _StructCachedField:
+    cdef int _field_index
+    cdef str _field_name
+
+    def __init__(self, int field_id, str field_name):
+        self._field_index = field_id
+        self._field_name = field_name
+
+    def __get__(self, Struct obj, objtype):
+        if obj is None:
+            return None
+
+        return obj._fbthrift_get_cached_field_value(self._field_index)
+
+    def __set__(self, obj, value):
+        raise AttributeError(f"Cannot set attribute {self._field_name}: thrift-python structs are immutable") 
+
+    def __delete__(self, obj):
+        raise AttributeError(f"Cannot delete attribute {self._field_name}: thrift-python structs are immutable") 
 
 
 class StructMeta(type):
@@ -1702,9 +1774,15 @@ class StructMeta(type):
                 List[Tuple[int (index in fields), str (field name), type_info]]
                 for all primitive (and non-adapted) fields.
         """
+        for base in bases:
+            if getattr(base, '_fbthrift_allow_inheritance_DO_NOT_USE', False):
+                return super().__new__(cls, cls_name, bases, dct)
+            raise TypeError(
+                f"Inheritance from generated thrift struct {cls_name} is deprecated. Please use composition."
+            )
         # Set[Tuple (field spec)]. See `StructInfo` class docstring for the
         # contents of the field spec tuples.
-        fields = dct.pop('_fbthrift_SPEC')
+        fields = dct.pop('_fbthrift_SPEC', ())
 
         num_fields = len(fields)
         dct["_fbthrift_struct_info"] = StructInfo(cls_name, fields)
@@ -1727,17 +1805,14 @@ class StructMeta(type):
 
         dct["_fbthrift_primitive_types"] = primitive_types
         dct["__slots__"] = slots
-        klass = super().__new__(cls, cls_name, (Struct,), dct)
+        all_bases = bases if bases else (Struct,)
+        klass = super().__new__(cls, cls_name, all_bases, dct)
 
         for field_index, field_name in non_primitive_types:
             type.__setattr__(
                 klass,
                 field_name,
-                _make_cached_property(
-                    _make_fget_struct(field_index),
-                    klass,
-                    field_name,
-                )
+                _StructCachedField(field_index, field_name),
             )
         klass.__setattr__ = _make_readonly_setattr()
         return klass
@@ -1826,6 +1901,12 @@ class UnionMeta(type):
                 A property for every field in the Thrift union, with its corresponding
                 `py_name`.
         """
+        if bases:
+            raise TypeError(
+                f"Inheritance from generated thrift union {bases[0].__name__} is deprecated."
+                " Please use composition."
+            )
+
         field_infos = union_class_namespace.pop('_fbthrift_SPEC')
         num_fields = len(field_infos)
         union_class_namespace["_fbthrift_struct_info"] = UnionInfo(
@@ -2402,30 +2483,10 @@ class EnumMeta(type):
             '__module__',
         ]
 
-# check whether two classes are equivalent, meaning
-# they have the same class name, py3 namespace, and thrift module name.
-# The trailing `.types` or `.thrift_types` is ignored.
-cdef inline _fbthrift_enum_equivalent(a, b):
-    cdef a_cls = a.__class__
-    cdef b_cls = b.__class__
-    if a_cls.__name__ != b_cls.__name__:
-        return False
-    cdef str a_module = a_cls.__module__
-    cdef str b_module = b_cls.__module__
-    # ignore trailing .types or .thrift_types
-    cdef int a_types = a_module.rfind(".")
-    cdef int b_types = b_module.rfind(".")
-    return a_module[:a_types] == b_module[:b_types]
-
 cdef inline bint _enum_eq_(self, other):
     if isinstance(other, Enum):
-        if self is other:
-            return True
-        # handle py3 vs python comparison
-        return (
-            self._fbthrift_value_ == other._fbthrift_value_ and
-            _fbthrift_enum_equivalent(self, other)
-        )
+        # enums are singletons, so use `is` to compare
+        return self is other
     if cFollyIsDebug and isinstance(other, (bool, float)):
         warnings.warn(
             f"Did you really mean to compare {type(self)} and {type(other)}?",

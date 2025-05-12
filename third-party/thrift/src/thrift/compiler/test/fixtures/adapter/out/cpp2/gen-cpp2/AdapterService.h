@@ -36,6 +36,8 @@ class AdapterServiceServiceInfoHolder : public apache::thrift::ServiceInfoHolder
 namespace apache::thrift {
 template <>
 class ServiceHandler<::facebook::thrift::test::AdapterService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::facebook::thrift::test::AdapterService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "AdapterService"; }
 
@@ -75,6 +77,13 @@ class ServiceHandler<::facebook::thrift::test::AdapterService> : public apache::
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_adaptedTypes{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::facebook::thrift::test::AdapterService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 6075707212720674476;
+  static constexpr ::std::string_view definitionKey = {"\x03\x9b\xff\xc3\x6a\xf9\xef\x06\x28\x55\x40\x94\x5b\xa1\x2c\xd7", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace facebook::thrift::test {

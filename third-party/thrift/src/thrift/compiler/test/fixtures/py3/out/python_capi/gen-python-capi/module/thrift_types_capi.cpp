@@ -15,10 +15,7 @@
 #include <thrift/compiler/test/fixtures/py3/gen-python-capi/module/thrift_types_capi.h>
 
 
-namespace apache {
-namespace thrift {
-namespace python {
-namespace capi {
+namespace apache::thrift::python::capi {
 namespace {
 bool ensure_module_imported() {
   static ::folly::python::import_cache_nocapture import((
@@ -31,8 +28,8 @@ bool ensure_module_imported() {
   static constexpr std::int16_t _fbthrift__OptionalRefStruct__tuple_pos[1] = {
     1
   };
-  static constexpr std::int16_t _fbthrift__SimpleStruct__tuple_pos[9] = {
-    1, 2, 3, 4, 5, 6, 7, 9, 8
+  static constexpr std::int16_t _fbthrift__SimpleStruct__tuple_pos[12] = {
+    1, 2, 3, 4, 5, 6, 7, 9, 8, 10, 11, 12
   };
   static constexpr std::int16_t _fbthrift__HiddenException__tuple_pos[1] = {
     1
@@ -43,7 +40,7 @@ bool ensure_module_imported() {
 } // namespace
 
 ExtractorResult<::py3::simple::SimpleException>
-Extractor<::py3::simple::SimpleException>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::SimpleException, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -54,12 +51,12 @@ Extractor<::py3::simple::SimpleException>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getExceptionThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::SimpleException>>{}(*fbThriftData);
+      ::py3::simple::SimpleException, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::SimpleException>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::SimpleException>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::SimpleException, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::SimpleException cpp;
   std::optional<std::string_view> error;
   Extractor<int16_t>{}.extractInto(
@@ -73,7 +70,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::SimpleException>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::SimpleException, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -88,14 +85,14 @@ int Extractor<::py3::simple::SimpleException>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::SimpleException>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::SimpleException, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::SimpleException& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::SimpleException>> ctor;
+        ::py3::simple::SimpleException, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -104,7 +101,7 @@ PyObject* Constructor<::py3::simple::SimpleException>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::SimpleException>>::operator()(
+        ::py3::simple::SimpleException, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::SimpleException& val) {
   StrongRef fbthrift_data(createStructTuple(1));
   StrongRef _fbthrift__err_code(
@@ -122,7 +119,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 
 
 ExtractorResult<::py3::simple::OptionalRefStruct>
-Extractor<::py3::simple::OptionalRefStruct>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::OptionalRefStruct, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -133,12 +130,12 @@ Extractor<::py3::simple::OptionalRefStruct>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::OptionalRefStruct>>{}(*fbThriftData);
+      ::py3::simple::OptionalRefStruct, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::OptionalRefStruct>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::OptionalRefStruct>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::OptionalRefStruct, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::OptionalRefStruct cpp;
   std::optional<std::string_view> error;
   Extractor<std::unique_ptr<folly::IOBuf>>{}.extractInto(
@@ -152,7 +149,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::OptionalRefStruct>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::OptionalRefStruct, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -167,14 +164,14 @@ int Extractor<::py3::simple::OptionalRefStruct>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::OptionalRefStruct>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::OptionalRefStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::OptionalRefStruct& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::OptionalRefStruct>> ctor;
+        ::py3::simple::OptionalRefStruct, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -183,7 +180,7 @@ PyObject* Constructor<::py3::simple::OptionalRefStruct>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::OptionalRefStruct>>::operator()(
+        ::py3::simple::OptionalRefStruct, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::OptionalRefStruct& val) {
   StrongRef fbthrift_data(createStructTuple(1));
   StrongRef _fbthrift__optional_blob(
@@ -208,7 +205,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 
 
 ExtractorResult<::py3::simple::SimpleStruct>
-Extractor<::py3::simple::SimpleStruct>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::SimpleStruct, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -219,12 +216,12 @@ Extractor<::py3::simple::SimpleStruct>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::SimpleStruct>>{}(*fbThriftData);
+      ::py3::simple::SimpleStruct, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::SimpleStruct>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::SimpleStruct>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::SimpleStruct, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::SimpleStruct cpp;
   std::optional<std::string_view> error;
   Extractor<bool>{}.extractInto(
@@ -263,6 +260,18 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
       cpp.hidden_field_ref(),
       PyTuple_GET_ITEM(fbThriftData, _fbthrift__SimpleStruct__tuple_pos[8]),
       error);
+  Extractor<int32_t>{}.extractInto(
+      cpp.opt_default_int_ref(),
+      PyTuple_GET_ITEM(fbThriftData, _fbthrift__SimpleStruct__tuple_pos[9]),
+      error);
+  Extractor<Bytes>{}.extractInto(
+      cpp.opt_default_str_ref(),
+      PyTuple_GET_ITEM(fbThriftData, _fbthrift__SimpleStruct__tuple_pos[10]),
+      error);
+  Extractor<::apache::thrift::python::capi::ComposedEnum<::py3::simple::AnEnum>>{}.extractInto(
+      cpp.opt_default_enum_ref(),
+      PyTuple_GET_ITEM(fbThriftData, _fbthrift__SimpleStruct__tuple_pos[11]),
+      error);
   if (error) {
     return folly::makeUnexpected(*error);
   }
@@ -270,7 +279,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::SimpleStruct>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::SimpleStruct, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -285,14 +294,14 @@ int Extractor<::py3::simple::SimpleStruct>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::SimpleStruct>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::SimpleStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::SimpleStruct& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::SimpleStruct>> ctor;
+        ::py3::simple::SimpleStruct, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -301,9 +310,9 @@ PyObject* Constructor<::py3::simple::SimpleStruct>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::SimpleStruct>>::operator()(
+        ::py3::simple::SimpleStruct, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::SimpleStruct& val) {
-  StrongRef fbthrift_data(createStructTuple(9));
+  StrongRef fbthrift_data(createStructTuple(12));
   StrongRef _fbthrift__is_on(
     Constructor<bool>{}
     .constructFrom(val.is_on_ref()));
@@ -394,12 +403,63 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
           *_fbthrift__hidden_field) == -1) {
     return nullptr;
   }
+  StrongRef _fbthrift__opt_default_int(
+    Constructor<int32_t>{}
+    .constructFrom(val.opt_default_int_ref()));
+  if (_fbthrift__opt_default_int.isNone()) {
+    Py_INCREF(Py_None);
+    PyTuple_SET_ITEM(
+      *fbthrift_data,
+      _fbthrift__SimpleStruct__tuple_pos[9],
+      Py_None);
+  } else
+  if (!_fbthrift__opt_default_int ||
+      setStructField(
+          *fbthrift_data,
+          _fbthrift__SimpleStruct__tuple_pos[9],
+          *_fbthrift__opt_default_int) == -1) {
+    return nullptr;
+  }
+  StrongRef _fbthrift__opt_default_str(
+    Constructor<Bytes>{}
+    .constructFrom(val.opt_default_str_ref()));
+  if (_fbthrift__opt_default_str.isNone()) {
+    Py_INCREF(Py_None);
+    PyTuple_SET_ITEM(
+      *fbthrift_data,
+      _fbthrift__SimpleStruct__tuple_pos[10],
+      Py_None);
+  } else
+  if (!_fbthrift__opt_default_str ||
+      setStructField(
+          *fbthrift_data,
+          _fbthrift__SimpleStruct__tuple_pos[10],
+          *_fbthrift__opt_default_str) == -1) {
+    return nullptr;
+  }
+  StrongRef _fbthrift__opt_default_enum(
+    Constructor<::apache::thrift::python::capi::ComposedEnum<::py3::simple::AnEnum>>{}
+    .constructFrom(val.opt_default_enum_ref()));
+  if (_fbthrift__opt_default_enum.isNone()) {
+    Py_INCREF(Py_None);
+    PyTuple_SET_ITEM(
+      *fbthrift_data,
+      _fbthrift__SimpleStruct__tuple_pos[11],
+      Py_None);
+  } else
+  if (!_fbthrift__opt_default_enum ||
+      setStructField(
+          *fbthrift_data,
+          _fbthrift__SimpleStruct__tuple_pos[11],
+          *_fbthrift__opt_default_enum) == -1) {
+    return nullptr;
+  }
   return std::move(fbthrift_data).release();
 }
 
 
 ExtractorResult<::py3::simple::HiddenTypeFieldsStruct>
-Extractor<::py3::simple::HiddenTypeFieldsStruct>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::HiddenTypeFieldsStruct>(
@@ -418,7 +478,7 @@ Extractor<::py3::simple::HiddenTypeFieldsStruct>::operator()(PyObject* obj) {
 
 ExtractorResult<::py3::simple::HiddenTypeFieldsStruct>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::HiddenTypeFieldsStruct>>::operator()(PyObject* fbthrift_data) {
+    ::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>::operator()(PyObject* fbthrift_data) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::HiddenTypeFieldsStruct>(
@@ -429,10 +489,10 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
       return extractorError<::py3::simple::HiddenTypeFieldsStruct>(
           "Init from fbthrift error: HiddenTypeFieldsStruct");
   }
-  return Extractor<::py3::simple::HiddenTypeFieldsStruct>{}(*obj);
+  return Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>{}(*obj);
 }
 
-int Extractor<::py3::simple::HiddenTypeFieldsStruct>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -447,7 +507,7 @@ int Extractor<::py3::simple::HiddenTypeFieldsStruct>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::HiddenTypeFieldsStruct>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::HiddenTypeFieldsStruct& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -470,9 +530,9 @@ PyObject* Constructor<::py3::simple::HiddenTypeFieldsStruct>::operator()(
 
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::HiddenTypeFieldsStruct>>::operator()(
+        ::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::HiddenTypeFieldsStruct& val) {
-  auto obj = StrongRef(Constructor<::py3::simple::HiddenTypeFieldsStruct>{}(val));
+  auto obj = StrongRef(Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenTypeFieldsStruct, ::module::NamespaceTag>>{}(val));
   if (!obj) {
     return nullptr;
   }
@@ -480,7 +540,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 ExtractorResult<::py3::simple::detail::AdaptedUnion>
-Extractor<::py3::simple::detail::AdaptedUnion>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -491,12 +551,12 @@ Extractor<::py3::simple::detail::AdaptedUnion>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::detail::AdaptedUnion>>{}(*fbThriftData);
+      ::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::detail::AdaptedUnion>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::detail::AdaptedUnion>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::detail::AdaptedUnion cpp;
   std::optional<std::string_view> error;
   auto type_tag = Extractor<int64_t>{}(PyTuple_GET_ITEM(fbThriftData, 0));
@@ -518,7 +578,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::detail::AdaptedUnion>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -533,14 +593,14 @@ int Extractor<::py3::simple::detail::AdaptedUnion>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::detail::AdaptedUnion>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::detail::AdaptedUnion& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::detail::AdaptedUnion>> ctor;
+        ::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -549,7 +609,7 @@ PyObject* Constructor<::py3::simple::detail::AdaptedUnion>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::detail::AdaptedUnion>>::operator()(
+        ::py3::simple::detail::AdaptedUnion, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::detail::AdaptedUnion& val) {
   int64_t type_key = static_cast<int64_t>(val.getType());
   StrongRef py_val;
@@ -572,7 +632,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 
 
 ExtractorResult<::py3::simple::HiddenException>
-Extractor<::py3::simple::HiddenException>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenException, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -583,12 +643,12 @@ Extractor<::py3::simple::HiddenException>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getExceptionThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::HiddenException>>{}(*fbThriftData);
+      ::py3::simple::HiddenException, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::HiddenException>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::HiddenException>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::HiddenException, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::HiddenException cpp;
   std::optional<std::string_view> error;
   Extractor<int16_t>{}.extractInto(
@@ -602,7 +662,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::HiddenException>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenException, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -617,14 +677,14 @@ int Extractor<::py3::simple::HiddenException>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::HiddenException>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::HiddenException, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::HiddenException& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::HiddenException>> ctor;
+        ::py3::simple::HiddenException, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -633,7 +693,7 @@ PyObject* Constructor<::py3::simple::HiddenException>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::HiddenException>>::operator()(
+        ::py3::simple::HiddenException, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::HiddenException& val) {
   StrongRef fbthrift_data(createStructTuple(1));
   StrongRef _fbthrift__test(
@@ -651,7 +711,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 
 
 ExtractorResult<::py3::simple::ComplexStruct>
-Extractor<::py3::simple::ComplexStruct>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::ComplexStruct, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::ComplexStruct>(
@@ -670,7 +730,7 @@ Extractor<::py3::simple::ComplexStruct>::operator()(PyObject* obj) {
 
 ExtractorResult<::py3::simple::ComplexStruct>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::ComplexStruct>>::operator()(PyObject* fbthrift_data) {
+    ::py3::simple::ComplexStruct, ::module::NamespaceTag>>::operator()(PyObject* fbthrift_data) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::ComplexStruct>(
@@ -681,10 +741,10 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
       return extractorError<::py3::simple::ComplexStruct>(
           "Init from fbthrift error: ComplexStruct");
   }
-  return Extractor<::py3::simple::ComplexStruct>{}(*obj);
+  return Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::ComplexStruct, ::module::NamespaceTag>>{}(*obj);
 }
 
-int Extractor<::py3::simple::ComplexStruct>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::ComplexStruct, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -699,7 +759,7 @@ int Extractor<::py3::simple::ComplexStruct>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::ComplexStruct>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::ComplexStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::ComplexStruct& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -722,9 +782,9 @@ PyObject* Constructor<::py3::simple::ComplexStruct>::operator()(
 
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::ComplexStruct>>::operator()(
+        ::py3::simple::ComplexStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::ComplexStruct& val) {
-  auto obj = StrongRef(Constructor<::py3::simple::ComplexStruct>{}(val));
+  auto obj = StrongRef(Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::ComplexStruct, ::module::NamespaceTag>>{}(val));
   if (!obj) {
     return nullptr;
   }
@@ -732,7 +792,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 ExtractorResult<::py3::simple::BinaryUnion>
-Extractor<::py3::simple::BinaryUnion>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::BinaryUnion, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -743,12 +803,12 @@ Extractor<::py3::simple::BinaryUnion>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::BinaryUnion>>{}(*fbThriftData);
+      ::py3::simple::BinaryUnion, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::BinaryUnion>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::BinaryUnion>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::BinaryUnion, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::BinaryUnion cpp;
   std::optional<std::string_view> error;
   auto type_tag = Extractor<int64_t>{}(PyTuple_GET_ITEM(fbThriftData, 0));
@@ -770,7 +830,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::BinaryUnion>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::BinaryUnion, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -785,14 +845,14 @@ int Extractor<::py3::simple::BinaryUnion>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::BinaryUnion>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::BinaryUnion, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::BinaryUnion& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::BinaryUnion>> ctor;
+        ::py3::simple::BinaryUnion, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -801,7 +861,7 @@ PyObject* Constructor<::py3::simple::BinaryUnion>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::BinaryUnion>>::operator()(
+        ::py3::simple::BinaryUnion, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::BinaryUnion& val) {
   int64_t type_key = static_cast<int64_t>(val.getType());
   StrongRef py_val;
@@ -824,7 +884,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 
 
 ExtractorResult<::py3::simple::BinaryUnionStruct>
-Extractor<::py3::simple::BinaryUnionStruct>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   int tCheckResult = typeCheck(obj);
   if (tCheckResult != 1) {
       if (tCheckResult == 0) {
@@ -835,15 +895,15 @@ Extractor<::py3::simple::BinaryUnionStruct>::operator()(PyObject* obj) {
   }
   StrongRef fbThriftData(getThriftData(obj));
   return Extractor<::apache::thrift::python::capi::ComposedStruct<
-      ::py3::simple::BinaryUnionStruct>>{}(*fbThriftData);
+      ::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>>{}(*fbThriftData);
 }
 
 ExtractorResult<::py3::simple::BinaryUnionStruct>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::BinaryUnionStruct>>::operator()(PyObject* fbThriftData) {
+    ::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>>::operator()(PyObject* fbThriftData) {
   ::py3::simple::BinaryUnionStruct cpp;
   std::optional<std::string_view> error;
-  Extractor<::apache::thrift::python::capi::ComposedStruct<::py3::simple::BinaryUnion>>{}.extractInto(
+  Extractor<::apache::thrift::python::capi::ComposedStruct<::py3::simple::BinaryUnion, ::module::NamespaceTag>>{}.extractInto(
       cpp.u_ref(),
       PyTuple_GET_ITEM(fbThriftData, _fbthrift__BinaryUnionStruct__tuple_pos[0]),
       error);
@@ -854,7 +914,7 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 
-int Extractor<::py3::simple::BinaryUnionStruct>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -869,14 +929,14 @@ int Extractor<::py3::simple::BinaryUnionStruct>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::BinaryUnionStruct>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::BinaryUnionStruct& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return nullptr;
   }
   Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::BinaryUnionStruct>> ctor;
+        ::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>> ctor;
   StrongRef fbthrift_data(ctor(val));
   if (!fbthrift_data) {
     return nullptr;
@@ -885,11 +945,11 @@ PyObject* Constructor<::py3::simple::BinaryUnionStruct>::operator()(
 }
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::BinaryUnionStruct>>::operator()(
+        ::py3::simple::BinaryUnionStruct, ::module::NamespaceTag>>::operator()(
     [[maybe_unused]] const ::py3::simple::BinaryUnionStruct& val) {
   StrongRef fbthrift_data(createStructTuple(1));
   StrongRef _fbthrift__u(
-    Constructor<::apache::thrift::python::capi::ComposedStruct<::py3::simple::BinaryUnion>>{}
+    Constructor<::apache::thrift::python::capi::ComposedStruct<::py3::simple::BinaryUnion, ::module::NamespaceTag>>{}
     .constructFrom(val.u_ref()));
   if (!_fbthrift__u ||
       setStructField(
@@ -903,7 +963,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 
 
 ExtractorResult<::py3::simple::CustomFields>
-Extractor<::py3::simple::CustomFields>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomFields, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::CustomFields>(
@@ -922,7 +982,7 @@ Extractor<::py3::simple::CustomFields>::operator()(PyObject* obj) {
 
 ExtractorResult<::py3::simple::CustomFields>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::CustomFields>>::operator()(PyObject* fbthrift_data) {
+    ::py3::simple::CustomFields, ::module::NamespaceTag>>::operator()(PyObject* fbthrift_data) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::CustomFields>(
@@ -933,10 +993,10 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
       return extractorError<::py3::simple::CustomFields>(
           "Init from fbthrift error: CustomFields");
   }
-  return Extractor<::py3::simple::CustomFields>{}(*obj);
+  return Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomFields, ::module::NamespaceTag>>{}(*obj);
 }
 
-int Extractor<::py3::simple::CustomFields>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomFields, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -951,7 +1011,7 @@ int Extractor<::py3::simple::CustomFields>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::CustomFields>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomFields, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::CustomFields& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -974,9 +1034,9 @@ PyObject* Constructor<::py3::simple::CustomFields>::operator()(
 
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::CustomFields>>::operator()(
+        ::py3::simple::CustomFields, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::CustomFields& val) {
-  auto obj = StrongRef(Constructor<::py3::simple::CustomFields>{}(val));
+  auto obj = StrongRef(Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomFields, ::module::NamespaceTag>>{}(val));
   if (!obj) {
     return nullptr;
   }
@@ -984,7 +1044,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 ExtractorResult<::py3::simple::CustomTypedefFields>
-Extractor<::py3::simple::CustomTypedefFields>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::CustomTypedefFields>(
@@ -1003,7 +1063,7 @@ Extractor<::py3::simple::CustomTypedefFields>::operator()(PyObject* obj) {
 
 ExtractorResult<::py3::simple::CustomTypedefFields>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::CustomTypedefFields>>::operator()(PyObject* fbthrift_data) {
+    ::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>::operator()(PyObject* fbthrift_data) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::CustomTypedefFields>(
@@ -1014,10 +1074,10 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
       return extractorError<::py3::simple::CustomTypedefFields>(
           "Init from fbthrift error: CustomTypedefFields");
   }
-  return Extractor<::py3::simple::CustomTypedefFields>{}(*obj);
+  return Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>{}(*obj);
 }
 
-int Extractor<::py3::simple::CustomTypedefFields>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -1032,7 +1092,7 @@ int Extractor<::py3::simple::CustomTypedefFields>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::CustomTypedefFields>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::CustomTypedefFields& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -1055,9 +1115,9 @@ PyObject* Constructor<::py3::simple::CustomTypedefFields>::operator()(
 
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::CustomTypedefFields>>::operator()(
+        ::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::CustomTypedefFields& val) {
-  auto obj = StrongRef(Constructor<::py3::simple::CustomTypedefFields>{}(val));
+  auto obj = StrongRef(Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::CustomTypedefFields, ::module::NamespaceTag>>{}(val));
   if (!obj) {
     return nullptr;
   }
@@ -1065,7 +1125,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 ExtractorResult<::py3::simple::AdaptedTypedefFields>
-Extractor<::py3::simple::AdaptedTypedefFields>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::AdaptedTypedefFields>(
@@ -1084,7 +1144,7 @@ Extractor<::py3::simple::AdaptedTypedefFields>::operator()(PyObject* obj) {
 
 ExtractorResult<::py3::simple::AdaptedTypedefFields>
 Extractor<::apache::thrift::python::capi::ComposedStruct<
-    ::py3::simple::AdaptedTypedefFields>>::operator()(PyObject* fbthrift_data) {
+    ::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>::operator()(PyObject* fbthrift_data) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
     return extractorError<::py3::simple::AdaptedTypedefFields>(
@@ -1095,10 +1155,10 @@ Extractor<::apache::thrift::python::capi::ComposedStruct<
       return extractorError<::py3::simple::AdaptedTypedefFields>(
           "Init from fbthrift error: AdaptedTypedefFields");
   }
-  return Extractor<::py3::simple::AdaptedTypedefFields>{}(*obj);
+  return Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>{}(*obj);
 }
 
-int Extractor<::py3::simple::AdaptedTypedefFields>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -1113,7 +1173,7 @@ int Extractor<::py3::simple::AdaptedTypedefFields>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::AdaptedTypedefFields>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::AdaptedTypedefFields& val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -1136,9 +1196,9 @@ PyObject* Constructor<::py3::simple::AdaptedTypedefFields>::operator()(
 
 
 PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
-        ::py3::simple::AdaptedTypedefFields>>::operator()(
+        ::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>::operator()(
     const ::py3::simple::AdaptedTypedefFields& val) {
-  auto obj = StrongRef(Constructor<::py3::simple::AdaptedTypedefFields>{}(val));
+  auto obj = StrongRef(Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AdaptedTypedefFields, ::module::NamespaceTag>>{}(val));
   if (!obj) {
     return nullptr;
   }
@@ -1146,7 +1206,7 @@ PyObject* Constructor<::apache::thrift::python::capi::ComposedStruct<
 }
 
 ExtractorResult<::py3::simple::AnEnum>
-Extractor<::py3::simple::AnEnum>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AnEnum, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   long val = PyLong_AsLong(obj);
   if (val == -1 && PyErr_Occurred()) {
     return extractorError<::py3::simple::AnEnum>(
@@ -1155,7 +1215,7 @@ Extractor<::py3::simple::AnEnum>::operator()(PyObject* obj) {
   return static_cast<::py3::simple::AnEnum>(val);
 }
 
-int Extractor<::py3::simple::AnEnum>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AnEnum, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -1170,7 +1230,7 @@ int Extractor<::py3::simple::AnEnum>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::AnEnum>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AnEnum, ::module::NamespaceTag>>::operator()(
     ::py3::simple::AnEnum val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -1185,7 +1245,7 @@ PyObject* Constructor<::py3::simple::AnEnum>::operator()(
 }
 
 ExtractorResult<::py3::simple::AnEnumRenamed>
-Extractor<::py3::simple::AnEnumRenamed>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AnEnumRenamed, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   long val = PyLong_AsLong(obj);
   if (val == -1 && PyErr_Occurred()) {
     return extractorError<::py3::simple::AnEnumRenamed>(
@@ -1194,7 +1254,7 @@ Extractor<::py3::simple::AnEnumRenamed>::operator()(PyObject* obj) {
   return static_cast<::py3::simple::AnEnumRenamed>(val);
 }
 
-int Extractor<::py3::simple::AnEnumRenamed>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AnEnumRenamed, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -1209,7 +1269,7 @@ int Extractor<::py3::simple::AnEnumRenamed>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::AnEnumRenamed>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::AnEnumRenamed, ::module::NamespaceTag>>::operator()(
     ::py3::simple::AnEnumRenamed val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -1224,7 +1284,7 @@ PyObject* Constructor<::py3::simple::AnEnumRenamed>::operator()(
 }
 
 ExtractorResult<::py3::simple::Flags>
-Extractor<::py3::simple::Flags>::operator()(PyObject* obj) {
+Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::Flags, ::module::NamespaceTag>>::operator()(PyObject* obj) {
   long val = PyLong_AsLong(obj);
   if (val == -1 && PyErr_Occurred()) {
     return extractorError<::py3::simple::Flags>(
@@ -1233,7 +1293,7 @@ Extractor<::py3::simple::Flags>::operator()(PyObject* obj) {
   return static_cast<::py3::simple::Flags>(val);
 }
 
-int Extractor<::py3::simple::Flags>::typeCheck(PyObject* obj) {
+int Extractor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::Flags, ::module::NamespaceTag>>::typeCheck(PyObject* obj) {
   if (!ensure_module_imported()) {
     ::folly::python::handlePythonError(
       "Module module import error");
@@ -1248,7 +1308,7 @@ int Extractor<::py3::simple::Flags>::typeCheck(PyObject* obj) {
 }
 
 
-PyObject* Constructor<::py3::simple::Flags>::operator()(
+PyObject* Constructor<::apache::thrift::python::capi::PythonNamespaced<::py3::simple::Flags, ::module::NamespaceTag>>::operator()(
     ::py3::simple::Flags val) {
   if (!ensure_module_imported()) {
     DCHECK(PyErr_Occurred() != nullptr);
@@ -1262,7 +1322,4 @@ PyObject* Constructor<::py3::simple::Flags>::operator()(
   return ptr;
 }
 
-} // namespace capi
-} // namespace python
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::python::capi

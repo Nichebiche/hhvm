@@ -18,22 +18,19 @@
 
 #include "hphp/runtime/base/file-util.h"
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
-#include "hphp/runtime/base/vanilla-dict.h"
-#include "hphp/runtime/base/vanilla-vec.h"
-#include "hphp/runtime/ext/functioncredential/ext_functioncredential.h"
 #include "hphp/runtime/vm/jit/irgen-call.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
 #include "hphp/runtime/vm/jit/irgen-internal.h"
 #include "hphp/runtime/vm/jit/irgen-interpone.h"
 #include "hphp/runtime/vm/jit/irgen-minstr.h"
-#include "hphp/runtime/vm/reified-generics.h"
-#include "hphp/runtime/vm/unit-util.h"
 
 #include "hphp/util/configs/eval.h"
 
 namespace HPHP::jit::irgen {
 
 void emitClassGetC(IRGS& env, ClassGetCMode mode) {
+  assertx(!(Cfg::Repo::Authoritative && mode == ClassGetCMode::UnsafeBackdoor));
+
   auto const name = topC(env);
 
   if (name->isA(TObj)) {
@@ -44,6 +41,7 @@ void emitClassGetC(IRGS& env, ClassGetCMode mode) {
         decRef(env, name);
         return;
       case ClassGetCMode::ExplicitConversion:
+      case ClassGetCMode::UnsafeBackdoor:
         interpOne(env);
         return;
     }
@@ -60,65 +58,82 @@ void emitClassGetC(IRGS& env, ClassGetCMode mode) {
     return;
   }
 
-  auto const cls = [&] {
+  auto const fallback = [&] {
     switch (mode) {
       case ClassGetCMode::Normal:
-        if (Cfg::Eval::RaiseStrToClsConversionNoticeSampleRate > 0
-            && name->isA(TStr)) {
-          gen(env, RaiseStrToClassNotice, name);
-        }
-        return ldCls(env, name);
+        return LdClsFallback::Fatal;
       case ClassGetCMode::ExplicitConversion:
+      case ClassGetCMode::UnsafeBackdoor:
         // HH\classname_to_class throws a catchable InvalidArgumentException
         // instead of raising a fatal error
         if (name->isA(TStr)) {
-          auto const cls = ldCls(env, name, LdClsFallback::ThrowClassnameToClassString);
-          if (Cfg::Eval::DynamicallyReferencedNoticeSampleRate > 0) {
-            if (cls->hasConstVal() &&
-                !cls->clsVal()->isDynamicallyReferenced()) {
-              gen(env, RaiseMissingDynamicallyReferenced, cls);
-            } else {
-              ifThen(
-                env,
-                [&] (Block* taken) {
-                  auto const data = AttrData { AttrDynamicallyReferenced };
-                  gen(env, JmpZero, taken, gen(env, ClassHasAttr, data, cls));
-                },
-                [&] {
-                  hint(env, Block::Hint::Unlikely);
-                  gen(env, RaiseMissingDynamicallyReferenced, cls);
-                }
-              );
-            }
-          }
-          return cls;
+          return LdClsFallback::ThrowClassnameToClassString;
         } else { // TLazyCls
-          return ldCls(env, name, LdClsFallback::ThrowClassnameToClassLazyClass);
+          return LdClsFallback::ThrowClassnameToClassLazyClass;
         }
     }
   }();
+  auto const cls = ldCls(env, name, fallback);
+
+  if (name->isA(TStr)) {
+    emitModuleBoundaryCheck(env, cls, false);
+
+    switch (mode) {
+      case ClassGetCMode::Normal:
+        if (Cfg::Eval::RaiseStrToClsConversionNoticeSampleRate > 0) {
+          gen(env, RaiseStrToClassNotice, name);
+        }
+        break;
+      case ClassGetCMode::ExplicitConversion:
+        if (Cfg::Eval::DynamicallyReferencedNoticeSampleRate > 0) {
+          if (cls->hasConstVal() &&
+              !cls->clsVal()->isDynamicallyReferenced()) {
+            gen(env, RaiseMissingDynamicallyReferenced, cls);
+          } else {
+            ifThen(
+              env,
+              [&] (Block* taken) {
+                auto const data = AttrData { AttrDynamicallyReferenced };
+                gen(env, JmpZero, taken, gen(env, ClassHasAttr, data, cls));
+              },
+              [&] {
+                hint(env, Block::Hint::Unlikely);
+                gen(env, RaiseMissingDynamicallyReferenced, cls);
+              }
+            );
+          }
+        }
+        break;
+      case ClassGetCMode::UnsafeBackdoor:
+        break;
+    }
+  }
 
   popC(env);
   decRef(env, name);
-  if (name->isA(TStr)) emitModuleBoundaryCheck(env, cls, false);
   push(env, cls);
 }
 
-void emitClassGetTS(IRGS& env) {
+void classGetTSImpl(IRGS& env, bool pushGenerics) {
   auto const ts = topC(env);
-  if (!ts->isA(TDict)) { if (ts->type().maybe(TDict)) { PUNT(ClassGetTS-UnguardedTS); } else {
+  if (!ts->isA(TDict)) {
+    if (ts->type().maybe(TDict)) {
+      PUNT(ClassGetTSWithGenerics-UnguardedTS);
+    } else {
       gen(env, RaiseError, cns(env, s_reified_type_must_be_ts.get()));
     }
   }
 
-  auto const val = gen(
-    env,
-    AKExistsDict,
-    ts,
-    cns(env, s_generic_types.get())
-  );
-  // Side-exit for now if it has reified generics
-  gen(env, JmpNZero, makeExitSlow(env), val);
+  if (pushGenerics) {
+    auto const val = gen(
+      env,
+      AKExistsDict,
+      ts,
+      cns(env, s_generic_types.get())
+    );
+    // Side-exit for now if it has reified generics
+    gen(env, JmpNZero, makeExitSlow(env), val);
+  }
 
   int locId = 0;
   auto const finish = [&] (SSATmp* clsName) {
@@ -137,7 +152,7 @@ void emitClassGetTS(IRGS& env) {
     auto const cls = ldCls(env, name);
     popDecRef(env, static_cast<DecRefProfileId>(locId++));
     push(env, cls);
-    push(env, cns(env, TInitNull));
+    if (pushGenerics) push(env, cns(env, ArrayData::CreateVec()));
   };
 
   auto const clsName = profiledArrayAccess(
@@ -155,6 +170,14 @@ void emitClassGetTS(IRGS& env) {
     finish
   );
   finish(clsName);
+}
+
+void emitClassGetTS(IRGS& env) {
+  classGetTSImpl(env, false);
+}
+
+void emitClassGetTSWithGenerics(IRGS& env) {
+  classGetTSImpl(env, true);
 }
 
 void emitCGetL(IRGS& env, NamedLocal loc) {
@@ -506,8 +529,8 @@ void emitDir(IRGS& env) {
     return;
   }
   auto const p = [&] {
-    if (auto const of = curFunc(env)->originalFilename()) {
-      return of;
+    if (auto const ou = curFunc(env)->originalUnit()) {
+      return ou;
     }
     return unit->origFilepath();
   }();
@@ -520,11 +543,11 @@ void emitFile(IRGS& env) {
   if (handle != rds::kUninitHandle) {
     assertx(!Cfg::Repo::Authoritative);
     assertx(Cfg::Eval::ReuseUnitsByHash);
-    assertx(!curFunc(env)->originalFilename());
+    assertx(!curFunc(env)->originalUnit());
     push(env, gen(env, LdUnitPerRequestFilepath, RDSHandleData { handle }));
     return;
   }
-  if (auto const of = curFunc(env)->originalFilename()) {
+  if (auto const of = curFunc(env)->originalUnit()) {
     push(env, cns(env, of));
     return;
   }

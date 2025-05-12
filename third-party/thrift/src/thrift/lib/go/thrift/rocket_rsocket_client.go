@@ -21,7 +21,11 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/rocket"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/facebook/fbthrift/thrift/lib/thrift/rpcmetadata"
 	rsocket "github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/core/transport"
 	"github.com/rsocket/rsocket-go/payload"
@@ -30,14 +34,16 @@ import (
 // RSocketClient is a client that uses a rsocket library.
 type RSocketClient interface {
 	SendSetup(ctx context.Context) error
-	FireAndForget(messageName string, protoID types.ProtocolID, typeID types.MessageType, headers map[string]string, dataBytes []byte) error
-	RequestResponse(ctx context.Context, messageName string, protoID types.ProtocolID, typeID types.MessageType, headers map[string]string, dataBytes []byte) (map[string]string, []byte, error)
+	FireAndForget(messageName string, protoID types.ProtocolID, headers map[string]string, dataBytes []byte) error
+	RequestResponse(ctx context.Context, messageName string, protoID types.ProtocolID, headers map[string]string, dataBytes []byte) (map[string]string, []byte, error)
 	Close() error
 }
 
 type rsocketClient struct {
 	client rsocket.Client
 	conn   net.Conn
+
+	initGroup singleflight.Group
 
 	useZstd bool
 }
@@ -47,46 +53,56 @@ func newRSocketClient(conn net.Conn) RSocketClient {
 }
 
 func (r *rsocketClient) SendSetup(_ context.Context) error {
-	if r.client != nil {
-		// already setup
-		return nil
-	}
-	setupPayload, err := newRequestSetupPayloadVersion8()
-	if err != nil {
-		return err
-	}
-	// Very important to reset the deadline! Especially when using UpgradeToRocket.
-	// We may have inherited this connection from Header protocol after an Upgrade.
-	// Deadlines may be nearing expiration, if not reset - rsocket setup may fail.
-	r.resetDeadline()
-	// See T182939211. This copies the keep alives from Java Rocket.
-	// KeepaliveLifetime = time.Duration(missedAcks = 1) * (ackTimeout = 3600000)
-	clientBuilder := rsocket.Connect().
-		KeepAlive(time.Millisecond*30000, time.Millisecond*3600000, 1).
-		MetadataMimeType(RocketMetadataCompactMimeType).
-		SetupPayload(setupPayload).
-		OnClose(func(error) {})
+	// Only a single instance of the code below is allowed to run at a time.
+	// If multiple goroutines arrive at this point concurrently - they will
+	// all wait here for a single instance of "setup" to complete.
+	// If "setup" has already run (client != nil) - we return immediately.
+	// If "setup" has already run but failed with an error (client == nil),
+	// the code below will be retried by the next goroutine that arrives here.
+	_, setupErr, _ := r.initGroup.Do("setup", func() (any, error) {
+		if r.client != nil {
+			return nil, nil
+		}
 
-	clientStarter := clientBuilder.Acceptor(
-		func(_ context.Context, _ rsocket.RSocket) rsocket.RSocket {
-			return rsocket.NewAbstractSocket(
-				rsocket.MetadataPush(
-					r.onServerMetadataPush,
-				),
-			)
-		},
-	)
+		setupPayload, err := rocket.NewRequestSetupPayloadVersion8()
+		if err != nil {
+			return nil, err
+		}
+		// Very important to reset the deadline! Especially when using UpgradeToRocket.
+		// We may have inherited this connection from Header protocol after an Upgrade.
+		// Deadlines may be nearing expiration, if not reset - rsocket setup may fail.
+		r.resetDeadline()
+		// See T182939211. This copies the keep alives from Java Rocket.
+		// KeepaliveLifetime = time.Duration(missedAcks = 1) * (ackTimeout = 3600000)
+		clientBuilder := rsocket.Connect().
+			KeepAlive(time.Millisecond*30000, time.Millisecond*3600000, 1).
+			MetadataMimeType(rocket.RocketMetadataCompactMimeType).
+			SetupPayload(setupPayload).
+			OnClose(func(error) {})
 
-	client, err := clientStarter.Transport(transporter(r.conn)).Start(context.Background())
-	if err != nil {
-		return err
-	}
-	r.client = client
-	return nil
+		clientStarter := clientBuilder.Acceptor(
+			func(_ context.Context, _ rsocket.RSocket) rsocket.RSocket {
+				return rsocket.NewAbstractSocket(
+					rsocket.MetadataPush(
+						r.onServerMetadataPush,
+					),
+				)
+			},
+		)
+
+		client, err := clientStarter.Transport(transporter(r.conn)).Start(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		r.client = client
+		return nil, nil
+	})
+
+	return setupErr
 }
 
 func (r *rsocketClient) onServerMetadataPush(pay payload.Payload) {
-	metadata, err := decodeServerMetadataPush(pay)
+	metadata, err := rocket.DecodeServerMetadataPush(pay)
 	if err != nil {
 		panic(err)
 	}
@@ -114,9 +130,15 @@ func (r *rsocketClient) resetDeadline() {
 	r.conn.SetDeadline(time.Time{})
 }
 
-func (r *rsocketClient) RequestResponse(ctx context.Context, messageName string, protoID types.ProtocolID, typeID types.MessageType, headers map[string]string, dataBytes []byte) (map[string]string, []byte, error) {
+func (r *rsocketClient) RequestResponse(
+	ctx context.Context,
+	messageName string,
+	protoID types.ProtocolID,
+	headers map[string]string,
+	dataBytes []byte,
+) (map[string]string, []byte, error) {
 	r.resetDeadline()
-	request, err := encodeRequestPayload(messageName, protoID, typeID, headers, r.useZstd, dataBytes)
+	request, err := rocket.EncodeRequestPayload(messageName, protoID, rpcmetadata.RpcKind_SINGLE_REQUEST_SINGLE_RESPONSE, headers, rpcmetadata.CompressionAlgorithm_NONE, dataBytes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -125,16 +147,16 @@ func (r *rsocketClient) RequestResponse(ctx context.Context, messageName string,
 	if err != nil {
 		return nil, nil, err
 	}
-	response, err := decodeResponsePayload(val)
+	response, err := rocket.DecodeResponsePayload(val)
 	if response != nil {
 		return response.Headers(), response.Data(), err
 	}
 	return nil, nil, err
 }
 
-func (r *rsocketClient) FireAndForget(messageName string, protoID types.ProtocolID, typeID types.MessageType, headers map[string]string, dataBytes []byte) error {
+func (r *rsocketClient) FireAndForget(messageName string, protoID types.ProtocolID, headers map[string]string, dataBytes []byte) error {
 	r.resetDeadline()
-	request, err := encodeRequestPayload(messageName, protoID, typeID, headers, r.useZstd, dataBytes)
+	request, err := rocket.EncodeRequestPayload(messageName, protoID, rpcmetadata.RpcKind_SINGLE_REQUEST_NO_RESPONSE, headers, rpcmetadata.CompressionAlgorithm_NONE, dataBytes)
 	if err != nil {
 		return err
 	}

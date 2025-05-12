@@ -14,20 +14,12 @@
    +----------------------------------------------------------------------+
 */
 #include "hphp/runtime/vm/runtime.h"
+#include "hphp/runtime/base/backtrace.h"
 #include "hphp/runtime/base/execution-context.h"
 #include "hphp/runtime/base/coeffects-config.h"
-#include "hphp/runtime/base/implicit-context.h"
-#include "hphp/runtime/server/source-root-info.h"
-#include "hphp/runtime/base/zend-string.h"
 #include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/base/unit-cache.h"
-#include "hphp/runtime/base/vanilla-dict.h"
-#include "hphp/runtime/ext/core/ext_core_closure.h"
-#include "hphp/runtime/ext/generator/ext_generator.h"
-#include "hphp/runtime/vm/bytecode.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
-#include "hphp/runtime/ext/string/ext_string.h"
 
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/conv-10.h"
@@ -39,7 +31,7 @@
 
 namespace HPHP {
 
-TRACE_SET_MOD(runtime);
+TRACE_SET_MOD(runtime)
 
 /**
  * print_string will decRef the string
@@ -551,6 +543,28 @@ void raiseDeploymentBoundaryViolation(const Class* cls) {
   if (auto const rate = Cfg::Eval::DeploymentViolationWarningSampleRate) {
     if (folly::Random::rand32(rate) != 0) return;
     raise_warning(errMsg);
+  }
+}
+
+const StaticString s___DynamicallyReferenced("__DynamicallyReferenced");
+
+void raiseMissingDynamicallyReferenced(const Class* cls) {
+  if (folly::Random::oneIn(Cfg::Eval::DynamicallyReferencedNoticeSampleRate)) {
+    auto const& attrs = cls->preClass()->userAttributes();
+    auto const it = attrs.find(s___DynamicallyReferenced.get());
+    if (it != attrs.end()) {
+      assertx(tvIsVec(it->second));
+      auto const args = val(it->second).parr;
+      assertx(args->size() == 1);
+      auto const rate = tvAssertInt(args->at(int64_t{0}));
+      if (folly::Random::oneIn(rate)) {
+        raise_notice(Strings::SOFT_MISSING_DYNAMICALLY_REFERENCED,
+                     cls->name()->data(),
+                     rate);
+      }
+    } else {
+      raise_notice(Strings::MISSING_DYNAMICALLY_REFERENCED, cls->name()->data());
+    }
   }
 }
 

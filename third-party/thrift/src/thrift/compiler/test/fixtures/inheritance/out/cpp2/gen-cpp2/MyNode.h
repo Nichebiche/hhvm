@@ -41,6 +41,8 @@ class MyNodeServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::MyNode> : virtual public ::cpp2::MyRootSvIf {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::MyNode>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "MyNode"; }
 
@@ -65,6 +67,13 @@ class ServiceHandler<::cpp2::MyNode> : virtual public ::cpp2::MyRootSvIf {
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_do_mid{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::MyNode, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 8628767142313694045;
+  static constexpr ::std::string_view definitionKey = {"\x3c\x44\xbd\xeb\x29\x4d\x61\xa3\xe4\xa3\x85\xc2\x8e\x5b\xd1\xe6", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

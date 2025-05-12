@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct access_field;
 struct access_shared_field;
@@ -46,11 +44,9 @@ APACHE_THRIFT_DEFINE_ACCESSOR(access_optional_shared_const_field);
 APACHE_THRIFT_DEFINE_ACCESSOR(access_optional_boxed_field);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace facebook::thrift::test {
@@ -94,7 +90,11 @@ class InterceptedFields final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 6;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2,3,4,5,6};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::access_field,
     ::apache::thrift::ident::access_shared_field,
     ::apache::thrift::ident::access_optional_shared_field,
@@ -103,7 +103,6 @@ class InterceptedFields final  {
     ::apache::thrift::ident::access_optional_boxed_field
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2,3,4,5,6};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t,
@@ -111,25 +110,6 @@ class InterceptedFields final  {
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 6;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -182,335 +162,307 @@ class InterceptedFields final  {
   bool operator<(const InterceptedFields&) const;
 
   /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<const T&> access_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_NOINLINE ::apache::thrift::field_ref<const fbthrift_T&> access_field_ref() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
     return {this->__fbthrift_field_access_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<const T&&> access_field_ref() const&& {
-    my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
-    return {static_cast<const T&&>(this->__fbthrift_field_access_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<T&> access_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_NOINLINE ::apache::thrift::field_ref<fbthrift_T&> access_field_ref() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
     return {this->__fbthrift_field_access_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<T&&> access_field_ref() && {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_NOINLINE ::apache::thrift::field_ref<fbthrift_T&&> access_field_ref() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
-    return {static_cast<T&&>(this->__fbthrift_field_access_field), __isset.at(0), __isset.bit(0)};
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_access_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<const T&> access_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_NOINLINE ::apache::thrift::field_ref<const fbthrift_T&> access_field() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
     return {this->__fbthrift_field_access_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<const T&&> access_field() const&& {
-    my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
-    return {static_cast<const T&&>(this->__fbthrift_field_access_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<T&> access_field() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_NOINLINE ::apache::thrift::field_ref<fbthrift_T&> access_field() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
     return {this->__fbthrift_field_access_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "access_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_NOINLINE ::apache::thrift::field_ref<T&&> access_field() && {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_NOINLINE ::apache::thrift::field_ref<fbthrift_T&&> access_field() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 1>{*this});
-    return {static_cast<T&&>(this->__fbthrift_field_access_field), __isset.at(0), __isset.bit(0)};
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_access_field), __isset.at(0), __isset.bit(0)};
   }
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T& access_shared_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_shared_field_ref() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
     return __fbthrift_field_access_shared_field;
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T& access_shared_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_shared_field_ref() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
     return __fbthrift_field_access_shared_field;
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T&& access_shared_field_ref() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_shared_field_ref() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_shared_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_shared_field);
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T&& access_shared_field_ref() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_shared_field_ref() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_shared_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_shared_field);
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T& access_shared_field() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_shared_field() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
     return __fbthrift_field_access_shared_field;
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T& access_shared_field() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_shared_field() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
     return __fbthrift_field_access_shared_field;
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T&& access_shared_field() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_shared_field() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_shared_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_shared_field);
   }
 
   /** Glean { "field": "access_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T&& access_shared_field() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_shared_field() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 2>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_shared_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_shared_field);
   }
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T& access_optional_shared_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_optional_shared_field_ref() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
     return __fbthrift_field_access_optional_shared_field;
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T& access_optional_shared_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_optional_shared_field_ref() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
     return __fbthrift_field_access_optional_shared_field;
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T&& access_optional_shared_field_ref() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_optional_shared_field_ref() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_optional_shared_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_optional_shared_field);
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T&& access_optional_shared_field_ref() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_optional_shared_field_ref() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_optional_shared_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_optional_shared_field);
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T& access_optional_shared_field() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_optional_shared_field() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
     return __fbthrift_field_access_optional_shared_field;
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T& access_optional_shared_field() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_optional_shared_field() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
     return __fbthrift_field_access_optional_shared_field;
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE T&& access_optional_shared_field() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_optional_shared_field() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_optional_shared_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_optional_shared_field);
   }
 
   /** Glean { "field": "access_optional_shared_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<::std::int32_t>>
-  FOLLY_ERASE const T&& access_optional_shared_field() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_optional_shared_field() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 3>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_optional_shared_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_optional_shared_field);
   }
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T& access_shared_const_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_shared_const_field_ref() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
     return __fbthrift_field_access_shared_const_field;
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T& access_shared_const_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_shared_const_field_ref() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
     return __fbthrift_field_access_shared_const_field;
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T&& access_shared_const_field_ref() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_shared_const_field_ref() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_shared_const_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_shared_const_field);
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T&& access_shared_const_field_ref() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_shared_const_field_ref() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_shared_const_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_shared_const_field);
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T& access_shared_const_field() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_shared_const_field() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
     return __fbthrift_field_access_shared_const_field;
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T& access_shared_const_field() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_shared_const_field() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
     return __fbthrift_field_access_shared_const_field;
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T&& access_shared_const_field() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_shared_const_field() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_shared_const_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_shared_const_field);
   }
 
   /** Glean { "field": "access_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T&& access_shared_const_field() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_shared_const_field() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 4>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_shared_const_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_shared_const_field);
   }
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T& access_optional_shared_const_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_optional_shared_const_field_ref() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
     return __fbthrift_field_access_optional_shared_const_field;
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T& access_optional_shared_const_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_optional_shared_const_field_ref() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
     return __fbthrift_field_access_optional_shared_const_field;
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T&& access_optional_shared_const_field_ref() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_optional_shared_const_field_ref() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_optional_shared_const_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_optional_shared_const_field);
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T&& access_optional_shared_const_field_ref() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_optional_shared_const_field_ref() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_optional_shared_const_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_optional_shared_const_field);
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T& access_optional_shared_const_field() & {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T& access_optional_shared_const_field() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
     return __fbthrift_field_access_optional_shared_const_field;
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T& access_optional_shared_const_field() const& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T& access_optional_shared_const_field() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
     return __fbthrift_field_access_optional_shared_const_field;
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE T&& access_optional_shared_const_field() && {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE fbthrift_T&& access_optional_shared_const_field() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
-    return static_cast<T&&>(__fbthrift_field_access_optional_shared_const_field);
+    return static_cast<fbthrift_T&&>(__fbthrift_field_access_optional_shared_const_field);
   }
 
   /** Glean { "field": "access_optional_shared_const_field" } */
-  template <typename ..., typename T = ::std::shared_ptr<const ::std::int32_t>>
-  FOLLY_ERASE const T&& access_optional_shared_const_field() const&& {
+  template <typename..., typename fbthrift_T = ::std::shared_ptr<const ::std::int32_t>>
+  FOLLY_ERASE const fbthrift_T&& access_optional_shared_const_field() const&& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_shared_const_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 5>{*this});
-    return static_cast<const T&&>(__fbthrift_field_access_optional_shared_const_field);
+    return static_cast<const fbthrift_T&&>(__fbthrift_field_access_optional_shared_const_field);
   }
 
   /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<const T&> access_optional_boxed_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
+  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<const fbthrift_T&> access_optional_boxed_field_ref() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<const T&>{this->__fbthrift_field_access_optional_boxed_field};
+    return ::apache::thrift::optional_boxed_field_ref<const fbthrift_T&>{this->__fbthrift_field_access_optional_boxed_field};
   }
 
   /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<const T&&> access_optional_boxed_field_ref() const&& {
+  template <typename..., typename fbthrift_T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
+  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<fbthrift_T&> access_optional_boxed_field_ref() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_access_optional_boxed_field)};
+    return ::apache::thrift::optional_boxed_field_ref<fbthrift_T&>{this->__fbthrift_field_access_optional_boxed_field};
   }
 
   /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<T&> access_optional_boxed_field_ref() & {
+  template <typename..., typename fbthrift_T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
+  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<fbthrift_T&&> access_optional_boxed_field_ref() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<T&>{this->__fbthrift_field_access_optional_boxed_field};
+    return ::apache::thrift::optional_boxed_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_access_optional_boxed_field)};
   }
 
   /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<T&&> access_optional_boxed_field_ref() && {
+  template <typename..., typename fbthrift_T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
+  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<const fbthrift_T&> access_optional_boxed_field() const& {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_access_optional_boxed_field)};
+    return ::apache::thrift::optional_boxed_field_ref<const fbthrift_T&>{this->__fbthrift_field_access_optional_boxed_field};
   }
 
   /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<const T&> access_optional_boxed_field() const& {
+  template <typename..., typename fbthrift_T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
+  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<fbthrift_T&> access_optional_boxed_field() & {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<const T&>{this->__fbthrift_field_access_optional_boxed_field};
+    return ::apache::thrift::optional_boxed_field_ref<fbthrift_T&>{this->__fbthrift_field_access_optional_boxed_field};
   }
 
   /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<const T&&> access_optional_boxed_field() const&& {
+  template <typename..., typename fbthrift_T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
+  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<fbthrift_T&&> access_optional_boxed_field() && {
     my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_access_optional_boxed_field)};
-  }
-
-  /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<T&> access_optional_boxed_field() & {
-    my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<T&>{this->__fbthrift_field_access_optional_boxed_field};
-  }
-
-  /** Glean { "field": "access_optional_boxed_field" } */
-  template <typename..., typename T = ::apache::thrift::detail::boxed_value_ptr<::std::int32_t>>
-  FOLLY_ERASE ::apache::thrift::optional_boxed_field_ref<T&&> access_optional_boxed_field() && {
-    my::FieldInterceptor::interceptThriftFieldAccess(this->__fbthrift_field_access_optional_boxed_field, ::apache::thrift::FieldContext<std::remove_reference<decltype(*this)>::type, 6>{*this});
-    return ::apache::thrift::optional_boxed_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_access_optional_boxed_field)};
+    return ::apache::thrift::optional_boxed_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_access_optional_boxed_field)};
   }
 
   template <class Protocol_>
@@ -539,3 +491,11 @@ unsigned long InterceptedFields::read(Protocol_* iprot) {
 
 
 } // namespace facebook::thrift::test
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::facebook::thrift::test::InterceptedFields, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -6573218540702524643;
+  static constexpr ::std::string_view definitionKey = {"\xc9\xa5\x23\x6e\xa3\x81\x1d\xb7\x78\xdb\x56\x1d\x43\xd3\x63\x8f", 16};
+};
+} // namespace apache::thrift::detail

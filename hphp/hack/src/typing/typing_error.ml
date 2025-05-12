@@ -76,6 +76,22 @@ module Primary = struct
     [@@deriving show]
   end
 
+  module Switch = struct
+    type t =
+      | Switch_nonexhaustive of {
+          switch_pos: Pos.t;
+          missing: string list Lazy.t;
+          scrutinee_pos: Pos.t;
+          scrutinee_type: string Lazy.t;
+        }
+      | Switch_needs_default of {
+          switch_pos: Pos.t;
+          scrutinee_pos: Pos.t;
+          scrutinee_type: string Lazy.t;
+        }
+    [@@deriving show]
+  end
+
   module Enum = struct
     module Const = struct
       type t =
@@ -340,10 +356,14 @@ module Primary = struct
           current_package_pos: Pos.t;
           current_package_def_pos: Pos.t;
           current_package_name: string option;
+          current_package_assignment_kind: string;
           target_package_pos: Pos.t;
           target_package_name: string option;
+          target_package_assignment_kind: string;
           current_filename: Relative_path.t;
           target_filename: Relative_path.t;
+          target_id: string;
+          target_symbol_spec: string;
         }
       | Cross_pkg_access_with_requirepackage of {
           pos: Pos.t;
@@ -357,10 +377,14 @@ module Primary = struct
           current_package_pos: Pos.t;
           current_package_def_pos: Pos.t;
           current_package_name: string option;
+          current_package_assignment_kind: string;
           target_package_pos: Pos.t;
           target_package_name: string option;
+          target_package_assignment_kind: string;
           current_filename: Relative_path.t;
           target_filename: Relative_path.t;
+          target_id: string;
+          target_symbol_spec: string;
         }
     [@@deriving show]
   end
@@ -403,6 +427,21 @@ module Primary = struct
     [@@deriving show]
   end
 
+  module SimpliHack = struct
+    type t =
+      | Run_prompt of { pos: Pos.t }
+      | Rerun_prompt of {
+          pos: Pos.t;
+          prompt_digest: string;
+          expected_digest: string;
+        }
+      | Evaluation_error of {
+          pos: Pos.t;
+          stack_trace: Pos_or_decl.t Message.t list Lazy.t;
+        }
+    [@@deriving show]
+  end
+
   type implements_info = {
     pos: Pos_or_decl.t;
     instantiation: string list;
@@ -419,9 +458,11 @@ module Primary = struct
     | Package of Package.t
     | Readonly of Readonly.t
     | Shape of Shape.t
+    | Switch of Switch.t
     | Wellformedness of Wellformedness.t
     | Xhp of Xhp.t
     | CaseType of CaseType.t
+    | SimpliHack of SimpliHack.t
     (* Primary only *)
     | Unresolved_tyvar of Pos.t
     | Unify_error of {
@@ -841,12 +882,6 @@ module Primary = struct
         others: Pos_or_decl.t list;
       }
     | Reified_function_reference of Pos.t
-    | Class_meth_abstract_call of {
-        pos: Pos.t;
-        class_name: string;
-        meth_name: string;
-        decl_pos: Pos_or_decl.t;
-      }
     | Reinheriting_classish_const of {
         pos: Pos.t;
         classish_name: string;
@@ -1040,6 +1075,10 @@ module Primary = struct
         pos: Pos.t;
         decl_pos: Pos_or_decl.t;
       }
+    | Protected_internal_meth_caller of {
+        pos: Pos.t;
+        decl_pos: Pos_or_decl.t;
+      }
     | Array_cast of Pos.t
     | String_cast of {
         pos: Pos.t;
@@ -1053,7 +1092,6 @@ module Primary = struct
         class_name: string;
         kind: [ `static | `classname ];
       }
-    | Undefined_parent of Pos.t
     | Parent_outside_class of Pos.t
     | Parent_abstract_call of {
         pos: Pos.t;
@@ -1131,7 +1169,10 @@ module Primary = struct
         reason: Pos_or_decl.t Message.t list Lazy.t;
       }
     | Parent_in_trait of Pos.t
-    | Parent_undefined of Pos.t
+    | Parent_undefined of {
+        pos: Pos.t;
+        trait_reqs: Pos_or_decl.t list option;
+      }
     | Constructor_no_args of Pos.t
     | Visibility of {
         pos: Pos.t;
@@ -1359,8 +1400,30 @@ module Primary = struct
         pos: Pos.t;
         ty: string;
       }
+    | String_to_class_pointer of {
+        pos: Pos.t;
+        cls_name: string;
+      }
     | Optional_parameter_not_supported of Pos.t
     | Optional_parameter_not_abstract of Pos.t
+    | Call_needs_concrete of {
+        call_pos: Pos.t;
+        class_name: string;
+        meth_name: string;
+        decl_pos: Pos_or_decl.t;
+        via: [ `Id | `Self | `Parent | `Static ];
+      }
+    | Abstract_access_via_static of {
+        access_pos: Pos.t;
+        class_name: string;
+        member_name: string;
+        decl_pos: Pos_or_decl.t;
+      }
+    | Uninstantiable_class_via_static of {
+        usage_pos: Pos.t;
+        class_name: string;
+        decl_pos: Pos_or_decl.t;
+      }
   [@@deriving show]
 end
 
@@ -1392,11 +1455,15 @@ module rec Error : sig
 
   val shape : Primary.Shape.t -> t
 
+  val switch : Primary.Switch.t -> t
+
   val wellformedness : Primary.Wellformedness.t -> t
 
   val xhp : Primary.Xhp.t -> t
 
   val casetype : Primary.CaseType.t -> t
+
+  val simplihack : Primary.SimpliHack.t -> t
 
   val apply_reasons : Secondary.t -> on_error:Reasons_callback.t -> t
 
@@ -1450,11 +1517,15 @@ end = struct
 
   let shape err = primary @@ Primary.Shape err
 
+  let switch err = primary @@ Primary.Switch err
+
   let wellformedness err = primary @@ Primary.Wellformedness err
 
   let xhp err = primary @@ Primary.Xhp err
 
   let casetype err = primary @@ Primary.CaseType err
+
+  let simplihack err = primary @@ Primary.SimpliHack err
 
   let apply_reasons t ~on_error = Apply_reasons (on_error, t)
 
@@ -1695,7 +1766,6 @@ and Secondary : sig
         pos: Pos_or_decl.t;
         decl_pos: Pos_or_decl.t;
       }
-    | Decl_override_missing_hint of Pos_or_decl.t
     | Bad_lateinit_override of {
         pos: Pos_or_decl.t;
         parent_pos: Pos_or_decl.t;
@@ -1762,7 +1832,6 @@ and Secondary : sig
         ty_sub: Typing_defs_core.internal_type;
         ty_sup: Typing_defs_core.internal_type;
         is_coeffect: bool;
-        stripped_existential: bool;
       }
     | Method_not_dynamically_callable of {
         pos: Pos_or_decl.t;
@@ -1807,6 +1876,16 @@ and Secondary : sig
         enum_name: string;
         decl_pos: Pos_or_decl.t;
         most_similar: (string * Pos_or_decl.t) option;
+      }
+    | Needs_concrete_override of {
+        pos: Pos_or_decl.t;
+        parent_pos: Pos_or_decl.t;
+      }
+    | Higher_rank_tparam_escape of {
+        tvar_pos: Pos_or_decl.t;
+        pos_with_generic: Pos_or_decl.t;
+        generic_reason: Typing_reason.t;
+        generic_name: string;
       }
   [@@deriving show]
 end = struct
@@ -1995,7 +2074,6 @@ end = struct
         pos: Pos_or_decl.t;
         decl_pos: Pos_or_decl.t;
       }
-    | Decl_override_missing_hint of Pos_or_decl.t
     | Bad_lateinit_override of {
         pos: Pos_or_decl.t;
         parent_pos: Pos_or_decl.t;
@@ -2062,7 +2140,6 @@ end = struct
         ty_sub: Typing_defs_core.internal_type;
         ty_sup: Typing_defs_core.internal_type;
         is_coeffect: bool;
-        stripped_existential: bool;
       }
     | Method_not_dynamically_callable of {
         pos: Pos_or_decl.t;
@@ -2107,6 +2184,16 @@ end = struct
         enum_name: string;
         decl_pos: Pos_or_decl.t;
         most_similar: (string * Pos_or_decl.t) option;
+      }
+    | Needs_concrete_override of {
+        pos: Pos_or_decl.t;
+        parent_pos: Pos_or_decl.t;
+      }
+    | Higher_rank_tparam_escape of {
+        tvar_pos: Pos_or_decl.t;
+        pos_with_generic: Pos_or_decl.t;
+        generic_reason: Typing_reason.t;
+        generic_name: string;
       }
   [@@deriving show]
 end

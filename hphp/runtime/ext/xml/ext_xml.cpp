@@ -54,7 +54,7 @@ struct XmlParser : SweepableResourceData {
   XmlParser() {}
   ~XmlParser() override;
   void cleanupImpl();
-  CLASSNAME_IS("xml");
+  CLASSNAME_IS("xml")
   const String& o_getClassNameHook() const override;
 
   int case_folding{0};
@@ -136,11 +136,11 @@ inline void clearParser(const req::ptr<XmlParser>& p) {
 
 }
 
-typedef struct {
+struct xml_encoding {
   XML_Char *name;
   char (*decoding_function)(unsigned short);
   unsigned short (*encoding_function)(unsigned char);
-} xml_encoding;
+};
 
 static XML_Char * xml_globals_default_encoding = (XML_Char*)"UTF-8";
 // for xml_parse_into_struct

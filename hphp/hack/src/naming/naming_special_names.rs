@@ -64,6 +64,8 @@ pub mod classes {
 
     pub const CLASS_NAME: &str = "\\HH\\classname";
 
+    pub const CONCRETE: &str = "\\HH\\concrete";
+
     pub const ENUM_NAME: &str = "\\HH\\enumname";
 
     pub const TYPE_NAME: &str = "\\HH\\typename";
@@ -222,6 +224,8 @@ pub mod user_attributes {
 
     pub const AUTOCOMPLETE_SORT_TEXT: &str = "__AutocompleteSortText";
 
+    pub const NEEDS_CONCRETE: &str = "__NeedsConcrete";
+
     pub const CONSISTENT_CONSTRUCT: &str = "__ConsistentConstruct";
 
     pub const CONST: &str = "__Const";
@@ -330,6 +334,12 @@ pub mod user_attributes {
 
     pub const REQUIRE_PACKAGE: &str = "__RequirePackage";
 
+    pub const NO_DISJOINT_UNION: &str = "__NoDisjointUnion";
+
+    pub const ASIO_LOW_PRI: &str = "__AsioLowPri";
+
+    pub const SIMPLIHACK: &str = "__SimpliHack";
+
     pub fn is_memoized(name: &str) -> bool {
         name == MEMOIZE || name == MEMOIZE_LSB
     }
@@ -375,6 +385,18 @@ pub mod user_attributes {
 
     pub fn is_require_package(name: &str) -> bool {
         name == REQUIRE_PACKAGE
+    }
+
+    pub fn is_no_disjoint_union(name: &str) -> bool {
+        name == NO_DISJOINT_UNION
+    }
+
+    pub fn is_asio_low_pri(name: &str) -> bool {
+        name == ASIO_LOW_PRI
+    }
+
+    pub fn is_simplihack(name: &str) -> bool {
+        name == SIMPLIHACK
     }
 }
 
@@ -1186,6 +1208,12 @@ pub mod expression_trees {
     pub const SPLICE: &str = "splice";
 
     pub const DOLLARDOLLAR_TMP_VAR: &str = "$0dollardollar";
+
+    pub const BUILTIN_SHAPE_AT: &str = "shapeAt";
+    pub const BUILTIN_SHAPE_PUT: &str = "shapePut";
+    pub const BUILTIN_SHAPE_IDX: &str = "shapeIdx";
+
+    pub const LIFT: &str = "lift";
 }
 
 pub mod modules {

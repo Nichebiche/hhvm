@@ -398,7 +398,7 @@ module Typing = struct
     | UnboundGlobal [@value 4106]
     | UnboundNameTyping [@value 4107]
     | UndefinedField [@value 4108]
-    | UndefinedParent [@value 4109]
+    (* | UndefinedParentDEPRECATED [@value 4109] *)
     | UnifyError [@value 4110]
     | UnsatisfiedReq [@value 4111]
     | Visibility [@value 4112]
@@ -671,7 +671,7 @@ module Typing = struct
     | IllegalInformationFlow [@value 4379]
     | ContextImplicitPolicyLeakage [@value 4380]
     | ReifiedFunctionReference [@value 4381]
-    | ClassMethAbstractCall [@value 4382]
+    (* | ClassMethAbstractCall [@value 4382] *)
     | KindMismatch [@value 4383]
     | UnboundNameTypeConstantAccess [@value 4384]
     | UnknownInformationFlow [@value 4385]
@@ -776,6 +776,16 @@ module Typing = struct
     | OptionalParameterNotSupported [@value 4484]
     | InvalidRecursiveType [@value 4485]
     | StaticCallOnTraitRequireThisAs [@value 4486]
+    | NeedsConcreteOverride [@value 4487]
+    | StringToClassPointer [@value 4488]
+    | SwitchNeedsDefault [@value 4489]
+    | CallNeedsConcrete [@value 4490]
+    | AbstractAccessViaStatic [@value 4491]
+    | UninstantiableClassViaStatic [@value 4492]
+    | SimpliHackRunPrompt [@value 4493]
+    | InvalidReifiedArgumentFIXMEable [@value 4494]
+    | SimpliHackEvalError [@value 4495]
+    | ProtectedInternalMethCaller [@value 4496]
   (* Add new Typing codes here! Comment out when deprecating. *)
   [@@deriving enum, show { with_path = false }]
 
@@ -796,6 +806,12 @@ module Warning = struct
     | AsAlwaysSucceeds [@value 12011]
     | AsAlwaysFails [@value 12012]
     | ClassPointerToString [@value 12013]
+    | SafeAbstractCall [@value 12014]
+    | SafeAbstractNew [@value 12015]
+    | SafeAbstractCallNeedsConcrete [@value 12016]
+    | NoDisjointUnion [@value 12017]
+    | SafeAbstractConstAccess [@value 12018]
+    | SwitchRedundancy [@value 12019]
   [@@deriving enum, ord, show { with_path = false }]
 end
 

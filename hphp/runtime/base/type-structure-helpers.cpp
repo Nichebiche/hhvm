@@ -41,6 +41,42 @@
 namespace HPHP {
 
 const StaticString s_unresolved("[unresolved]");
+const StaticString s_allows_unknown_fields("allows_unknown_fields");
+const StaticString s_elem_types("elem_types");
+const StaticString s_optional_elem_types("optional_elem_types");
+const StaticString s_param_types("param_types");
+const StaticString s_return_type("return_type");
+const StaticString s_variadic_type("variadic_type");
+const StaticString s_fields("fields");
+const StaticString s_kind("kind");
+const StaticString s_value("value");
+const StaticString s_nullable("nullable");
+const StaticString s_soft("soft");
+const StaticString s_opaque("opaque");
+const StaticString s_optional_shape_field("optional_shape_field");
+const StaticString s_classname("classname");
+const StaticString s_wildcard("_");
+const StaticString s_name("name");
+const StaticString s_generic_types("generic_types");
+const StaticString s_is_cls_cns("is_cls_cns");
+const StaticString s_access_list("access_list");
+const StaticString s_root_name("root_name");
+const StaticString s_alias("alias");
+const StaticString s_case_type("case_type");
+const StaticString s_callable("callable");
+const StaticString s_exact("exact");
+const StaticString s_typevars("typevars");
+const StaticString s_typevar_types("typevar_types");
+const StaticString s_union_types("union_types");
+const StaticString s_hh_this(annotTypeName(AnnotType::This));
+const StaticString s_type_structure_non_existant_class(
+  "HH\\__internal\\type_structure_non_existant_class");
+
+// Fixed error messages
+const StaticString s_reified_type_must_be_ts(
+  "Reified type must be a type structure");
+const StaticString s_new_instance_of_not_string(
+  "You cannot create a new instance of this type as it is not a string");
 
 namespace {
 
@@ -453,13 +489,33 @@ bool typeStructureIsTypeList(
   return false;
 }
 
+/*
+ * Semantics of checkTypeStructureMatchesTVImpl varies depending on this enum
+ *    Shallow (used for enforcement):
+ *      enums checked only up to base type,
+ *      tuple and shapes only checked up to vec/dict,
+ *      varray and darray are not distinguished,
+ *      reject attempts to test erased generics
+ *    Deep (used for "is type" testing or "as type" assertion operations):
+ *      enums matter,
+ *      deep tuple and shape checking,
+ *      varray and darray are treated as vec and dict,
+ *      reject attempts to test erased generics
+ *    DeepIgnoreErased (used for checked casts when enabled):
+ *      enums matter,
+ *      deep tuple and shape checking,
+ *      varray and darray are treated as vec and dict,
+ *      ignore attempts to test erased generics
+ */
+enum class CheckOpKind : uint8_t { Shallow = 0, Deep = 1, DeepIgnoreErased = 2 };
+
 ALWAYS_INLINE
 bool checkReifiedGenericsMatch(
   const Array& ts,
   TypedValue c1,
   const StringData* name,
   bool& warn,
-  bool strict // whether to return false on erased generics
+  CheckOpKind opkind
 ) {
   if (!ts.exists(s_generic_types)) return true;
   // TODO(T31677864): Handle non KindOfObject types
@@ -468,7 +524,7 @@ bool checkReifiedGenericsMatch(
   auto const cls = Class::load(name);
   assertx(cls);
   if (!cls->hasReifiedGenerics()) {
-    if (!strict) return true;
+    if (opkind == CheckOpKind::DeepIgnoreErased || opkind == CheckOpKind::Shallow) return true;
     // Before returning false, lets check if all the generics are wildcards
     // If not all wildcard, since this is not a reified class, then it is false
     return isTSAllWildcards(ts.get());
@@ -491,7 +547,7 @@ bool checkReifiedGenericsMatch(
         get_ts_name(tsvalue)->equal(s_wildcard.get())) {
       continue;
     }
-    if (!typeStructureIsType(objrg.val().parr, tsvalue, warn, strict)) {
+    if (!typeStructureIsType(objrg.val().parr, tsvalue, warn, opkind == CheckOpKind::Deep)) {
       auto const tpinfo = cls->getReifiedGenericsInfo().m_typeParamInfo;
       assertx(tpinfo.size() == size);
       if (warn || tpinfo[i].m_isWarn || is_ts_soft(tsvalue)) {
@@ -578,13 +634,7 @@ bool verifyReifiedLocalType(
 /*
  * Shared implementation for checkTypeStructureMatchesTV().
  *
- * If `isOrAsOp` is set, we are running this check for "is type" testing or "as
- * type" assertion operations.  For these operations, we reject comparisons
- * over {v,d,}array since we do want not users to be able distinguish
- * {v,d,}arrays while HAM is in progress (i.e., we only allow checking
- * {,v,d}arrays as ArrLike, not at any finer granularity).  Being able to tell
- * between them cripples the ability to transparently switch between them in
- * userland.
+ * See description of CheckOpKind above for its meaning.
  */
 template <bool gen_error>
 bool checkTypeStructureMatchesTVImpl(
@@ -594,7 +644,7 @@ bool checkTypeStructureMatchesTVImpl(
   std::string& expectedType,
   std::string& errorKey,
   bool& warn,
-  bool isOrAsOp
+  CheckOpKind kind
 ) {
   auto const errOnLen = [&givenType](auto cell, auto len) {
     if (!gen_error) return;
@@ -671,10 +721,10 @@ bool checkTypeStructureMatchesTVImpl(
              !reinterpret_cast<const OptResource*>(&data.pres)->isInvalid();
 
     case TypeStructure::Kind::T_darray:
-      return isOrAsOp ? is_dict(&c1) : is_vec(&c1) || is_dict(&c1);
+      return kind != CheckOpKind::Shallow ? is_dict(&c1) : is_vec(&c1) || is_dict(&c1);
 
     case TypeStructure::Kind::T_varray:
-      return isOrAsOp ? is_vec(&c1) : is_vec(&c1) || is_dict(&c1);
+      return kind != CheckOpKind::Shallow ? is_vec(&c1) : is_vec(&c1) || is_dict(&c1);
 
     case TypeStructure::Kind::T_varray_or_darray:
       return is_vec(&c1) || is_dict(&c1);
@@ -697,7 +747,7 @@ bool checkTypeStructureMatchesTVImpl(
     case TypeStructure::Kind::T_enum: {
       assertx(ts.exists(s_classname));
       auto const cls = Class::load(ts[s_classname].asCStrRef().get());
-      if (!isOrAsOp) {
+      if (kind == CheckOpKind::Shallow) {
         // N.B. This is currently broken for enums declared with the underlying
         //      type classname<T>, where it will cause us to accept both int and
         //      string.
@@ -720,12 +770,12 @@ bool checkTypeStructureMatchesTVImpl(
       auto const name = ts[s_classname].asCStrRef().get();
       return
         tvInstanceOfImpl(&c1, [&] { return Class::load(name); }) &&
-        checkReifiedGenericsMatch(ts, c1, name, warn, isOrAsOp);
+        checkReifiedGenericsMatch(ts, c1, name, warn, kind);
     }
 
     case TypeStructure::Kind::T_tuple: {
       if (!isVecType(type)) return false;
-      if (!isOrAsOp) return true;
+      if (kind == CheckOpKind::Shallow) return true;
 
       auto const ad = data.parr;
       assertx(ts.exists(s_elem_types));
@@ -750,7 +800,7 @@ bool checkTypeStructureMatchesTVImpl(
             auto const& ts2 = asCArrRef(&tv);
             auto thisElemWarns = false;
             if (!checkTypeStructureMatchesTVImpl<gen_error>(
-              ts2, v, givenType, expectedType, errorKey, thisElemWarns, isOrAsOp
+              ts2, v, givenType, expectedType, errorKey, thisElemWarns, kind
             )) {
               errOnKey(k);
               if (thisElemWarns) {
@@ -775,7 +825,7 @@ bool checkTypeStructureMatchesTVImpl(
 
     case TypeStructure::Kind::T_shape: {
       if (!isDictType(type)) return false;
-      if (!isOrAsOp) return true;
+      if (kind == CheckOpKind::Shallow) return true;
 
       auto const ad = data.parr;
       assertx(ts.exists(s_fields));
@@ -826,7 +876,7 @@ bool checkTypeStructureMatchesTVImpl(
           numExpectedFields++;
           if (!checkTypeStructureMatchesTVImpl<gen_error>(
             ArrNR(tsField), field, givenType,
-            expectedType, errorKey, thisFieldWarns, isOrAsOp
+            expectedType, errorKey, thisFieldWarns, kind
           )) {
             errOnKey(k);
             if (thisFieldWarns) {
@@ -855,7 +905,7 @@ bool checkTypeStructureMatchesTVImpl(
           assertx(isArrayLikeType(ty.m_type));
           match |= checkTypeStructureMatchesTVImpl<false>(
             Array{ty.m_data.parr}, c1, givenType, expectedType, errorKey, warn,
-            isOrAsOp
+            kind
           );
           return match;
         }
@@ -904,7 +954,29 @@ bool checkTypeStructureMatchesTV(const Array& ts, TypedValue c1) {
   std::string givenType, expectedType, errorKey;
   bool warn = false;
   return checkTypeStructureMatchesTVImpl<false>(
-    ts, c1, givenType, expectedType, errorKey, warn, true);
+    ts, c1, givenType, expectedType, errorKey, warn, CheckOpKind::Deep);
+}
+
+bool checkForVerifyTypeStructureMatchesTV(
+  const Array& ts,
+  TypedValue c1,
+  std::string& givenType,
+  std::string& expectedType,
+  std::string& errorKey
+) {
+  bool warn = false;
+  auto const ts_kind = TypeStructure::kind(ts);
+  // For the VerifyType instruction we don't want to flag `nothing` (as people write UNSAFE_CAST<mixed,nothing>)
+  // or class pointers and classnames
+  if (ts_kind == TypeStructure::Kind::T_class_or_classname || ts_kind == TypeStructure::Kind::T_nothing) {
+    return true;
+  }
+  if (c1.m_type == KindOfClass || c1.m_type == KindOfLazyClass) {
+    return true;
+  }
+
+  return checkTypeStructureMatchesTVImpl<true>(
+    ts, c1, givenType, expectedType, errorKey, warn, CheckOpKind::DeepIgnoreErased);
 }
 
 bool checkTypeStructureMatchesTV(
@@ -916,7 +988,7 @@ bool checkTypeStructureMatchesTV(
 ) {
   bool warn = false;
   return checkTypeStructureMatchesTVImpl<true>(
-    ts, c1, givenType, expectedType, errorKey, warn, true);
+    ts, c1, givenType, expectedType, errorKey, warn, CheckOpKind::Deep);
 }
 
 bool checkTypeStructureMatchesTV(
@@ -926,7 +998,7 @@ bool checkTypeStructureMatchesTV(
 ) {
   std::string givenType, expectedType, errorKey;
   return checkTypeStructureMatchesTVImpl<false>(
-    ts, c1, givenType, expectedType, errorKey, warn, false);
+    ts, c1, givenType, expectedType, errorKey, warn, CheckOpKind::Shallow);
 }
 
 ALWAYS_INLINE

@@ -36,7 +36,7 @@ struct c_ExternalThreadEventWaitHandle final :
     SystemLib::ClassLoader<"HH\\ExternalThreadEventWaitHandle"> {
   using SystemLib::ClassLoader<"HH\\ExternalThreadEventWaitHandle">::classof;
   using SystemLib::ClassLoader<"HH\\ExternalThreadEventWaitHandle">::className;
-  WAITHANDLE_DTOR(ExternalThreadEventWaitHandle);
+  WAITHANDLE_DTOR(ExternalThreadEventWaitHandle)
   void sweep();
 
   explicit c_ExternalThreadEventWaitHandle()
@@ -61,7 +61,7 @@ struct c_ExternalThreadEventWaitHandle final :
   bool cancel(const Object& exception);
   void process();
   String getName();
-  void exitContext(context_idx_t ctx_idx);
+  void exitContext(ContextIndex contextIdx);
   void registerToContext();
   void unregisterFromContext();
 

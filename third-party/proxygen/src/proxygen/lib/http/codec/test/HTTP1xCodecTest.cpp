@@ -326,7 +326,7 @@ TEST(HTTP1xCodecTest, TestHighAsciiUA) {
       .WillOnce(Invoke(
           [&](HTTPCodec::StreamID, std::shared_ptr<HTTPException> error, bool) {
             EXPECT_EQ(error->getHttpStatusCode(), 400);
-            EXPECT_EQ(error->getProxygenError(), kErrorParseHeader);
+            EXPECT_EQ(error->getProxygenError(), kErrorHeaderContentValidation);
           }));
   codec.onIngress(*buffer);
 }
@@ -416,7 +416,7 @@ TEST(HTTP1xCodecTest, TestGetRequestChunkedResponse) {
   string resp1("Hello");
   auto body1 = folly::IOBuf::copyBuffer(resp1);
 
-  string resp2("");
+  string resp2;
   auto body2 = folly::IOBuf::copyBuffer(resp2);
 
   codec.generateBody(
@@ -873,7 +873,6 @@ TEST(HTTP1xCodecTest, TestChunkResponseSerialization) {
   downCodec.generateBody(
       blob, downStream, body->clone(), HTTPCodec::NoPadding, false);
   downCodec.generateTrailers(blob, downStream, trailers);
-  downCodec.generateEOM(blob, downStream);
 
   std::string tmp;
   blob.appendToString(tmp);

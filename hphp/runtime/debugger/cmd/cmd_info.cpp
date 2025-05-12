@@ -17,9 +17,6 @@
 #include "hphp/runtime/debugger/cmd/cmd_info.h"
 #include <vector>
 
-#include <folly/json/dynamic.h>
-#include <folly/json/json.h>
-
 #include "hphp/runtime/debugger/cmd/cmd_variable.h"
 #include "hphp/runtime/ext/reflection/ext_reflection.h"
 #include "hphp/runtime/ext/string/ext_string.h"
@@ -34,7 +31,7 @@ namespace HPHP::Eval {
 
 using std::string;
 
-TRACE_SET_MOD(debugger);
+TRACE_SET_MOD(debugger)
 
 const StaticString
   s_params("params"),

@@ -23,6 +23,7 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BigValueRoute.h>
 #include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
@@ -70,6 +71,11 @@ RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
 template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
+makeBigValueRoute<carbon::test::CarbonTestRouterInfo>(
+RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json);
+
+template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
 makeBlackholeRoute<carbon::test::CarbonTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
@@ -81,11 +87,6 @@ const folly::dynamic& json);
 
 template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
 makeErrorRoute<carbon::test::CarbonTestRouterInfo>(
-RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
-const folly::dynamic& json);
-
-template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
-makeHashRoute<carbon::test::CarbonTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
@@ -138,6 +139,12 @@ template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
 makeRandomRoute<carbon::test::CarbonTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
+
+template carbon::test::CarbonTestRouterInfo::RouteHandlePtr
+makeHashRoute<carbon::test::CarbonTestRouterInfo>(
+RouteHandleFactory<carbon::test::CarbonTestRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json,
+ProxyBase& proxy);
 
 template class ExtraRouteHandleProviderIf<carbon::test::CarbonTestRouterInfo>;
 

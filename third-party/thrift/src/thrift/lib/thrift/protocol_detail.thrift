@@ -38,10 +38,9 @@ namespace py thrift.lib.thrift.protocol_detail
 
 // A dynamic struct/union/exception
 @rust.Ord
-@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.virtual": "1"}}
 @thrift.Uri{value = "facebook.com/thrift/protocol/Object"}
 @cpp.Adapter{
-  name = "::apache::thrift::protocol::detail::ObjectAdapter",
+  name = "::apache::thrift::InlineAdapter<::apache::thrift::protocol::detail::ObjectWrapper<::apache::thrift::protocol::detail::detail::Object>>",
   adaptedType = "::apache::thrift::protocol::detail::ObjectWrapper<::apache::thrift::protocol::detail::detail::Object>",
 }
 @cpp.UseOpEncode
@@ -69,10 +68,9 @@ typedef double Double
 
 // A dynamic value.
 @rust.Ord
-@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.virtual": "1"}}
 @thrift.Uri{value = "facebook.com/thrift/protocol/Value"}
 @cpp.Adapter{
-  name = "::apache::thrift::protocol::detail::ValueAdapter",
+  name = "::apache::thrift::InlineAdapter<::apache::thrift::protocol::detail::ValueWrapper<::apache::thrift::protocol::detail::detail::Value>>",
   adaptedType = "::apache::thrift::protocol::detail::ValueWrapper<::apache::thrift::protocol::detail::detail::Value>",
 }
 @cpp.ScopedEnumAsUnionType
@@ -90,17 +88,21 @@ union Value {
   7: Double doubleValue;
 
   // Strings.
+  @cpp.Ref{type = cpp.RefType.Unique}
   8: binary stringValue; // Might not be valid UTF-8
 
+  @cpp.Ref{type = cpp.RefType.Unique}
   9: standard.ByteBuffer binaryValue;
 
   // A dynamic object value.
+  @cpp.Ref{type = cpp.RefType.Unique}
   11: Object objectValue;
 
   // Containers of values.
+  @cpp.Ref{type = cpp.RefType.Unique}
   14: list<Value> listValue;
   @cpp.Ref{type = cpp.RefType.Unique}
-  @cpp.Type{template = "::folly::F14FastSet"}
+  @cpp.Type{template = "::folly::F14VectorSet"}
   @hack.SkipCodegen{
     reason = "Set can only have integer/string/binary/enum values",
   }

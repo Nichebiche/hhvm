@@ -83,7 +83,7 @@ struct Args_TestService_init {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_TestService_init {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "TestService.init"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("int1", ::fbthrift::TType::I64, 1),
         ];
@@ -93,7 +93,7 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Te
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::I64, 1) => field_int1 = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::I64, 1) => field_int1 = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "int1", function: "init"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -140,13 +140,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"TestService";
         const METHOD_NAME: &::std::ffi::CStr = c"init";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"TestService.init";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_TestService_init = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_TestService_init = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -170,12 +171,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "TestService.init", exception = ?exn);
+                ::tracing::error!(method = "TestService.init", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("TestService.init", exn);
-                ::tracing::error!(method = "TestService.init", panic = ?aexn);
+                ::tracing::error!(method = "TestService.init", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::test_service::InitExn::ApplicationException(aexn))
             }
         };

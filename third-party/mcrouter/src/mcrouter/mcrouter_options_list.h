@@ -525,25 +525,11 @@ MCROUTER_OPTION_STRING(
 MCROUTER_OPTION(
     facebook::memcache::mcrouter::RoutingPrefix,
     default_route,
-    "/././",
+    facebook::memcache::mcrouter::RoutingPrefix("/././"),
     "route-prefix",
     'R',
     "default routing prefix (ex. /oregon/prn1c16/)",
     routing_prefix)
-
-MCROUTER_OPTION_TOGGLE(
-    miss_on_get_errors,
-    true,
-    "disable-miss-on-get-errors",
-    no_short,
-    "Disable reporting get errors as misses")
-
-MCROUTER_OPTION_TOGGLE(
-    disable_miss_on_arith_errors,
-    false,
-    "disable-miss-on-arith-errors",
-    no_short,
-    "Disable reporting arithmetic operation errors as misses")
 
 MCROUTER_OPTION_TOGGLE(
     group_remote_errors,

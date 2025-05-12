@@ -293,6 +293,9 @@ struct RuntimeOption {
     const std::string &task, const std::string &cpu, const std::string &tiers, const std::string &tags);
   static std::map<std::string, std::string> getTierOverwriteInputs();
 
+  // Store the Metadata about the config file read in.
+  static std::map<std::string, std::string>& GetMetadata();
+
   static std::string BuildId;
   static std::string InstanceId;
   static std::string DeploymentId; // ID for set of instances deployed at once
@@ -396,6 +399,7 @@ public:
   static int ThriftFBServerThriftServerIOWorkerThreads;
   static int ThriftFBServerThriftServerCPUWorkerThreads;
   static std::set<std::string> ThriftFBServerHighPriorityEndPoints;
+  static bool ThriftFBServerUseThriftResourcePool;
 
   // fb303 server
   static bool EnableFb303Server;

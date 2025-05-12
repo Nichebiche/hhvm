@@ -31,7 +31,8 @@
 #include <folly/container/F14Set.h>
 
 #include <boost/program_options.hpp>
-#include <boost/variant.hpp>
+#include <utility>
+#include <variant>
 
 #include <tbb/concurrent_unordered_map.h>
 #include <tbb/concurrent_vector.h>
@@ -237,7 +238,7 @@ struct Generator {
   // Indexer<> instantiation (preferred), or its raw memory address. We have to
   // use the raw memory address for Indexer<> instantiations which do not have
   // external linkage.
-  using Address = boost::variant<std::string, uintptr_t>;
+  using Address = std::variant<std::string, uintptr_t>;
 
  public:
   // Parse out all the debug information out of the specified file and do the
@@ -2380,9 +2381,9 @@ bool Generator::checkMemberSpecialAction(const Object& base_object,
     return true;
   }
 
-  if (action.ignore_fields.count(member.name) > 0) return true;
+  if (action.ignore_fields.contains(member.name)) return true;
 
-  if (action.conservative_fields.count(member.name) > 0) {
+  if (action.conservative_fields.contains(member.name)) {
     layout.addConservative(offset, determineSize(member.type));
     return true;
   }
@@ -2416,7 +2417,7 @@ void Generator::genLayout(const Object& object,
                           bool conservative_everything) const {
   // Never generate layout for collectable types, unless it was marked as
   // scannable.
-  if (m_collectable.count(&object) > 0 &&
+  if (m_collectable.contains(&object) &&
       !m_scannable_collectable.count(&object)) {
     return;
   }
@@ -2459,7 +2460,7 @@ void Generator::genLayout(const Object& object,
   for (const auto& base : object.bases) {
     try {
       const auto& obj = getObject(base.type);
-      if (action.ignored_bases.count(&obj)) continue;
+      if (action.ignored_bases.contains(&obj)) continue;
 
       // Any base which has been included with the custom base scanner should be
       // ignored here, as we'll do one call to the custom scanner.
@@ -2483,7 +2484,7 @@ void Generator::genLayout(const Object& object,
         obj,
         layout,
         offset + *base.offset,
-        !action.silenced_bases.count(&obj),
+        !action.silenced_bases.contains(&obj),
         action.conservative_all_bases
       );
     } catch (LayoutError& exn) {
@@ -2687,7 +2688,7 @@ void Generator::makePtrFollowable(const Object& obj) {
 // Recursive function to check if a given object has a collectable base
 // somewhere in its type hierarchy.
 bool Generator::hasCollectableBase(const Object& object) const {
-  if (m_collectable.count(&object)) return true;
+  if (m_collectable.contains(&object)) return true;
   return std::any_of(
     object.bases.begin(),
     object.bases.end(),
@@ -2996,7 +2997,7 @@ void Generator::genForwardDecls(std::ostream& os) const {
   decls.clear();
   for (const auto& indexed : m_indexed_types) {
     for (const auto& addr : indexed.addresses) {
-      if (auto* decl = boost::get<std::string>(&addr)) {
+      if (auto* decl = std::get_if<std::string>(&addr)) {
         decls.emplace(*decl);
       }
     }
@@ -3039,9 +3040,9 @@ void Generator::genIndexInit(std::ostream& os) const {
                         [&](const std::string& s) {
                           os << "  " << s << " = " << index << ";\n";
                         },
-                        [&](uintptr_t /*p*/) {
+                        [&](uintptr_t p) {
                           os << "  *reinterpret_cast<Index*>(0x" << std::hex
-                             << address << std::dec << ") = " << index << ";\n";
+                             << p << std::dec << ") = " << index << ";\n";
                         });
     }
     ++index;
@@ -3405,7 +3406,7 @@ int main(int argc, char** argv) {
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
 
-    if (vm.count("help")) {
+    if (vm.contains("help")) {
       std::cout << kProgramDescription << "\n\n"
                 << desc << std::endl;
       return 1;
@@ -3422,10 +3423,10 @@ int main(int argc, char** argv) {
 #endif
 
     po::notify(vm);
-    auto const print = vm.count("print") != 0;
+    auto const print = vm.contains("print");
 
     const auto output_filename =
-      vm.count("install_dir") ?
+      vm.contains("install_dir") ?
       folly::sformat(
         "{}{}{}",
         vm["install_dir"].as<std::string>(),
@@ -3434,7 +3435,7 @@ int main(int argc, char** argv) {
       ) :
       vm["output_file"].as<std::string>();
 
-    if (vm.count("num_threads")) {
+    if (vm.contains("num_threads")) {
       auto n = vm["num_threads"].as<int>();
       if (n > 0) {
         NumThreads = n;

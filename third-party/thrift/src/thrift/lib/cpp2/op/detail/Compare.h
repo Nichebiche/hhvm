@@ -17,7 +17,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -265,6 +264,34 @@ struct DefaultLessThan {
   CompareWith compareWith;
 };
 
+// A CompareThreeWay implementation that delegates to EqualTo and LessThan.
+template <
+    typename Tag,
+    template <class...> class LessThanImpl = LessThan,
+    typename T = type::native_type<Tag>,
+    typename = void>
+struct DefaultCompareThreeWay {
+  static_assert(type::is_concrete_v<Tag>, "");
+
+  constexpr folly::ordering operator()(const T& lhs, const T& rhs) const {
+    if (EqualTo<Tag>{}(lhs, rhs)) {
+      return folly::ordering::eq;
+    }
+    if (LessThanImpl<Tag>{}(lhs, rhs)) {
+      return folly::ordering::lt;
+    }
+    return folly::ordering::gt;
+  }
+};
+
+// The 'compare three way' operator.
+template <
+    typename Tag,
+    template <class...> class LessThanImpl = LessThan,
+    typename = void>
+struct CompareThreeWay : DefaultCompareThreeWay<Tag, LessThanImpl> {
+}; // Delegates by default.
+
 // Use bit_cast for floating point identical.
 template <typename F, typename I>
 struct FloatIdenticalTo {
@@ -320,8 +347,34 @@ struct CompareWith<
     type::cpp_type<std::unique_ptr<folly::IOBuf>, RUTag>>
     : CheckIOBufOp<LUTag, RUTag>, folly::IOBufCompare {};
 
+template <typename UTag>
+struct CompareWith<type::cpp_type<folly::IOBuf, UTag>>
+    : CheckIOBufOp<UTag, UTag>, folly::IOBufCompare {};
+
+template <typename UTag>
+struct CompareThreeWay<type::cpp_type<folly::IOBuf, UTag>>
+    : CheckIOBufOp<UTag, UTag>, folly::IOBufCompare {};
+
+template <typename UTag>
+struct CompareThreeWay<type::cpp_type<std::unique_ptr<folly::IOBuf>, UTag>>
+    : CheckIOBufOp<UTag, UTag>, folly::IOBufCompare {};
+
+template <class I1, class I2, class Cmp>
+auto lexicographicalCompareThreeWay(I1 f1, I1 l1, I2 f2, I2 l2, Cmp comp)
+    -> decltype(comp(*f1, *f2)) {
+  for (; f1 != l1 && f2 != l2; ++f1, ++f2) {
+    if (auto c = comp(*f1, *f2); c != folly::ordering::eq) {
+      return c;
+    }
+  }
+
+  return (f1 != l1) ? folly::ordering::gt
+      : (f2 != l2)  ? folly::ordering::lt
+                    : folly::ordering::eq;
+}
+
 template <class T, class Comp>
-[[maybe_unused]] bool sortAndLexicographicalCompare(
+[[maybe_unused]] folly::ordering sortAndLexicographicalCompareThreeWay(
     const T& lhs, const T& rhs, Comp&& comp) {
   std::vector<decltype(lhs.begin())> l, r;
   for (auto i = lhs.begin(); i != lhs.end(); ++i) {
@@ -331,26 +384,35 @@ template <class T, class Comp>
     r.push_back(i);
   }
   auto less = [&](auto lhsIter, auto rhsIter) {
+    return comp(*lhsIter, *rhsIter) == folly::ordering::lt;
+  };
+  auto compare_three_way = [&](auto lhsIter, auto rhsIter) {
     return comp(*lhsIter, *rhsIter);
   };
   std::sort(l.begin(), l.end(), less);
   std::sort(r.begin(), r.end(), less);
-  return std::lexicographical_compare(
-      l.begin(), l.end(), r.begin(), r.end(), less);
+  return lexicographicalCompareThreeWay(
+      l.begin(), l.end(), r.begin(), r.end(), compare_three_way);
 }
 
 template <class T, class E, template <class...> class LessThanImpl = LessThan>
 struct ListLessThan {
   bool operator()(const T& l, const T& r) const {
-    return std::lexicographical_compare(
-        l.begin(), l.end(), r.begin(), r.end(), LessThanImpl<E>{});
+    return lexicographicalCompareThreeWay(
+               l.begin(),
+               l.end(),
+               r.begin(),
+               r.end(),
+               CompareThreeWay<E, LessThanImpl>{}) == folly::ordering::lt;
   }
 };
 
 template <class T, class E, template <class...> class LessThanImpl = LessThan>
 struct SetLessThan {
   bool operator()(const T& lhs, const T& rhs) const {
-    return sortAndLexicographicalCompare(lhs, rhs, LessThanImpl<E>{});
+    return sortAndLexicographicalCompareThreeWay(
+               lhs, rhs, CompareThreeWay<E, LessThanImpl>{}) ==
+        folly::ordering::lt;
   }
 };
 
@@ -361,16 +423,16 @@ template <
     template <class...> class LessThanImpl = LessThan>
 struct MapLessThan {
   bool operator()(const T& lhs, const T& rhs) const {
-    auto less = [](const auto& l, const auto& r) {
-      if (LessThanImpl<K>{}(l.first, r.first)) {
-        return true;
+    auto compare_three_way = [](const auto& l, const auto& r) {
+      auto ret = CompareThreeWay<K, LessThanImpl>{}(l.first, r.first);
+      if (ret != folly::ordering::eq) {
+        return ret;
       }
-      if (LessThanImpl<K>{}(r.first, l.first)) {
-        return false;
-      }
-      return LessThanImpl<V>{}(l.second, r.second);
+      return CompareThreeWay<V, LessThanImpl>{}(l.second, r.second);
     };
-    return sortAndLexicographicalCompare(lhs, rhs, less);
+
+    return sortAndLexicographicalCompareThreeWay(lhs, rhs, compare_three_way) ==
+        folly::ordering::lt;
   }
 };
 
@@ -603,6 +665,24 @@ struct EqualTo<type::cpp_type<T, type::map<KTag, VTag>>>
 template <typename Tag, typename Context>
 struct IdenticalTo<type::field<Tag, Context>> : IdenticalTo<Tag> {};
 
+template <typename VTag>
+struct CompareThreeWay<type::list<VTag>> {
+  template <typename T = type::native_type<type::list<VTag>>>
+  folly::ordering operator()(const T& l, const T& r) const {
+    return lexicographicalCompareThreeWay(
+        l.begin(), l.end(), r.begin(), r.end(), CompareThreeWay<VTag>{});
+  }
+};
+
+template <typename VTag>
+struct CompareThreeWay<type::set<VTag>> {
+  template <typename T = type::native_type<type::set<VTag>>>
+  folly::ordering operator()(const T& l, const T& r) const {
+    return lexicographicalCompareThreeWay(
+        l.begin(), l.end(), r.begin(), r.end(), CompareThreeWay<VTag>{});
+  }
+};
+
 // Hooks for adapted types.
 template <typename Adapter, typename Tag>
 struct EqualTo<type::adapted<Adapter, Tag>> {
@@ -639,45 +719,74 @@ struct LessThan<type::adapted<Adapter, Tag>> {
   }
 };
 
+template <typename Adapter, typename Tag>
+struct CompareThreeWay<type::adapted<Adapter, Tag>> {
+  using adapted_tag = type::adapted<Adapter, Tag>;
+  static_assert(type::is_concrete_v<adapted_tag>, "");
+  template <typename T>
+  constexpr folly::ordering operator()(const T& lhs, const T& rhs) const {
+    if constexpr (adapt_detail::is_compare_three_way_adapter_v<Adapter, T>) {
+      return Adapter::compareThreeWay(lhs, rhs);
+    } else {
+      if (EqualTo<adapted_tag>{}(lhs, rhs)) {
+        return folly::ordering::eq;
+      } else if (LessThan<adapted_tag>{}(lhs, rhs)) {
+        return folly::ordering::lt;
+      }
+      return folly::ordering::gt;
+    }
+  }
+};
+
+template <typename T, template <class...> class LessThanImpl = LessThan>
+folly::ordering compareStructFields(const T& lhs, const T& rhs) {
+  folly::Optional<folly::ordering> result;
+  for_each_ordinal<T>([&](auto ord) {
+    if (result.has_value()) {
+      return;
+    }
+
+    using Ord = decltype(ord);
+    using Tag = get_type_tag<T, Ord>;
+    const auto* lhsValue = getValueOrNull(get<Ord>(lhs));
+    const auto* rhsValue = getValueOrNull(get<Ord>(rhs));
+
+    if (lhsValue == nullptr && rhsValue == nullptr) {
+      return;
+    }
+
+    if (lhsValue == nullptr) {
+      result = folly::ordering::lt;
+      return;
+    }
+
+    if (rhsValue == nullptr) {
+      result = folly::ordering::gt;
+      return;
+    }
+
+    auto ret = CompareThreeWay<Tag, LessThanImpl>{}(*lhsValue, *rhsValue);
+    if (ret != folly::ordering::eq) {
+      result = ret;
+    }
+  });
+
+  return result.value_or(folly::ordering::eq);
+}
+
+template <typename T>
+struct CompareThreeWay<type::struct_t<T>> {
+  folly::ordering operator()(const T& lhs, const T& rhs) const {
+    return compareStructFields<T>(lhs, rhs);
+  }
+};
+
 template <template <class...> class LessThanImpl = LessThan>
 struct StructLessThan {
   template <class T>
   bool operator()(const T& lhs, const T& rhs) const {
-    folly::Optional<bool> result;
-    for_each_ordinal<T>([&](auto ord) {
-      if (result.has_value()) {
-        return;
-      }
-
-      using Ord = decltype(ord);
-      using Tag = get_type_tag<T, Ord>;
-      const auto* lhsValue = getValueOrNull(get<Ord>(lhs));
-      const auto* rhsValue = getValueOrNull(get<Ord>(rhs));
-
-      if (lhsValue == nullptr && rhsValue == nullptr) {
-        return;
-      }
-
-      if (lhsValue == nullptr) {
-        result = true;
-        return;
-      }
-
-      if (rhsValue == nullptr) {
-        result = false;
-        return;
-      }
-
-      if (!EqualTo<Tag>{}(*lhsValue, *rhsValue)) {
-        result = LessThanImpl<Tag>{}(*lhsValue, *rhsValue);
-      }
-    });
-
-    if (result.has_value()) {
-      return *result;
-    }
-
-    return false;
+    return compareStructFields<T, LessThanImpl>(lhs, rhs) ==
+        folly::ordering::lt;
   }
 };
 

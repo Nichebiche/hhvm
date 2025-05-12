@@ -21,18 +21,12 @@
 #include "hphp/runtime/vm/jit/mcgen-translate.h"
 
 #include "hphp/runtime/vm/jit/prof-data.h"
-#include "hphp/runtime/vm/jit/smashable-instr.h"
 #include "hphp/runtime/vm/jit/tc-prologue.h"
-#include "hphp/runtime/vm/jit/tc-region.h"
 #include "hphp/runtime/vm/jit/vm-protect.h"
-#include "hphp/runtime/vm/jit/write-lease.h"
 
-#include "hphp/runtime/vm/resumable.h"
-
-#include "hphp/util/configs/eval.h"
 #include "hphp/util/trace.h"
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 /*
  * Given a callee and a number of args, match up to the callee's

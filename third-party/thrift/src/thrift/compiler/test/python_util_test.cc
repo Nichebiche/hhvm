@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <thrift/compiler/ast/t_field.h>
 #include <thrift/compiler/ast/t_primitive_type.h>
@@ -35,7 +35,7 @@ TEST(UtilTest, get_py3_name) {
       python::get_py3_name(t_field(t_primitive_type::t_i32(), "cpdef")));
 
   t_field f(t_primitive_type::t_i32(), "foo");
-  f.set_annotation("py3.name", "bar");
+  f.set_unstructured_annotation("py3.name", "bar");
   EXPECT_EQ("bar", python::get_py3_name(f));
 }
 

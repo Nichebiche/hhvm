@@ -228,6 +228,14 @@ Value* getOrCreateWithArgs(tbb::concurrent_unordered_map<Key, Value*>& map,
 }
 
 struct Impl {
+  ExportedCounter* getCounterIfExists(const std::string& name) {
+    ExportedCounter* ret = nullptr;
+    if (concurrentMapGet(m_counterMap, name, ret)) {
+      return ret;
+    }
+    return nullptr;
+  }
+
   ExportedCounter* createCounter(const std::string& name) {
     return getOrCreateWithArgs(m_counterMap, name);
   }
@@ -235,7 +243,7 @@ struct Impl {
   CounterHandle registerCounterCallback(CounterFunc func, bool expensive) {
     auto handle = folly::Random::rand32();
     SYNCHRONIZED(m_counterFuncs) {
-      while (m_counterFuncs.count(handle)) ++handle;
+      while (m_counterFuncs.contains(handle)) ++handle;
       m_counterFuncs.emplace(handle, std::make_pair(std::move(func), expensive));
     }
     return handle;
@@ -243,7 +251,7 @@ struct Impl {
 
   void deregisterCounterCallback(CounterHandle key) {
     SYNCHRONIZED(m_counterFuncs) {
-      assertx(m_counterFuncs.count(key) == 1);
+      assertx(m_counterFuncs.contains(key));
       m_counterFuncs.erase(key);
     }
   }
@@ -493,6 +501,10 @@ UNUSED const Impl& s_dummy = getServiceDataInstance();
 
 ExportedCounter* createCounter(const std::string& name) {
   return getServiceDataInstance().createCounter(name);
+}
+
+ExportedCounter* getCounterIfExists(const std::string& name) {
+  return getServiceDataInstance().getCounterIfExists(name);
 }
 
 CounterHandle registerCounterCallback(CounterFunc func, bool expensive) {

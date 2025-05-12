@@ -19,8 +19,6 @@
 #include <glog/logging.h>
 
 #include <folly/ExceptionWrapper.h>
-#include <folly/io/async/Request.h>
-#include <folly/synchronization/Baton.h>
 #include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/async/ResponseChannel.h>
 #include <thrift/lib/cpp2/transport/core/RpcMetadataPlugins.h>
@@ -66,7 +64,8 @@ void ThriftClient::sendRequestResponse(
     MethodMetadata&& methodMetadata,
     SerializedRequest&& serializedRequest,
     std::shared_ptr<THeader> header,
-    RequestClientCallback::Ptr cb) {
+    RequestClientCallback::Ptr cb,
+    std::unique_ptr<folly::IOBuf> /* unused */) {
   auto buf = LegacySerializedRequest(
                  header->getProtocolId(),
                  methodMetadata.name_view(),
@@ -86,7 +85,8 @@ void ThriftClient::sendRequestNoResponse(
     MethodMetadata&& methodMetadata,
     SerializedRequest&& serializedRequest,
     std::shared_ptr<THeader> header,
-    RequestClientCallback::Ptr cb) {
+    RequestClientCallback::Ptr cb,
+    std::unique_ptr<folly::IOBuf> /* unused */) {
   auto buf = LegacySerializedRequest(
                  header->getProtocolId(),
                  methodMetadata.name_view(),

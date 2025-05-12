@@ -13,7 +13,7 @@
 
 #include <folly/lang/Assume.h>
 
-namespace proxygen { namespace hq {
+namespace proxygen::hq {
 
 /*
  * HQFramedCodec encapsulates the core logic for interfacing with the HQ Framer,
@@ -240,14 +240,6 @@ class HQFramedCodec : public HTTPCodec {
   }
 
   // only valid for the Control Codec
-  size_t generatePriority(folly::IOBufQueue& /*writeBuf*/,
-                          StreamID /*stream*/,
-                          const HTTPMessage::HTTP2Priority& /*pri*/) override {
-    LOG(FATAL) << __func__ << " not supported on this codec";
-    folly::assume_unreachable();
-  }
-
-  // only valid for the Control Codec
   const HTTPSettings* getIngressSettings() const override {
     LOG(FATAL) << __func__ << " not supported on this codec";
     folly::assume_unreachable();
@@ -283,21 +275,6 @@ class HQFramedCodec : public HTTPCodec {
 
   // only valid on the Stream Codec
   bool isRequest(StreamID /*id*/) const {
-    LOG(FATAL) << __func__ << " not supported on this codec";
-    folly::assume_unreachable();
-  }
-
-  // only valid for the Control Codec
-  size_t addPriorityNodes(PriorityQueue& /*queue*/,
-                          folly::IOBufQueue& /*writeBuf*/,
-                          uint8_t /*maxLevel*/) override {
-    LOG(FATAL) << __func__ << " not supported on this codec";
-    folly::assume_unreachable();
-  }
-
-  // only valid for the Control Codec
-  HTTPCodec::StreamID mapPriorityToDependency(
-      uint8_t /*priority*/) const override {
     LOG(FATAL) << __func__ << " not supported on this codec";
     folly::assume_unreachable();
   }
@@ -402,4 +379,4 @@ class HQFramedCodec : public HTTPCodec {
   folly::Function<void()> resumeHook_;
 };
 
-}} // namespace proxygen::hq
+} // namespace proxygen::hq

@@ -33,17 +33,17 @@ var errFakeProtoWriteMessageEnd = errors.New("error writing message end from Fak
 var errFakeProtoFlush = errors.New("error flushing FakeProto")
 
 type fakeResponse struct {
-	types.IResponse
+	types.ReadableStruct
 	shouldReturnError bool
 }
 
 type fakeRequest struct {
-	types.IRequest
+	types.WritableStruct
 	shouldReturnError bool
 }
 
 type fakeProto struct {
-	types.Protocol
+	Protocol
 	method            string
 	typeID            types.MessageType
 	seqID             int32
@@ -99,8 +99,8 @@ func (f *fakeResponse) Read(proto types.Decoder) error {
 
 func TestSendMsgError(t *testing.T) {
 	testCases := []struct {
-		proto    types.Protocol
-		request  types.IRequest
+		proto    Protocol
+		request  types.WritableStruct
 		expected error
 	}{
 		// Bad WriteMessageBegin
@@ -142,8 +142,8 @@ func TestSendMsgError(t *testing.T) {
 
 func TestRecvMsgError(t *testing.T) {
 	testCases := []struct {
-		proto    types.Protocol
-		response types.IResponse
+		proto    Protocol
+		response types.ReadableStruct
 		expected error
 	}{
 		// Error reading message begin

@@ -24,7 +24,7 @@
                 ft_where_constraints = [];
                 ft_params =
                 [{ fp_pos = [4:28-30]; fp_name = (Some "$a");
-                   fp_type = (Rhint ([4:25-27]), (Tgeneric ("Ta", [])));
+                   fp_type = (Rhint ([4:25-27]), (Tgeneric "Ta"));
                    fp_flags =
                    { Typing_defs_flags.FunParam.accept_disposable = false;
                      inout = false; is_optional = false; readonly = false;
@@ -32,7 +32,7 @@
                    fp_def_value = None }
                   ];
                 ft_implicit_params = { capability = (CapDefaults [4:19-20]) };
-                ft_ret = (Rhint ([4:33-35]), (Tgeneric ("Ta", [])));
+                ft_ret = (Rhint ([4:33-35]), (Tgeneric "Ta"));
                 ft_flags =
                 { Typing_defs_flags.Fun.return_disposable = false;
                   async = false; generator = false; fun_kind = FSync;
@@ -45,7 +45,7 @@
           { Shallow_decl_defs.MethodFlags.abstract = false; final = false;
             override = false; dynamicallycallable = false;
             php_std_lib = false; support_dynamic_type = false;
-            no_auto_likes = false };
+            no_auto_likes = false; needs_concrete = false };
           sm_attributes = []; sm_sort_text = None };
          { Shallow_decl_defs.sm_name = ([8:19-20], "g");
            sm_type =
@@ -60,7 +60,7 @@
                  ft_where_constraints = [];
                  ft_params =
                  [{ fp_pos = [8:28-30]; fp_name = (Some "$b");
-                    fp_type = (Rhint ([8:25-27]), (Tgeneric ("Tb", [])));
+                    fp_type = (Rhint ([8:25-27]), (Tgeneric "Tb"));
                     fp_flags =
                     { Typing_defs_flags.FunParam.accept_disposable = false;
                       inout = false; is_optional = false; readonly = false;
@@ -69,7 +69,7 @@
                    ];
                  ft_implicit_params =
                  { capability = (CapDefaults [8:19-20]) };
-                 ft_ret = (Rhint ([8:33-35]), (Tgeneric ("Tb", [])));
+                 ft_ret = (Rhint ([8:33-35]), (Tgeneric "Tb"));
                  ft_flags =
                  { Typing_defs_flags.Fun.return_disposable = false;
                    async = false; generator = false; fun_kind = FSync;
@@ -82,7 +82,7 @@
            { Shallow_decl_defs.MethodFlags.abstract = false; final = false;
              override = false; dynamicallycallable = false;
              php_std_lib = false; support_dynamic_type = false;
-             no_auto_likes = false };
+             no_auto_likes = false; needs_concrete = false };
            sm_attributes = []; sm_sort_text = None }
          ];
        sc_user_attributes = []; sc_enum_type = None; sc_docs_url = None;

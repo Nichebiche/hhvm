@@ -15,6 +15,9 @@ import thrift.python.types as _fbthrift_python_types
 import thrift.python.exceptions as _fbthrift_python_exceptions
 
 
+import test.fixtures.basic.module.thrift_types
+import test.fixtures.basic.module.thrift_types as _fbthrift__test__fixtures__basic__module__thrift_types
+
 
 class EchoRequest(metaclass=_fbthrift_python_types.StructMeta):
     _fbthrift_SPEC = (
@@ -51,26 +54,26 @@ class EchoRequest(metaclass=_fbthrift_python_types.StructMeta):
         return self
 
     def _to_mutable_python(self):
-        import thrift.python.mutable_converter
+        from thrift.python import mutable_converter
         import importlib
         mutable_types = importlib.import_module("meta.example.thrift.service.thrift_mutable_types")
-        return thrift.python.mutable_converter.to_mutable_python_struct_or_union(mutable_types.EchoRequest, self)
+        return mutable_converter.to_mutable_python_struct_or_union(mutable_types.EchoRequest, self)
 
     def _to_py3(self):
         import importlib
         py3_types = importlib.import_module("meta.example.thrift.service.types")
-        import thrift.py3.converter
-        return thrift.py3.converter.to_py3_struct(py3_types.EchoRequest, self)
+        from thrift.py3 import converter
+        return converter.to_py3_struct(py3_types.EchoRequest, self)
 
     def _to_py_deprecated(self):
         import importlib
-        import thrift.util.converter
+        from thrift.util import converter
         try:
             py_deprecated_types = importlib.import_module("service.ttypes")
-            return thrift.util.converter.to_py_struct(py_deprecated_types.EchoRequest, self)
+            return converter.to_py_struct(py_deprecated_types.EchoRequest, self)
         except ModuleNotFoundError:
             py_asyncio_types = importlib.import_module("service.ttypes")
-            return thrift.util.converter.to_py_struct(py_asyncio_types.EchoRequest, self)
+            return converter.to_py_struct(py_asyncio_types.EchoRequest, self)
 
 _fbthrift_ABCMeta.register(_fbthrift_abstract_types.EchoRequest, EchoRequest)
 _fbthrift_EchoRequest = EchoRequest
@@ -110,26 +113,26 @@ class EchoResponse(metaclass=_fbthrift_python_types.StructMeta):
         return self
 
     def _to_mutable_python(self):
-        import thrift.python.mutable_converter
+        from thrift.python import mutable_converter
         import importlib
         mutable_types = importlib.import_module("meta.example.thrift.service.thrift_mutable_types")
-        return thrift.python.mutable_converter.to_mutable_python_struct_or_union(mutable_types.EchoResponse, self)
+        return mutable_converter.to_mutable_python_struct_or_union(mutable_types.EchoResponse, self)
 
     def _to_py3(self):
         import importlib
         py3_types = importlib.import_module("meta.example.thrift.service.types")
-        import thrift.py3.converter
-        return thrift.py3.converter.to_py3_struct(py3_types.EchoResponse, self)
+        from thrift.py3 import converter
+        return converter.to_py3_struct(py3_types.EchoResponse, self)
 
     def _to_py_deprecated(self):
         import importlib
-        import thrift.util.converter
+        from thrift.util import converter
         try:
             py_deprecated_types = importlib.import_module("service.ttypes")
-            return thrift.util.converter.to_py_struct(py_deprecated_types.EchoResponse, self)
+            return converter.to_py_struct(py_deprecated_types.EchoResponse, self)
         except ModuleNotFoundError:
             py_asyncio_types = importlib.import_module("service.ttypes")
-            return thrift.util.converter.to_py_struct(py_asyncio_types.EchoResponse, self)
+            return converter.to_py_struct(py_asyncio_types.EchoResponse, self)
 
 _fbthrift_ABCMeta.register(_fbthrift_abstract_types.EchoResponse, EchoResponse)
 _fbthrift_EchoResponse = EchoResponse
@@ -172,26 +175,26 @@ class WhisperException(metaclass=_fbthrift_python_exceptions.GeneratedErrorMeta)
         return self
 
     def _to_mutable_python(self):
-        import thrift.python.mutable_converter
+        from thrift.python import mutable_converter
         import importlib
         mutable_types = importlib.import_module("meta.example.thrift.service.thrift_mutable_types")
-        return thrift.python.mutable_converter.to_mutable_python_struct_or_union(mutable_types.WhisperException, self)
+        return mutable_converter.to_mutable_python_struct_or_union(mutable_types.WhisperException, self)
 
     def _to_py3(self):
         import importlib
         py3_types = importlib.import_module("meta.example.thrift.service.types")
-        import thrift.py3.converter
-        return thrift.py3.converter.to_py3_struct(py3_types.WhisperException, self)
+        from thrift.py3 import converter
+        return converter.to_py3_struct(py3_types.WhisperException, self)
 
     def _to_py_deprecated(self):
         import importlib
-        import thrift.util.converter
+        from thrift.util import converter
         try:
             py_deprecated_types = importlib.import_module("service.ttypes")
-            return thrift.util.converter.to_py_struct(py_deprecated_types.WhisperException, self)
+            return converter.to_py_struct(py_deprecated_types.WhisperException, self)
         except ModuleNotFoundError:
             py_asyncio_types = importlib.import_module("service.ttypes")
-            return thrift.util.converter.to_py_struct(py_asyncio_types.WhisperException, self)
+            return converter.to_py_struct(py_asyncio_types.WhisperException, self)
 _fbthrift_WhisperException = WhisperException
 
 # This unfortunately has to be down here to prevent circular imports
@@ -265,7 +268,89 @@ class _fbthrift_EchoService_echo_result(metaclass=_fbthrift_python_types.StructM
 
 
 
+
+class _fbthrift_ExtendedEchoService_echo_2_args(metaclass=_fbthrift_python_types.StructMeta):
+    _fbthrift_SPEC = (
+        _fbthrift_python_types.FieldInfo(
+            1,  # id
+            _fbthrift_python_types.FieldQualifier.Unqualified, # qualifier
+            "request",  # name
+            "request",  # python name (from @python.Name annotation)
+            lambda: _fbthrift_python_types.StructTypeInfo(EchoRequest),  # typeinfo
+            None,  # default value
+            None,  # adapter info
+            False, # field type is primitive
+            11, # IDL type (see BaseTypeEnum)
+        ),
+    )
+
+
+class _fbthrift_ExtendedEchoService_echo_2_result(metaclass=_fbthrift_python_types.StructMeta):
+    _fbthrift_SPEC = (
+        _fbthrift_python_types.FieldInfo(
+            0,  # id
+            _fbthrift_python_types.FieldQualifier.Optional, # qualifier
+            "success",  # name
+            "success", # name
+            lambda: _fbthrift_python_types.StructTypeInfo(EchoResponse),  # typeinfo
+            None,  # default value
+            None,  # adapter info
+            False, # field type is primitive
+        ),
+        _fbthrift_python_types.FieldInfo(
+            1,  # id
+            _fbthrift_python_types.FieldQualifier.Optional, # qualifier
+            "ex",  # name
+            "ex",  # python name (from @python.Name annotation)
+            lambda: _fbthrift_python_types.StructTypeInfo(WhisperException),  # typeinfo
+            None,  # default value
+            None,  # adapter info
+            False, # field type is primitive
+            11, # IDL type (see BaseTypeEnum)
+        ),
+    )
+
+
+
+
+class _fbthrift_ExtendedMyService_putDataById_2_args(metaclass=_fbthrift_python_types.StructMeta):
+    _fbthrift_SPEC = (
+        _fbthrift_python_types.FieldInfo(
+            1,  # id
+            _fbthrift_python_types.FieldQualifier.Unqualified, # qualifier
+            "id",  # name
+            "id",  # python name (from @python.Name annotation)
+            _fbthrift_python_types.typeinfo_i64,  # typeinfo
+            None,  # default value
+            None,  # adapter info
+            True, # field type is primitive
+            5, # IDL type (see BaseTypeEnum)
+        ),
+        _fbthrift_python_types.FieldInfo(
+            2,  # id
+            _fbthrift_python_types.FieldQualifier.Unqualified, # qualifier
+            "data",  # name
+            "data",  # python name (from @python.Name annotation)
+            _fbthrift_python_types.typeinfo_string,  # typeinfo
+            None,  # default value
+            None,  # adapter info
+            False, # field type is primitive
+            8, # IDL type (see BaseTypeEnum)
+        ),
+    )
+
+
+class _fbthrift_ExtendedMyService_putDataById_2_result(metaclass=_fbthrift_python_types.StructMeta):
+    _fbthrift_SPEC = (
+    )
+
+
+
 _fbthrift_python_types.fill_specs(
     _fbthrift_EchoService_echo_args,
     _fbthrift_EchoService_echo_result,
+    _fbthrift_ExtendedEchoService_echo_2_args,
+    _fbthrift_ExtendedEchoService_echo_2_result,
+    _fbthrift_ExtendedMyService_putDataById_2_args,
+    _fbthrift_ExtendedMyService_putDataById_2_result,
 )

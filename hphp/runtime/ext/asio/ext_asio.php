@@ -273,16 +273,10 @@ final class ExternalThreadEventWaitHandle extends WaitableWaitHandle<void> {
 }
 
 /**
- * Get index of the current scheduler context, or 0 if there is none.
+ * Get the depth of the current scheduler context, 0 if there is none.
  */
 <<__Native>>
-function asio_get_current_context_idx(): int;
-
-/**
- * Get currently running wait handle in a context specified by its index.
- */
-<<__Native>>
-function asio_get_running_in_context(int $ctx_idx): ResumableWaitHandle<mixed>;
+function asio_get_current_context_depth(): int;
 
 /**
  * Get currently running wait handle, or null if there is none.
@@ -346,13 +340,14 @@ function cancel<T>(Awaitable<T> $awaitable, \Exception $exception): bool;
  * Following conditions must be met to produce non-null backtrace:
  * - $awaitable has not finished yet (i.e. has_finished($awaitable) === false)
  * - $awaitable is part of valid scheduler context
- *     (i.e. $awaitable->getContextIdx() > 0)
+ *     (i.e. $awaitable->getContextStateIndex() > 0)
  * If either condition is not met, backtrace() returns null.
  *
  * @param $awaitable - Awaitable, to take backtrace from.
  * @param int $options - bitmask of the following options:
  *   DEBUG_BACKTRACE_PROVIDE_OBJECT
  *   DEBUG_BACKTRACE_PROVIDE_METADATA
+ *   DEBUG_BACKTRACE_ONLY_METADATA_FRAMES
  *   DEBUG_BACKTRACE_IGNORE_ARGS
  * @param int $limit - the maximum number of stack frames returned.
  *   By default (limit=0) it returns all stack frames.

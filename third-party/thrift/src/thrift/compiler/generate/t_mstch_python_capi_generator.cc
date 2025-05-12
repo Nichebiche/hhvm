@@ -118,8 +118,9 @@ std::string_view get_cpp_template(const t_node& node) {
   }
   if (auto type = type_of_node(node)) {
     // finds unstructured annotation template, if present
-    if (const auto* _template = type->get_true_type()->find_annotation_or_null(
-            {"cpp.template", "cpp2.template"})) {
+    if (const auto* _template =
+            type->get_true_type()->find_unstructured_annotation_or_null(
+                {"cpp.template", "cpp2.template"})) {
       return *_template;
     }
   }
@@ -145,6 +146,17 @@ inline std::string get_capi_include(
       "{}gen-python-capi/{}/thrift_types_capi.h",
       prefix.empty() ? this_prog->include_prefix() : prefix,
       prog->name());
+}
+
+const std::string& gen_capi_module_prefix(const t_program* program) {
+  static std::unordered_map<const t_program*, std::string> cache;
+  auto it = cache.find(program);
+  if (it != cache.end()) {
+    return it->second;
+  }
+  auto inserted =
+      cache.emplace(program, python::gen_capi_module_prefix_impl(program));
+  return inserted.first->second;
 }
 
 // Formats a field's type, or a sub-type
@@ -270,11 +282,13 @@ std::string format_marshal_type_unadapted(
         "::apache::thrift::python::capi::ComposedEnum<{}::{}>",
         cpp2::get_gen_namespace(*true_type->program()),
         cpp2::get_name(true_type));
-  } else if (true_type->is_struct() || true_type->is_exception()) {
+  } else if (true_type->is_struct_or_union() || true_type->is_exception()) {
     return fmt::format(
-        "::apache::thrift::python::capi::ComposedStruct<{}::{}>",
+        "::apache::thrift::python::capi::ComposedStruct<{}::{}, ::{}::NamespaceTag>",
         cpp2::get_gen_namespace(*true_type->program()),
-        cpp2::get_name(true_type));
+        cpp2::get_name(true_type),
+        gen_capi_module_prefix(true_type->program()));
+
   } else if (true_type->is_list()) {
     const auto* elem_type =
         dynamic_cast<const t_list*>(true_type)->get_elem_type();
@@ -336,13 +350,7 @@ class python_capi_mstch_program : public mstch_program {
     return a;
   }
 
-  mstch::node capi_module_prefix() {
-    std::string prefix = get_py3_namespace_with_name_and_prefix(
-        program_, get_option("root_module_prefix"), "__");
-    // kebab is not kosher in cpp fn names
-    std::replace(prefix.begin(), prefix.end(), '-', '_');
-    return prefix;
-  }
+  mstch::node capi_module_prefix() { return gen_capi_module_prefix(program_); }
 
   mstch::node module_path() {
     return get_py3_namespace_with_name_and_prefix(
@@ -458,7 +466,7 @@ class python_capi_mstch_struct : public mstch_struct {
             {"struct:marshal_capi?", &python_capi_mstch_struct::marshal_capi},
             {"struct:cpp_name", &python_capi_mstch_struct::cpp_name},
             {"struct:cpp_adapter?", &python_capi_mstch_struct::cpp_adapter},
-            {"struct:fields_size", &python_capi_mstch_struct::fields_size},
+            {"struct:num_fields", &python_capi_mstch_struct::num_fields},
             {"struct:tuple_positions",
              &python_capi_mstch_struct::tuple_positions},
         });
@@ -509,7 +517,7 @@ class python_capi_mstch_struct : public mstch_struct {
   }
 
   bool capi_eligible_type(const t_type* type) {
-    if (type->find_structured_annotation_or_null(kCppAdapterUri)) {
+    if (type->has_structured_annotation(kCppAdapterUri)) {
       return false;
     }
 
@@ -524,13 +532,15 @@ class python_capi_mstch_struct : public mstch_struct {
     // used on type or field
     // TODO: delete these if structured annotation migration completed
     if (const std::string* template_anno =
-            type->find_annotation_or_null({"cpp.template", "cpp2.template"})) {
+            type->find_unstructured_annotation_or_null(
+                {"cpp.template", "cpp2.template"})) {
       if (!is_supported_template(*template_anno)) {
         return false;
       }
     }
     if (const std::string* type_anno =
-            type->find_annotation_or_null({"cpp.type", "cpp2.type"})) {
+            type->find_unstructured_annotation_or_null(
+                {"cpp.type", "cpp2.type"})) {
       return is_type_iobuf(*type_anno);
     }
     if (type->is_list() &&
@@ -558,7 +568,7 @@ class python_capi_mstch_struct : public mstch_struct {
   }
 
   bool capi_eligible_field(const t_field& field) {
-    if (field.find_structured_annotation_or_null(kCppAdapterUri)) {
+    if (field.has_structured_annotation(kCppAdapterUri)) {
       return false;
     }
     if (const auto* cpp_type_anno =
@@ -609,7 +619,7 @@ class python_capi_mstch_struct : public mstch_struct {
     return cpp_resolver_.get_underlying_namespaced_name(*struct_);
   }
 
-  mstch::node fields_size() { return struct_->fields().size(); }
+  mstch::node num_fields() { return struct_->fields().size(); }
 
  private:
   cpp_name_resolver cpp_resolver_;

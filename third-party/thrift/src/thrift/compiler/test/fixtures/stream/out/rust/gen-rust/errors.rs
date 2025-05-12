@@ -76,7 +76,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -125,7 +125,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -181,7 +181,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -248,13 +248,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for StreamthrowsStreamError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -315,11 +315,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -393,13 +393,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for ServicethrowsError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -483,11 +483,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -537,7 +537,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -619,16 +619,16 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for Servicethrows2Error {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e1(ref inner) => {
+                Self::e1(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::e2(ref inner) => {
+                Self::e2(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -731,15 +731,15 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::e1(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::e1(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 2), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::e2(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::e2(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -790,7 +790,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -864,13 +864,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for BoththrowsError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -954,11 +954,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1025,13 +1025,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for BoththrowsStreamError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -1093,11 +1093,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1153,7 +1153,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1226,13 +1226,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for ResponseandstreamstreamthrowsStreamError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -1293,11 +1293,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1371,13 +1371,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for ResponseandstreamservicethrowsError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -1461,11 +1461,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1521,7 +1521,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1595,13 +1595,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for ResponseandstreamboththrowsError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -1685,11 +1685,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1762,13 +1762,13 @@ pub mod pub_sub_streaming_service {
     impl ::std::error::Error for ResponseandstreamboththrowsStreamError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::e(ref inner) => {
+                Self::e(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -1830,11 +1830,11 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::e(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1890,7 +1890,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -1939,7 +1939,7 @@ pub mod pub_sub_streaming_service {
                     }
                     ((::fbthrift::TType::I32, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(

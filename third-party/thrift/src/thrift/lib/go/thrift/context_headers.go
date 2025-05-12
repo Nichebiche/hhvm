@@ -18,9 +18,19 @@ package thrift
 
 import (
 	"context"
-	"fmt"
+	"maps"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+)
+
+// The headersKeyType type is unexported to prevent collisions with context keys.
+type headersKeyType int
+
+const (
+	// requestHeadersKey is a context key.
+	requestHeadersKey headersKeyType = 0
+	// responseHeadersKey is a context key.
+	responseHeadersKey headersKeyType = 1
 )
 
 // AddHeader adds a header to the context, which will be sent as part of the request.
@@ -28,7 +38,7 @@ import (
 // These headers are not persistent and will only be sent with the current request.
 func AddHeader(ctx context.Context, key string, value string) (context.Context, error) {
 	headersMap := make(map[string]string)
-	if headers := ctx.Value(types.HeadersKey); headers != nil {
+	if headers := ctx.Value(requestHeadersKey); headers != nil {
 		var ok bool
 		headersMap, ok = headers.(map[string]string)
 		if !ok {
@@ -36,62 +46,109 @@ func AddHeader(ctx context.Context, key string, value string) (context.Context, 
 		}
 	}
 	headersMap[key] = value
-	ctx = context.WithValue(ctx, types.HeadersKey, headersMap)
+	ctx = context.WithValue(ctx, requestHeadersKey, headersMap)
 	return ctx, nil
 }
 
 // WithHeaders attaches thrift headers to a ctx.
 func WithHeaders(ctx context.Context, headers map[string]string) context.Context {
-	storedHeaders := ctx.Value(types.HeadersKey)
+	storedHeaders := ctx.Value(requestHeadersKey)
 	if storedHeaders == nil {
-		return context.WithValue(ctx, types.HeadersKey, headers)
+		return context.WithValue(ctx, requestHeadersKey, headers)
 	}
 	headersMap, ok := storedHeaders.(map[string]string)
 	if !ok {
-		return context.WithValue(ctx, types.HeadersKey, headers)
+		return context.WithValue(ctx, requestHeadersKey, headers)
 	}
-	for k, v := range headers {
-		headersMap[k] = v
-	}
-	return context.WithValue(ctx, types.HeadersKey, headersMap)
+	maps.Copy(headersMap, headers)
+	return context.WithValue(ctx, requestHeadersKey, headersMap)
 }
 
 // SetHeaders replaces all the current headers.
 func SetHeaders(ctx context.Context, headers map[string]string) context.Context {
-	return context.WithValue(ctx, types.HeadersKey, headers)
+	return context.WithValue(ctx, requestHeadersKey, headers)
 }
 
 // GetHeaders gets thrift headers from ctx.
 func GetHeaders(ctx context.Context) map[string]string {
 	// check for headersKey
-	v, ok := ctx.Value(types.HeadersKey).(map[string]string)
+	v, ok := ctx.Value(requestHeadersKey).(map[string]string)
 	if ok {
 		return v
 	}
 	return nil
 }
 
-// setRequestHeaders sets the Headers in the protocol to send with the request.
-// These headers will be written via the Write method, inside the Call method for each generated request.
-// These Headers will be cleared with Flush, as they are not persistent.
-func setRequestHeaders(ctx context.Context, protocol types.Protocol) error {
+// NewResponseHeadersContext returns a new context with the response headers value.
+func NewResponseHeadersContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, responseHeadersKey, make(map[string]string))
+}
+
+// ResponseHeadersFromContext returns the response headers from the context.
+func ResponseHeadersFromContext(ctx context.Context) map[string]string {
 	if ctx == nil {
 		return nil
 	}
-	headers := ctx.Value(types.HeadersKey)
+	responseHeaders := ctx.Value(responseHeadersKey)
+	if responseHeaders == nil {
+		return nil
+	}
+	responseHeadersMap, ok := responseHeaders.(map[string]string)
+	if !ok {
+		return nil
+	}
+	return responseHeadersMap
+}
+
+// RequestHeadersFromContext returns the request headers from the context.
+func RequestHeadersFromContext(ctx context.Context) map[string]string {
+	if ctx == nil {
+		return nil
+	}
+	requestHeaders := ctx.Value(requestHeadersKey)
+	if requestHeaders == nil {
+		return nil
+	}
+	requestHeadersMap, ok := requestHeaders.(map[string]string)
+	if !ok {
+		return nil
+	}
+	return requestHeadersMap
+}
+
+// SetRequestHeaders sets the Headers in the protocol to send with the request.
+// These headers will be written via the Write method, inside the Call method for each generated request.
+// These Headers will be cleared with Flush, as they are not persistent.
+func SetRequestHeaders(ctx context.Context, protocol Protocol) error {
+	if ctx == nil {
+		return nil
+	}
+	headers := ctx.Value(requestHeadersKey)
 	if headers == nil {
 		return nil
 	}
 	headersMap, ok := headers.(map[string]string)
 	if !ok {
-		return types.NewTransportException(types.INVALID_HEADERS_TYPE, "Headers key in context value is not map[string]string")
-	}
-	p, ok := protocol.(types.RequestHeaders)
-	if !ok {
-		return types.NewTransportException(types.NOT_IMPLEMENTED, fmt.Sprintf("requestHeaders not implemented for transport type %T", protocol))
+		return NewTransportException(INVALID_HEADERS_TYPE, "Headers key in context value is not map[string]string")
 	}
 	for k, v := range headersMap {
-		p.SetRequestHeader(k, v)
+		protocol.setRequestHeader(k, v)
 	}
 	return nil
+}
+
+func setResponseHeaders(ctx context.Context, responseHeaders map[string]string) {
+	if ctx == nil {
+		return
+	}
+	responseHeadersMapIf := ctx.Value(responseHeadersKey)
+	if responseHeadersMapIf == nil {
+		return
+	}
+	responseHeadersMap, ok := responseHeadersMapIf.(map[string]string)
+	if !ok {
+		return
+	}
+
+	maps.Copy(responseHeadersMap, responseHeaders)
 }

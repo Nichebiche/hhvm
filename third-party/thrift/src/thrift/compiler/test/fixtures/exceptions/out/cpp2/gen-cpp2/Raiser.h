@@ -36,6 +36,8 @@ class RaiserServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::Raiser> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::Raiser>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "Raiser"; }
 
@@ -91,6 +93,13 @@ class ServiceHandler<::cpp2::Raiser> : public apache::thrift::ServerInterface {
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_get500{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::Raiser, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\x75\x1a\x2c\xda\xc4\xdb\xff\x78\x5d\xcd\xcc\x07\x4e\x97\x5c\x23", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

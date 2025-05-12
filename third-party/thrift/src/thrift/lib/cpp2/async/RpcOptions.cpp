@@ -286,4 +286,22 @@ RpcOptions::Checksum RpcOptions::getChecksum() const {
   return checksum_;
 }
 
+RpcOptions& RpcOptions::setForceSyncOnFiber(bool forceSyncOnFiber) {
+  forceSyncOnFiber_ = forceSyncOnFiber;
+  return *this;
+}
+
+bool RpcOptions::getForceSyncOnFiber() const {
+  return forceSyncOnFiber_;
+}
+
+RpcOptions& RpcOptions::setMetricsToCollect(
+    std::shared_ptr<void> metricsToCollect) {
+  metricsToCollect_ = std::move(metricsToCollect);
+  return *this;
+}
+
+const std::shared_ptr<void>& RpcOptions::getMetricsToCollect() const {
+  return metricsToCollect_;
+}
 } // namespace apache::thrift

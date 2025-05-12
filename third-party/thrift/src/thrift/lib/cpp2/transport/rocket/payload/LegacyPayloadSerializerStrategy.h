@@ -29,6 +29,8 @@ class LegacyPayloadSerializerStrategy final
  public:
   LegacyPayloadSerializerStrategy() : PayloadSerializerStrategy(*this) {}
 
+  bool supportsChecksum() { return false; }
+
   template <class T>
   FOLLY_ERASE folly::Try<T> unpackAsCompressed(
       rocket::Payload&& payload, bool decodeMetadataUsingBinary) {
@@ -92,6 +94,20 @@ class LegacyPayloadSerializerStrategy final
         std::move(fds),
         encodeMetadataUsingBinary,
         transport);
+  }
+
+  std::unique_ptr<folly::IOBuf> compressBuffer(
+      std::unique_ptr<folly::IOBuf>&& buffer,
+      CompressionAlgorithm compressionAlgorithm) {
+    return CompressionManager().compressBuffer(
+        std::move(buffer), compressionAlgorithm);
+  }
+
+  std::unique_ptr<folly::IOBuf> uncompressBuffer(
+      std::unique_ptr<folly::IOBuf>&& buffer,
+      CompressionAlgorithm compressionAlgorithm) {
+    return CompressionManager().uncompressBuffer(
+        std::move(buffer), compressionAlgorithm);
   }
 };
 

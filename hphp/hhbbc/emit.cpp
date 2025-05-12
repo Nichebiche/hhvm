@@ -31,14 +31,11 @@
 #include "hphp/hhbbc/context.h"
 #include "hphp/hhbbc/func-util.h"
 #include "hphp/hhbbc/index.h"
-#include "hphp/hhbbc/options.h"
 #include "hphp/hhbbc/representation.h"
-#include "hphp/hhbbc/type-structure.h"
 #include "hphp/hhbbc/unit-util.h"
 
 #include "hphp/runtime/base/array-data.h"
 #include "hphp/runtime/base/repo-auth-type.h"
-#include "hphp/runtime/base/tv-comparisons.h"
 
 #include "hphp/runtime/ext/extension-registry.h"
 
@@ -53,7 +50,7 @@
 
 namespace HPHP::HHBBC {
 
-TRACE_SET_MOD(hhbbc_emit);
+TRACE_SET_MOD(hhbbc_emit)
 
 namespace {
 
@@ -236,7 +233,7 @@ bool handleEquivalent(const php::Func& func, ExnNodeId eh1, ExnNodeId eh2) {
   }
 
   return true;
-};
+}
 
 // The common parent P of eh1 and eh2 is the deepest region such that
 // eh1 and eh2 are both handle-equivalent to P or a child of P
@@ -253,7 +250,7 @@ ExnNodeId commonParent(const php::Func& func, ExnNodeId eh1, ExnNodeId eh2) {
     eh2 = func.exnNodes[eh2].parent;
   }
   return eh1;
-};
+}
 
 const StaticString
   s_hhbbc_fail_verification("__hhvm_intrinsics\\hhbbc_fail_verification");
@@ -430,14 +427,14 @@ EmitBcInfo emit_bytecode(EmitUnitState& euState, UnitEmitter& ue, FuncEmitter& f
 #define IMM_IA(n)      fe.emitIVA(data.iter##n);
 #define IMM_DA(n)      fe.emitDouble(data.dbl##n);
 #define IMM_SA(n)      fe.emitInt32(ue.mergeLitstr(data.str##n));
-#define IMM_RATA(n)    encodeRAT(fe, data.rat);
+#define IMM_RATA(n)    encodeRAT(fe, ue, data.rat);
 #define IMM_AA(n)      fe.emitInt32(ue.mergeArray(data.arr##n));
 #define IMM_OA_IMPL(n) fe.emitByte(static_cast<uint8_t>(data.subop##n));
 #define IMM_OA(type)   IMM_OA_IMPL
 #define IMM_BA(n)      targets[numTargets++] = data.target##n; \
                        emit_branch(data.target##n);
 #define IMM_VSA(n)     emit_vsa(data.keys);
-#define IMM_KA(n)      encode_member_key(make_member_key(data.mkey), fe);
+#define IMM_KA(n)      encode_member_key(make_member_key(data.mkey), fe, ue);
 #define IMM_LAR(n)     emit_lar(data.locrange);
 #define IMM_ITA(n)     encodeIterArgs(fe, data.ita);
 #define IMM_FCA(n)     encodeFCallArgs(                                 \
@@ -697,6 +694,7 @@ void emit_locals_and_params(FuncEmitter& fe, const php::Func& func,
       pinfo.phpCode = param.phpCode;
       pinfo.userAttributes = param.userAttributes;
       if (param.inout) pinfo.setFlag(Func::ParamInfo::Flags::InOut);
+      if (param.outOnly) pinfo.setFlag(Func::ParamInfo::Flags::OutOnly);
       if (param.readonly) pinfo.setFlag(Func::ParamInfo::Flags::Readonly);
       if (param.isVariadic) pinfo.setFlag(Func::ParamInfo::Flags::Variadic);
       if (param.isOptional) pinfo.setFlag(Func::ParamInfo::Flags::Optional);
@@ -971,8 +969,7 @@ void emit_finish_func(EmitUnitState& state, FuncEmitter& fe,
   fe.userAttributes = func.userAttributes;
   fe.retUserType = func.returnUserType;
   fe.retTypeConstraints = func.retTypeConstraints;
-  fe.originalFilename =
-    func.originalFilename ? func.originalFilename :
+  fe.originalUnit =
     func.originalUnit ? func.originalUnit : nullptr;
   fe.originalModuleName = func.originalModuleName;
   fe.requiresFromOriginalModule = func.requiresFromOriginalModule;
@@ -1037,12 +1034,13 @@ void renumber_locals(php::Func& func) {
   }
 }
 
-void emit_init_func(FuncEmitter& fe, const php::Func& func) {
+void emit_init_func(UnitEmitter& ue, FuncEmitter& fe, const php::Func& func) {
   fe.init(
     std::get<0>(func.srcInfo.loc),
     std::get<1>(func.srcInfo.loc),
     func.attrs | (func.sampleDynamicCalls ? AttrDynamicallyCallable : AttrNone),
-    func.srcInfo.docComment
+    func.srcInfo.docComment,
+    ue.isSystemLib()
   );
 }
 
@@ -1051,7 +1049,7 @@ void emit_func(EmitUnitState& state, UnitEmitter& ue,
   FTRACE(2,  "    func {}\n", f.name->data());
   assertx(f.attrs & AttrPersistent);
   renumber_locals(f);
-  emit_init_func(fe, f);
+  emit_init_func(ue, fe, f);
   auto func = php::WideFunc::mut(&f);
   auto const info = emit_bytecode(state, ue, fe, func);
   emit_finish_func(state, fe, func, info);
@@ -1067,7 +1065,8 @@ void emit_class(EmitUnitState& state, UnitEmitter& ue, PreClassEmitter* pce,
     cls.attrs |
       (cls.sampleDynamicConstruct ? AttrDynamicallyConstructible : AttrNone),
     cls.parentName ? cls.parentName : staticEmptyString(),
-    cls.srcInfo.docComment
+    cls.srcInfo.docComment,
+    ue.isSystemLib()
   );
   pce->setUserAttributes(cls.userAttributes);
 

@@ -93,6 +93,7 @@ void swap([[maybe_unused]] MyStruct& a, [[maybe_unused]] MyStruct& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -101,6 +102,7 @@ template void MyStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace facebook::thrift::test::terse_write::deprecated
@@ -210,6 +212,7 @@ void swap(MyUnion& a, MyUnion& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyUnion::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyUnion::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyUnion::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -218,6 +221,7 @@ template void MyUnion::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyUnion::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyUnion::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyUnion::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace facebook::thrift::test::terse_write::deprecated
@@ -339,8 +343,8 @@ void StructLevelTerseStruct::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -355,8 +359,8 @@ void StructLevelTerseStruct::__fbthrift_clear_terse_fields() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -409,6 +413,7 @@ void swap([[maybe_unused]] StructLevelTerseStruct& a, [[maybe_unused]] StructLev
   swap(a.__fbthrift_field_union_field, b.__fbthrift_field_union_field);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void StructLevelTerseStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t StructLevelTerseStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t StructLevelTerseStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -417,6 +422,7 @@ template void StructLevelTerseStruct::readNoXfer<>(apache::thrift::CompactProtoc
 template uint32_t StructLevelTerseStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t StructLevelTerseStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t StructLevelTerseStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -622,8 +628,8 @@ void FieldLevelTerseStruct::__fbthrift_clear() {
   this->__fbthrift_field_terse_long_field = ::std::int64_t();
   this->__fbthrift_field_terse_float_field = float();
   this->__fbthrift_field_terse_double_field = double();
-  this->__fbthrift_field_terse_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_terse_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_terse_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_terse_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_terse_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_terse_list_field.clear();
   this->__fbthrift_field_terse_set_field.clear();
@@ -635,8 +641,8 @@ void FieldLevelTerseStruct::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -653,8 +659,8 @@ void FieldLevelTerseStruct::__fbthrift_clear_terse_fields() {
   this->__fbthrift_field_terse_long_field = ::std::int64_t();
   this->__fbthrift_field_terse_float_field = float();
   this->__fbthrift_field_terse_double_field = double();
-  this->__fbthrift_field_terse_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_terse_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_terse_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_terse_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_terse_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_terse_list_field.clear();
   this->__fbthrift_field_terse_set_field.clear();
@@ -830,6 +836,7 @@ void swap([[maybe_unused]] FieldLevelTerseStruct& a, [[maybe_unused]] FieldLevel
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void FieldLevelTerseStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t FieldLevelTerseStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t FieldLevelTerseStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -838,6 +845,7 @@ template void FieldLevelTerseStruct::readNoXfer<>(apache::thrift::CompactProtoco
 template uint32_t FieldLevelTerseStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t FieldLevelTerseStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t FieldLevelTerseStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -963,6 +971,7 @@ void swap([[maybe_unused]] CppRefStructFields& a, [[maybe_unused]] CppRefStructF
   swap(a.__fbthrift_field_struct_ref_field, b.__fbthrift_field_struct_ref_field);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void CppRefStructFields::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t CppRefStructFields::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t CppRefStructFields::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -971,6 +980,7 @@ template void CppRefStructFields::readNoXfer<>(apache::thrift::CompactProtocolRe
 template uint32_t CppRefStructFields::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t CppRefStructFields::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t CppRefStructFields::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -1026,8 +1036,8 @@ DeprecatedTerseWriteWithCustomDefault::DeprecatedTerseWriteWithCustomDefault() :
     __fbthrift_field_long_field(static_cast<::std::int64_t>(42)),
     __fbthrift_field_float_field(static_cast<float>(42)),
     __fbthrift_field_double_field(static_cast<double>(42)),
-    __fbthrift_field_string_field(apache::thrift::StringTraits<std::string>::fromStringLiteral("hello")),
-    __fbthrift_field_binary_field(apache::thrift::StringTraits<std::string>::fromStringLiteral("world")),
+    __fbthrift_field_string_field(apache::thrift::StringTraits<::std::string>::fromStringLiteral("hello")),
+    __fbthrift_field_binary_field(apache::thrift::StringTraits<::std::string>::fromStringLiteral("world")),
     __fbthrift_field_enum_field( ::facebook::thrift::test::terse_write::deprecated::MyEnum::ME1),
     __fbthrift_field_list_field(std::initializer_list<::std::int16_t>{ static_cast<::std::int16_t>(1) }),
     __fbthrift_field_set_field(std::initializer_list<::std::int16_t>{ static_cast<::std::int16_t>(1) }),
@@ -1112,8 +1122,8 @@ void DeprecatedTerseWriteWithCustomDefault::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -1263,6 +1273,7 @@ void swap([[maybe_unused]] DeprecatedTerseWriteWithCustomDefault& a, [[maybe_unu
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void DeprecatedTerseWriteWithCustomDefault::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t DeprecatedTerseWriteWithCustomDefault::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t DeprecatedTerseWriteWithCustomDefault::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1271,6 +1282,7 @@ template void DeprecatedTerseWriteWithCustomDefault::readNoXfer<>(apache::thrift
 template uint32_t DeprecatedTerseWriteWithCustomDefault::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t DeprecatedTerseWriteWithCustomDefault::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t DeprecatedTerseWriteWithCustomDefault::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace facebook::thrift::test::terse_write::deprecated
@@ -1320,8 +1332,8 @@ DeprecatedTerseWriteWithRedundantCustomDefault::DeprecatedTerseWriteWithRedundan
     __fbthrift_field_long_field(static_cast<::std::int64_t>(0)),
     __fbthrift_field_float_field(static_cast<float>(0)),
     __fbthrift_field_double_field(static_cast<double>(0)),
-    __fbthrift_field_string_field(apache::thrift::StringTraits<std::string>::fromStringLiteral("")),
-    __fbthrift_field_binary_field(apache::thrift::StringTraits<std::string>::fromStringLiteral("")),
+    __fbthrift_field_string_field(apache::thrift::StringTraits<::std::string>::fromStringLiteral("")),
+    __fbthrift_field_binary_field(apache::thrift::StringTraits<::std::string>::fromStringLiteral("")),
     __fbthrift_field_enum_field( ::facebook::thrift::test::terse_write::deprecated::MyEnum::ME0) {
 }
 
@@ -1403,8 +1415,8 @@ void DeprecatedTerseWriteWithRedundantCustomDefault::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::facebook::thrift::test::terse_write::deprecated::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -1554,6 +1566,7 @@ void swap([[maybe_unused]] DeprecatedTerseWriteWithRedundantCustomDefault& a, [[
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void DeprecatedTerseWriteWithRedundantCustomDefault::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t DeprecatedTerseWriteWithRedundantCustomDefault::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t DeprecatedTerseWriteWithRedundantCustomDefault::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1562,6 +1575,7 @@ template void DeprecatedTerseWriteWithRedundantCustomDefault::readNoXfer<>(apach
 template uint32_t DeprecatedTerseWriteWithRedundantCustomDefault::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t DeprecatedTerseWriteWithRedundantCustomDefault::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t DeprecatedTerseWriteWithRedundantCustomDefault::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace facebook::thrift::test::terse_write::deprecated

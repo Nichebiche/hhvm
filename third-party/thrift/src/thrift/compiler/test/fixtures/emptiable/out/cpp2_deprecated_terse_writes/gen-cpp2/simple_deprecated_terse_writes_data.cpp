@@ -6,32 +6,11 @@
  */
 
 #include "thrift/compiler/test/fixtures/emptiable/gen-cpp2/simple_deprecated_terse_writes_data.h"
+#include "thrift/compiler/test/fixtures/emptiable/gen-cpp2/simple_deprecated_terse_writes_constants.h"
 
 #include <thrift/lib/cpp2/gen/module_data_cpp.h>
 
-FOLLY_CLANG_DISABLE_WARNING("-Wunused-macros")
-
-#if defined(__GNUC__) && defined(__linux__) && !FOLLY_MOBILE
-// These attributes are applied to the static data members to ensure that they
-// are not stripped from the compiled binary, in order to keep them available
-// for use by debuggers at runtime.
-//
-// The "used" attribute is required to ensure the compiler always emits unused
-// data.
-//
-// The "section" attribute is required to stop the linker from stripping used
-// data. It works by forcing all of the data members (both used and unused ones)
-// into the same section. As the linker strips data on a per-section basis, it
-// is then unable to remove unused data without also removing used data.
-// This has a similar effect to the "retain" attribute, but works with older
-// toolchains.
-#define THRIFT_DATA_MEMBER [[gnu::used]] [[gnu::section(".rodata.thrift.data")]]
-#else
-#define THRIFT_DATA_MEMBER
-#endif
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 THRIFT_DATA_MEMBER const std::string_view TStructDataStorage<::apache::thrift::test::MyStruct>::name = "MyStruct";
 THRIFT_DATA_MEMBER const std::array<std::string_view, 0> TStructDataStorage<::apache::thrift::test::MyStruct>::fields_names = { {
@@ -39,8 +18,6 @@ THRIFT_DATA_MEMBER const std::array<std::string_view, 0> TStructDataStorage<::ap
 THRIFT_DATA_MEMBER const std::array<int16_t, 0> TStructDataStorage<::apache::thrift::test::MyStruct>::fields_ids = { {
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 0> TStructDataStorage<::apache::thrift::test::MyStruct>::fields_types = { {
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 0> TStructDataStorage<::apache::thrift::test::MyStruct>::storage_names = { {
 }};
 THRIFT_DATA_MEMBER const std::array<int, 0> TStructDataStorage<::apache::thrift::test::MyStruct>::isset_indexes = { {
 }};
@@ -93,22 +70,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 14> TStructDataStorage<::ap
   TType::T_SET,
   TType::T_MAP,
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 14> TStructDataStorage<::apache::thrift::test::EmptiableStruct>::storage_names = { {
-  "__fbthrift_field_bool_field"sv,
-  "__fbthrift_field_byte_field"sv,
-  "__fbthrift_field_short_field"sv,
-  "__fbthrift_field_int_field"sv,
-  "__fbthrift_field_long_field"sv,
-  "__fbthrift_field_float_field"sv,
-  "__fbthrift_field_double_field"sv,
-  "__fbthrift_field_string_field"sv,
-  "__fbthrift_field_binary_field"sv,
-  "__fbthrift_field_enum_field"sv,
-  "__fbthrift_field_list_field"sv,
-  "__fbthrift_field_set_field"sv,
-  "__fbthrift_field_map_field"sv,
-  "__fbthrift_field_struct_field"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 14> TStructDataStorage<::apache::thrift::test::EmptiableStruct>::isset_indexes = { {
   0,
@@ -176,22 +137,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 14> TStructDataStorage<::ap
   TType::T_MAP,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 14> TStructDataStorage<::apache::thrift::test::NotEmptiableStruct>::storage_names = { {
-  "__fbthrift_field_bool_field"sv,
-  "__fbthrift_field_byte_field"sv,
-  "__fbthrift_field_short_field"sv,
-  "__fbthrift_field_int_field"sv,
-  "__fbthrift_field_long_field"sv,
-  "__fbthrift_field_float_field"sv,
-  "__fbthrift_field_double_field"sv,
-  "__fbthrift_field_string_field"sv,
-  "__fbthrift_field_binary_field"sv,
-  "__fbthrift_field_enum_field"sv,
-  "__fbthrift_field_list_field"sv,
-  "__fbthrift_field_set_field"sv,
-  "__fbthrift_field_map_field"sv,
-  "__fbthrift_field_struct_field"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 14> TStructDataStorage<::apache::thrift::test::NotEmptiableStruct>::isset_indexes = { {
   0,
   1,
@@ -209,5 +154,19 @@ THRIFT_DATA_MEMBER const std::array<int, 14> TStructDataStorage<::apache::thrift
   13,
 }};
 
-} // namespace thrift
-} // namespace apache
+namespace detail {
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::apache::thrift::test::MyStruct, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::apache::thrift::test::EmptiableStruct, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::apache::thrift::test::NotEmptiableStruct, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::apache::thrift::test::MyEnum, true>::bundle)() =
+    nullptr;
+
+} // namespace detail
+} // namespace apache::thrift

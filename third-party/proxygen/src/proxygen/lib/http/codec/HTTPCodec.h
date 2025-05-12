@@ -278,14 +278,6 @@ class HTTPCodec {
     }
 
     /**
-     * Called upon receipt of a priority frame, for protocols that support
-     * dynamic priority
-     */
-    virtual void onPriority(StreamID /* stream */,
-                            const HTTPMessage::HTTP2Priority& /* pri */) {
-    }
-
-    /**
      * Experimental: this is the new HTTP Priority draft format of priority
      * update. This is called when a PRIORITY_UPDATE frame is received.
      */
@@ -731,15 +723,6 @@ class HTTPCodec {
     return 0;
   }
 
-  /*
-   * Generate a PRIORITY message, if supported
-   */
-  virtual size_t generatePriority(folly::IOBufQueue& /* writeBuf */,
-                                  StreamID /* stream */,
-                                  const HTTPMessage::HTTP2Priority& /* pri */) {
-    return 0;
-  }
-
   /**
    * Generate a PRIORITY_UPDATE frame, according to the new HTTP priority
    * draft, if supported.
@@ -818,33 +801,6 @@ class HTTPCodec {
    * Get the default size of flow control windows for this protocol
    */
   virtual uint32_t getDefaultWindowSize() const {
-    return 0;
-  }
-
-  /**
-   * Create virtual nodes in HTTP/2 priority tree. Some protocols (SPDY) have a
-   * linear priority structure which must be simulated in the HTTP/2 tree
-   * structure with "virtual" nodes representing different priority bands.
-   * There are other cases we simply want a "plain" linear priority structure
-   * even with HTTP/2. In that case a Priority frame will also be sent out for
-   * each virtual node created so that peer will have the same linear structure.
-   *
-   * @param queue     the priority queue to add nodes
-   * @param writeBuf  IOBufQueue to append priority frames to send. For SPDY,
-   *                    the writeBuf will be ignored.
-   * @param maxLavel  the max level of virtual priority nodes to create. For
-   *                    SPDY, this value will be ignored.
-   */
-  virtual size_t addPriorityNodes(PriorityQueue& /* queue */,
-                                  folly::IOBufQueue& /* writeBuf */,
-                                  uint8_t /* maxLevel */) {
-    return 0;
-  }
-
-  /**
-   * Map the given linear priority to the correct parent node dependency
-   */
-  virtual StreamID mapPriorityToDependency(uint8_t /* priority */) const {
     return 0;
   }
 

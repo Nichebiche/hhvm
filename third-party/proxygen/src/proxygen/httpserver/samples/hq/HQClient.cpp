@@ -11,7 +11,6 @@
 #include <fstream>
 #include <ostream>
 #include <string>
-#include <thread>
 
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBaseManager.h>
@@ -22,14 +21,12 @@
 #include <proxygen/httpserver/samples/hq/H1QUpstreamSession.h>
 #include <proxygen/httpserver/samples/hq/HQLoggerHelper.h>
 #include <proxygen/httpserver/samples/hq/InsecureVerifierDangerousDoNotUseInProduction.h>
-#include <proxygen/lib/http/codec/HTTP1xCodec.h>
 #include <proxygen/lib/utils/UtilInl.h>
 #include <quic/api/QuicSocket.h>
 #include <quic/client/QuicClientTransport.h>
 #include <quic/common/udpsocket/FollyQuicAsyncUDPSocket.h>
 #include <quic/congestion_control/CongestionControllerFactory.h>
 #include <quic/fizz/client/handshake/FizzClientQuicHandshakeContext.h>
-#include <quic/logging/FileQLogger.h>
 
 namespace quic::samples {
 
@@ -253,7 +250,7 @@ void HQClient::sendKnobFrame(const folly::StringPiece str) {
   }
   uint64_t knobSpace = 0xfaceb00c;
   uint64_t knobId = 100;
-  Buf buf(folly::IOBuf::create(str.size()));
+  BufPtr buf(folly::IOBuf::create(str.size()));
   memcpy(buf->writableData(), str.data(), str.size());
   buf->append(str.size());
   VLOG(10) << "Sending Knob Frame to peer. KnobSpace: " << std::hex << knobSpace

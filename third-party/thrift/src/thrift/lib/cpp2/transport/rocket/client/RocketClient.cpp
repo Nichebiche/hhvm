@@ -17,14 +17,12 @@
 #include <thrift/lib/cpp2/transport/rocket/client/RocketClient.h>
 
 #include <chrono>
-#include <functional>
 #include <limits>
 #include <string>
 #include <utility>
 
 #include <fmt/core.h>
 #include <folly/Conv.h>
-#include <folly/CppAttributes.h>
 #include <folly/ExceptionWrapper.h>
 #include <folly/GLog.h>
 #include <folly/Likely.h>
@@ -44,14 +42,15 @@
 #include <thrift/lib/cpp2/transport/rocket/RocketException.h>
 #include <thrift/lib/cpp2/transport/rocket/Types.h>
 #include <thrift/lib/cpp2/transport/rocket/client/RequestContext.h>
+#include <thrift/lib/cpp2/transport/rocket/compression/CustomCompressorRegistry.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/Frames.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/Util.h>
-#include <thrift/lib/cpp2/transport/rocket/payload/PayloadSerializer.h>
+#include <thrift/lib/thrift/gen-cpp2/RpcMetadata_constants.h>
 #include <thrift/lib/thrift/gen-cpp2/RpcMetadata_types.h>
 
-THRIFT_FLAG_DEFINE_int64(rocket_server_version_timeout_ms, 500);
-THRIFT_FLAG_DEFINE_bool(rocket_client_enable_keep_alive, true);
+THRIFT_FLAG_DEFINE_bool(rocket_client_new_protocol_key, true);
 THRIFT_FLAG_DEFINE_bool(rocket_client_binary_rpc_metadata_encoding, false);
+THRIFT_FLAG_DEFINE_bool(rocket_client_rocket_skip_protocol_key, false);
 
 namespace apache::thrift {
 
@@ -88,12 +87,59 @@ folly::exception_wrapper makeContractViolation(std::string msg) {
           STREAMING_CONTRACT_VIOLATION,
       std::move(msg));
 }
+
+std::unique_ptr<rocket::SetupFrame> makeSetupFrame(
+    RequestSetupMetadata const& meta) {
+  uint32_t serialized_size;
+  folly::IOBufQueue paramQueue;
+
+  bool encodeMetadataUsingBinary =
+      THRIFT_FLAG(rocket_client_binary_rpc_metadata_encoding);
+
+  if (meta.encodeMetadataUsingBinary().has_value()) {
+    encodeMetadataUsingBinary = meta.encodeMetadataUsingBinary().value();
+  }
+
+  // TODO: migrate this to
+  if (encodeMetadataUsingBinary) {
+    BinaryProtocolWriter binaryProtocolWriter;
+    binaryProtocolWriter.setOutput(&paramQueue);
+    meta.write(&binaryProtocolWriter);
+    serialized_size = meta.serializedSize(&binaryProtocolWriter);
+  } else {
+    CompactProtocolWriter compactProtocolWriter;
+    compactProtocolWriter.setOutput(&paramQueue);
+    meta.write(&compactProtocolWriter);
+    serialized_size = meta.serializedSize(&compactProtocolWriter);
+  }
+
+  // Serialize RocketClient's major/minor version (which is separate from the
+  // rsocket protocol major/minor version) into setup metadata.
+  auto buf = folly::IOBuf::createCombined(sizeof(int32_t) + serialized_size);
+  folly::IOBufQueue queue;
+  queue.append(std::move(buf));
+  folly::io::QueueAppender appender(&queue, /* do not grow */ 0);
+  if (!THRIFT_FLAG(rocket_client_rocket_skip_protocol_key)) {
+    const uint32_t protocolKey = THRIFT_FLAG(rocket_client_new_protocol_key)
+        ? RpcMetadata_constants::kRocketProtocolKey()
+        : 1;
+
+    appender.writeBE<uint32_t>(protocolKey); // Rocket protocol key
+  }
+  // Append serialized setup parameters to setup frame metadata
+  appender.insert(paramQueue.move());
+
+  return std::make_unique<SetupFrame>(
+      rocket::Payload::makeFromMetadataAndData(queue.move(), {}),
+      encodeMetadataUsingBinary);
+}
+
 } // namespace
 
 RocketClient::RocketClient(
     folly::EventBase& evb,
     folly::AsyncTransport::UniquePtr socket,
-    std::unique_ptr<SetupFrame> setupFrame,
+    RequestSetupMetadata&& setupMetadata,
     int32_t keepAliveTimeoutMs,
     std::shared_ptr<rocket::ParserAllocatorType> allocatorPtr)
     : evb_(&evb),
@@ -103,7 +149,7 @@ RocketClient::RocketClient(
       detachableLoopCallback_(*this),
       closeLoopCallback_(*this),
       eventBaseDestructionCallback_(*this),
-      setupFrame_(std::move(setupFrame)),
+      setupFrame_(makeSetupFrame(setupMetadata)),
       encodeMetadataUsingBinary_(setupFrame_->encodeMetadataUsingBinary()) {
   DCHECK(socket_ != nullptr);
   socket_->setReadCB(&parser_);
@@ -111,7 +157,7 @@ RocketClient::RocketClient(
     socket_2->setCloseOnFailedWrite(false);
   }
 
-  if (THRIFT_FLAG(rocket_client_enable_keep_alive) && keepAliveTimeoutMs > 0) {
+  if (keepAliveTimeoutMs > 0) {
     keepAliveWatcher_ = std::unique_ptr<
         KeepAliveWatcher,
         folly::DelayedDestruction::Destructor>(new KeepAliveWatcher(
@@ -123,6 +169,13 @@ RocketClient::RocketClient(
   evb_->runOnDestruction(eventBaseDestructionCallback_);
   // Get or create flush manager from EventBaseLocal
   flushManager_ = &FlushManager::getInstance(*evb_);
+
+  // keep a copy to be used in later
+  if (setupMetadata.compressionSetupRequest()) {
+    if (auto ref = setupMetadata.compressionSetupRequest()->custom_ref()) {
+      customCompressionSetupRequest_.emplace(*ref);
+    }
+  }
 }
 
 RocketClient::~RocketClient() {
@@ -140,13 +193,13 @@ RocketClient::~RocketClient() {
 RocketClient::Ptr RocketClient::create(
     folly::EventBase& evb,
     folly::AsyncTransport::UniquePtr socket,
-    std::unique_ptr<SetupFrame> setupFrame,
+    RequestSetupMetadata&& setupMetadata,
     int32_t keepAliveTimeoutMs,
     std::shared_ptr<rocket::ParserAllocatorType> allocatorPtr) {
   return Ptr(new RocketClient(
       evb,
       std::move(socket),
-      std::move(setupFrame),
+      std::move(setupMetadata),
       keepAliveTimeoutMs,
       std::move(allocatorPtr)));
 }
@@ -179,7 +232,7 @@ void RocketClient::handleFrame(std::unique_ptr<folly::IOBuf> frame) {
     }
     ServerPushMetadata serverMeta;
     try {
-      PayloadSerializer::getInstance()->unpack(
+      getPayloadSerializer()->unpack(
           serverMeta, std::move(mdPushFrame.metadata()), false /* useBinary */);
     } catch (...) {
       close(transport::TTransportException(
@@ -195,6 +248,16 @@ void RocketClient::handleFrame(std::unique_ptr<folly::IOBuf> frame) {
             (int32_t)std::numeric_limits<int16_t>::max()));
         serverZstdSupported_ =
             serverMeta.setupResponse_ref()->zstdSupported_ref().value_or(false);
+
+        if (auto ref =
+                serverMeta.setupResponse_ref()->compressionSetupResponse()) {
+          auto customCompressionRes =
+              handleSetupResponseCustomCompression(*ref);
+          if (customCompressionRes.hasError()) {
+            close(customCompressionRes.error());
+            return;
+          }
+        }
         break;
       }
       case ServerPushMetadata::Type::streamHeadersPush: {
@@ -232,8 +295,7 @@ void RocketClient::handleFrame(std::unique_ptr<folly::IOBuf> frame) {
 
           close(RocketException(
               ErrorCode::REJECTED,
-              rocket::PayloadSerializer::getInstance()->packCompact(
-                  responseRpcError)));
+              getPayloadSerializer()->packCompact(responseRpcError)));
         }
         return;
       }
@@ -249,6 +311,69 @@ void RocketClient::handleFrame(std::unique_ptr<folly::IOBuf> frame) {
   }
 
   handleStreamChannelFrame(streamId, frameType, std::move(frame));
+}
+
+folly::Expected<folly::Unit, transport::TTransportException>
+RocketClient::handleSetupResponseCustomCompression(
+    CompressionSetupResponse const& setupResponse) {
+  if (!setupResponse.custom_ref()) {
+    return folly::makeUnexpected(transport::TTransportException(
+        transport::TTransportException::NOT_SUPPORTED,
+        "Only 'custom' compressor setup response is supported on client."));
+  }
+  const auto& customSetupResponse = setupResponse.custom_ref().value();
+
+  auto factory =
+      CustomCompressorRegistry::get(*customSetupResponse.compressorName());
+  if (!factory) {
+    return folly::makeUnexpected(transport::TTransportException(
+        transport::TTransportException::NOT_SUPPORTED,
+        fmt::format(
+            "Custom compressor {} is not supported on client.",
+            *customSetupResponse.compressorName())));
+  }
+
+  if (!customCompressionSetupRequest_) {
+    return folly::makeUnexpected(transport::TTransportException(
+        transport::TTransportException::INTERNAL_ERROR,
+        "Trying to setup custom compression on client without a valid request. "
+        "Maybe it has already been moved out? Did we somehow invoke "
+        "handleSetupResponseCustomCompression more than once?"));
+  }
+
+  std::shared_ptr<CustomCompressor> compressor;
+  auto customSetupRequest = std::move(*customCompressionSetupRequest_);
+  try {
+    compressor = factory->make(
+        customSetupRequest,
+        customSetupResponse,
+        CustomCompressorFactory::CompressorLocation::CLIENT);
+  } catch (const std::exception& ex) {
+    return folly::makeUnexpected(transport::TTransportException(
+        transport::TTransportException::INVALID_SETUP,
+        fmt::format(
+            "Failed to make custom compressor on client due to: {}",
+            ex.what())));
+  }
+
+  if (!compressor) {
+    return folly::makeUnexpected(transport::TTransportException(
+        transport::TTransportException::INVALID_SETUP,
+        "Failed to make custom compressor on client."));
+  }
+
+  if (!payloadSerializerHolder_) {
+    payloadSerializerHolder_.emplace();
+  }
+
+  CustomCompressionPayloadSerializerStrategyOptions options;
+  options.compressor = compressor;
+  CustomCompressionPayloadSerializerStrategy<DefaultPayloadSerializerStrategy>
+      strategy{options};
+  payloadSerializerHolder_->initialize(std::move(strategy));
+  customCompressor_ = compressor;
+
+  return folly::unit;
 }
 
 void RocketClient::handleRequestResponseFrame(
@@ -386,9 +511,8 @@ StreamChannelStatusResponse RocketClient::handleFirstResponse(
     serverCallback.onInitialError(makeContractViolation(kErrorMsg));
     return {StreamChannelStatus::ContractViolation, kErrorMsg};
   }
-  auto firstResponse =
-      rocket::PayloadSerializer::getInstance()->unpack<FirstResponsePayload>(
-          std::move(fullPayload), encodeMetadataUsingBinary_);
+  auto firstResponse = getPayloadSerializer()->unpack<FirstResponsePayload>(
+      std::move(fullPayload), encodeMetadataUsingBinary_);
   if (firstResponse.hasException()) {
     serverCallback.onInitialError(std::move(firstResponse.exception()));
     return StreamChannelStatus::Complete;
@@ -442,9 +566,8 @@ StreamChannelStatusResponse RocketClient::handleStreamResponse(
     bool next,
     bool complete) {
   if (next) {
-    auto streamPayload =
-        rocket::PayloadSerializer::getInstance()->unpack<StreamPayload>(
-            std::move(fullPayload), encodeMetadataUsingBinary_);
+    auto streamPayload = getPayloadSerializer()->unpack<StreamPayload>(
+        std::move(fullPayload), encodeMetadataUsingBinary_);
     if (streamPayload.hasException()) {
       return serverCallback.onStreamError(std::move(streamPayload.exception()));
     }
@@ -511,9 +634,8 @@ StreamChannelStatusResponse RocketClient::handleSinkResponse(
     return {StreamChannelStatus::ContractViolation, std::move(msg)};
   };
   if (next) {
-    auto streamPayload =
-        rocket::PayloadSerializer::getInstance()->unpack<StreamPayload>(
-            std::move(fullPayload), encodeMetadataUsingBinary_);
+    auto streamPayload = getPayloadSerializer()->unpack<StreamPayload>(
+        std::move(fullPayload), encodeMetadataUsingBinary_);
     if (streamPayload.hasException()) {
       return serverCallback.onFinalResponseError(
           std::move(streamPayload.exception()));
@@ -1076,7 +1198,7 @@ bool RocketClient::sendPayload(
   return sendFrame(
       PayloadFrame(
           streamId,
-          rocket::PayloadSerializer::getInstance()->pack(
+          getPayloadSerializer()->pack(
               std::move(payload),
               encodeMetadataUsingBinary(),
               getTransportWrapper()),
@@ -1129,7 +1251,7 @@ bool RocketClient::sendHeadersPush(
       std::move(payload.payload);
   return sendFrame(
       MetadataPushFrame::makeFromMetadata(
-          rocket::PayloadSerializer::getInstance()->packCompact(clientMeta)),
+          getPayloadSerializer()->packCompact(clientMeta)),
       std::move(onError));
 }
 
@@ -1516,7 +1638,7 @@ void RocketClient::terminateInteraction(int64_t id) {
   clientMeta.interactionTerminate_ref().ensure().interactionId_ref() = id;
   std::ignore = sendFrame(
       MetadataPushFrame::makeFromMetadata(
-          rocket::PayloadSerializer::getInstance()->packCompact(clientMeta)),
+          getPayloadSerializer()->packCompact(clientMeta)),
       std::move(onError));
 }
 
@@ -1531,8 +1653,7 @@ void RocketClient::onServerVersionRequired() {
   // include a timeout to close the connection if server does not respond
   serverVersionTimeout_.reset(new ServerVersionTimeout(*this));
   evb_->timer().scheduleTimeout(
-      serverVersionTimeout_.get(),
-      std::chrono::milliseconds(THRIFT_FLAG(rocket_server_version_timeout_ms)));
+      serverVersionTimeout_.get(), std::chrono::milliseconds(500));
 }
 
 void RocketClient::setServerVersion(int32_t serverVersion) {
@@ -1558,7 +1679,7 @@ void RocketClient::sendTransportMetadataPush() {
     clientMeta.transportMetadataPush_ref() = std::move(*transportMetadataPush);
     std::ignore = sendFrame(
         MetadataPushFrame::makeFromMetadata(
-            rocket::PayloadSerializer::getInstance()->packCompact(clientMeta)),
+            getPayloadSerializer()->packCompact(clientMeta)),
         std::move(onError));
   }
 }

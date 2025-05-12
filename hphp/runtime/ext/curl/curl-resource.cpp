@@ -8,10 +8,8 @@
 #include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/curl-tls-workarounds.h"
 #include "hphp/runtime/base/file.h"
-#include "hphp/runtime/base/file-util.h"
 #include "hphp/runtime/base/plain-file.h"
 #include "hphp/runtime/base/stack-logger.h"
-#include "hphp/runtime/ext/extension.h"
 #include "hphp/runtime/server/server-stats.h"
 #include "hphp/runtime/vm/vm-regs.h"
 
@@ -20,7 +18,6 @@
 
 #include <curl/curl.h>
 #include <curl/easy.h>
-#include <curl/multi.h>
 #include <folly/portability/OpenSSL.h>
 
 #define PHP_CURL_STDOUT 0
@@ -629,7 +626,6 @@ bool CurlResource::isStringOption(long option) {
     case CURLOPT_EGDSOCKET:
     case CURLOPT_INTERFACE:
     case CURLOPT_PROXY:
-    case CURLOPT_PROXYUSERPWD:
     case CURLOPT_REFERER:
     case CURLOPT_SSLCERTTYPE:
     case CURLOPT_SSLENGINE:
@@ -639,7 +635,6 @@ bool CurlResource::isStringOption(long option) {
     case CURLOPT_SSLKEYTYPE:
     case CURLOPT_SSL_CIPHER_LIST:
     case CURLOPT_USERAGENT:
-    case CURLOPT_USERPWD:
 #if LIBCURL_VERSION_NUM >= 0x070e01 /* Available since 7.14.1 */
     case CURLOPT_COOKIELIST:
 #endif
@@ -773,7 +768,9 @@ bool CurlResource::isNullableStringOption(long option) {
   switch (option) {
     case CURLOPT_CUSTOMREQUEST:
     case CURLOPT_FTPPORT:
+    case CURLOPT_PROXYUSERPWD:
     case CURLOPT_RANGE:
+    case CURLOPT_USERPWD:
 #if LIBCURL_VERSION_NUM >= 0x070d00 /* Available since 7.13.0 */
     case CURLOPT_FTP_ACCOUNT:
 #endif

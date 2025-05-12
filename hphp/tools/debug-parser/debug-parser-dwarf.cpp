@@ -25,8 +25,6 @@
 #include <folly/container/F14Set.h>
 #include <folly/portability/Unistd.h>
 
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
@@ -35,9 +33,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFTypeUnit.h"
 
 #include "hphp/util/assertions.h"
-#include "hphp/util/functional.h"
 #include "hphp/util/job-queue.h"
-#include "hphp/util/timer.h"
 #include "hphp/util/trace.h"
 
 #include "hphp/tools/debug-parser/dwarf-context-manager.h"
@@ -62,7 +58,7 @@
 
 namespace debug_parser { namespace {
 
-TRACE_SET_MOD(trans);
+TRACE_SET_MOD(trans)
 
 ////////////////////////////////////////////////////////////////////////////////
 

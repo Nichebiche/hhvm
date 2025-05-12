@@ -88,7 +88,7 @@ pub mod raiser {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -172,19 +172,19 @@ pub mod raiser {
     impl ::std::error::Error for DoRaiseError {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::b(ref inner) => {
+                Self::b(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::f(ref inner) => {
+                Self::f(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::s(ref inner) => {
+                Self::s(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -306,19 +306,19 @@ pub mod raiser {
                     }
                     ((::fbthrift::TType::Void, 0i32), false) => {
                         once = true;
-                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?);
+                        alt = ::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?);
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::b(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::b(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 2), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::f(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::f(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 3), false) => {
                         once = true;
-                        alt = ::std::result::Result::Err(Self::Error::s(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::result::Result::Err(Self::Error::s(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -368,7 +368,7 @@ pub mod raiser {
                     }
                     ((::fbthrift::TType::String, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(
@@ -458,19 +458,19 @@ pub mod raiser {
     impl ::std::error::Error for Get500Error {
         fn source(&self) -> ::std::option::Option<&(dyn ::std::error::Error + 'static)> {
             match self {
-                Self::f(ref inner) => {
+                Self::f(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::b(ref inner) => {
+                Self::b(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::s(ref inner) => {
+                Self::s(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ApplicationException(ref inner) => {
+                Self::ApplicationException(inner) => {
                     ::std::option::Option::Some(inner)
                 }
-                Self::ThriftError(ref inner) => {
+                Self::ThriftError(inner) => {
                     ::std::option::Option::Some(inner.as_ref())
                 }
             }
@@ -592,19 +592,19 @@ pub mod raiser {
                     }
                     ((::fbthrift::TType::String, 0i32), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::read(p)?));
+                        alt = ::std::option::Option::Some(::std::result::Result::Ok(::fbthrift::Deserialize::rs_thrift_read(p)?));
                     }
                     ((::fbthrift::TType::Struct, 1), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::f(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::f(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((::fbthrift::TType::Struct, 2), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::b(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::b(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((::fbthrift::TType::Struct, 3), false) => {
                         once = true;
-                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::s(::fbthrift::Deserialize::read(p)?)));
+                        alt = ::std::option::Option::Some(::std::result::Result::Err(Self::Error::s(::fbthrift::Deserialize::rs_thrift_read(p)?)));
                     }
                     ((ty, _id), false) => p.skip(ty)?,
                     ((badty, badid), true) => return ::std::result::Result::Err(::std::convert::From::from(

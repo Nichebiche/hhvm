@@ -22,8 +22,6 @@
 #include <cassert>
 #include <bitset>
 
-#include <boost/dynamic_bitset.hpp>
-
 #include <folly/gen/Base.h>
 #include <folly/gen/String.h>
 
@@ -46,7 +44,6 @@
 #include "hphp/hhbbc/options-util.h"
 #include "hphp/hhbbc/representation.h"
 #include "hphp/hhbbc/type-system.h"
-#include "hphp/hhbbc/unit-util.h"
 
 namespace HPHP::HHBBC {
 
@@ -469,7 +466,7 @@ struct OptimizeIterState {
       // At every op, we check the known state of all live iterators and mark it
       // as ineligible as necessary.
       for (IterId it = 0; it < state.iters.size(); ++it) {
-        match<void>(
+        match(
           state.iters[it],
           []  (DeadIter) {},
           [&] (const LiveIter& ti) {
@@ -509,7 +506,7 @@ struct OptimizeIterState {
       };
 
       auto const fixupFromState = [&] (IterId it) {
-        match<void>(
+        match(
           state.iters[it],
           []  (DeadIter) {},
           [&] (const LiveIter& ti) {

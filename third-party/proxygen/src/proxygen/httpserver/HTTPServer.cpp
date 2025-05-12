@@ -10,7 +10,6 @@
 
 #include <folly/executors/thread_factory/NamedThreadFactory.h>
 #include <folly/io/async/EventBaseManager.h>
-#include <folly/system/ThreadName.h>
 #include <proxygen/httpserver/HTTPServerAcceptor.h>
 #include <proxygen/httpserver/SignalHandler.h>
 #include <proxygen/httpserver/filters/CompressionFilter.h>
@@ -73,7 +72,8 @@ HTTPServer::HTTPServer(HTTPServerOptions options)
     CompressionFilterFactory::Options opts;
     opts.minimumCompressionSize = options_->contentCompressionMinimumSize;
     opts.zlibCompressionLevel = options_->contentCompressionLevel;
-    opts.compressibleContentTypes = options_->contentCompressionTypes;
+    opts.compressibleContentTypes = std::make_shared<std::set<std::string>>(
+        options_->contentCompressionTypes);
     opts.enableGzip = options_->enableGzipCompression;
     if (options_->enableZstdCompression) {
       opts.enableZstd = options_->enableZstdCompression;

@@ -17,13 +17,12 @@
 #include "hphp/util/alloc.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/configs/server.h"
-#include "hphp/util/safe-cast.h"
 #include "hphp/util/trace.h"
 #include <folly/portability/SysMman.h>
 
 namespace HPHP {
 
-TRACE_SET_MOD(mm);
+TRACE_SET_MOD(mm)
 
 std::atomic_bool SparseHeap::s_shutdown = false;
 

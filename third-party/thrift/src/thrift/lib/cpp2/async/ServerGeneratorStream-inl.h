@@ -23,14 +23,18 @@ folly::coro::Task<> ServerGeneratorStream::fromAsyncGeneratorImpl(
     StreamElementEncoder<T>* encode,
     folly::coro::AsyncGenerator<
         std::conditional_t<WithHeader, MessageVariant<T>, T>&&> gen,
-    TileStreamGuard) {
+    TileStreamGuard,
+    ContextStack::UniquePtr contextStack) {
   using ReadyCallback = ServerStreamConsumerBaton<folly::coro::Baton>;
-
   bool pauseStream = false;
   int64_t credits = 0;
   SCOPE_EXIT {
     stream->serverClose();
   };
+
+  if (contextStack) {
+    contextStack->onStreamSubscribe();
+  }
 
   // ensure the generator is destroyed before the interaction TimeStreamGuard
   auto gen_ = std::move(gen);
@@ -50,14 +54,27 @@ folly::coro::Task<> ServerGeneratorStream::fromAsyncGeneratorImpl(
         queue.pop();
         switch (next) {
           case detail::StreamControl::CANCEL:
+            if (contextStack) {
+              contextStack->onStreamFinally(
+                  details::STREAM_ENDING_TYPES::CANCEL);
+            }
             co_return;
           case detail::StreamControl::PAUSE:
+            if (contextStack) {
+              contextStack->onStreamPauseReceive();
+            }
             pauseStream = true;
             break;
           case detail::StreamControl::RESUME:
+            if (contextStack) {
+              contextStack->onStreamResumeReceive();
+            }
             pauseStream = false;
             break;
           default:
+            if (contextStack) {
+              contextStack->onStreamCredit(next);
+            }
             credits += next;
             break;
         }
@@ -72,11 +89,22 @@ folly::coro::Task<> ServerGeneratorStream::fromAsyncGeneratorImpl(
         co_await folly::coro::co_awaitTry(folly::coro::co_withCancellation(
             stream->cancelSource_.getToken(), gen_.next()));
     if (next.hasException()) {
+      if (contextStack) {
+        if (stream->cancelSource_.isCancellationRequested()) {
+          contextStack->onStreamFinally(details::STREAM_ENDING_TYPES::CANCEL);
+        } else {
+          contextStack->handleStreamErrorWrapped(next.exception());
+          contextStack->onStreamFinally(details::STREAM_ENDING_TYPES::ERROR);
+        }
+      }
       stream->publish((*encode)(std::move(next.exception())));
       co_return;
     }
     if (!next->has_value()) {
       stream->publish({});
+      if (contextStack) {
+        contextStack->onStreamFinally(details::STREAM_ENDING_TYPES::COMPLETE);
+      }
       co_return;
     }
 
@@ -92,6 +120,10 @@ folly::coro::Task<> ServerGeneratorStream::fromAsyncGeneratorImpl(
     } else {
       stream->publish((*encode)(std::move(item)));
       --credits;
+    }
+
+    if (contextStack) {
+      contextStack->onStreamNext();
     }
   }
 }
@@ -109,7 +141,9 @@ ServerStreamFn<T> ServerGeneratorStream::fromAsyncGenerator(
                                    FirstResponsePayload&& payload,
                                    StreamClientCallback* callback,
                                    folly::EventBase* clientEb,
-                                   TilePtr&& interaction) mutable {
+                                   TilePtr&& interaction,
+                                   ContextStack::UniquePtr
+                                       contextStack) mutable {
       DCHECK(clientEb->isInEventBaseThread());
       auto stream = new ServerGeneratorStream(callback, clientEb);
       auto streamPtr = stream->copy();
@@ -117,7 +151,8 @@ ServerStreamFn<T> ServerGeneratorStream::fromAsyncGenerator(
           std::move(streamPtr),
           encode,
           std::move(gen),
-          TileStreamGuard::transferFrom(std::move(interaction)))
+          TileStreamGuard::transferFrom(std::move(interaction)),
+          std::move(contextStack))
           .scheduleOn(std::move(serverExecutor))
           .start([sp = stream->copy()](folly::Try<folly::Unit> t) {
             if (t.hasException()) {

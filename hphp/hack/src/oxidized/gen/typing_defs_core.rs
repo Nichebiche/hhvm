@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<d52ed81244e82b9f90919884ca268ddd>>
+// @generated SignedSource<<7d483c1f95c5b6ccd78b33a08befef45>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -45,6 +45,11 @@ pub enum CeVisibility {
     Vprivate(String),
     Vprotected(String),
     Vinternal(String),
+    #[rust_to_ocaml(name = "Vprotected_internal")]
+    VprotectedInternal {
+        class_id: String,
+        module__: String,
+    },
 }
 
 #[rust_to_ocaml(attr = "deriving (eq, hash, ord, (show { with_path = false }))")]
@@ -494,7 +499,25 @@ pub struct FunType {
     Serialize,
     ToOcamlRep
 )]
-#[rust_to_ocaml(attr = "deriving (eq, ord, hash, (show { with_path = false }))")]
+#[repr(C)]
+pub struct Ty(pub reason::T_, pub Box<Ty_>);
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Eq,
+    EqModuloPos,
+    FromOcamlRep,
+    Hash,
+    NoPosHash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    ToOcamlRep
+)]
+#[rust_to_ocaml(and)]
 #[repr(C, u8)]
 pub enum TypeTag {
     BoolTag,
@@ -505,7 +528,7 @@ pub enum TypeTag {
     NumTag,
     ResourceTag,
     NullTag,
-    ClassTag(ast_defs::Id_),
+    ClassTag(ast_defs::Id_, Vec<Ty>),
 }
 
 #[derive(
@@ -523,6 +546,7 @@ pub enum TypeTag {
     Serialize,
     ToOcamlRep
 )]
+#[rust_to_ocaml(and)]
 #[repr(C)]
 pub struct ShapeFieldPredicate {
     pub sfp_predicate: TypePredicate,
@@ -609,27 +633,8 @@ pub enum TypePredicate_ {
     ToOcamlRep
 )]
 #[rust_to_ocaml(and)]
-#[rust_to_ocaml(attr = "deriving (eq, ord, hash, (show { with_path = false }))")]
 #[repr(C)]
 pub struct TypePredicate(pub reason::Reason, pub Box<TypePredicate_>);
-
-#[derive(
-    Clone,
-    Debug,
-    Deserialize,
-    Eq,
-    EqModuloPos,
-    FromOcamlRep,
-    Hash,
-    NoPosHash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    ToOcamlRep
-)]
-#[repr(C)]
-pub struct Ty(pub reason::T_, pub Box<Ty_>);
 
 /// A shape may specify whether or not fields are required. For example, consider
 /// this typedef:
@@ -744,9 +749,8 @@ pub enum Ty_ {
     /// The type of a generic parameter. The constraints on a generic parameter
     /// are accessed through the lenv.tpenv component of the environment, which
     /// is set up when checking the body of a function or method. See uses of
-    /// Typing_phase.add_generic_parameters_and_constraints. The list denotes
-    /// type arguments.
-    Tgeneric(String, Vec<Ty>),
+    /// Typing_phase.add_generic_parameters_and_constraints.
+    Tgeneric(String),
     /// Union type.
     /// The values that are members of this type are the union of the values
     /// that are members of the components of the union.
@@ -792,15 +796,6 @@ pub enum Ty_ {
     ///
     /// The second parameter is the list of type arguments to the type.
     Tnewtype(String, Vec<Ty>, Ty),
-    /// This represents a type alias that lacks necessary type arguments. Given
-    /// type Foo<T1,T2> = ...
-    /// Tunappliedalias "Foo" stands for usages of plain Foo, without supplying
-    /// further type arguments. In particular, Tunappliedalias always stands for
-    /// a higher-kinded type. It is never used for an alias like
-    /// type Foo2 = ...
-    /// that simply doesn't require type arguments.
-    #[rust_to_ocaml(name = "Tunapplied_alias")]
-    TunappliedAlias(String),
     /// see dependent_type
     Tdependent(DependentType, Ty),
     /// An instance of a class or interface, ty list are the arguments

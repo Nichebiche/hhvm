@@ -390,8 +390,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::ReturnstreamStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::ReturnstreamStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -458,8 +462,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::StreamthrowsStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::StreamthrowsStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -526,8 +534,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::ServicethrowsStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::ServicethrowsStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -594,8 +606,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::Servicethrows2StreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::Servicethrows2StreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -662,8 +678,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::BoththrowsStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::BoththrowsStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -730,8 +750,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::ResponseandstreamstreamthrowsStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::ResponseandstreamstreamthrowsStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -798,8 +822,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::ResponseandstreamservicethrowsStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::ResponseandstreamservicethrowsStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -866,8 +894,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::ResponseandstreamboththrowsStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::ResponseandstreamboththrowsStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -936,8 +968,12 @@ where
                                     }
                                     ::fbthrift::ClientStreamElement::ApplicationEx(payload) => {
                                         let mut de = P::deserializer(payload);
-                                        let aexn = ::fbthrift::ApplicationException::read(&mut de)?;
+                                        let aexn = ::fbthrift::ApplicationException::rs_thrift_read(&mut de)?;
                                         ::std::result::Result::Ok(::std::result::Result::Err(crate::errors::pub_sub_streaming_service::ReturnstreamFastStreamError::ApplicationException(aexn)))
+                                    }
+                                    ::fbthrift::ClientStreamElement::DeclaredEx(payload) => {
+                                        let mut de = P::deserializer(payload);
+                                        <crate::errors::pub_sub_streaming_service::ReturnstreamFastStreamReader as ::fbthrift::help::DeserializeExn>::read_result(&mut de)
                                     }
                                 }
                             }).await.map_err(::anyhow::Error::from)??
@@ -978,13 +1014,13 @@ struct Args_PubSubStreamingService_returnstream<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_returnstream<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.returnstream"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("i32_from", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.i32_from, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.i32_from, p);
         p.write_field_end();
         p.write_field_begin("i32_to", ::fbthrift::TType::I32, 2i16);
-        ::fbthrift::Serialize::write(&self.i32_to, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.i32_to, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -999,10 +1035,10 @@ struct Args_PubSubStreamingService_streamthrows<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_streamthrows<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.streamthrows"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1017,10 +1053,10 @@ struct Args_PubSubStreamingService_servicethrows<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_servicethrows<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.servicethrows"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1035,10 +1071,10 @@ struct Args_PubSubStreamingService_servicethrows2<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_servicethrows2<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.servicethrows2"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1053,10 +1089,10 @@ struct Args_PubSubStreamingService_boththrows<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_boththrows<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.boththrows"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1071,10 +1107,10 @@ struct Args_PubSubStreamingService_responseandstreamstreamthrows<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_responseandstreamstreamthrows<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.responseandstreamstreamthrows"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1089,10 +1125,10 @@ struct Args_PubSubStreamingService_responseandstreamservicethrows<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_responseandstreamservicethrows<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.responseandstreamservicethrows"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1107,10 +1143,10 @@ struct Args_PubSubStreamingService_responseandstreamboththrows<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_responseandstreamboththrows<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.responseandstreamboththrows"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("foo", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.foo, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.foo, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();
@@ -1126,13 +1162,13 @@ struct Args_PubSubStreamingService_returnstreamFast<'a> {
 impl<'a, P: ::fbthrift::ProtocolWriter> ::fbthrift::Serialize<P> for self::Args_PubSubStreamingService_returnstreamFast<'a> {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "serialize_args", fields(method = "PubSubStreamingService.returnstreamFast"))]
-    fn write(&self, p: &mut P) {
+    fn rs_thrift_write(&self, p: &mut P) {
         p.write_struct_begin("args");
         p.write_field_begin("i32_from", ::fbthrift::TType::I32, 1i16);
-        ::fbthrift::Serialize::write(&self.i32_from, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.i32_from, p);
         p.write_field_end();
         p.write_field_begin("i32_to", ::fbthrift::TType::I32, 2i16);
-        ::fbthrift::Serialize::write(&self.i32_to, p);
+        ::fbthrift::Serialize::rs_thrift_write(&self.i32_to, p);
         p.write_field_end();
         p.write_field_stop();
         p.write_struct_end();

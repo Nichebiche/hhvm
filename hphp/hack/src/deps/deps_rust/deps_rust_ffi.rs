@@ -7,22 +7,21 @@
 
 use std::cell::RefCell;
 use std::ffi::OsString;
-use std::path::Path;
 
 use dep::Dep;
+use deps_rust::DEP_GRAPH;
 use deps_rust::DepSet;
 use deps_rust::RawTypingDepsMode;
 use deps_rust::VisitedSet;
-use deps_rust::DEP_GRAPH;
 use hash::HashSet;
 use ocamlrep::Value;
 use ocamlrep_custom::CamlSerialize;
 use ocamlrep_custom::Custom;
 use ocamlrep_ocamlpool::ocaml_ffi;
 use rpds::HashTrieSet;
+use typing_deps_hash::DepType;
 use typing_deps_hash::hash1;
 use typing_deps_hash::hash2;
-use typing_deps_hash::DepType;
 
 fn tag_to_dep_type(tag: u8) -> DepType {
     match DepType::from_u8(tag) {
@@ -45,7 +44,7 @@ fn tag_to_dep_type(tag: u8) -> DepType {
 /// transitively called functions from here call into the OCaml runtime, and we
 /// do not spawn threads in our OCaml code, so the pointed-to value will not be
 /// concurrently modified.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn hash1_ocaml(dep_type_tag: usize, name1: usize) -> usize {
     fn do_hash(dep_type_tag: Value<'_>, name1: Value<'_>) -> Value<'static> {
         let dep_type_tag = dep_type_tag
@@ -86,7 +85,7 @@ unsafe extern "C" fn hash1_ocaml(dep_type_tag: usize, name1: usize) -> usize {
 /// transitively called functions from here call into the OCaml runtime, and we
 /// do not spawn threads in our OCaml code, so the pointed-to value will not be
 /// concurrently modified.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn hash2_ocaml(
     dep_type_tag: usize,
     type_hash: usize,
@@ -231,20 +230,6 @@ ocaml_ffi! {
     fn hh_custom_dep_graph_save_delta(dest: OsString, reset_state_after_saving: bool) -> usize {
         save_delta(dest, reset_state_after_saving)
     }
-
-    fn hh_custom_dep_graph_load_delta(mode: RawTypingDepsMode, source: OsString) -> usize {
-        DEP_GRAPH.write(mode).load_delta(source)
-    }
-
-    // Moves the source file to the destination directory.
-    fn hh_save_custom_dep_graph_save_delta(source: OsString, dest_dir: OsString) -> usize {
-        let dest_file = Path::new(&dest_dir)
-            .join(source.to_str().unwrap().replace('/', "-"));
-        std::fs::rename(&source, dest_file).unwrap();
-
-        // Technically we loaded 0 deps into the hh_server dep graph
-        0
-    }
 }
 
 fn get_ideps_from_hash(mode: RawTypingDepsMode, dep: Dep) -> Custom<DepSet> {
@@ -328,7 +313,7 @@ ocaml_ffi! {
     }
 
     fn hh_dep_set_elements(s: Custom<DepSet>) -> Vec<Dep> {
-        s.iter().copied().map(Dep::from).collect()
+        s.iter().copied().collect()
     }
 
      fn hh_dep_set_cardinal(s: Custom<DepSet>) -> usize {

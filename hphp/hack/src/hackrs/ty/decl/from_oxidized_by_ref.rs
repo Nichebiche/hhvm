@@ -8,14 +8,14 @@ use pos::Pos;
 
 use super::ty::TypedefCaseTypeVariant;
 use crate::decl;
+use crate::decl::Ty;
+use crate::decl::Ty_;
 use crate::decl::folded;
 use crate::decl::folded::ConstraintRequirement;
 use crate::decl::shallow;
 use crate::decl::ty;
 use crate::decl::ty::DeclConstraintRequirement;
 use crate::decl::ty::TypedefTypeAssignment;
-use crate::decl::Ty;
-use crate::decl::Ty_;
 use crate::reason::Reason;
 
 #[inline]
@@ -51,6 +51,9 @@ impl From<obr::typing_defs::CeVisibility<'_>> for ty::CeVisibility {
             Obr::Vprivate(s) => Self::Private(s.into()),
             Obr::Vprotected(s) => Self::Protected(s.into()),
             Obr::Vinternal(s) => Self::Internal(s.into()),
+            Obr::VprotectedInternal { class_id, module__ } => {
+                Self::ProtectedInternal(class_id.into(), module__.into())
+            }
         }
     }
 }
@@ -145,8 +148,8 @@ impl<R: Reason> From<obr::typing_defs::TupleExtra<'_>> for ty::TupleExtra<R> {
 
 impl<R: Reason> From<&obr::typing_defs::Ty<'_>> for Ty<R> {
     fn from(ty: &obr::typing_defs::Ty<'_>) -> Self {
-        use obr::typing_defs_core;
         use Ty_::*;
+        use obr::typing_defs_core;
         let reason = R::from(*ty.0);
         let ty_ = match ty.1 {
             typing_defs_core::Ty_::Tthis => Tthis,
@@ -189,9 +192,7 @@ impl<R: Reason> From<&obr::typing_defs::Ty<'_>> for Ty<R> {
                     },
                 }))
             }
-            typing_defs_core::Ty_::Tgeneric(&(pos_id, tys)) => {
-                Tgeneric(Box::new((pos_id.into(), slice(tys))))
-            }
+            typing_defs_core::Ty_::Tgeneric(pos_id) => Tgeneric(pos_id.into()),
             typing_defs_core::Ty_::Tunion(tys) => Tunion(slice(tys)),
             typing_defs_core::Ty_::Tintersection(tys) => Tintersection(slice(tys)),
             typing_defs_core::Ty_::TvecOrDict(&(ty1, ty2)) => {
@@ -199,8 +200,7 @@ impl<R: Reason> From<&obr::typing_defs::Ty<'_>> for Ty<R> {
             }
             typing_defs_core::Ty_::Taccess(taccess_type) => Taccess(Box::new(taccess_type.into())),
             typing_defs_core::Ty_::TclassPtr(class_type) => TclassPtr(class_type.into()),
-            typing_defs_core::Ty_::TunappliedAlias(_)
-            | typing_defs_core::Ty_::Tnewtype(_)
+            typing_defs_core::Ty_::Tnewtype(_)
             | typing_defs_core::Ty_::Tdependent(_)
             | typing_defs_core::Ty_::Tclass(_)
             | typing_defs_core::Ty_::Tneg(_)

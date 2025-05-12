@@ -9,11 +9,11 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 
+use anyhow::Context;
+use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::ensure;
-use anyhow::Context;
-use anyhow::Result;
 use ffi::Maybe;
 use ffi::Vector;
 use hash::HashMap;
@@ -1691,7 +1691,7 @@ fn assemble_instr(
         } else if sl_lexer.peek_is(Token::is_identifier) {
             let tb = sl_lexer.peek().unwrap().as_bytes();
 
-            if sl_lexer.peek1().map_or(false, |tok| tok.is_colon()) {
+            if sl_lexer.peek1().is_some_and(|tok| tok.is_colon()) {
                 // It's actually a label.
                 // DV123: or L123:
                 let label = assemble_label(&mut sl_lexer)?;

@@ -37,6 +37,7 @@ from thrift.py3.types cimport (
     make_const_shared,
     constant_shared_ptr,
 )
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -51,9 +52,11 @@ import builtins as _builtins
 import importlib
 
 import module.thrift_types as _fbthrift_python_types
-from module.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
+from module.thrift_enums import (
     MyEnum,
     TypedEnum,
+)
+from module.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
     __MyUnionType,
     __NonTriviallyDestructibleUnionType,
 )
@@ -76,6 +79,7 @@ cdef object get_types_reflection():
 
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class MyUnion(thrift.py3.types.Union):
     __module__ = _fbthrift__module_name__
     Type = __MyUnionType
@@ -88,6 +92,7 @@ cdef class MyUnion(thrift.py3.types.Union):
         if anInteger is not None:
             if not isinstance(anInteger, int):
                 raise TypeError(f'anInteger is not a { int !r}.')
+
             anInteger = <cint32_t> anInteger
 
         self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE = __to_shared_ptr(cmove(MyUnion._make_instance(
@@ -183,14 +188,11 @@ cdef class MyUnion(thrift.py3.types.Union):
 
     cdef _initialize_py(MyUnion self):
         self.py_type = None
-        self.type_int = deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType()
+        self.type_int = int(deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType())
         self.py_value = None
 
     def __copy__(MyUnion self):
-        cdef shared_ptr[_module_cbindings.cMyUnion] cpp_obj = make_shared[_module_cbindings.cMyUnion](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return MyUnion._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -255,6 +257,7 @@ cdef class MyUnion(thrift.py3.types.Union):
 
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class NonTriviallyDestructibleUnion(thrift.py3.types.Union):
     __module__ = _fbthrift__module_name__
     Type = __NonTriviallyDestructibleUnionType
@@ -266,6 +269,7 @@ cdef class NonTriviallyDestructibleUnion(thrift.py3.types.Union):
         if int_field is not None:
             if not isinstance(int_field, int):
                 raise TypeError(f'int_field is not a { int !r}.')
+
             int_field = <cint32_t> int_field
 
         self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE = __to_shared_ptr(cmove(NonTriviallyDestructibleUnion._make_instance(
@@ -340,14 +344,11 @@ cdef class NonTriviallyDestructibleUnion(thrift.py3.types.Union):
 
     cdef _initialize_py(NonTriviallyDestructibleUnion self):
         self.py_type = None
-        self.type_int = deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType()
+        self.type_int = int(deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType())
         self.py_value = None
 
     def __copy__(NonTriviallyDestructibleUnion self):
-        cdef shared_ptr[_module_cbindings.cNonTriviallyDestructibleUnion] cpp_obj = make_shared[_module_cbindings.cNonTriviallyDestructibleUnion](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return NonTriviallyDestructibleUnion._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -410,6 +411,7 @@ cdef class NonTriviallyDestructibleUnion(thrift.py3.types.Union):
         return thrift.util.converter.to_py_struct(py_deprecated_types.NonTriviallyDestructibleUnion, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class MyField(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -552,10 +554,7 @@ cdef class MyField(thrift.py3.types.Struct):
 
 
     def __copy__(MyField self):
-        cdef shared_ptr[_module_cbindings.cMyField] cpp_obj = make_shared[_module_cbindings.cMyField](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return MyField._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -616,6 +615,7 @@ cdef class MyField(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.MyField, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class MyStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -692,10 +692,7 @@ cdef class MyStruct(thrift.py3.types.Struct):
 
 
     def __copy__(MyStruct self):
-        cdef shared_ptr[_module_cbindings.cMyStruct] cpp_obj = make_shared[_module_cbindings.cMyStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return MyStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -756,6 +753,7 @@ cdef class MyStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.MyStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithUnion(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -831,10 +829,7 @@ cdef class StructWithUnion(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithUnion self):
-        cdef shared_ptr[_module_cbindings.cStructWithUnion] cpp_obj = make_shared[_module_cbindings.cStructWithUnion](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithUnion._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -895,6 +890,7 @@ cdef class StructWithUnion(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithUnion, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class RecursiveStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -950,10 +946,7 @@ cdef class RecursiveStruct(thrift.py3.types.Struct):
 
 
     def __copy__(RecursiveStruct self):
-        cdef shared_ptr[_module_cbindings.cRecursiveStruct] cpp_obj = make_shared[_module_cbindings.cRecursiveStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return RecursiveStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1014,6 +1007,7 @@ cdef class RecursiveStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.RecursiveStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithContainers(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1123,10 +1117,7 @@ cdef class StructWithContainers(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithContainers self):
-        cdef shared_ptr[_module_cbindings.cStructWithContainers] cpp_obj = make_shared[_module_cbindings.cStructWithContainers](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithContainers._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1187,6 +1178,7 @@ cdef class StructWithContainers(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithContainers, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithSharedConst(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1263,10 +1255,7 @@ cdef class StructWithSharedConst(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithSharedConst self):
-        cdef shared_ptr[_module_cbindings.cStructWithSharedConst] cpp_obj = make_shared[_module_cbindings.cStructWithSharedConst](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithSharedConst._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1327,6 +1316,7 @@ cdef class StructWithSharedConst(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithSharedConst, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class Empty(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1363,10 +1353,7 @@ cdef class Empty(thrift.py3.types.Struct):
 
 
     def __copy__(Empty self):
-        cdef shared_ptr[_module_cbindings.cEmpty] cpp_obj = make_shared[_module_cbindings.cEmpty](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return Empty._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1427,6 +1414,7 @@ cdef class Empty(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.Empty, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithRef(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1503,10 +1491,7 @@ cdef class StructWithRef(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithRef self):
-        cdef shared_ptr[_module_cbindings.cStructWithRef] cpp_obj = make_shared[_module_cbindings.cStructWithRef](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithRef._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1567,6 +1552,7 @@ cdef class StructWithRef(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithRef, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithBox(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1644,10 +1630,7 @@ cdef class StructWithBox(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithBox self):
-        cdef shared_ptr[_module_cbindings.cStructWithBox] cpp_obj = make_shared[_module_cbindings.cStructWithBox](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithBox._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1708,6 +1691,7 @@ cdef class StructWithBox(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithBox, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithInternBox(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1771,10 +1755,7 @@ cdef class StructWithInternBox(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithInternBox self):
-        cdef shared_ptr[_module_cbindings.cStructWithInternBox] cpp_obj = make_shared[_module_cbindings.cStructWithInternBox](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithInternBox._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1835,6 +1816,7 @@ cdef class StructWithInternBox(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithInternBox, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithTerseInternBox(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1896,10 +1878,7 @@ cdef class StructWithTerseInternBox(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithTerseInternBox self):
-        cdef shared_ptr[_module_cbindings.cStructWithTerseInternBox] cpp_obj = make_shared[_module_cbindings.cStructWithTerseInternBox](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithTerseInternBox._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -1960,6 +1939,7 @@ cdef class StructWithTerseInternBox(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithTerseInternBox, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class AdaptedStructWithInternBox(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2023,10 +2003,7 @@ cdef class AdaptedStructWithInternBox(thrift.py3.types.Struct):
 
 
     def __copy__(AdaptedStructWithInternBox self):
-        cdef shared_ptr[_module_cbindings.cAdaptedStructWithInternBox] cpp_obj = make_shared[_module_cbindings.cAdaptedStructWithInternBox](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return AdaptedStructWithInternBox._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -2087,6 +2064,7 @@ cdef class AdaptedStructWithInternBox(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.AdaptedStructWithInternBox, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class AdaptedStructWithTerseInternBox(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2148,10 +2126,7 @@ cdef class AdaptedStructWithTerseInternBox(thrift.py3.types.Struct):
 
 
     def __copy__(AdaptedStructWithTerseInternBox self):
-        cdef shared_ptr[_module_cbindings.cAdaptedStructWithTerseInternBox] cpp_obj = make_shared[_module_cbindings.cAdaptedStructWithTerseInternBox](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return AdaptedStructWithTerseInternBox._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -2212,6 +2187,7 @@ cdef class AdaptedStructWithTerseInternBox(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.AdaptedStructWithTerseInternBox, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithRefTypeUnique(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2288,10 +2264,7 @@ cdef class StructWithRefTypeUnique(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithRefTypeUnique self):
-        cdef shared_ptr[_module_cbindings.cStructWithRefTypeUnique] cpp_obj = make_shared[_module_cbindings.cStructWithRefTypeUnique](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithRefTypeUnique._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -2352,6 +2325,7 @@ cdef class StructWithRefTypeUnique(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithRefTypeUnique, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithRefTypeShared(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2428,10 +2402,7 @@ cdef class StructWithRefTypeShared(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithRefTypeShared self):
-        cdef shared_ptr[_module_cbindings.cStructWithRefTypeShared] cpp_obj = make_shared[_module_cbindings.cStructWithRefTypeShared](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithRefTypeShared._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -2492,6 +2463,7 @@ cdef class StructWithRefTypeShared(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithRefTypeShared, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithRefTypeSharedConst(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2568,10 +2540,7 @@ cdef class StructWithRefTypeSharedConst(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithRefTypeSharedConst self):
-        cdef shared_ptr[_module_cbindings.cStructWithRefTypeSharedConst] cpp_obj = make_shared[_module_cbindings.cStructWithRefTypeSharedConst](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithRefTypeSharedConst._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -2632,6 +2601,7 @@ cdef class StructWithRefTypeSharedConst(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithRefTypeSharedConst, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithRefAndAnnotCppNoexceptMoveCtor(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2686,10 +2656,7 @@ cdef class StructWithRefAndAnnotCppNoexceptMoveCtor(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithRefAndAnnotCppNoexceptMoveCtor self):
-        cdef shared_ptr[_module_cbindings.cStructWithRefAndAnnotCppNoexceptMoveCtor] cpp_obj = make_shared[_module_cbindings.cStructWithRefAndAnnotCppNoexceptMoveCtor](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithRefAndAnnotCppNoexceptMoveCtor._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -2750,6 +2717,7 @@ cdef class StructWithRefAndAnnotCppNoexceptMoveCtor(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.StructWithRefAndAnnotCppNoexceptMoveCtor, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class StructWithString(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -2848,10 +2816,7 @@ cdef class StructWithString(thrift.py3.types.Struct):
 
 
     def __copy__(StructWithString self):
-        cdef shared_ptr[_module_cbindings.cStructWithString] cpp_obj = make_shared[_module_cbindings.cStructWithString](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return StructWithString._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)

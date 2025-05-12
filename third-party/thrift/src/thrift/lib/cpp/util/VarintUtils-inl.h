@@ -46,6 +46,22 @@
 #include <immintrin.h>
 #endif
 
+#if defined(__BMI2__) && !defined(__APPLE__)
+// apple silicon can run most x86-64 instructions, but not necessarily all
+#define THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER 1
+#elif defined(__ARM_FEATURE_SVE) && defined(__ARM_FEATURE_SVE2_BITPERM) && \
+    __has_include(<arm_neon_sve_bridge.h>) && !FOLLY_MOBILE
+#define THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER 1
+#else
+#define THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER 0
+#endif
+
+#if THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER && FOLLY_AARCH64
+#include <arm_neon.h>
+#include <arm_neon_sve_bridge.h> // @manual
+#include <arm_sve.h>
+#endif
+
 namespace apache {
 namespace thrift {
 
@@ -66,36 +82,32 @@ constexpr std::make_unsigned_t<T> signedIntToZigzag(T n) {
   return ((Unsigned)n << 1) ^ (Unsigned)((Signed)n >> (sizeof(n) * 8 - 1));
 }
 
-template <class T, class CursorT>
-void readVarintSlow(CursorT& c, T& value) {
-  // ceil(sizeof(T) * 8) / 7
-  static const size_t maxSize = (8 * sizeof(T) + 6) / 7;
-  T retVal = 0;
-  uint8_t shift = 0;
-  uint8_t rsize = 0;
-  while (true) {
-    uint8_t byte = c.template read<uint8_t>();
-    rsize++;
-    retVal |= (uint64_t)(byte & 0x7f) << shift;
-    shift += 7;
-    if (!(byte & 0x80)) {
-      value = retVal;
-      return;
-    }
-    if (rsize >= maxSize) {
-      // Too big for return type
-      throw std::out_of_range("invalid varint read");
-    }
-  }
-}
+template <typename T>
+constexpr size_t kVarintMaxBytes =
+    (8 * sizeof(T) + 6) / 7; // ceil(8 * sizeof(T)) / 7
 
 // This is a simple function that just throws an exception. It is defined out
 // line to make the caller (readVarint) smaller and simpler (assembly-wise),
 // which gives us 5% perf win (even when the exception is not actually thrown).
 [[noreturn]] void throwInvalidVarint();
 
+template <class T, class CursorT>
+FOLLY_NOINLINE void readVarintSlow(CursorT& c, T& value) {
+  T result = 0;
+  FOLLY_PRAGMA_UNROLL_N(1)
+  for (size_t i = 0; i < kVarintMaxBytes<T>; ++i) {
+    auto const byte = c.template read<uint8_t>();
+    result |= T(byte & 0x7f) << (i * 7);
+    if (!(byte & 0x80)) {
+      value = result;
+      return;
+    }
+  }
+  throwInvalidVarint();
+}
+
 template <class T>
-size_t readVarintMediumSlowUnrolled(T& value, const uint8_t* p) {
+size_t readVarintMediumSlowUnrolledX86(T& value, const uint8_t* p) {
   uint64_t result;
   const uint8_t* start = p;
   do {
@@ -119,6 +131,65 @@ size_t readVarintMediumSlowUnrolled(T& value, const uint8_t* p) {
   } while (false);
   value = static_cast<T>(result);
   return p - start;
+}
+
+// This way of structuring code branching guarantees that only one conditional
+// jump will be taken. It provides a straight-line execution path, while
+// breaking from it when no more bytes need to be read.
+template <class T>
+size_t readVarintMediumSlowUnrolledAarch64(T& result, const uint8_t* p) {
+  // clang-format off
+  T byte;
+  byte = *p++; result = (byte & 0x7f);       
+  if (UNLIKELY(!(byte & 0x80))) 
+    return 1;
+  byte = *p++; result |= (byte & 0x7f) <<  7; 
+  if constexpr (sizeof(T) == 1) {
+    if (UNLIKELY((byte & 0x80))) 
+      throwInvalidVarint();
+    return 2;
+  } else {
+    if (UNLIKELY(!(byte & 0x80))) 
+      return 2;
+    byte = *p++; result |= (byte & 0x7f) << 14;
+    if constexpr (sizeof(T) == 2) {
+      if (UNLIKELY((byte & 0x80))) 
+        throwInvalidVarint();
+      return 3;
+    } else {
+      if (UNLIKELY(!(byte & 0x80))) 
+        return 3;
+      byte = *p++; result |= (byte & 0x7f) << 21; 
+      if (UNLIKELY(!(byte & 0x80))) 
+        return 4;
+      byte = *p++; result |= (byte & 0x7f) << 28;
+      if constexpr (sizeof(T) == 4) {
+        if (UNLIKELY((byte & 0x80))) 
+          throwInvalidVarint();
+        return 5;
+      } else {
+        if (UNLIKELY(!(byte & 0x80))) return 5;
+        byte = *p++; result |= (byte & 0x7f) << 35; if (UNLIKELY(!(byte & 0x80))) return 6;
+        byte = *p++; result |= (byte & 0x7f) << 42; if (UNLIKELY(!(byte & 0x80))) return 7;
+        byte = *p++; result |= (byte & 0x7f) << 49; if (UNLIKELY(!(byte & 0x80))) return 8;
+        byte = *p++; result |= (byte & 0x7f) << 56; if (UNLIKELY(!(byte & 0x80))) return 9;
+        byte = *p; result |= (byte & 0x7f) << 63; 
+        if (UNLIKELY((byte & 0x80))) 
+          throwInvalidVarint();
+        return 10;
+      }
+    }
+  }
+  // clang-format on
+}
+
+template <class T>
+size_t readVarintMediumSlowUnrolled(T& result, const uint8_t* p) {
+  if constexpr (folly::kIsArchAArch64) {
+    return readVarintMediumSlowUnrolledAarch64(result, p);
+  } else {
+    return readVarintMediumSlowUnrolledX86(result, p);
+  }
 }
 
 // The fast-path of the optimized medium-slow paths. Decodes the first two bytes
@@ -276,9 +347,7 @@ void readVarintMediumSlow(CursorT& c, T& value, const uint8_t* p, size_t len) {
       sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8,
       "Trying to deserialize into an unsupported type");
 
-  static const size_t maxSize = (8 * sizeof(T) + 6) / 7;
-
-  if (FOLLY_LIKELY(len >= maxSize)) {
+  if (FOLLY_LIKELY(len >= kVarintMaxBytes<T>)) {
     size_t bytesRead;
     if (sizeof(T) <= 4) {
       // NOTE: BMI2-based decoding for 32-bit integers appears not to
@@ -326,10 +395,9 @@ namespace detail {
 // Cursor class must have ensure() and append() (e.g. QueueAppender)
 template <class Cursor, class T>
 uint8_t writeVarintSlow(Cursor& c, T value) {
-  enum { maxSize = (8 * sizeof(T) + 6) / 7 };
   auto unval = folly::to_unsigned(value);
 
-  c.ensure(maxSize);
+  c.ensure(kVarintMaxBytes<T>);
 
   uint8_t* p = c.writableData();
   uint8_t* orig_p = p;
@@ -361,10 +429,104 @@ uint8_t writeVarintUnrolled(Cursor& c, T value) {
   return detail::writeVarintSlow(c, value);
 }
 
-#ifdef __BMI2__
+#if THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER
+
+#if FOLLY_AARCH64
 
 template <class Cursor, class T>
-uint8_t writeVarintBMI2(Cursor& c, T valueS) {
+uint8_t writeVarintSve(Cursor& c, T valueS) {
+  auto value = folly::to_unsigned(valueS);
+  if (FOLLY_LIKELY((value & ~0x7f) == 0)) {
+    c.template write<uint8_t>(static_cast<uint8_t>(value));
+    return 1;
+  }
+
+  if constexpr (sizeof(T) == 1) {
+    c.template write<uint16_t>(static_cast<uint16_t>(value | 0x100));
+    return 2;
+  }
+
+  enum { maxSize = (8 * sizeof(T) + 6) / 7 };
+  c.ensure(maxSize);
+
+  svuint8_t bdepMask = svset_neonq_u8(svundef_u8(), vdupq_n_u8(0x7f));
+  uint64x2_t clzMask = vreinterpretq_u64_u8(vdupq_n_u8(0xff));
+  uint64x2_t vec;
+  vec[0] = value;
+
+  vec = svget_neonq_u64(svbdep_u64(
+      svset_neonq_u64(svundef_u64(), vec), svreinterpret_u64_u8(bdepMask)));
+
+  svuint64_t clzV;
+  uint64x2_t clzMaskV;
+  if constexpr (sizeof(T) == 2) {
+    clzV = svset_neonq_u64(
+        svundef_u64(),
+        vreinterpretq_u64_u32(vclzq_u32(vreinterpretq_u32_u64(vec))));
+    clzMaskV = vreinterpretq_u64_u32(svget_neonq_u32(svlsr_u32_x(
+        svptrue_b32(),
+        svset_neonq_u32(svundef_u32(), vreinterpretq_u32_u64(clzMask)),
+        svreinterpret_u32_u64(clzV))));
+  } else {
+    clzV = svclz_u64_x(svptrue_b64(), svset_neonq_u64(svundef_u64(), vec));
+    clzMaskV = svget_neonq_u64(svlsr_u64_x(
+        svptrue_b64(), svset_neonq_u64(svundef_u64(), clzMask), clzV));
+  }
+
+  svuint64_t sizeSV = svlsr_n_u64_x(svptrue_b64(), clzV, 3);
+
+  if constexpr (sizeof(T) == 2) {
+    sizeSV = svsubr_n_u64_x(svptrue_b64(), sizeSV, 4);
+  } else {
+    sizeSV = svsubr_n_u64_x(svptrue_b64(), sizeSV, 8);
+  }
+
+  vec = vreinterpretq_u64_u8(svget_neonq_u8(svorr_n_u8_x(
+      svptrue_b8(),
+      svset_neonq_u8(svundef_u8(), vreinterpretq_u8_u64(vec)),
+      0x80)));
+
+  vec = vandq_u64(vec, clzMaskV);
+
+  if constexpr (sizeof(T) == 8) {
+    uint8_t orMask = value < (1ull << 56) ? 0 : 0x80;
+    uint64x2_t orMaskV = vreinterpretq_u64_u8(vdupq_n_u8(orMask));
+    vec = vorrq_u64(vec, orMaskV);
+  }
+
+  uint8_t* p = c.writableData();
+
+  if constexpr (sizeof(T) == sizeof(uint16_t)) {
+    vst1q_lane_u16(
+        reinterpret_cast<uint16_t*>(p), vreinterpretq_u16_u64(vec), 0);
+    vst1q_lane_u8(p + 2, vreinterpretq_u8_u64(vec), 2);
+  } else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+    vst1q_lane_u32(
+        reinterpret_cast<uint32_t*>(p), vreinterpretq_u32_u64(vec), 0);
+    vst1q_lane_u8(p + 4, vreinterpretq_u8_u64(vec), 4);
+  } else {
+    vst1q_lane_u64(reinterpret_cast<uint64_t*>(p), vec, 0);
+    p[8] = value >> 56;
+    p[9] = value >> 63;
+  }
+
+  uint8_t size = vreinterpretq_u8_u64(svget_neonq_u64(sizeSV))[0];
+  if constexpr (sizeof(T) == 8) {
+    size = value < (1ull << 56) ? size : (value >> 63) + 9;
+  }
+
+  c.append(size);
+  return size;
+}
+
+#else
+
+inline uint64_t compressBits(uint64_t value, uint64_t mask) {
+  return _pdep_u64(value, mask);
+}
+
+template <class Cursor, class T>
+uint8_t writeVarintBranchFreeX86(Cursor& c, T valueS) {
   auto value = folly::to_unsigned(valueS);
   if (FOLLY_LIKELY((value & ~0x7f) == 0)) {
     c.template write<uint8_t>(static_cast<uint8_t>(value));
@@ -395,7 +557,7 @@ uint8_t writeVarintBMI2(Cursor& c, T valueS) {
 
   auto clzll = __builtin_clzll(static_cast<uint64_t>(value));
   // Only the first 56 bits of @value will be deposited in @v.
-  uint64_t v = _pdep_u64(value, ~kMask) | (kMask >> kShift[clzll]);
+  uint64_t v = compressBits(value, ~kMask) | (kMask >> kShift[clzll]);
   uint8_t size = kSize[clzll];
 
   if /* constexpr */ (sizeof(T) < sizeof(uint64_t)) {
@@ -415,19 +577,30 @@ uint8_t writeVarintBMI2(Cursor& c, T valueS) {
   return size;
 }
 
+#endif
+
 template <class Cursor, class T>
-uint8_t writeVarint(Cursor& c, T value) {
-  return writeVarintBMI2(c, value);
+uint8_t writeVarintBranchFree(Cursor& c, T valueS) {
+#if FOLLY_AARCH64
+  return writeVarintSve(c, valueS);
+#else
+  return writeVarintBranchFreeX86(c, valueS);
+#endif
 }
 
-#else // __BMI2__
+template <class Cursor, class T>
+uint8_t writeVarint(Cursor& c, T value) {
+  return writeVarintBranchFree(c, value);
+}
+
+#else // THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER
 
 template <class Cursor, class T>
 uint8_t writeVarint(Cursor& c, T value) {
   return writeVarintUnrolled(c, value);
 }
 
-#endif // __BMI2__
+#endif // THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER
 
 inline int32_t zigzagToI32(uint32_t n) {
   return detail::zigzagToSignedInt(n);

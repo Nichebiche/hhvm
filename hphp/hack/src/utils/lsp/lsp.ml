@@ -71,6 +71,7 @@ end
 type markedString =
   | MarkedString of string
   | MarkedCode of string * string
+[@@deriving eq, show]
 
 module Command = struct
   type t = {
@@ -513,6 +514,7 @@ module PublishDiagnostics = struct
     message: string;
     relatedInformation: diagnosticRelatedInformation list;
     relatedLocations: relatedLocation list;
+    data: Hh_json.json option; [@equal (fun _ _ -> true)]
   }
   [@@deriving eq]
 

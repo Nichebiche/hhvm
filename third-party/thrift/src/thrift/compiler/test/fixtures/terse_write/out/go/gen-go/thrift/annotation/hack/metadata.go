@@ -13,7 +13,7 @@ import (
 )
 
 // (needed to ensure safety because of naive import list construction)
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = maps.Copy[map[int]int, map[int]int]
 var _ = metadata.GoUnusedProtection__
 
@@ -21,7 +21,7 @@ var _ = metadata.GoUnusedProtection__
 var (
     premadeThriftType_string = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE),
         )
     }()
     premadeThriftType_hack_FieldWrapper = func() *metadata.ThriftType {
@@ -90,6 +90,12 @@ var (
                 SetName("hack.ModuleInternal"),
         )
     }()
+    premadeThriftType_hack_GenerateClientMethodsWithHeaders = func() *metadata.ThriftType {
+        return metadata.NewThriftType().SetTStruct(
+            metadata.NewThriftStructType().
+                SetName("hack.GenerateClientMethodsWithHeaders"),
+        )
+    }()
 )
 
 // Helper type to allow us to store Thrift types in a slice at compile time,
@@ -113,6 +119,7 @@ var premadeThriftTypesMap = func() map[string]*metadata.ThriftType {
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "hack.Attributes", premadeThriftType_hack_Attributes })
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "hack.StructAsTrait", premadeThriftType_hack_StructAsTrait })
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "hack.ModuleInternal", premadeThriftType_hack_ModuleInternal })
+    thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "hack.GenerateClientMethodsWithHeaders", premadeThriftType_hack_GenerateClientMethodsWithHeaders })
 
     fbthriftThriftTypesMap := make(map[string]*metadata.ThriftType, len(thriftTypesWithFullName))
     for _, value := range thriftTypesWithFullName {
@@ -246,7 +253,7 @@ func getMetadataThriftPrimitiveType(s *thrift.CodecPrimitiveSpec) *metadata.Thri
 		value = metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE
 	}
 
-	return value.Ptr()
+	return thrift.Pointerize(value)
 }
 
 func getMetadataThriftEnumType(s *thrift.CodecEnumSpec) *metadata.ThriftEnumType {

@@ -30,14 +30,14 @@ use super::FLOAT_VALUES;
 use super::INT16_VALUES;
 use super::INT32_VALUES;
 use super::INT64_VALUES;
-use crate::deserialize::Deserialize;
-use crate::errors::ProtocolError;
-use crate::thrift_protocol::MessageType;
-use crate::ttype::TType;
 use crate::BinaryProtocol;
 use crate::Protocol;
 use crate::ProtocolReader;
 use crate::ProtocolWriter;
+use crate::deserialize::Deserialize;
+use crate::errors::ProtocolError;
+use crate::thrift_protocol::MessageType;
+use crate::ttype::TType;
 
 #[test]
 fn read_write_bool_list() {
@@ -59,7 +59,7 @@ fn read_write_bool_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -98,7 +98,7 @@ fn read_write_string_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -133,7 +133,7 @@ fn read_write_byte_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -165,7 +165,7 @@ fn read_write_i16_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -197,7 +197,7 @@ fn read_write_i32_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -229,7 +229,7 @@ fn read_write_i64_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -261,7 +261,7 @@ fn read_write_f32_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -299,7 +299,7 @@ fn read_write_f64_list() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_list_begin()
+            .read_list_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -337,7 +337,7 @@ fn read_write_f64_set() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (thetype2, thelen2) = deserializer
-            .read_set_begin()
+            .read_set_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(thetype, thetype2);
@@ -376,7 +376,7 @@ fn read_write_string_i64_map() {
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(buf));
     {
         let (key_type2, value_type2, thelen2) = deserializer
-            .read_map_begin()
+            .read_map_begin_unchecked()
             .expect("failed to read header");
 
         assert_eq!(key_type, key_type2);
@@ -523,14 +523,14 @@ fn test_overallocation() {
     malicious.put_bytes(0, 10);
     let malicious = malicious.freeze();
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(malicious.clone()));
-    let err = <Vec<i16> as Deserialize<_>>::read(&mut deserializer).unwrap_err();
+    let err = <Vec<i16> as Deserialize<_>>::rs_thrift_read(&mut deserializer).unwrap_err();
     assert_eq!(
         err.downcast_ref::<ProtocolError>(),
         Some(&ProtocolError::EOF),
     );
 
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(malicious));
-    let err = <HashSet<i16> as Deserialize<_>>::read(&mut deserializer).unwrap_err();
+    let err = <HashSet<i16> as Deserialize<_>>::rs_thrift_read(&mut deserializer).unwrap_err();
     assert_eq!(
         err.downcast_ref::<ProtocolError>(),
         Some(&ProtocolError::EOF),
@@ -542,7 +542,8 @@ fn test_overallocation() {
     malicious.put_i32(1_000_000_000);
     malicious.put_bytes(0, 10);
     let mut deserializer = <BinaryProtocol>::deserializer(Cursor::new(malicious.freeze()));
-    let err = <HashMap<String, i16> as Deserialize<_>>::read(&mut deserializer).unwrap_err();
+    let err =
+        <HashMap<String, i16> as Deserialize<_>>::rs_thrift_read(&mut deserializer).unwrap_err();
     assert_eq!(
         err.downcast_ref::<ProtocolError>(),
         Some(&ProtocolError::EOF),

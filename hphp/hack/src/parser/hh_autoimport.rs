@@ -25,6 +25,7 @@ pub static TYPES: &[&str] = &[
     "AwaitAllWaitHandle",
     "classname",
     "class_or_classname",
+    "concrete",
     "Collection",
     "ConcurrentWaitHandle",
     "ConditionWaitHandle",
@@ -71,8 +72,7 @@ pub static TYPES: &[&str] = &[
 ];
 
 static FUNCS: &[&str] = &[
-    "asio_get_current_context_idx",
-    "asio_get_running_in_context",
+    "asio_get_current_context_depth",
     "asio_get_running",
     "class_meth",
     "darray",

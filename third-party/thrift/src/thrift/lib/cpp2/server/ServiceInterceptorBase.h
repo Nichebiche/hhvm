@@ -21,6 +21,7 @@
 #include <folly/coro/Task.h>
 
 #include <thrift/lib/cpp2/server/ServiceInterceptorStorage.h>
+#include <thrift/lib/cpp2/server/metrics/InterceptorMetricCallback.h>
 
 namespace apache::thrift {
 
@@ -41,7 +42,19 @@ class ServiceInterceptorBase {
  public:
   virtual ~ServiceInterceptorBase() = default;
 
+  /**
+   * This method returns the name of the interceptor itself. This is use as
+   * part of the interceptor's qualified name.
+   */
   virtual std::string getName() const = 0;
+
+  /**
+   * At runtime, ServiceInterceptors are uniquely identified by
+   * {module name}.{interceptor name}. This methods returns
+   * ServiceInterceptorQualifiedName which encapsulates this identifier. If
+   * this is called prior to the module being set, this will fatal
+   */
+  virtual const ServiceInterceptorQualifiedName& getQualifiedName() const = 0;
 
   struct InitParams {};
   virtual folly::coro::Task<void> co_onStartServing(InitParams);
@@ -50,8 +63,10 @@ class ServiceInterceptorBase {
     Cpp2ConnContext* context = nullptr;
     detail::ServiceInterceptorOnConnectionStorage* storage = nullptr;
   };
-  virtual void internal_onConnection(ConnectionInfo) = 0;
-  virtual void internal_onConnectionClosed(ConnectionInfo) noexcept = 0;
+  virtual void internal_onConnection(
+      ConnectionInfo, InterceptorMetricCallback&) = 0;
+  virtual void internal_onConnectionClosed(
+      ConnectionInfo, InterceptorMetricCallback&) noexcept = 0;
 
   struct RequestInfo {
     Cpp2RequestContext* context = nullptr;
@@ -75,9 +90,16 @@ class ServiceInterceptorBase {
      * in the format `{interaction_name}.{method_name}`.
      */
     const char* methodName = nullptr;
+    /**
+     * This is a pointer to the deserialized frameworkMetadata buffer sent as
+     * part of the request. InterceptorFrameworkMetadataStorage may be empty
+     * even if the pointer here is not null - it should always be checked with
+     * has_value()
+     */
+    const InterceptorFrameworkMetadataStorage* frameworkMetadata = nullptr;
   };
   virtual folly::coro::Task<void> internal_onRequest(
-      ConnectionInfo, RequestInfo) = 0;
+      ConnectionInfo, RequestInfo, InterceptorMetricCallback&) = 0;
 
   struct ResponseInfo {
     const Cpp2RequestContext* context = nullptr;
@@ -103,7 +125,15 @@ class ServiceInterceptorBase {
     const char* methodName = nullptr;
   };
   virtual folly::coro::Task<void> internal_onResponse(
-      ConnectionInfo, ResponseInfo) = 0;
+      ConnectionInfo, ResponseInfo, InterceptorMetricCallback&) = 0;
+
+  /**
+   * This methods is called by ThriftServer to set the module name for the
+   * interceptor. This method is expected to be called prior to to the
+   * the interceptor methods being executed on any request, as it performs
+   * various secondary intitialization requiring module name to be known.
+   */
+  virtual void setModuleName(const std::string& moduleName) = 0;
 
   static constexpr std::size_t kMaxRequestStateSize =
       detail::ServiceInterceptorOnRequestStorage::max_size();

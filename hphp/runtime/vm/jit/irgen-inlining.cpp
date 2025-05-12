@@ -178,24 +178,49 @@ Outer:                                 | Inner:
 
 #include "hphp/runtime/vm/jit/irgen-inlining.h"
 
-#include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/mutation.h"
 
 #include "hphp/runtime/vm/jit/irgen.h"
 #include "hphp/runtime/vm/jit/irgen-call.h"
 #include "hphp/runtime/vm/jit/irgen-control.h"
-#include "hphp/runtime/vm/jit/irgen-create.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
 #include "hphp/runtime/vm/jit/irgen-internal.h"
 #include "hphp/runtime/vm/jit/irgen-sprop-global.h"
 
-#include "hphp/runtime/vm/hhbc-codec.h"
 #include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/unwind.h"
+#include "hphp/runtime/vm/jit/inlining-decider.h"
+#include "hphp/runtime/vm/jit/mcgen-translate.h"
+#include "hphp/runtime/vm/jit/translate-region.h"
 
 namespace HPHP::jit::irgen {
 
-TRACE_SET_MOD(hhir);  
+TRACE_SET_MOD(hhir)
+
+RegionAndLazyUnit::RegionAndLazyUnit(
+    SrcKey callerSk,
+    RegionDescPtr region
+  ) : m_callerSk(callerSk)
+    , m_region(std::move(region)) {}
+
+IRUnit* RegionAndLazyUnit::unit() const {
+    if (m_unit) return m_unit.get();
+    always_assert(m_region);
+    TransContext ctx {
+      TransIDSet{},
+      0,  // optIndex
+      TransKind::Optimize,
+      m_callerSk,
+      m_region.get(),
+      m_callerSk.packageInfo(),
+      PrologueID(),
+    };
+    tracing::Block _{"compute-inline-cost", [&] { return traceProps(ctx); }};
+    rqtrace::DisableTracing notrace;
+    auto const unbumper = mcgen::unbumpFunctions();
+    m_unit = irGenInlineRegion(ctx, *m_region);
+    return m_unit.get();
+}
 
 bool isInlining(const IRGS& env) {
   return !env.inlineState.frames.empty();
@@ -242,36 +267,6 @@ void beginInlining(IRGS& env,
   };
 
   FTRACE(1, "[[[ begin inlining: {}\n", callee->fullName()->data());
-
-  ctx = [&] () -> SSATmp* {
-    if (callee->isClosureBody()) {
-      return gen(env, AssertType, Type::ExactObj(callee->implCls()), ctx);
-    }
-
-    if (!callee->cls()) {
-      assertx(ctx->isA(TNullptr));
-      return ctx;
-    }
-    assertx(!ctx->type().maybe(TNullptr));
-
-    if (ctx->isA(TBottom)) return ctx;
-
-    if (callee->isStatic()) {
-      assertx(ctx->isA(TCls));
-      if (ctx->hasConstVal(TCls)) {
-        return ctx;
-      }
-
-      auto const ty = ctx->type() & Type::SubCls(callee->cls());
-      if (ctx->type() <= ty) return ctx;
-      return gen(env, AssertType, ty, ctx);
-    }
-
-    assertx(ctx->type().maybe(TObj));
-    auto const ty = ctx->type() & thisTypeFromFunc(callee);
-    if (ctx->type() <= ty) return ctx;
-    return gen(env, AssertType, ty, ctx);
-  }();
 
   auto const numTotalInputs = callee->numFuncEntryInputs();
 
@@ -597,14 +592,44 @@ void implEndCatchBlock(IRGS& env, const RegionDesc& calleeRegion) {
   auto const exc = label->dst(0);
   retypeDests(label, &env.unit);
 
+  // If this async function was called without an associated await,
+  // the exception needs to be wrapped into an Awaitable.
+  auto const wrapToAwaitable =
+    curFunc(env)->isAsync() && frame.asyncEagerOffset == kInvalidOffset;
+
   auto const inlineFrame = implInlineReturn(env);
   SCOPE_EXIT { pushInlineFrame(env, inlineFrame); };
 
   emitLockObjOnFrameUnwind(env, curSrcKey(env).pc());
 
-  // vmspOffset is unknown at this point due to multiple BeginCatches
-  emitHandleException(
-    env, EndCatchData::CatchMode::UnwindOnly, exc, std::nullopt);
+  auto const handleException = [&] {
+    // vmspOffset is unknown at this point due to multiple BeginCatches
+    emitHandleException(
+      env, EndCatchData::CatchMode::UnwindOnly, exc, std::nullopt);
+  };
+
+  if (wrapToAwaitable) {
+    cond(
+      env,
+      [&](Block* taken) {
+        return gen(env, CheckNonNull, taken, exc);
+      },
+      [&](SSATmp* exception) {
+        // Wrap Hack exceptions into Awaitables and continue at the next opcode.
+        push(env, gen(env, CreateFSWH, exception));
+        gen(env, Jmp, makeExit(env, nextSrcKey(env)));
+        return nullptr;
+      },
+      [&] {
+        // C++ exceptions don't get wrapped into an Awaitable.
+        handleException();
+        return nullptr;
+      }
+    );
+    return;
+  }
+
+  handleException();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -685,28 +710,14 @@ void sideExitFromInlined(IRGS& env, SSATmp* target) {
   gen(env, Jmp, env.inlineState.frames.back().sideExitTarget, target);
 }
 
-bool endCatchFromInlined(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc) {
+void endCatchFromInlined(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc) {
   assertx(isInlining(env));
   assertx(mode == EndCatchData::CatchMode::UnwindOnly ||
           mode == EndCatchData::CatchMode::LocalsDecRefd);
-
-  if (findExceptionHandler(curFunc(env), bcOff(env)) != kInvalidOffset) {
-    // We are not exiting the frame, as the current opcode has a catch handler.
-    // Use the standard EndCatch logic that will have to spill the frame.
-    return false;
-  }
-
-  if (fp(env) == env.irb->fs().fixupFP()) {
-    // The current frame is already spilled.
-    return false;
-  }
-
-  if (curFunc(env)->isAsync() &&
-      env.inlineState.frames.back().asyncEagerOffset == kInvalidOffset) {
-    // This async function was called without associated await, the exception
-    // needs to be wrapped into an Awaitable.
-    return false;
-  }
+  assertx(mode == EndCatchData::CatchMode::LocalsDecRefd ||
+          findExceptionHandler(curFunc(env), bcOff(env)) == kInvalidOffset ||
+          exc->type() <= TNullptr);
+  assertx(fp(env) != env.irb->fs().fixupFP());
 
   // Clear the evaluation stack and jump to the shared EndCatch handler.
   int locId = 0;
@@ -717,7 +728,6 @@ bool endCatchFromInlined(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc) {
     ? env.inlineState.frames.back().endCatchTarget
     : env.inlineState.frames.back().endCatchLocalsDecRefdTarget;
   gen(env, Jmp, target, exc);
-  return true;
 }
 
 bool spillInlinedFrames(IRGS& env) {
@@ -749,6 +759,16 @@ bool spillInlinedFrames(IRGS& env) {
     }
   }
   return spilled;
+}
+
+void fixCalleeUnit(const IRGS& env, IRUnit& unit) {
+}
+
+
+bool stitchInlinedRegion(irgen::IRGS& irgs, SrcKey callerSk, SrcKey calleeSk,
+                         const RegionDesc& calleeRegion, IRUnit& calleeUnit) {
+    fixCalleeUnit(irgs, calleeUnit);
+    return true;
 }
 
 //////////////////////////////////////////////////////////////////////

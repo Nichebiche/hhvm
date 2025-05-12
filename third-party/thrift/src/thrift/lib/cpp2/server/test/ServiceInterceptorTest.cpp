@@ -17,27 +17,44 @@
 #include <functional>
 #include <stdexcept>
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <folly/coro/Baton.h>
 #include <folly/coro/GtestHelpers.h>
 #include <thrift/lib/cpp2/async/HTTPClientChannel.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <thrift/lib/cpp2/async/MultiplexAsyncProcessor.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 #include <thrift/lib/cpp2/server/ServerModule.h>
 #include <thrift/lib/cpp2/server/ServiceInterceptor.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <thrift/lib/cpp2/server/ThriftServerInternals.h>
 #include <thrift/lib/cpp2/server/test/gen-cpp2/ServiceInterceptor_clients.h>
 #include <thrift/lib/cpp2/server/test/gen-cpp2/ServiceInterceptor_handlers.h>
+#include <thrift/lib/cpp2/test/gen-cpp2/MultiplexAsyncProcessor2_clients.h>
+#include <thrift/lib/cpp2/test/gen-cpp2/MultiplexAsyncProcessor2_handlers.h>
+#include <thrift/lib/cpp2/test/gen-cpp2/MultiplexAsyncProcessor_clients.h>
+#include <thrift/lib/cpp2/test/gen-cpp2/MultiplexAsyncProcessor_handlers.h>
 #include <thrift/lib/cpp2/transport/http2/common/HTTP2RoutingHandler.h>
 #include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
 using namespace apache::thrift;
+using namespace apache::thrift::test;
+using namespace apache::thrift::test2;
 using namespace ::testing;
 
-namespace {
+namespace apache::thrift::detail {
 
+// This is a helper since the flag exists in the apache::thrift::detail
+// namespace
+void setDisabledServiceInterceptorsFlag(std::string flagValue) {
+  THRIFT_FLAG_SET_MOCK(disabled_service_interceptors, std::move(flagValue));
+}
+
+} // namespace apache::thrift::detail
+
+namespace {
 using TransportType = Cpp2ConnContext::TransportType;
 
 std::unique_ptr<HTTP2RoutingHandler> createHTTP2RoutingHandler(
@@ -64,6 +81,12 @@ class ServiceInterceptorTestP : public ::testing::TestWithParam<TransportType> {
       thriftServer.addRoutingHandler(createHTTP2RoutingHandler(thriftServer));
     }
     return runner;
+  }
+
+  std::shared_ptr<AsyncProcessorFactory> multiplex(
+      std::vector<std::shared_ptr<AsyncProcessorFactory>> services) {
+    return std::make_shared<MultiplexAsyncProcessorFactory>(
+        std::move(services));
   }
 
   ScopedServerInterfaceThread::MakeChannelFunc channelFor(
@@ -249,6 +272,59 @@ struct ServiceInterceptorThrowOnRequest
   int onResponseCount = 0;
 };
 
+// Covering the case where ServiceInterceptor should be able to catch exception
+// thrown from another interceptor
+struct ServiceInterceptorRequestExceptionCatch
+    : public NamedServiceInterceptor<folly::Unit> {
+ public:
+  using NamedServiceInterceptor::NamedServiceInterceptor;
+
+  explicit ServiceInterceptorRequestExceptionCatch(
+      const std::string_view interceptorName,
+      const bool shouldSelfThrow,
+      const std::string_view expectedErrMsg)
+      : NamedServiceInterceptor<folly::Unit>(std::string(interceptorName)),
+        expectedErrMsg_(expectedErrMsg),
+        shouldSelfThrow_(shouldSelfThrow) {}
+
+  folly::coro::Task<std::optional<folly::Unit>> onRequest(
+      folly::Unit*, RequestInfo) override {
+    onRequestCount++;
+    if (shouldSelfThrow_) {
+      throw std::logic_error(
+          "Exception from ServiceInterceptorRequestExceptionCatch");
+    }
+    co_return std::nullopt;
+  }
+
+  folly::coro::Task<void> onResponse(
+      folly::Unit*, folly::Unit*, ResponseInfo responseInfo) override {
+    onResponseCount++;
+    if (std::holds_alternative<folly::exception_wrapper>(
+            responseInfo.resultOrActiveException)) {
+      const auto& exception = std::get<folly::exception_wrapper>(
+          responseInfo.resultOrActiveException);
+      EXPECT_TRUE(exception.get_exception() != nullptr);
+      if (shouldSelfThrow_) {
+        EXPECT_THAT(
+            std::string(exception.get_exception()->what()),
+            HasSubstr(
+                "Exception from ServiceInterceptorRequestExceptionCatch"));
+      } else {
+        EXPECT_THAT(
+            std::string(exception.get_exception()->what()),
+            HasSubstr(expectedErrMsg_));
+      }
+    }
+    co_return;
+  }
+
+  int onRequestCount = 0;
+  int onResponseCount = 0;
+  const std::string expectedErrMsg_;
+  const bool shouldSelfThrow_;
+};
+
 struct ServiceInterceptorThrowOnResponse
     : public NamedServiceInterceptor<folly::Unit> {
  public:
@@ -367,15 +443,62 @@ struct ServiceInterceptorLogResultTypeOnResponse
   std::vector<Entry> results;
 };
 
+class MockInterceptorMetricCallback : public InterceptorMetricCallback {
+ public:
+  MOCK_METHOD(
+      void,
+      onConnectionComplete,
+      (const ServiceInterceptorQualifiedName& qualifiedName,
+       std::chrono::microseconds onResponseTime),
+      (override));
+  MOCK_METHOD(
+      void,
+      onConnectionClosedComplete,
+      (const ServiceInterceptorQualifiedName& qualifiedName,
+       std::chrono::microseconds onResponseTime),
+      (override));
+  MOCK_METHOD(
+      void,
+      onRequestComplete,
+      (const ServiceInterceptorQualifiedName& qualifiedName,
+       std::chrono::microseconds onResponseTime),
+      (override));
+  MOCK_METHOD(
+      void,
+      onResponseComplete,
+      (const ServiceInterceptorQualifiedName& qualifiedName,
+       std::chrono::microseconds onResponseTime),
+      (override));
+};
+
 } // namespace
 
 CO_TEST_P(ServiceInterceptorTestP, BasicTM) {
   auto interceptor =
       std::make_shared<ServiceInterceptorCountWithRequestState>("Interceptor1");
+  auto interceptorMetricCallback =
+      std::make_shared<MockInterceptorMetricCallback>();
   auto runner =
       makeServer(std::make_shared<TestHandler>(), [&](ThriftServer& server) {
         server.addModule(std::make_unique<TestModule>(interceptor));
+        detail::ThriftServerInternals(server).setInterceptorMetricCallback(
+            interceptorMetricCallback);
       });
+  const auto callsIfNotHttp2 = [&](int value) -> int {
+    return transportType() == TransportType::HTTP2 ? 0 : value;
+  };
+  EXPECT_CALL(*interceptorMetricCallback, onConnectionComplete(_, _))
+      .Times(callsIfNotHttp2(2))
+      .WillRepeatedly(Return());
+  EXPECT_CALL(*interceptorMetricCallback, onConnectionClosedComplete(_, _))
+      .Times(callsIfNotHttp2(2))
+      .WillRepeatedly(Return());
+  EXPECT_CALL(*interceptorMetricCallback, onRequestComplete(_, _))
+      .Times(2)
+      .WillRepeatedly(Return());
+  EXPECT_CALL(*interceptorMetricCallback, onResponseComplete(_, _))
+      .Times(2)
+      .WillRepeatedly(Return());
 
   auto client =
       makeClient<apache::thrift::Client<test::ServiceInterceptorTest>>(*runner);
@@ -405,6 +528,42 @@ CO_TEST_P(ServiceInterceptorTestP, BasicEB) {
   co_await client->co_echo_eb("");
   EXPECT_EQ(interceptor->onRequestCount, 2);
   EXPECT_EQ(interceptor->onResponseCount, 2);
+}
+
+CO_TEST_P(ServiceInterceptorTestP, InterceptorControl) {
+  struct BrokenInterceptor : public NamedServiceInterceptor<folly::Unit> {
+    using NamedServiceInterceptor::NamedServiceInterceptor;
+
+    [[noreturn]] std::optional<folly::Unit> onConnection(
+        ConnectionInfo) override {
+      throw std::runtime_error("Broken");
+    }
+
+    // onConnectionClosed is noexcept
+
+    [[noreturn]] folly::coro::Task<std::optional<folly::Unit>> onRequest(
+        folly::Unit*, RequestInfo) override {
+      throw std::runtime_error("Broken");
+    }
+
+    [[noreturn]] folly::coro::Task<void> onResponse(
+        folly::Unit*, folly::Unit*, ResponseInfo) override {
+      throw std::runtime_error("Broken");
+    }
+  };
+
+  auto interceptor = std::make_shared<BrokenInterceptor>("BrokenInterceptor");
+  auto runner =
+      makeServer(std::make_shared<TestHandler>(), [&](ThriftServer& server) {
+        server.addModule(std::make_unique<TestModule>(interceptor));
+      });
+  auto client =
+      makeClient<apache::thrift::Client<test::ServiceInterceptorTest>>(*runner);
+
+  // Setting the flag disables the interceptor, allowing the call to succeed
+  apache::thrift::detail::setDisabledServiceInterceptorsFlag(
+      "TestModule.BrokenInterceptor");
+  co_await client->co_echo("Should not throw");
 }
 
 // void return calls HandlerCallback::done() instead of
@@ -718,6 +877,85 @@ CO_TEST_P(ServiceInterceptorTestP, OnRequestException) {
   EXPECT_EQ(interceptor2->onResponseCount, 1);
   EXPECT_EQ(interceptor3->onRequestCount, 1);
   EXPECT_EQ(interceptor3->onResponseCount, 1);
+}
+
+CO_TEST_P(
+    ServiceInterceptorTestP, InterceptorOnRequestExceptionCatchSelfThrowTest) {
+  auto interceptor1 = std::make_shared<ServiceInterceptorRequestExceptionCatch>(
+      "Interceptor1",
+      true /* self throw */,
+      "Exception from ServiceInterceptorRequestExceptionCatch");
+  auto runner =
+      makeServer(std::make_shared<TestHandler>(), [&](ThriftServer& server) {
+        server.addModule(
+            std::make_unique<TestModule>(InterceptorList{interceptor1}));
+      });
+
+  auto client =
+      makeClient<apache::thrift::Client<test::ServiceInterceptorTest>>(*runner);
+  EXPECT_THROW(
+      {
+        try {
+          co_await client->co_echo("");
+        } catch (const apache::thrift::TApplicationException& ex) {
+          EXPECT_THAT(
+              std::string(ex.what()),
+              HasSubstr("ServiceInterceptor::onRequest threw exceptions"));
+          EXPECT_THAT(
+              std::string(ex.what()),
+              HasSubstr(
+                  "Exception from ServiceInterceptorRequestExceptionCatch"));
+          EXPECT_THAT(
+              std::string(ex.what()), HasSubstr("[TestModule.Interceptor1]"));
+          throw;
+        }
+      },
+      apache::thrift::TApplicationException);
+  EXPECT_EQ(interceptor1->onRequestCount, 1);
+  EXPECT_EQ(interceptor1->onResponseCount, 1);
+}
+
+CO_TEST_P(
+    ServiceInterceptorTestP, InterceptorOnRequestExceptionCatchOtherThrowTest) {
+  auto interceptor1 =
+      std::make_shared<ServiceInterceptorThrowOnRequest>("Interceptor1");
+  auto interceptor2 = std::make_shared<ServiceInterceptorRequestExceptionCatch>(
+      "Interceptor2",
+      false /* self throw */,
+      "Exception from ServiceInterceptorThrowOnRequest::onRequest");
+  auto runner =
+      makeServer(std::make_shared<TestHandler>(), [&](ThriftServer& server) {
+        server.addModule(std::make_unique<TestModule>(
+            InterceptorList{interceptor1, interceptor2}));
+      });
+
+  auto client =
+      makeClient<apache::thrift::Client<test::ServiceInterceptorTest>>(*runner);
+  EXPECT_THROW(
+      {
+        try {
+          co_await client->co_echo("");
+        } catch (const apache::thrift::TApplicationException& ex) {
+          EXPECT_THAT(
+              std::string(ex.what()),
+              HasSubstr("ServiceInterceptor::onRequest threw exceptions"));
+          EXPECT_THAT(
+              std::string(ex.what()),
+              HasSubstr(
+                  "Exception from ServiceInterceptorThrowOnRequest::onRequest"));
+          EXPECT_THAT(
+              std::string(ex.what()), HasSubstr("[TestModule.Interceptor1]"));
+          EXPECT_THAT(
+              std::string(ex.what()),
+              Not(HasSubstr("[TestModule.Interceptor2]")));
+          throw;
+        }
+      },
+      apache::thrift::TApplicationException);
+  EXPECT_EQ(interceptor1->onRequestCount, 1);
+  EXPECT_EQ(interceptor1->onResponseCount, 1);
+  EXPECT_EQ(interceptor2->onRequestCount, 1);
+  EXPECT_EQ(interceptor2->onResponseCount, 1);
 }
 
 CO_TEST_P(ServiceInterceptorTestP, OnRequestExceptionEB) {
@@ -1143,31 +1381,32 @@ struct ServiceNameInfo {
                info.methodName);
   }
 };
+
+struct ServiceInterceptorCheckingServiceAndMethodNames
+    : public NamedServiceInterceptor<folly::Unit> {
+ public:
+  using ConnectionState = folly::Unit;
+  using RequestState = folly::Unit;
+
+  ServiceInterceptorCheckingServiceAndMethodNames()
+      : NamedServiceInterceptor("SomeName") {}
+
+  folly::coro::Task<std::optional<RequestState>> onRequest(
+      ConnectionState*, RequestInfo requestInfo) override {
+    names.emplace_back(
+        requestInfo.serviceName ? std::string(requestInfo.serviceName) : "",
+        requestInfo.definingServiceName
+            ? std::string(requestInfo.definingServiceName)
+            : "",
+        requestInfo.methodName ? std::string(requestInfo.methodName) : "");
+    co_return std::nullopt;
+  }
+
+  std::vector<ServiceNameInfo> names;
+};
 } // namespace
 
-CO_TEST_P(ServiceInterceptorTestP, ServiceAndMethodNames) {
-  struct ServiceInterceptorCheckingServiceAndMethodNames
-      : public NamedServiceInterceptor<folly::Unit> {
-   public:
-    using ConnectionState = folly::Unit;
-    using RequestState = folly::Unit;
-
-    ServiceInterceptorCheckingServiceAndMethodNames()
-        : NamedServiceInterceptor("SomeName") {}
-
-    folly::coro::Task<std::optional<RequestState>> onRequest(
-        ConnectionState*, RequestInfo requestInfo) override {
-      names.emplace_back(
-          requestInfo.serviceName ? std::string(requestInfo.serviceName) : "",
-          requestInfo.definingServiceName
-              ? std::string(requestInfo.definingServiceName)
-              : "",
-          requestInfo.methodName ? std::string(requestInfo.methodName) : "");
-      co_return std::nullopt;
-    }
-
-    std::vector<ServiceNameInfo> names;
-  };
+CO_TEST_P(ServiceInterceptorTestP, ServiceAndMethodNamesBasic) {
   auto interceptor =
       std::make_shared<ServiceInterceptorCheckingServiceAndMethodNames>();
   auto runner =
@@ -1200,6 +1439,117 @@ CO_TEST_P(ServiceInterceptorTestP, ServiceAndMethodNames) {
   }
 
   EXPECT_THAT(interceptor->names, ElementsAreArray(expectedNames));
+}
+/* Service Authorization Platform depends on ServiceInterceptor multiplex
+ * conflict resolution. Breakage in these tests could result in ACL failures.*/
+CO_TEST_P(
+    ServiceInterceptorTestP, ServiceAndMethodNamesMultiplexBasicConflicts) {
+  class SecondHandler : public apache::thrift::ServiceHandler<Second> {
+    int three() override { return 3; }
+    int four() override { return 4; }
+  };
+
+  class ThirdHandler : public apache::thrift::ServiceHandler<Third> {
+    int five() override { return 5; }
+    int six() override { return 6; }
+  };
+
+  class ConflictsHandler : public apache::thrift::ServiceHandler<Conflicts> {
+    int four() override { return 444; }
+    int five() override { return 555; }
+  };
+  std::vector<std::shared_ptr<AsyncProcessorFactory>> services = {
+      /* order matters when resolving conflicts */
+      std::make_shared<SecondHandler>(),
+      std::make_shared<ConflictsHandler>(),
+      std::make_shared<ThirdHandler>(),
+  };
+  auto interceptor =
+      std::make_shared<ServiceInterceptorCheckingServiceAndMethodNames>();
+  auto runner = makeServer(multiplex(services), [&](ThriftServer& server) {
+    server.addModule(std::make_unique<TestModule>(interceptor));
+  });
+
+  auto client2 = makeClient<apache::thrift::Client<Second>>(*runner);
+  auto client3 = makeClient<apache::thrift::Client<Third>>(*runner);
+
+  EXPECT_EQ(co_await client2->co_three(), 3);
+  // Second takes precedence
+  EXPECT_EQ(co_await client2->co_four(), 4);
+  // Conflicts takes precedence
+  EXPECT_EQ(co_await client3->co_five(), 555);
+  EXPECT_EQ(co_await client3->co_six(), 6);
+
+  std::vector<ServiceNameInfo> expectedNames = {
+      {"Second", "Second", "three"},
+      {"Second", "Second", "four"},
+      {"Conflicts", "Conflicts", "five"},
+      {"Third", "Third", "six"},
+  };
+
+  EXPECT_THAT(interceptor->names, ElementsAreArray(expectedNames));
+}
+
+CO_TEST_P(
+    ServiceInterceptorTestP,
+    ServiceAndMethodNamesMultiplexInteractionConflicts) {
+  if (transportType() == TransportType::ROCKET) {
+    class Interaction1Handler
+        : public apache::thrift::ServiceHandler<Interaction1> {
+     public:
+      std::unique_ptr<Thing1If> createThing1() override {
+        class Thing1 : public Thing1If {
+         public:
+          void foo() override {}
+        };
+        return std::make_unique<Thing1>();
+      }
+    };
+
+    class ConflictsInteraction1Handler
+        : public apache::thrift::ServiceHandler<
+              apache::thrift::test2::ConflictsInteraction1> {
+     public:
+      std::unique_ptr<Thing1If> createThing1() override {
+        class Thing1 : public Thing1If {
+         public:
+          void foo() override { ADD_FAILURE() << "Should never be called"; }
+          void bar() override { ADD_FAILURE() << "Should never be called"; }
+        };
+        return std::make_unique<Thing1>();
+      }
+    };
+
+    std::vector<std::shared_ptr<AsyncProcessorFactory>> services = {
+        /* order matters when resolving conflicts */
+        std::make_shared<Interaction1Handler>(),
+        std::make_shared<ConflictsInteraction1Handler>(),
+    };
+    auto interceptor =
+        std::make_shared<ServiceInterceptorCheckingServiceAndMethodNames>();
+    auto runner = makeServer(multiplex(services), [&](ThriftServer& server) {
+      server.addModule(std::make_unique<TestModule>(interceptor));
+    });
+
+    auto client1 = makeClient<apache::thrift::Client<Interaction1>>(*runner);
+    auto client2 =
+        makeClient<apache::thrift::Client<ConflictsInteraction1>>(*runner);
+
+    auto thing = client1->createThing1();
+    EXPECT_NO_THROW(co_await thing.co_foo());
+
+    auto thing2 = client2->createThing1();
+
+    // Thing1.bar from ConflictsInteraction1 should not be in MethodMetadataMap
+    // because Interaction1 already added Thing1.foo.
+    EXPECT_THROW(co_await thing2.co_bar(), TApplicationException);
+
+    std::vector<ServiceNameInfo> expectedNames = {
+        {"Interaction1", "Interaction1", "Thing1.foo"},
+    };
+
+    EXPECT_THAT(interceptor->names, ElementsAreArray(expectedNames));
+  }
 }
 
 CO_TEST_P(

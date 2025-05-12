@@ -77,7 +77,7 @@ DoSomethingResult::DoSomethingResult(apache::thrift::FragileConstructor, ::std::
 
 void DoSomethingResult::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_s_res = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_s_res = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_i_res = ::std::int32_t();
   __isset = {};
 }
@@ -114,6 +114,7 @@ void swap([[maybe_unused]] DoSomethingResult& a, [[maybe_unused]] DoSomethingRes
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void DoSomethingResult::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t DoSomethingResult::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t DoSomethingResult::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -122,6 +123,7 @@ template void DoSomethingResult::readNoXfer<>(apache::thrift::CompactProtocolRea
 template uint32_t DoSomethingResult::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t DoSomethingResult::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t DoSomethingResult::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace thrift::shared_interactions

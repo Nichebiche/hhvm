@@ -17,8 +17,8 @@
 #include <thrift/test/reflection/gen-cpp2/reflection_for_each_field.h>
 #include <thrift/test/reflection/gen-cpp2/reflection_visit_by_thrift_field_metadata.h> // @manual
 
+#include <gtest/gtest.h>
 #include <folly/Overload.h>
-#include <folly/portability/GTest.h>
 
 #include <typeindex>
 
@@ -88,12 +88,12 @@ TYPED_TEST(ForEachFieldTest, test_metadata) {
     EXPECT_EQ(
         meta.type_ref()->getType(),
         (vector{
-            meta.type_ref()->t_primitive,
-            meta.type_ref()->t_primitive,
-            meta.type_ref()->t_enum,
-            meta.type_ref()->t_enum,
-            meta.type_ref()->t_union,
-            meta.type_ref()->t_union,
+            apache::thrift::metadata::ThriftType::Type::t_primitive,
+            apache::thrift::metadata::ThriftType::Type::t_primitive,
+            apache::thrift::metadata::ThriftType::Type::t_enum,
+            apache::thrift::metadata::ThriftType::Type::t_enum,
+            apache::thrift::metadata::ThriftType::Type::t_union,
+            apache::thrift::metadata::ThriftType::Type::t_union,
         })[i]);
     EXPECT_EQ(
         *meta.is_optional_ref(),
@@ -269,30 +269,6 @@ TYPED_TEST(ForEachFieldTest, test_reference_type) {
         break;
       case 32:
         EXPECT_TRUE((is_same_v<decltype(*ref), const union2&>));
-        break;
-      default:
-        EXPECT_TRUE(false) << *meta.name_ref() << " " << *meta.id_ref();
-    }
-  });
-  TestFixture::adapter(std::move(t), [](auto& meta, auto&& ref) {
-    switch (*meta.id_ref()) {
-      case 1:
-        EXPECT_TRUE((is_same_v<decltype(*ref), const int32_t&&>));
-        break;
-      case 2:
-        EXPECT_TRUE((is_same_v<decltype(*ref), const string&&>));
-        break;
-      case 4:
-        EXPECT_TRUE((is_same_v<decltype(*ref), const enum1&&>));
-        break;
-      case 8:
-        EXPECT_TRUE((is_same_v<decltype(*ref), const enum2&&>));
-        break;
-      case 16:
-        EXPECT_TRUE((is_same_v<decltype(*ref), const union1&&>));
-        break;
-      case 32:
-        EXPECT_TRUE((is_same_v<decltype(*ref), const union2&&>));
         break;
       default:
         EXPECT_TRUE(false) << *meta.name_ref() << " " << *meta.id_ref();

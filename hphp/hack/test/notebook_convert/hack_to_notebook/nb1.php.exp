@@ -6,13 +6,15 @@
       "metadata":{"collapsed":true,"output":{"id":1247934846418027,"loadingStatus":"loaded"}},
       "outputs":[],
       "source":[
-        "class MyClass {",
-        "  public function hello(): void {",
-        "    echo \"hello\";",
-        "  }",
-        "}",
-        "$m = new MyClass();",
-        "echo \"hi1\";"
+        "$m = new MyClass();\n",
+        "echo \"hi1\";\n",
+        "class MyClass {\n",
+        "  public function hello(): void {\n",
+        "    echo \"hello\";\n",
+        "  }\n",
+        "}\n",
+        "function foo(): void {}\n",
+        "function bar(): void {}"
       ]
     },
     {
@@ -20,14 +22,21 @@
       "execution_count":null,
       "metadata":{},
       "outputs":[],
-      "source":["# Check it out","","I am a *markdown* **cell**"]
+      "source":["# Check it out\n","I am a *markdown* **cell**"]
     },
     {
       "cell_type":"code",
       "execution_count":null,
       "metadata":{},
       "outputs":[],
-      "source":["echo \"hi2\";","$m->hello();"]
+      "source":["echo \"hi2\";\n","$m->hello();"]
+    },
+    {
+      "cell_type":"code",
+      "execution_count":null,
+      "metadata":{"language":"python"},
+      "outputs":[],
+      "source":["%%python\n","print('Hello from python')"]
     }
   ],
   "metadata":{

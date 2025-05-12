@@ -72,15 +72,6 @@ Variant HHVM_FUNCTION(
 int64_t HHVM_FUNCTION(thrift_protocol_set_compact_version, int64_t version);
 
 void HHVM_FUNCTION(
-    thrift_protocol_write_compact,
-    const Object& transportobj,
-    const String& method_name,
-    int64_t msgtype,
-    const Object& request_struct,
-    int64_t seqid,
-    bool oneway = false);
-
-void HHVM_FUNCTION(
     thrift_protocol_write_compact2,
     const Object& transportobj,
     const String& method_name,
@@ -95,6 +86,11 @@ void HHVM_FUNCTION(
     const Object& transportobj,
     const Object& request_struct,
     int64_t version = 2);
+
+String HHVM_FUNCTION(
+    thrift_protocol_write_compact_struct_to_string,
+    const Object& request_struct,
+    int64_t version);
 
 Variant HHVM_FUNCTION(
     thrift_protocol_read_compact,
@@ -122,7 +118,7 @@ Object compact_deserialize_from_string(
     const String& thrift_typename, 
     int64_t options = 0);
 
-String compact_serialize_to_string(const Object& transportobj,
+String compact_serialize_to_string(
                    const Object& thrift_struct,
                    int64_t version = 2);
 

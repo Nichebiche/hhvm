@@ -17,9 +17,7 @@
 #include "hphp/runtime/vm/jit/irlower-internal.h"
 
 #include "hphp/runtime/base/runtime-error.h"
-#include "hphp/runtime/base/tv-conversions.h"
 
-#include "hphp/runtime/vm/jit/types.h"
 #include "hphp/runtime/vm/jit/arg-group.h"
 #include "hphp/runtime/vm/jit/call-spec.h"
 #include "hphp/runtime/vm/jit/code-gen-cf.h"
@@ -27,7 +25,6 @@
 #include "hphp/runtime/vm/jit/ir-instruction.h"
 #include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/ssa-tmp.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/jit/type.h"
 #include "hphp/runtime/vm/jit/vasm-gen.h"
 #include "hphp/runtime/vm/jit/vasm-instr.h"
@@ -38,7 +35,7 @@
 
 namespace HPHP::jit::irlower {
 
-TRACE_SET_MOD(irlower);
+TRACE_SET_MOD(irlower)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -74,6 +71,7 @@ IMPL_OPCODE_CALL(VerifyParamCallable)
 IMPL_OPCODE_CALL(VerifyRetCallable)
 IMPL_OPCODE_CALL(VerifyReifiedLocalType)
 IMPL_OPCODE_CALL(VerifyReifiedReturnType)
+IMPL_OPCODE_CALL(VerifyType)
 
 void cgVerifyParamCls(IRLS& env, const IRInstruction* inst) {
   implVerifyType(env, inst);

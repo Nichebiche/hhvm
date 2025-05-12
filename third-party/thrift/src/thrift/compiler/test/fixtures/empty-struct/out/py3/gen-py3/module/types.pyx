@@ -37,6 +37,7 @@ from thrift.py3.types cimport (
     make_const_shared,
     constant_shared_ptr,
 )
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -64,6 +65,7 @@ cdef object get_types_reflection():
     )
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class Empty(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -100,10 +102,7 @@ cdef class Empty(thrift.py3.types.Struct):
 
 
     def __copy__(Empty self):
-        cdef shared_ptr[_module_cbindings.cEmpty] cpp_obj = make_shared[_module_cbindings.cEmpty](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return Empty._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -166,6 +165,7 @@ cdef class Empty(thrift.py3.types.Struct):
 
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class Nada(thrift.py3.types.Union):
     __module__ = _fbthrift__module_name__
     Type = __NadaType
@@ -219,14 +219,11 @@ cdef class Nada(thrift.py3.types.Union):
 
     cdef _initialize_py(Nada self):
         self.py_type = None
-        self.type_int = deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType()
+        self.type_int = int(deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType())
         self.py_value = None
 
     def __copy__(Nada self):
-        cdef shared_ptr[_module_cbindings.cNada] cpp_obj = make_shared[_module_cbindings.cNada](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return Nada._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)

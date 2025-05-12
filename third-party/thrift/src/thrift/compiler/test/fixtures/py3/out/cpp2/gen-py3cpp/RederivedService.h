@@ -41,6 +41,8 @@ class RederivedServiceServiceInfoHolder : public apache::thrift::ServiceInfoHold
 namespace apache::thrift {
 template <>
 class ServiceHandler<::py3::simple::RederivedService> : virtual public ::py3::simple::DerivedServiceSvIf {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::py3::simple::RederivedService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "RederivedService"; }
 
@@ -65,6 +67,13 @@ class ServiceHandler<::py3::simple::RederivedService> : virtual public ::py3::si
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_get_seven{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::py3::simple::RederivedService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -1303334149772697254;
+  static constexpr ::std::string_view definitionKey = {"\x85\x32\xed\xbb\x45\x11\xc6\x49\x2e\xbb\xa9\x45\xd3\x8e\x5a\x24", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace py3::simple {

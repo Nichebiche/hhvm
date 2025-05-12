@@ -59,6 +59,33 @@ class t_type : public t_named {
    */
   const t_type* get_true_type() const;
 
+  // Conversions and checks to more specific types.
+  template <typename T>
+  bool is() const {
+    static_assert(std::is_same_v<std::decay_t<std::remove_pointer_t<T>>, T>);
+    return dynamic_cast<const T*>(this) != nullptr;
+  }
+  template <typename T>
+  T& as() {
+    static_assert(std::is_same_v<std::decay_t<std::remove_pointer_t<T>>, T>);
+    return dynamic_cast<T&>(*this);
+  }
+  template <typename T>
+  const T& as() const {
+    static_assert(std::is_same_v<std::decay_t<std::remove_pointer_t<T>>, T>);
+    return dynamic_cast<const T&>(*this);
+  }
+  template <typename T>
+  T* try_as() {
+    static_assert(std::is_same_v<std::decay_t<std::remove_pointer_t<T>>, T>);
+    return dynamic_cast<T*>(this);
+  }
+  template <typename T>
+  const T* try_as() const {
+    static_assert(std::is_same_v<std::decay_t<std::remove_pointer_t<T>>, T>);
+    return dynamic_cast<const T*>(this);
+  }
+
  protected:
   /**
    * Default constructor for t_type
@@ -168,6 +195,7 @@ class t_type : public t_named {
   virtual bool is_double() const { return false; }
   virtual bool is_typedef() const { return false; }
   virtual bool is_enum() const { return false; }
+  virtual bool is_struct_or_union() const { return false; }
   virtual bool is_struct() const { return false; }
   virtual bool is_union() const { return false; }
   virtual bool is_exception() const { return false; }
@@ -175,9 +203,7 @@ class t_type : public t_named {
   virtual bool is_list() const { return false; }
   virtual bool is_set() const { return false; }
   virtual bool is_map() const { return false; }
-  virtual bool is_service() const { return false; }
   virtual bool is_binary() const { return false; }
-  virtual bool is_paramlist() const { return false; }
 
   bool is_string_or_binary() const { return is_string() || is_binary(); }
   bool is_any_int() const { return is_i16() || is_i32() || is_i64(); }

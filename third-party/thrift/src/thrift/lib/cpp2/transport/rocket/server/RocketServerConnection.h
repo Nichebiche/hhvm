@@ -46,6 +46,7 @@
 #include <thrift/lib/cpp2/transport/core/ManagedConnectionIf.h>
 #include <thrift/lib/cpp2/transport/rocket/RocketException.h>
 #include <thrift/lib/cpp2/transport/rocket/Types.h>
+#include <thrift/lib/cpp2/transport/rocket/compression/CustomCompressor.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/Parser.h>
 #include <thrift/lib/cpp2/transport/rocket/payload/PayloadSerializer.h>
 #include <thrift/lib/cpp2/transport/rocket/server/RocketServerConnectionObserver.h>
@@ -647,6 +648,34 @@ class RocketServerConnection final
   // can inspect any state available through public methods
   // when destruction of the Rocket connection begins.
   RocketServerConnectionObserverContainer observerContainer_;
+
+ public:
+  PayloadSerializer::Ptr getPayloadSerializer() {
+    if (payloadSerializerHolder_) {
+      return payloadSerializerHolder_->get();
+    }
+
+    return PayloadSerializer::getInstance();
+  }
+
+  void applyCustomCompression(std::shared_ptr<CustomCompressor> compressor) {
+    CustomCompressionPayloadSerializerStrategyOptions options;
+    options.compressor = compressor;
+
+    if (!payloadSerializerHolder_) {
+      payloadSerializerHolder_.emplace();
+    }
+
+    CustomCompressionPayloadSerializerStrategy<DefaultPayloadSerializerStrategy>
+        strategy{options};
+    payloadSerializerHolder_->initialize(std::move(strategy));
+    customCompressor_ = compressor;
+  }
+
+ private:
+  std::optional<PayloadSerializer::PayloadSerializerHolder>
+      payloadSerializerHolder_;
+  std::shared_ptr<CustomCompressor> customCompressor_;
 };
 
 } // namespace rocket

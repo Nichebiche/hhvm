@@ -18,7 +18,6 @@ package stress
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -30,7 +29,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/dummy"
+	dummyif "github.com/facebook/fbthrift/thrift/test/go/if/dummy"
 	"thrift/lib/go/thrift"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestServerStress(t *testing.T) {
@@ -47,9 +49,7 @@ func TestServerStress(t *testing.T) {
 
 func runStressTest(t *testing.T, serverTransport thrift.TransportID) {
 	listener, err := net.Listen("unix", fmt.Sprintf("/tmp/thrift_go_stress_server_test_%d.sock", os.Getpid()))
-	if err != nil {
-		t.Fatalf("could not create listener: %s", err)
-	}
+	require.NoError(t, err)
 	addr := listener.Addr()
 	t.Logf("Server listening on %v", addr)
 
@@ -76,7 +76,7 @@ func runStressTest(t *testing.T, serverTransport thrift.TransportID) {
 		},
 	)
 
-	processor := dummy.NewDummyProcessor(&dummy.DummyHandler{})
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
 	server := thrift.NewServer(processor, listener, serverTransport, connContextOption, thrift.WithNumWorkers(10))
 
 	serverCtx, serverCancel := context.WithCancel(context.Background())
@@ -88,7 +88,7 @@ func runStressTest(t *testing.T, serverTransport thrift.TransportID) {
 	var successRequestCount atomic.Uint64
 
 	makeRequestFunc := func() error {
-		conn, err := thrift.NewClient(
+		channel, err := thrift.NewClient(
 			clientTransportOption,
 			thrift.WithDialer(func() (net.Conn, error) {
 				return net.DialTimeout("unix", addr.String(), 60*time.Second)
@@ -96,15 +96,15 @@ func runStressTest(t *testing.T, serverTransport thrift.TransportID) {
 			thrift.WithIoTimeout(60*time.Second),
 		)
 		if err != nil {
-			errRes := fmt.Errorf("failed to create client: %v", err)
+			errRes := fmt.Errorf("failed to create client: %w", err)
 			t.Log(errRes.Error())
 			return errRes
 		}
-		client := dummy.NewDummyClient(conn)
+		client := dummyif.NewDummyChannelClient(channel)
 		defer client.Close()
 		result, err := client.Echo(context.Background(), "hello")
 		if err != nil {
-			errRes := fmt.Errorf("failed to make RPC: %v", err)
+			errRes := fmt.Errorf("failed to make RPC: %w", err)
 			t.Log(errRes.Error())
 			return errRes
 		}
@@ -117,9 +117,7 @@ func runStressTest(t *testing.T, serverTransport thrift.TransportID) {
 
 	runtime.GC()
 	fdCountBefore, err := getNumFileDesciptors()
-	if err != nil {
-		t.Fatalf("failed to get FD count: %v", err)
-	}
+	require.NoError(t, err)
 
 	const requestCount = 100_000
 	const parallelism = 100
@@ -133,51 +131,38 @@ func runStressTest(t *testing.T, serverTransport thrift.TransportID) {
 	err = clientsEG.Wait()
 	timeElapsed := time.Since(startTime)
 	timePerRequest := timeElapsed / requestCount
-	if err != nil {
-		t.Logf("successful requests: %d/%d", successRequestCount.Load(), requestCount)
-		t.Fatalf("failed to make request: %v", err)
-	}
+	t.Logf("successful requests: %d/%d", successRequestCount.Load(), requestCount)
+	require.NoError(t, err)
 
 	goroutinesAfterRequests := runtime.NumGoroutine()
 	var memStatsAfter runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&memStatsAfter)
 	fdCountAfter, err := getNumFileDesciptors()
-	if err != nil {
-		t.Fatalf("failed to get FD count: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Go routine check (while server is still running)
 	// We shouldn't exceed 100 Go-routines, if we do - server is likely leaking.
-	if goroutinesAfterRequests > 100 {
-		t.Fatalf("unexpected large goroutine count: %d", goroutinesAfterRequests)
-	}
+	require.Less(t, goroutinesAfterRequests, 100)
+
 	// Mem alloc check (while server is still running)
-	if memStatsAfter.HeapAlloc > 50*1024*1024 /* 50MB */ {
-		t.Fatalf("unexpectedly large memory alloc: %d", memStatsAfter.HeapAlloc)
-	}
+	require.Less(t, memStatsAfter.HeapAlloc, uint64(50*1024*1024) /* 50MB */)
+
 	// FD count check (against FD leaks)
-	if fdCountAfter > fdCountBefore {
-		t.Fatalf("unexpected FD count increase: %d (before), %d (after)", fdCountBefore, fdCountAfter)
-	}
+	require.LessOrEqual(t, fdCountAfter, fdCountBefore)
+
 	// Latency per-request
-	if timePerRequest > 500*time.Microsecond {
-		t.Fatalf("unexpected per-request latency: %v", timePerRequest)
-	}
+	require.Less(t, timePerRequest, 500*time.Microsecond)
 
 	// Shut down server.
 	serverCancel()
 	err = serverEG.Wait()
-	if err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("unexpected error in ServeContext: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled)
 
 	// Go routine check (after server shutdown)
 	// We shouldn't exceed 10 Go-routines, if we do - something didn't get cleaned up properly.
 	goroutinesAfterServerStop := runtime.NumGoroutine()
-	if goroutinesAfterServerStop > 10 {
-		t.Fatalf("unexpected large goroutine count: %d", goroutinesAfterServerStop)
-	}
+	require.LessOrEqual(t, goroutinesAfterServerStop, 10)
 }
 
 func getNumFileDesciptors() (int, error) {

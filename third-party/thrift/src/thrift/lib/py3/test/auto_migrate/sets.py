@@ -152,6 +152,10 @@ class SetTests(unittest.TestCase):
         self.assertTrue(all(ge(x, x2)))
         self.assertTrue(all(ge(y2, y)))
 
+    def test_default_ctor(self) -> None:
+        self.assertEqual(SetI32(), set())
+        self.assertEqual(Set__i32(), set())
+
     def test_None(self) -> None:
         with self.assertRaises(TypeError):
             # pyre-fixme[6]: Expected `Optional[AbstractSet[Sequence[int]]]` for 1st
@@ -165,7 +169,7 @@ class SetTests(unittest.TestCase):
 
     def test_no_dict(self) -> None:
         with self.assertRaises(AttributeError):
-            SetI32().__dict__
+            Set__i32().__dict__
 
     def test_empty(self) -> None:
         SetI32Lists(set())

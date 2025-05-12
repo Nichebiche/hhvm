@@ -1261,7 +1261,7 @@ class TestLsp(LspTestBase):
                         {
                             "label": "class",
                             "kind": 21,
-                            "detail": "classname<this>",
+                            "detail": "class<this>",
                             "sortText": "class",
                             "insertTextFormat": 1,
                             "textEdit": {
@@ -1650,7 +1650,7 @@ class TestLsp(LspTestBase):
                         {
                             "label": "class",
                             "kind": 21,
-                            "detail": "classname<this>",
+                            "detail": "class<this>",
                             "sortText": "class",
                             "insertTextFormat": 1,
                             "textEdit": {
@@ -2754,7 +2754,7 @@ class TestLsp(LspTestBase):
                 },
                 result={
                     "contents": [
-                        {"language": "hack", "value": "int"},
+                        {"language": "hack", "value": "function b_hover(): int"},
                         "---",
                         "A comment describing b_hover.",
                     ],
@@ -2787,6 +2787,7 @@ class TestLsp(LspTestBase):
                 result={
                     "contents": [
                         {"language": "hack", "value": "string"},
+                        "---",
                         {"language": "hack", "value": "Parameter: $s"},
                     ]
                 },
@@ -2803,6 +2804,7 @@ class TestLsp(LspTestBase):
                 result={
                     "contents": [
                         {"language": "hack", "value": "int"},
+                        "---",
                         {"language": "hack", "value": "Parameter: $i"},
                     ]
                 },
@@ -3052,7 +3054,7 @@ class TestLsp(LspTestBase):
                 },
                 result={
                     "contents": [
-                        {"language": "hack", "value": "int"},
+                        {"language": "hack", "value": "function b_hover(): int"},
                         "---",
                         "A comment describing b_hover.",
                     ],
@@ -3097,9 +3099,11 @@ class TestLsp(LspTestBase):
                 },
                 result={
                     "contents": [
+                        "Defined in `HoverWithErrorsClass`",
+                        "---",
                         {
                             "language": "hack",
-                            "value": "// Defined in HoverWithErrorsClass\npublic static function staticMethod(string $z): void",
+                            "value": "public static function staticMethod(string $z): void",
                         },
                         "---",
                         'During testing, we\'ll remove the "public" tag from this '
@@ -3139,9 +3143,11 @@ class TestLsp(LspTestBase):
                 },
                 result={
                     "contents": [
+                        "Defined in `HoverWithErrorsClass`",
+                        "---",
                         {
                             "language": "hack",
-                            "value": "// Defined in HoverWithErrorsClass\npublic static function staticMethod(string $z): void",
+                            "value": "public static function staticMethod(string $z): void",
                         },
                         "---",
                         'During testing, we\'ll remove the "public" tag from this '
@@ -4460,6 +4466,13 @@ function f(): void {
         self.test_driver.run_check()
         self.load_and_run("references_partial_with_server", variables)
 
+    def test_references_partial_with_server_2(self) -> None:
+        variables = self.write_hhconf_and_naming_table()
+        variables.update(self.setup_php_file("references.php"))
+        self.test_driver.start_hh_server()
+        self.test_driver.run_check()
+        self.load_and_run("references_partial_with_server_2", variables)
+
     def test_references_no_server(self) -> None:
         variables = self.write_hhconf_and_naming_table()
         variables.update(self.setup_php_file("references.php"))
@@ -4730,7 +4743,7 @@ function call_method(ClassWithFooBar $mc): void {
                                         }
                                     ]
                                 },
-                            },
+                            }
                         },
                     },
                     {
@@ -4858,8 +4871,40 @@ function call_method(ClassWithFooBar $mc): void {
                                         }
                                     ]
                                 },
-                            },
+                            }
                         },
+                    },
+                    {
+                        "title": "Fix Hack error inline - No instance method `foobaz` in `ClassWithFooBar`",
+                        "kind": "",
+                        "diagnostics": [],
+                        "edit": {"changes": {}},
+                        "command": {
+                            "title": "Fix Hack error inline - No instance method `foobaz` in `ClassWithFooBar`",
+                            "command": "code-compose.show-inline-chat",
+                            "arguments": [
+                                {
+                                    "entrypoint": "FixLintErrorCodeAction",
+                                    "predefinedPrompt": {
+                                        "command": "Fix Hack error inline",
+                                        "displayPrompt": "Fix inline - No instance method `foobaz` in `ClassWithFooBar`",
+                                        "userPrompt": "Given the following snippet of Hack code that is part of the file:\n<SNIPPET>\n```hack\n 7 | function call_method(ClassWithFooBar $mc): void {\n 8 |   $mc->[DIAGNOSTIC_START]foobar[DIAGNOSTIC_END]();\n 9 | }\n```\n</SNIPPET>\n<DIAGNOSTIC>\nerror: Typing[4053] No instance method foobaz in ClassWithFooBar\n\nFile code_action_missing_method.php, line 8, character 8 - line 8, character 13:\n\n 5 | }\n 6 | \n 7 | function call_method(ClassWithFooBar $mc): void {\n 8 |   $mc->»foobar«();\n 9 | }\n\nDid you mean foobar instead?\n\nFile code_action_missing_method.php, line 4, character 19 - line 4, character 24:\n\n 1 | <?hh\n 2 | \n 3 | class ClassWithFooBar {\n 4 |   public function »foobar«(): void {}\n 5 | }\n 6 | \n 7 | function call_method(ClassWithFooBar $mc): void {\n\nThis is why I think it is an object of type ClassWithFooBar\n\nFile code_action_missing_method.php, line 7, character 22 - line 7, character 36:\n\n 5 | }\n 6 | \n 7 | function call_method(»ClassWithFooBar« $mc): void {\n 8 |   $mc->foobar();\n 9 | }\n\nDeclaration of ClassWithFooBar is here\n\nFile code_action_missing_method.php, line 3, character 7 - line 3, character 21:\n\n 1 | <?hh\n 2 | \n 3 | class »ClassWithFooBar« {\n 4 |   public function foobar(): void {}\n 5 | }\n 6 | \n 7 | function call_method(ClassWithFooBar $mc): void {\n\n\n</DIAGNOSTIC>\nEdit <SNIPPET> in a way that would fix that lint.\n   If there are multiple ways to fix this issue, please return in the code section the most strightforward one that is part of <SNIPPET>,\n   any further suggestions can be added in the explanation section.",
+                                        "description": "Fix Hack error inline",
+                                        "model": "iCodeLlama 3.1 70B",
+                                    },
+                                    "overrideSelection": {
+                                        "start": {"line": 6, "character": 0},
+                                        "end": {"line": 8, "character": 1},
+                                    },
+                                    "webviewStartLine": 6,
+                                    "extras": {
+                                        "lineAgnosticHash": "6c30c21bea1128b0",
+                                        "legacyUserPrompt": "Given the following snippet of Hack code that is part of the file:\n<SNIPPET>\n```hack\n 7 | function call_method(ClassWithFooBar $mc): void {\n 8 |   $mc->[DIAGNOSTIC_START]foobar[DIAGNOSTIC_END]();\n 9 | }\n```\n</SNIPPET>\n<DIAGNOSTIC>\nNo instance method `foobaz` in `ClassWithFooBar`\n</DIAGNOSTIC>\n<HINT>\nDid you mean `foobar` instead?\nlocation uri:${root_path}/code_action_missing_method.php\n</HINT>\n<HINT>\nThis is why I think it is an object of type ClassWithFooBar\nlocation uri:${root_path}/code_action_missing_method.php\n</HINT>\n<HINT>\nDeclaration of `ClassWithFooBar` is here\nlocation uri:${root_path}/code_action_missing_method.php\n</HINT>\nEdit <SNIPPET> in a way that would fix that lint.\n   If there are multiple ways to fix this issue, please return in the code section the most strightforward one that is part of <SNIPPET>,\n   any further suggestions can be added in the explanation section.",
+                                    },
+                                }
+                            ],
+                        },
+                        "data": {"isAI": True},
                     },
                 ],
                 powered_by="serverless_ide",
@@ -5086,9 +5131,11 @@ function call_method(ClassWithFooBar $mc): void {
                 },
                 result={
                     "contents": [
+                        "Defined in `BaseClassIncremental`",
+                        "---",
                         {
                             "language": "hack",
-                            "value": "// Defined in BaseClassIncremental\npublic function foo(): int",
+                            "value": "public function foo(): int",
                         },
                     ],
                     "range": {
@@ -5118,14 +5165,116 @@ class BaseClassIncremental {
                 },
                 result={
                     "contents": [
+                        "Defined in `BaseClassIncremental`",
+                        "---",
                         {
                             "language": "hack",
-                            "value": "// Defined in BaseClassIncremental\npublic function foo(): string",
+                            "value": "public function foo(): string",
                         },
                     ],
                     "range": {
                         "start": {"line": 7, "character": 12},
                         "end": {"line": 7, "character": 15},
+                    },
+                },
+                powered_by="serverless_ide",
+            )
+            .request(line=line(), method="shutdown", params={}, result=None)
+            .notification(method="exit", params={})
+        )
+
+        self.run_spec(spec, variables)
+
+    def test_incrementality(self) -> None:
+        variables = self.write_hhconf_and_naming_table()
+        variables.update(self.setup_php_file("incrementality_use.php"))
+        parent_php_file_uri = self.repo_file("incrementality_parent.php")
+        variables.update({"parent_php_file_uri": parent_php_file_uri})
+        child_php_file_uri = self.repo_file("incrementality_child.php")
+        variables.update({"child_php_file_uri": child_php_file_uri})
+
+        spec = (
+            self.initialize_spec(
+                LspTestSpec("incrementality"),
+            )
+            .ignore_notifications(method="textDocument/publishDiagnostics")
+            .notification(
+                method="textDocument/didOpen",
+                params={
+                    "textDocument": {
+                        "uri": "${php_file_uri}",
+                        "languageId": "hack",
+                        "version": 1,
+                        "text": "${php_file}",
+                    }
+                },
+            )
+            .notification(
+                method="textDocument/didOpen",
+                params={
+                    "textDocument": {
+                        "uri": "${parent_php_file_uri}",
+                        "languageId": "hack",
+                        "version": 1,
+                        "text": self.read_repo_file("incrementality_parent.php"),
+                    }
+                },
+            )
+            .request(
+                line=line(),
+                comment="hover before change to class hierarchy should be `int`",
+                method="textDocument/hover",
+                params={
+                    "textDocument": {"uri": "${php_file_uri}"},
+                    "position": {"line": 3, "character": 6},
+                },
+                result={
+                    "contents": [
+                        "Defined in `Parentt`",
+                        "---",
+                        {
+                            "language": "hack",
+                            "value": "public function m(int $_): void",
+                        },
+                    ],
+                    "range": {
+                        "start": {"line": 3, "character": 6},
+                        "end": {"line": 3, "character": 7},
+                    },
+                },
+                powered_by="serverless_ide",
+            )
+            .write_to_disk(
+                uri=parent_php_file_uri,
+                contents="""\
+<?hh
+
+class Parentt {
+  public function m(string $_): void {}
+}
+""",
+                notify=True,
+            )
+            .request(
+                line=line(),
+                comment="hover after change to class hierarchy should be `string`",
+                method="textDocument/hover",
+                params={
+                    "textDocument": {"uri": "${php_file_uri}"},
+                    "position": {"line": 3, "character": 6},
+                },
+                result={
+                    "contents": [
+                        "Defined in `Parentt`",
+                        "---",
+                        {
+                            "language": "hack",
+                            "value": "public function m(string $_): void",
+                        },
+                    ],
+                    "range": {
+                        "start": {"line": 3, "character": 6},
+                        "end": {"line": 3, "character": 7},
                     },
                 },
                 powered_by="serverless_ide",
@@ -5166,7 +5315,7 @@ class BaseClassIncremental {
                 },
                 result={
                     "contents": [
-                        {"language": "hack", "value": "int"},
+                        {"language": "hack", "value": "function b_hover(): int"},
                         "---",
                         "A comment describing b_hover.",
                     ],
@@ -5209,7 +5358,7 @@ function b_hover(): string {
                 },
                 result={
                     "contents": [
-                        {"language": "hack", "value": "string"},
+                        {"language": "hack", "value": "function b_hover(): string"},
                         "---",
                         "A comment describing b_hover differently.",
                     ],
@@ -5402,6 +5551,7 @@ function unsaved_bar(): string { return "hello"; }
                 result={
                     "contents": [
                         {"language": "hack", "value": "string"},
+                        "---",
                         {"language": "hack", "value": "Parameter: $s"},
                     ]
                 },
@@ -5609,15 +5759,39 @@ function unsaved_bar(): string { return "hello"; }
                 notify=False,
             )
             .notification(
-                comment="actually open something that's different from what was on disk (with extra newline)",
+                comment="open errors_b.php",
+                method="textDocument/didOpen",
+                params={
+                    "textDocument": {
+                        "uri": "${errors_b_uri}",
+                        "languageId": "hack",
+                        "version": 1,
+                        "text": "<?hh\nfunction bbb(): int { return 2 }\n",
+                    }
+                },
+            )
+            .notification(
+                comment="open errors_a.php",
                 method="textDocument/didOpen",
                 params={
                     "textDocument": {
                         "uri": "${errors_a_uri}",
                         "languageId": "hack",
                         "version": 1,
-                        "text": "<?hh\n\n\n\nfunction aaa(): int { return 1 }\n",
+                        "text": "<?hh\nfunction aaa(): int { return 1 }\n",
                     }
+                },
+            )
+            .notification(
+                comment="edit errors_a.php",
+                method="textDocument/didChange",
+                params={
+                    "textDocument": {"uri": "${errors_a_uri}", "version": 1},
+                    "contentChanges": [
+                        {
+                            "text": "<?hh\n\n\n\nfunction aaa(): int { return 1 }\n",
+                        }
+                    ],
                 },
             )
             .wait_for_notification(

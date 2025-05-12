@@ -60,10 +60,10 @@ class TaggedPatchRef<type::list<Tag>> {
 
   void operator=(const value_type& v) { assign(v); }
 
-  void clear() { patch_.get().clear(badge); }
+  void clear() { patch_.get().clear(); }
 
   void push_back(const typename type::native_type<Tag>& v) {
-    patch_.get().push_back(badge, asValueStruct<Tag>(v));
+    patch_.get().push_back(asValueStruct<Tag>(v));
   }
 
   void apply(value_type& v) { apply_impl(v); }
@@ -83,7 +83,7 @@ class TaggedPatchRef<type::list<Tag>> {
   }
   template <class Value>
   void assign_impl(const Value& v) {
-    patch_.get().assign(badge, asValueStruct<List>(v).as_list());
+    patch_.get().assign(asValueStruct<List>(v).as_list());
   }
 
  private:
@@ -106,14 +106,14 @@ class TaggedPatchRef<type::set<Tag>> {
 
   void operator=(const value_type& v) { assign(v); }
 
-  void clear() { patch_.get().clear(badge); }
+  void clear() { patch_.get().clear(); }
 
   void insert(const typename type::native_type<Tag>& v) {
-    patch_.get().insert(badge, asValueStruct<Tag>(v));
+    patch_.get().insert(asValueStruct<Tag>(v));
   }
 
   void erase(const typename type::native_type<Tag>& v) {
-    patch_.get().erase(badge, asValueStruct<Tag>(v));
+    patch_.get().erase(asValueStruct<Tag>(v));
   }
 
   void apply(value_type& v) { apply_impl(v); }
@@ -133,7 +133,7 @@ class TaggedPatchRef<type::set<Tag>> {
   }
   template <class Value>
   void assign_impl(const Value& v) {
-    patch_.get().assign(badge, asValueStruct<Set>(v).as_set());
+    patch_.get().assign(asValueStruct<Set>(v).as_set());
   }
 
  private:
@@ -150,7 +150,7 @@ class TaggedPatchAnyRef {
  public:
   template <class Tag>
   auto& bind(DynamicPatch& patch) {
-    auto& stored = patch.getStoredPatchByTag<Tag>(BadgeHolder::get());
+    auto& stored = patch.getStoredPatchByTag<Tag>();
     if constexpr (!kHasTaggedPatchRef<Tag>) {
       // For primitive patches we return the stored patch directly.
       return stored;
@@ -183,24 +183,24 @@ class TaggedPatchRef<type::map<K, V>> {
 
   void operator=(const value_type& v) { assign(v); }
 
-  void clear() { patch_.get().clear(badge); }
+  void clear() { patch_.get().clear(); }
 
   void insert_or_assign(
       const type::native_type<K>& key, const type::native_type<V>& value) {
     patch_.get().insert_or_assign(
-        badge, asValueStruct<K>(key), asValueStruct<V>(value));
+        asValueStruct<K>(key), asValueStruct<V>(value));
   }
 
   void tryPutMulti(const type::native_type<Map>& map) {
-    patch_.get().tryPutMulti(badge, asValueStruct<Map>(map).as_map());
+    patch_.get().tryPutMulti(asValueStruct<Map>(map).as_map());
   }
 
   void erase(const type::native_type<K>& key) {
-    patch_.get().erase(badge, asValueStruct<K>(key));
+    patch_.get().erase(asValueStruct<K>(key));
   }
 
   auto& patchByKey(const type::native_type<K>& key) {
-    auto& subPatch = patch_.get().patchByKey(badge, asValueStruct<K>(key));
+    auto& subPatch = patch_.get().patchByKey(asValueStruct<K>(key));
     return valuePatchRef_.bind<V>(subPatch);
   }
 
@@ -226,7 +226,7 @@ class TaggedPatchRef<type::map<K, V>> {
   }
   template <class Value>
   void assign_impl(const Value& v) {
-    patch_.get().assign(badge, asValueStruct<Map>(v).as_map());
+    patch_.get().assign(asValueStruct<Map>(v).as_map());
   }
 
  private:
@@ -254,7 +254,7 @@ class TaggedStructurePatchRef {
 
   void operator=(const value_type& v) { assign(v); }
 
-  void clear() { patch_.get().clear(badge); }
+  void clear() { patch_.get().clear(); }
 
   template <class Id>
   void ensure() {
@@ -274,7 +274,7 @@ class TaggedStructurePatchRef {
     }
 
     FieldId id = op::get_field_id_v<value_type, Id>;
-    auto& subPatch = patch_.get().patchIfSet(badge, id);
+    auto& subPatch = patch_.get().patchIfSet(id);
     return fieldPatchRef_.bind<op::get_type_tag<value_type, Id>>(subPatch);
   }
 
@@ -286,7 +286,7 @@ class TaggedStructurePatchRef {
 
   template <class Id>
   void remove() {
-    patch_.get().remove(badge, op::get_field_id_v<value_type, Id>);
+    patch_.get().remove(op::get_field_id_v<value_type, Id>);
   }
 
   void apply(value_type& v) { apply_impl(v); }
@@ -321,7 +321,7 @@ class TaggedStructurePatchRef {
   }
   template <class Value>
   void assign_impl(const Value& v) {
-    patch_.get().assign(badge, asValueStruct<Tag>(v).as_object());
+    patch_.get().assign(asValueStruct<Tag>(v).as_object());
   }
 
  private:
@@ -330,7 +330,6 @@ class TaggedStructurePatchRef {
   template <class Id>
   void ensureImpl(const op::get_native_type<value_type, Id>& d) {
     patch_.get().ensure(
-        badge,
         op::get_field_id_v<value_type, Id>,
         asValueStruct<op::get_type_tag<value_type, Id>>(d));
   }

@@ -29,15 +29,12 @@
 #include "hphp/util/trace.h"
 
 #include "hphp/runtime/vm/jit/alias-analysis.h"
-#include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/cfg.h"
 #include "hphp/runtime/vm/jit/containers.h"
-#include "hphp/runtime/vm/jit/fixup.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/memory-effects.h"
 #include "hphp/runtime/vm/jit/mutation.h"
 #include "hphp/runtime/vm/jit/pass-tracer.h"
-#include "hphp/runtime/vm/jit/state-multi-map.h"
 #include "hphp/runtime/vm/jit/state-vector.h"
 #include "hphp/runtime/vm/jit/timer.h"
 #include "hphp/runtime/vm/jit/vm-reg-liveness.h"
@@ -143,7 +140,7 @@
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(hhir_store);
+TRACE_SET_MOD(hhir_store)
 
 namespace {
 
@@ -496,7 +493,7 @@ void store(Local& env, AliasClass acls) {
   mayStore(env, acls);
   auto const canon = canonicalize(acls);
   mustStoreSet(env, env.global.ainfo.expand(canon));
-};
+}
 
 void kill(Local& env, AliasClass acls) {
   auto const canon = canonicalize(acls);
@@ -552,7 +549,7 @@ void visit(Local& env, IRInstruction& inst) {
       mustStore(env, *bit);
       if (!l.value || l.value->inst()->block() != inst.block()) return;
       auto const le = memory_effects(*l.value->inst());
-      auto pl = boost::get<PureLoad>(&le);
+      auto pl = std::get_if<PureLoad>(&le);
       if (!pl) return;
       auto lbit = pure_store_bit(env, pl->src);
       if (!lbit || *lbit != *bit) return;
@@ -587,7 +584,7 @@ void visit(Local& env, IRInstruction& inst) {
     doMustStore(AVMRetAddr);
   };
 
-  match<void>(
+  match(
     effects,
     [&] (const IrrelevantEffects&) {
       switch (inst.op()) {
@@ -614,7 +611,7 @@ void visit(Local& env, IRInstruction& inst) {
       if (auto bit = pure_store_bit(env, l.src)) {
         if (env.reStores[*bit]) {
           auto const st = memory_effects(*env.global.reStores[*bit]);
-          auto const pst = boost::get<PureStore>(&st);
+          auto const pst = std::get_if<PureStore>(&st);
           if (pst && pst->value && pst->value == inst.dst()) {
             FTRACE(4, "Killing self-store: {}\n",
                    env.global.reStores[*bit]->toString());

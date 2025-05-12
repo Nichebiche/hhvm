@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <thrift/compiler/whisker/dsl.h>
 #include <thrift/compiler/whisker/eval_context.h>
@@ -27,7 +27,37 @@ namespace w = whisker::make;
 
 namespace whisker {
 
-class MstchCompatTest : public RenderTest {};
+namespace {
+ast::identifier make_identifier_from_string(std::string name) {
+  // The source range is not important for testing here
+  return ast::identifier{source_range(), std::move(name)};
+}
+
+template <typename... Components>
+ast::variable_lookup path(Components&&... components) {
+  if constexpr (sizeof...(Components) == 0) {
+    return ast::variable_lookup{
+        source_range(), ast::variable_lookup::this_ref()};
+  } else {
+    std::vector<ast::identifier> chain = {
+        make_identifier_from_string(
+            std::string(std::forward<Components>(components)))...,
+    };
+    return ast::variable_lookup{source_range(), std::move(chain)};
+  }
+}
+} // namespace
+
+class MstchCompatTest : public RenderTest {
+ public:
+  MstchCompatTest() : diags_(diagnostics_engine::ignore_all(src_manager_)) {}
+
+  diagnostics_engine& diags() { return diags_; }
+
+ private:
+  source_manager src_manager_;
+  diagnostics_engine diags_;
+};
 
 TEST_F(MstchCompatTest, basic) {
   mstch_array arr{
@@ -41,20 +71,13 @@ TEST_F(MstchCompatTest, basic) {
   EXPECT_EQ(
       to_string(converted),
       "mstch::array (size=5)\n"
-      "`-[0]\n"
-      "  |-i64(1)\n"
-      "`-[1]\n"
-      "  |-'hello world'\n"
-      "`-[2]\n"
-      "  |-i64(3)\n"
-      "`-[3]\n"
-      "  |-true\n"
-      "`-[4]\n"
-      "  |-mstch::map (size=1)\n"
-      "  | `-'key'\n"
-      "  |   |-mstch::array (size=1)\n"
-      "  |   | `-[0]\n"
-      "  |   |   |-'nested'\n");
+      "├─ [0] i64(1)\n"
+      "├─ [1] 'hello world'\n"
+      "├─ [2] i64(3)\n"
+      "├─ [3] true\n"
+      "╰─ [4] mstch::map (size=1)\n"
+      "   ╰─ 'key' → mstch::array (size=1)\n"
+      "      ╰─ [0] 'nested'\n");
 
   // Value equality
   EXPECT_EQ(from_mstch(arr), from_mstch(arr));
@@ -69,32 +92,26 @@ TEST_F(MstchCompatTest, map_lookups) {
   EXPECT_EQ(
       to_string(converted),
       "mstch::map (size=2)\n"
-      "`-'key'\n"
-      "  |-mstch::map (size=3)\n"
-      "  | `-'bool'\n"
-      "  |   |-true\n"
-      "  | `-'float'\n"
-      "  |   |-f64(2)\n"
-      "  | `-'nested'\n"
-      "  |   |-i64(1)\n"
-      "`-'key2'\n"
-      "  |-null\n");
+      "├─ 'key' → mstch::map (size=3)\n"
+      "│  ├─ 'bool' → true\n"
+      "│  ├─ 'float' → f64(2)\n"
+      "│  ╰─ 'nested' → i64(1)\n"
+      "╰─ 'key2' → null\n");
 
-  auto ctx = eval_context::with_root_scope(converted);
+  auto ctx = eval_context::with_root_scope(diags(), converted);
   EXPECT_EQ(**ctx.lookup_object({}), converted);
-  EXPECT_TRUE(is_mstch_map(**ctx.lookup_object({"key"})));
-  EXPECT_FALSE(is_mstch_array(**ctx.lookup_object({"key"})));
-  EXPECT_FALSE(is_mstch_object(**ctx.lookup_object({"key"})));
+  EXPECT_TRUE((*ctx.lookup_object(path("key")))->is_map());
+  EXPECT_FALSE((*ctx.lookup_object(path("key")))->is_array());
 
-  EXPECT_EQ(**ctx.lookup_object({"key", "nested"}), i64(1));
-  EXPECT_EQ(**ctx.lookup_object({"key", "bool"}), true);
-  EXPECT_EQ(**ctx.lookup_object({"key", "float"}), f64(2.0));
-  EXPECT_EQ(**ctx.lookup_object({"key2"}), w::null);
+  EXPECT_EQ(**ctx.lookup_object(path("key", "nested")), i64(1));
+  EXPECT_EQ(**ctx.lookup_object(path("key", "bool")), true);
+  EXPECT_EQ(**ctx.lookup_object(path("key", "float")), f64(2.0));
+  EXPECT_EQ(**ctx.lookup_object(path("key2")), w::null);
 
   EXPECT_TRUE(
-      has_error<eval_scope_lookup_error>(ctx.lookup_object({"unknown"})));
+      has_error<eval_scope_lookup_error>(ctx.lookup_object(path("unknown"))));
   EXPECT_TRUE(has_error<eval_property_lookup_error>(
-      ctx.lookup_object({"key", "unknown"})));
+      ctx.lookup_object(path("key", "unknown"))));
 }
 
 TEST_F(MstchCompatTest, array_iteration) {
@@ -107,30 +124,28 @@ TEST_F(MstchCompatTest, array_iteration) {
   EXPECT_EQ(
       to_string(converted),
       "mstch::map (size=2)\n"
-      "`-'key'\n"
-      "  |-mstch::array (size=5)\n"
-      "  | `-[0]\n"
-      "  |   |-'nested'\n"
-      "  | `-[1]\n"
-      "  |   |-i64(1)\n"
-      "  | `-[2]\n"
-      "  |   |-true\n"
-      "  | `-[3]\n"
-      "  |   |-null\n"
-      "  | `-[4]\n"
-      "  |   |-f64(2)\n"
-      "`-'outer'\n"
-      "  |-mstch::array (size=1)\n"
-      "  | `-[0]\n"
-      "  |   |-mstch::map (size=1)\n"
-      "  |   | `-'inner'\n"
-      "  |   |   |-mstch::array (size=3)\n"
-      "  |   |   | `-[0]\n"
-      "  |   |   |   |-i64(1)\n"
-      "  |   |   | `-[1]\n"
-      "  |   |   |   |-i64(2)\n"
-      "  |   |   | `-[2]\n"
-      "  |   |   |   |-i64(3)\n");
+      "├─ 'key' → mstch::array (size=5)\n"
+      "│  ├─ [0] 'nested'\n"
+      "│  ├─ [1] i64(1)\n"
+      "│  ├─ [2] true\n"
+      "│  ├─ [3] null\n"
+      "│  ╰─ [4] f64(2)\n"
+      "╰─ 'outer' → mstch::array (size=1)\n"
+      "   ╰─ [0] mstch::map (size=1)\n"
+      "      ╰─ 'inner' → mstch::array (size=3)\n"
+      "         ├─ [0] i64(1)\n"
+      "         ├─ [1] i64(2)\n"
+      "         ╰─ [2] i64(3)\n");
+
+  {
+    object_print_options print_opts;
+    print_opts.max_depth = 1;
+    EXPECT_EQ(
+        to_string(converted, print_opts),
+        "mstch::map (size=2)\n"
+        "├─ 'key' → ...\n"
+        "╰─ 'outer' → ...\n");
+  }
 
   {
     object_print_options print_opts;
@@ -138,29 +153,20 @@ TEST_F(MstchCompatTest, array_iteration) {
     EXPECT_EQ(
         to_string(converted, print_opts),
         "mstch::map (size=2)\n"
-        "`-'key'\n"
-        "  |-mstch::array (size=5)\n"
-        "  | `-[0]\n"
-        "  |   |-'nested'\n"
-        "  | `-[1]\n"
-        "  |   |-i64(1)\n"
-        "  | `-[2]\n"
-        "  |   |-true\n"
-        "  | `-[3]\n"
-        "  |   |-null\n"
-        "  | `-[4]\n"
-        "  |   |-f64(2)\n"
-        "`-'outer'\n"
-        "  |-mstch::array (size=1)\n"
-        "  | `-[0]\n"
-        "  |   |-...\n");
+        "├─ 'key' → mstch::array (size=5)\n"
+        "│  ├─ [0] 'nested'\n"
+        "│  ├─ [1] i64(1)\n"
+        "│  ├─ [2] true\n"
+        "│  ├─ [3] null\n"
+        "│  ╰─ [4] f64(2)\n"
+        "╰─ 'outer' → mstch::array (size=1)\n"
+        "   ╰─ [0] ...\n");
   }
 
   {
-    auto ctx = eval_context::with_root_scope(converted);
-    EXPECT_TRUE(is_mstch_array(**ctx.lookup_object({"key"})));
-    EXPECT_FALSE(is_mstch_map(**ctx.lookup_object({"key"})));
-    EXPECT_FALSE(is_mstch_object(**ctx.lookup_object({"key"})));
+    auto ctx = eval_context::with_root_scope(diags(), converted);
+    EXPECT_FALSE((*ctx.lookup_object(path("key")))->is_map());
+    EXPECT_TRUE((*ctx.lookup_object(path("key")))->is_array());
   }
   {
     strict_printable_types(diagnostic_level::debug);
@@ -214,15 +220,16 @@ TEST_F(MstchCompatTest, mstch_object) {
     mstch_node error_func() { throw std::runtime_error("do not call me"); }
 
     whisker::i64 w_i64() { return 1; }
-    whisker::array w_array() {
-      return {w::i64(1), w::string("two"), w::i64(3)};
+    whisker::array::ptr w_array() {
+      return whisker::array::of({w::i64(1), w::string("two"), w::i64(3)});
     }
     whisker::object w_object() { return w::string("whisker object"); }
     whisker::object::ptr w_object_ptr() {
       return manage_owned<object>(w::string("whisker object ptr"));
     }
     whisker::native_handle<> w_self_handle() {
-      return native_handle<object_impl>(shared_from_this());
+      return native_handle<object_impl>(
+          shared_from_this(), nullptr /* prototype */);
     }
 
     std::string cpp_only_method() const { return "hello from C++"; }
@@ -240,10 +247,9 @@ TEST_F(MstchCompatTest, mstch_object) {
   auto converted = from_mstch(mstch_obj);
 
   {
-    auto ctx = eval_context::with_root_scope(converted);
-    EXPECT_TRUE(is_mstch_object(**ctx.lookup_object({})));
-    EXPECT_FALSE(is_mstch_map(**ctx.lookup_object({})));
-    EXPECT_FALSE(is_mstch_array(**ctx.lookup_object({})));
+    auto ctx = eval_context::with_root_scope(diags(), converted);
+    EXPECT_TRUE((*ctx.lookup_object({}))->is_map());
+    EXPECT_FALSE((*ctx.lookup_object({}))->is_array());
   }
   {
     auto result = render("{{foo:bar.key}}", converted);
@@ -321,12 +327,12 @@ TEST_F(MstchCompatTest, mstch_object) {
       to_string(converted),
       testing::AllOf(
           testing::HasSubstr("mstch::object"),
-          testing::HasSubstr("`-'volatile'\n"),
-          testing::HasSubstr("`-'foo:bar'\n"),
-          testing::HasSubstr("`-'array'\n"),
-          testing::HasSubstr("`-'error'\n"),
-          testing::HasSubstr("`-'copy'\n"),
-          testing::HasSubstr("`-'w_i64'\n")));
+          testing::HasSubstr("'volatile'"),
+          testing::HasSubstr("'foo:bar'"),
+          testing::HasSubstr("'array'"),
+          testing::HasSubstr("'error'"),
+          testing::HasSubstr("'copy'"),
+          testing::HasSubstr("'w_i64'")));
 }
 
 } // namespace whisker

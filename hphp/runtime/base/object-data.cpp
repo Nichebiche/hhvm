@@ -31,7 +31,6 @@
 #include "hphp/runtime/base/tv-type.h"
 #include "hphp/runtime/base/type-variant.h"
 #include "hphp/runtime/base/vanilla-dict-defs.h"
-#include "hphp/runtime/base/variable-serializer.h"
 
 #include "hphp/runtime/ext/generator/ext_generator.h"
 #include "hphp/runtime/ext/simplexml/ext_simplexml.h"
@@ -59,7 +58,7 @@
 namespace HPHP {
 //////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(runtime);
+TRACE_SET_MOD(runtime)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -327,7 +326,7 @@ Object ObjectData::iterableObject(bool& isIterable,
 
 Array& ObjectData::dynPropArray() const {
   assertx(getAttribute(HasDynPropArr));
-  assertx(g_context->dynPropTable.count(this));
+  assertx(g_context->dynPropTable.contains(this));
   assertx(g_context->dynPropTable[this].arr().isDict());
   return g_context->dynPropTable[this].arr();
 }
@@ -357,7 +356,7 @@ Array& ObjectData::reserveProperties(int numDynamic /* = 2 */) {
 }
 
 Array& ObjectData::setDynPropArray(const Array& newArr) {
-  assertx(!g_context->dynPropTable.count(this));
+  assertx(!g_context->dynPropTable.contains(this));
   assertx(!getAttribute(HasDynPropArr));
   assertx(newArr.isDict());
 

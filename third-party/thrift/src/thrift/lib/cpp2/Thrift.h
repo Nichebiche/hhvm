@@ -21,7 +21,6 @@
 #include <thrift/lib/cpp/Thrift.h>
 #include <thrift/lib/cpp2/TypeClass.h>
 
-#include <initializer_list>
 #include <utility>
 #include <folly/Traits.h>
 #include <folly/Utility.h>
@@ -34,8 +33,25 @@
 namespace apache::thrift {
 
 namespace detail {
+
 template <typename Tag>
 struct invoke_reffer;
+
+template <class List, FieldOrdinal>
+struct at_impl {
+  static_assert(sizeof(List) < 0, "");
+};
+
+template <class... Args, FieldOrdinal Ord>
+struct at_impl<folly::tag_t<Args...>, Ord> {
+  using type =
+      folly::type_pack_element_t<folly::to_underlying(Ord), void, Args...>;
+};
+
+// Similar to mp_at in boost mp11, but Ordinal based
+template <class List, FieldOrdinal Ord>
+using at = typename at_impl<List, Ord>::type;
+
 } // namespace detail
 
 template <typename Tag>
@@ -102,6 +118,9 @@ struct struct_private_access {
 
   template <typename T, typename Ord>
   static const folly::StringPiece __fbthrift_get_field_name() {
+    static_assert(
+        1 <= size_t(Ord::value) && size_t(Ord::value) <= num_fields<T>,
+        "Field not found");
     return T::__fbthrift_get_field_name(Ord::value);
   }
 
@@ -130,32 +149,22 @@ struct struct_private_access {
       clear_terse_fields_fn, __fbthrift_clear_terse_fields);
   FOLLY_CREATE_MEMBER_INVOKER(empty_fn, __fbthrift_is_empty);
 
-  template <typename T, typename Ord>
-  static typename T::template __fbthrift_ident<Ord> __fbthrift_ident();
-
-  template <typename T, typename Ord>
-  using ident = decltype(__fbthrift_ident<T, Ord>());
-
-  template <typename T, typename Ord>
-  static typename T::template __fbthrift_id<Ord> __fbthrift_field_id();
-
-  template <typename T, typename Ord>
-  using field_id = decltype(__fbthrift_field_id<T, Ord>());
-
-  template <typename T, typename Ord>
-  static typename T::template __fbthrift_type_tag<Ord> __fbthrift_type_tag();
-
-  template <typename T, typename Ord>
-  using type_tag = decltype(__fbthrift_type_tag<T, Ord>());
-
-  template <typename T, typename U>
-  static typename T::template __fbthrift_ordinal<U> __fbthrift_ordinal();
-
-  template <typename T, typename U>
-  using ordinal = decltype(__fbthrift_ordinal<T, U>());
+  template <typename T>
+  static constexpr auto num_fields = T::__fbthrift_num_fields;
 
   template <typename T>
-  static constexpr auto __fbthrift_field_size_v = T::__fbthrift_field_size_v;
+  static constexpr const int16_t* field_ids() {
+    return T::__fbthrift_reflection_field_ids;
+  }
+
+  // This is a function and not an alias to workaround a bug in clang 18 and
+  // older: https://github.com/llvm/llvm-project/issues/66604.
+  // See https://www.godbolt.org/z/n3fbbEd9v.
+  template <typename T>
+  static typename T::__fbthrift_reflection_idents idents();
+
+  template <typename T>
+  static typename T::__fbthrift_reflection_type_tags type_tags();
 
   template <typename T, typename... Args>
   static constexpr std::string_view __fbthrift_get_module_name() {
@@ -179,6 +188,9 @@ struct IsThriftUnion : std::false_type {};
 template <typename T>
 struct IsThriftUnion<T, folly::void_t<typename T::__fbthrift_cpp2_type>>
     : std::bool_constant<T::__fbthrift_cpp2_is_union> {};
+
+template <typename T>
+using detect_complete = decltype(sizeof(T));
 
 // __fbthrift_clear_terse_fields should be called for a terse struct field
 // before deserialization so that it only clears out terse fields in a terse
@@ -217,6 +229,15 @@ constexpr bool is_thrift_exception_v =
 template <typename T>
 constexpr bool is_thrift_struct_v =
     is_thrift_class_v<T> && !is_thrift_union_v<T> && !is_thrift_exception_v<T>;
+
+template <typename T>
+constexpr bool is_thrift_service_tag_v = //
+    folly::is_detected_v< //
+        detail::st::detect_complete,
+        apache::thrift::Client<T>> ||
+    folly::is_detected_v<
+        detail::st::detect_complete,
+        apache::thrift::ServiceHandler<T>>;
 
 template <typename T, typename Fallback>
 using type_class_of_thrift_class_or_t = //
@@ -458,6 +479,34 @@ struct is_deprecated_terse_writes_with_custom_default_field : std::false_type {
   static_assert(sizeof(Struct), "Struct must be a complete type.");
 };
 } // namespace qualifier
+
+template <class T, class F>
+constexpr std::bool_constant<std::is_invocable_v<F&&, T&>> callable(F&&) {
+  return {};
+}
+
+// __FBTHRIFT_IS_VALID(VARIABLE, EXPRESSION)
+//
+// Uses SFINAE to check whether expression is valid. The caller must specifies
+// one variable so that the expression depends on its type.
+//
+// e.g.,
+//
+//   if constexpr (__FBTHRIFT_IS_VALID(list, list.reserve(n))) {
+//     list.reserve(n);
+//   }
+#define __FBTHRIFT_IS_VALID(VARIABLE, ...)                            \
+  (::apache::thrift::detail::callable<decltype(VARIABLE)>(            \
+       [&](auto&& VARIABLE) -> std::void_t<decltype(__VA_ARGS__)> {}) \
+       .value)
+
+/**
+ * Specialization defn in _types.h / service.h
+ */
+template <typename T, bool IsEnum = std::is_enum_v<T>>
+struct TSchemaAssociation {
+  static_assert(sizeof(T) == ~0ull, "invalid use of base template");
+};
 
 } // namespace detail
 

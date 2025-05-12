@@ -18,8 +18,6 @@
 #include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/coeffects-config.h"
 #include "hphp/runtime/vm/as.h"
-#include "hphp/runtime/vm/as-shared.h"
-#include "hphp/runtime/vm/disas.h"
 #include "hphp/runtime/vm/opcodes.h"
 #include "hphp/runtime/vm/preclass.h"
 #include "hphp/runtime/vm/preclass-emitter.h"
@@ -27,19 +25,20 @@
 #include "hphp/runtime/vm/unit-gen-helpers.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/hash-map.h"
-#include "hphp/zend/zend-string.h"
 
 #include <folly/Range.h>
 
 namespace HPHP {
 
-TRACE_SET_MOD(hackc_translate);
+TRACE_SET_MOD(hackc_translate)
 
 namespace {
 
 using namespace HPHP::hackc;
 using namespace HPHP::hackc::hhbc;
 
+
+const StaticString s_OutOnly("__OutOnly");
 
 struct TranslationState {
 
@@ -762,12 +761,12 @@ void handleVSA(TranslationState& ts, const Vector<BytesId>& arr) {
 void handleRATA(TranslationState& ts, const hhbc::RepoAuthType& rat) {
   auto str = toStringPiece(rat);
   auto const rat_ = ts.translateRepoAuthType(str);
-  encodeRAT(*ts.fe, rat_);
+  encodeRAT(*ts.fe, *ts.ue, rat_);
 }
 
 void handleKA(TranslationState& ts, const hhbc::MemberKey& mkey) {
   auto const mkey_ = ts.translateMemberKey(mkey);
-  encode_member_key(mkey_, *ts.fe);
+  encode_member_key(mkey_, *ts.fe, *ts.ue);
 }
 
 inline bool operator==(const hhbc::Local& a, const hhbc::Local& b) {
@@ -969,7 +968,7 @@ OPCODES
 #undef handleSLA
 #undef handleOA
 
-typedef void (*translatorFunc)(TranslationState& ts, const Opcode& o);
+using translatorFunc = void (*)(TranslationState& ts, const Opcode& o);
 hphp_hash_map<Opcode::Tag, translatorFunc> opcodeTranslators;
 
 void initializeMap() {
@@ -1045,7 +1044,13 @@ void translateParameter(TranslationState& ts,
     assertx(ts.fe->attrs & AttrVariadicParam);
     param.setFlag(Func::ParamInfo::Flags::Variadic);
   }
-  if (p.is_inout) param.setFlag(Func::ParamInfo::Flags::InOut);
+  if (p.is_inout) {
+    param.setFlag(Func::ParamInfo::Flags::InOut);
+
+    if (ts.fe->isNative && param.userAttributes.contains(s_OutOnly.get())) {
+      param.setFlag(Func::ParamInfo::Flags::OutOnly);
+    }
+  }
   if (p.is_readonly) param.setFlag(Func::ParamInfo::Flags::Readonly);
   if (p.is_optional) param.setFlag(Func::ParamInfo::Flags::Optional);
 
@@ -1219,7 +1224,7 @@ void translateFunction(TranslationState& ts,
   SCOPE_ASSERT_DETAIL("translate function") {return name->data();};
 
   ts.fe = ts.ue->newFuncEmitter(name);
-  ts.fe->init(f.body.span.line_begin, f.body.span.line_end, attrs, nullptr);
+  ts.fe->init(f.body.span.line_begin, f.body.span.line_end, attrs, nullptr, ts.ue->isSystemLib());
   ts.fe->isGenerator = (bool)(f.flags & hhbc::FunctionFlags_GENERATOR);
   ts.fe->isAsync = (bool)(f.flags & hhbc::FunctionFlags_ASYNC);
   ts.fe->isPairGenerator = (bool)(f.flags & hhbc::FunctionFlags_PAIR_GENERATOR);
@@ -1238,8 +1243,8 @@ void translateFunction(TranslationState& ts,
   ts.fe->retUserType = retTypeInfo.first;
   ts.fe->retTypeConstraints = std::move(tic);
   ts.srcLoc = locationFromSpan(f.body.span);
-  translateFunctionBody(ts, f.body, ubs, {}, {}, hasReifiedGenerics);
   checkNative(ts);
+  translateFunctionBody(ts, f.body, ubs, {}, {}, hasReifiedGenerics);
 }
 
 void translateShadowedTParams(TParamNameVec& vec, const Vector<ClassName>& tpms) {
@@ -1265,7 +1270,7 @@ void translateMethod(TranslationState& ts,
   auto const name = toStaticString(m.name._0);
   ts.fe = ts.ue->newMethodEmitter(name, ts.pce);
   ts.pce->addMethod(ts.fe);
-  ts.fe->init(m.body.span.line_begin, m.body.span.line_end, attrs, nullptr);
+  ts.fe->init(m.body.span.line_begin, m.body.span.line_end, attrs, nullptr, ts.ue->isSystemLib());
   ts.fe->isGenerator = (bool)(m.flags & hhbc::MethodFlags_IS_GENERATOR);
   ts.fe->isAsync = (bool)(m.flags & hhbc::MethodFlags_IS_ASYNC);
   ts.fe->isPairGenerator = (bool)(m.flags & hhbc::MethodFlags_IS_PAIR_GENERATOR);
@@ -1289,8 +1294,8 @@ void translateMethod(TranslationState& ts,
   ts.srcLoc = locationFromSpan(m.body.span);
   ts.fe->retUserType = retTypeInfo.first;
   ts.fe->retTypeConstraints = std::move(tic);
-  translateFunctionBody(ts, m.body, ubs, classUbs, shadowedTParams, hasReifiedGenerics);
   checkNative(ts);
+  translateFunctionBody(ts, m.body, ubs, classUbs, shadowedTParams, hasReifiedGenerics);
 }
 
 void translateClass(TranslationState& ts,
@@ -1320,7 +1325,8 @@ void translateClass(TranslationState& ts,
                c.span.line_end,
                attrs,
                parentName,
-               staticEmptyString());
+               staticEmptyString(),
+               ts.ue->isSystemLib());
 
   auto const dc = maybe(c.doc_comment);
   if (dc) ts.pce->setDocComment(makeDocComment(dc.value()));

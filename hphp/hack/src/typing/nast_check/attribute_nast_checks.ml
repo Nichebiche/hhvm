@@ -139,13 +139,37 @@ let check_no_auto_dynamic env attrs =
         Nast_check_error.(to_user_error @@ Attribute_no_auto_dynamic pos)
     | _ -> ()
 
+let check_dynamically_referenced attrs =
+  let attr =
+    Naming_attributes.find SN.UserAttributes.uaDynamicallyReferenced attrs
+  in
+  match attr with
+  | None -> ()
+  | Some { ua_name = (pos, name); ua_params } ->
+    (match ua_params with
+    | [] -> ()
+    | [(_, _, Int _)] -> ()
+    | [(_, p, _)] ->
+      Errors.add_error
+        Nast_check_error.(
+          to_user_error
+          @@ Attribute_param_type { pos = p; x = "an integer literal" })
+    | _ ->
+      Errors.add_error
+        Nast_check_error.(
+          to_user_error
+          @@ Attribute_too_many_arguments { pos; name; expected = 1 }))
+
 let handler =
   object
     inherit Nast_visitor.handler_base
 
     method! at_fun_ env f =
       let variadic_param =
-        List.find_opt Aast_utils.is_param_variadic f.f_params
+        List.find_opt
+          (fun fp ->
+            Aast_utils.is_param_variadic fp || Aast_utils.is_param_splat fp)
+          f.f_params
       in
       (* Ban arguments on functions with the __EntryPoint attribute. *)
       if has_attribute SN.UserAttributes.uaEntryPoint f.f_user_attributes then begin
@@ -217,7 +241,10 @@ let handler =
 
     method! at_method_ env m =
       let variadic_param =
-        List.find_opt Aast_utils.is_param_variadic m.m_params
+        List.find_opt
+          (fun fp ->
+            Aast_utils.is_param_variadic fp || Aast_utils.is_param_splat fp)
+          m.m_params
       in
       check_attribute_arity
         m.m_user_attributes
@@ -258,6 +285,7 @@ let handler =
       check_no_auto_dynamic env c.c_user_attributes;
       check_autocomplete_valid_text c.c_user_attributes;
       check_soft_internal_without_internal c.c_internal c.c_user_attributes;
+      check_dynamically_referenced c.c_user_attributes;
       check_attribute_arity
         c.c_user_attributes
         SN.UserAttributes.uaDocs

@@ -47,7 +47,7 @@ var taskExpiredException = NewApplicationException(UNKNOWN_APPLICATION_EXCEPTION
 type server struct {
 	processor   Processor
 	listener    net.Listener
-	log         func(format string, args ...interface{})
+	log         func(format string, args ...any)
 	connContext ConnContextFunc
 
 	wg sync.WaitGroup
@@ -220,10 +220,10 @@ func (s *server) writeMessage(
 		if k == LoadHeaderKey {
 			continue // do not set a load header sent from the client.
 		}
-		prot.SetRequestHeader(k, v)
+		prot.setRequestHeader(k, v)
 	}
 	// *always* write our load header
-	prot.SetRequestHeader(LoadHeaderKey, fmt.Sprintf("%d", loadFn(s.stats)))
+	prot.setRequestHeader(LoadHeaderKey, fmt.Sprintf("%d", loadFn(s.stats)))
 
 	messageType := REPLY
 	if _, isExc := response.(ApplicationException); isExc {
@@ -300,7 +300,7 @@ func (s *server) reader(ctx context.Context, socket net.Conn, writeCh chan func(
 		// maintain the header seqid we received, as well as the msg seq id.
 		msg.name, msg.typ, msg.seqID, err = prot.ReadMessageBegin()
 		// add headers to the ctx. This allows thrift functions to inspect headers, at the cost of a gomap per request
-		msg.headers = prot.GetResponseHeaders()
+		msg.headers = prot.getResponseHeaders()
 		msg.headerSeqID = prot.GetSeqID()
 		if remainingMsStr, ok := msg.headers[ClientTimeoutKey]; ok {
 			if remainingMs, err := strconv.Atoi(remainingMsStr); err == nil && remainingMs > 0 {
@@ -312,7 +312,7 @@ func (s *server) reader(ctx context.Context, socket net.Conn, writeCh chan func(
 		s.stats.ReadingCount.Incr()
 		startReadMessage := time.Now()
 		if err != nil {
-			if err, ok := err.(TransportException); ok && err.TypeID() == END_OF_FILE {
+			if isEOF(err) {
 				s.stats.ClientClosed.RecordEvent()
 				s.stats.ReadingCount.Decr()
 				return

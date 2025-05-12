@@ -21,7 +21,6 @@ import include.thrift_types as _fbthrift__include__thrift_types
 from module.thrift_enums import (
     Result,
     Result as _fbthrift_Result,
-    _fbthrift_compatible_with_Result,
 )
 
 
@@ -74,26 +73,26 @@ class CustomException(metaclass=_fbthrift_python_exceptions.GeneratedErrorMeta):
         return self
 
     def _to_mutable_python(self):
-        import thrift.python.mutable_converter
+        from thrift.python import mutable_converter
         import importlib
         mutable_types = importlib.import_module("module.thrift_mutable_types")
-        return thrift.python.mutable_converter.to_mutable_python_struct_or_union(mutable_types.CustomException, self)
+        return mutable_converter.to_mutable_python_struct_or_union(mutable_types.CustomException, self)
 
     def _to_py3(self):
         import importlib
         py3_types = importlib.import_module("module.types")
-        import thrift.py3.converter
-        return thrift.py3.converter.to_py3_struct(py3_types.CustomException, self)
+        from thrift.py3 import converter
+        return converter.to_py3_struct(py3_types.CustomException, self)
 
     def _to_py_deprecated(self):
         import importlib
-        import thrift.util.converter
+        from thrift.util import converter
         try:
             py_deprecated_types = importlib.import_module("module.ttypes")
-            return thrift.util.converter.to_py_struct(py_deprecated_types.CustomException, self)
+            return converter.to_py_struct(py_deprecated_types.CustomException, self)
         except ModuleNotFoundError:
             py_asyncio_types = importlib.import_module("module.ttypes")
-            return thrift.util.converter.to_py_struct(py_asyncio_types.CustomException, self)
+            return converter.to_py_struct(py_asyncio_types.CustomException, self)
 _fbthrift_CustomException = CustomException
 
 # This unfortunately has to be down here to prevent circular imports

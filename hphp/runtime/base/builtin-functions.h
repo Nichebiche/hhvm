@@ -61,7 +61,6 @@ void NEVER_INLINE throw_invalid_property_name(const String& name);
 [[noreturn]]
 void NEVER_INLINE throw_call_reified_func_without_generics(const Func* f);
 
-[[noreturn]] void NEVER_INLINE throw_implicit_context_exception(std::string);
 void NEVER_INLINE raise_implicit_context_warning(std::string);
 
 [[noreturn]]
@@ -248,10 +247,6 @@ bool is_constructor_name(const char* func);
 [[noreturn]] void throw_late_init_prop(const Class* cls,
                                        const StringData* propName,
                                        bool isSProp);
-[[noreturn]] void throw_parameter_wrong_type(TypedValue tv,
-                                             const Func* callee,
-                                             unsigned int arg_num,
-                                             const StringData* type);
 
 [[noreturn]] void throw_must_be_mutable(const char* className, const char* propName);
 [[noreturn]] void throw_must_be_readonly(const char* className, const char* propName);
@@ -267,6 +262,7 @@ void check_collection_cast_to_array();
 
 Object create_object_only(const String& s);
 Object create_object(const String& s, const Array &params, bool init = true);
+Object create_object(const Class* cls, const Array &params, bool init = true);
 Object init_object(const String& s, const Array &params, ObjectData* o);
 
 [[noreturn]] void throw_object(const Object& e);
@@ -279,6 +275,11 @@ Object init_object(const String& s, const Array &params, ObjectData* o);
 [[noreturn]] inline
 void throw_object(const String& s, const Array& params, bool init = true) {
   throw_object(create_object(s, params, init));
+}
+
+[[noreturn]] inline
+void throw_object(const Class* cls, const Array& params, bool init = true) {
+  throw_object(create_object(cls, params, init));
 }
 
 void throw_missing_arguments_nr(const char *fn, int expected, int got)

@@ -15,6 +15,7 @@
 #include "mcrouter/routes/AllInitialRouteFactory.h"
 #include "mcrouter/routes/AllMajorityRouteFactory.h"
 #include "mcrouter/routes/AllSyncRouteFactory.h"
+#include "mcrouter/routes/BigValueRoute.h"
 #include "mcrouter/routes/BlackholeRoute.h"
 #include "mcrouter/routes/CarbonLookasideRoute.h"
 #include "mcrouter/routes/DevNullRoute.h"
@@ -34,7 +35,6 @@
 #include "mcrouter/routes/LoadBalancerRoute.h"
 #include "mcrouter/routes/LoggingRoute.h"
 #include "mcrouter/routes/McExtraRouteHandleProvider.h"
-#include "mcrouter/routes/McRefillRoute.h"
 #include "mcrouter/routes/MigrateRouteFactory.h"
 #include "mcrouter/routes/MissFailoverRoute.h"
 #include "mcrouter/routes/ModifyExptimeRoute.h"
@@ -252,6 +252,7 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<MemcacheRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<MemcacheRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<MemcacheRouterInfo>},
+      {"BigValueRoute", &makeBigValueRoute<MemcacheRouterInfo>},
       {"BlackholeRoute", &makeBlackholeRoute<MemcacheRouterInfo>},
       {"CarbonLookasideRoute",
        &createCarbonLookasideRoute<
@@ -265,10 +266,6 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
       {"ErrorRoute", &makeErrorRoute<MemcacheRouterInfo>},
       {"FailoverWithExptimeRoute",
        &makeFailoverWithExptimeRoute<MemcacheRouterInfo>},
-      {"HashRoute",
-       [](McRouteHandleFactory& factory, const folly::dynamic& json) {
-         return makeHashRoute<McrouterRouterInfo>(factory, json);
-       }},
       {"HashStopAllowListRoute",
        &makeHashStopAllowListRoute<MemcacheRouterInfo>},
       {"HostIdRoute", &makeHostIdRoute<MemcacheRouterInfo>},
@@ -283,10 +280,6 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
       {"LatestRoute", &makeLatestRoute<MemcacheRouterInfo>},
       {"LoadBalancerRoute", &makeLoadBalancerRoute<MemcacheRouterInfo>},
       {"LoggingRoute", &makeLoggingRoute<MemcacheRouterInfo>},
-      {"McRefillRoute",
-       [](McRouteHandleFactory& factory, const folly::dynamic& json) {
-         return makeMcRefillRoute<MemcacheRouterInfo>(factory, json);
-       }},
       {"MigrateRoute", &makeMigrateRoute<MemcacheRouterInfo>},
       {"MissFailoverRoute", &makeMissFailoverRoute<MemcacheRouterInfo>},
       {"ModifyKeyRoute", &makeModifyKeyRoute<MemcacheRouterInfo>},
@@ -318,6 +311,7 @@ typename McRouteHandleProvider<
     MemcacheRouterInfo>::RouteHandleFactoryMapWithProxy
 McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMapWithProxy() {
   RouteHandleFactoryMapWithProxy map{
+      {"HashRoute", &makeHashRoute<MemcacheRouterInfo>},
       {"SRRoute", &makeSRRoute},
   };
   return map;
@@ -329,8 +323,11 @@ typename McRouteHandleProvider<
 McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMapForWrapper() {
   RouteHandleFactoryMapForWrapper map{
       {"AxonLogRoute",
-       [](RouteHandlePtr rh, ProxyBase& proxy, const folly::dynamic& json) {
-         return makeAxonLogRoute(std::move(rh), proxy, json);
+       [](RouteHandlePtr rh,
+          ProxyBase& proxy,
+          const folly::dynamic& json,
+          RouteHandleFactory<RouteHandleIf>& factory) {
+         return makeAxonLogRoute(std::move(rh), proxy, json, factory);
        }}};
   return map;
 }

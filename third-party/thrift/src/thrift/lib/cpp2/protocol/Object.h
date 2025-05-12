@@ -74,7 +74,7 @@ Object parseObject(Protocol& prot, bool string_to_binary = true) {
 }
 
 // Schemaless deserialization of thrift serialized data with mask.
-// Only parses values that are masked. Unmasked fields are stored in MaskedData.
+// Only parses values that are masked.
 template <typename Protocol>
 Object parseObjectWithoutExcludedData(
     const folly::IOBuf& buf, const Mask& mask, bool string_to_binary = true) {
@@ -94,7 +94,11 @@ MaskedDecodeResult parseObject(
 
 // Schemaless deserialization of thrift serialized data with readMask and
 // writeMask. Only parses values that are masked by readMask. Fields that are
-// not in neither writeMask nor readMask are stored in MaskedData.
+// not in neither writeMask nor readMask are stored in MaskedData. Unmasked
+// fields that are not specified in writeMask are stored in MaskedData.
+//
+// This is designed to be used with Thrift Patch to avoid full deserialization
+// when applying Thrift Patch to serialized data in a binary blob.
 template <typename Protocol>
 MaskedDecodeResult parseObject(
     const folly::IOBuf& buf,
@@ -201,6 +205,18 @@ bool isIntrinsicDefault(const Object& obj);
 folly::dynamic toDynamic(const Value& value);
 folly::dynamic toDynamic(const Object& obj);
 
+// Convert protocol::Value to Thrift Any with the given protocol.
 using detail::toAny;
+
+// Convert Thrift Any to Protocol Value. It only supports Compact and Binary
+// Protocol.
+using detail::parseValueFromAny;
+
+// Check whether a protocol object maybe a thrift.Any based on a heuristic field
+// id and type checking. A return value of
+// - true indicates that the object COULD be Any (but there may be false
+// positives if the Object's schema is simlar to Any's)
+// - false indicates that the object is NOT Any (i.e. no false negatives)
+bool maybeAny(const protocol::Object&);
 
 } // namespace apache::thrift::protocol

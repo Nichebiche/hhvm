@@ -24,9 +24,44 @@ from thrift.py3.types cimport (
 
 from thrift.py3.types cimport const_pointer_cast
 from thrift.python.types cimport BadEnum as _fbthrift_BadEnum
+from thrift.py3.types import _from_python_or_raise
+from thrift.py3.types cimport _ensure_py3_container_or_raise
 
 
 import module.types as _module_types
+from module.containers_FBTHRIFT_ONLY_DO_NOT_USE import (
+    List__i16,
+    List__i32,
+    List__i64,
+    List__string,
+    List__SimpleStruct,
+    Set__i32,
+    Set__string,
+    Map__string_string,
+    Map__string_SimpleStruct,
+    Map__string_i16,
+    List__List__i32,
+    Map__string_i32,
+    Map__string_Map__string_i32,
+    List__Set__string,
+    Map__string_List__SimpleStruct,
+    List__List__string,
+    List__Set__i32,
+    List__Map__string_string,
+    List__binary,
+    Set__binary,
+    List__AnEnum,
+    _std_unordered_map__Map__i32_i32,
+    _MyType__List__i32,
+    _MyType__Set__i32,
+    _MyType__Map__i32_i32,
+    _py3_simple_AdaptedList__List__i32,
+    _py3_simple_AdaptedSet__Set__i32,
+    _py3_simple_AdaptedMap__Map__i32_i32,
+    Map__i32_double,
+    List__Map__i32_double,
+    Map__AnEnumRenamed_i32,
+)
 
 
 @__cython.auto_pickle(False)
@@ -99,6 +134,9 @@ cdef class __SimpleStruct_FieldsSetter(__StructFieldsSetter):
         __fbthrift_inst._setters[__cstring_view(<const char*>"real")] = __SimpleStruct_FieldsSetter._set_field_5
         __fbthrift_inst._setters[__cstring_view(<const char*>"smaller_real")] = __SimpleStruct_FieldsSetter._set_field_6
         __fbthrift_inst._setters[__cstring_view(<const char*>"something")] = __SimpleStruct_FieldsSetter._set_field_7
+        __fbthrift_inst._setters[__cstring_view(<const char*>"opt_default_int")] = __SimpleStruct_FieldsSetter._set_field_8
+        __fbthrift_inst._setters[__cstring_view(<const char*>"opt_default_str")] = __SimpleStruct_FieldsSetter._set_field_9
+        __fbthrift_inst._setters[__cstring_view(<const char*>"opt_default_enum")] = __SimpleStruct_FieldsSetter._set_field_10
         return __fbthrift_inst
 
     cdef void set_field(__SimpleStruct_FieldsSetter self, const char* name, object value) except *:
@@ -182,6 +220,34 @@ cdef class __SimpleStruct_FieldsSetter(__StructFieldsSetter):
             return
         deref(self._struct_cpp_obj).something_ref().assign(_module_types._std_unordered_map__Map__i32_i32__make_instance(_fbthrift_value))
 
+    cdef void _set_field_8(self, _fbthrift_value) except *:
+        # for field opt_default_int
+        if _fbthrift_value is None:
+            __reset_field[_module_cbindings.cSimpleStruct](deref(self._struct_cpp_obj), 8)
+            return
+        if not isinstance(_fbthrift_value, int):
+            raise TypeError(f'opt_default_int is not a { int !r}.')
+        _fbthrift_value = <cint32_t> _fbthrift_value
+        deref(self._struct_cpp_obj).opt_default_int_ref().assign(_fbthrift_value)
+
+    cdef void _set_field_9(self, _fbthrift_value) except *:
+        # for field opt_default_str
+        if _fbthrift_value is None:
+            __reset_field[_module_cbindings.cSimpleStruct](deref(self._struct_cpp_obj), 9)
+            return
+        if not isinstance(_fbthrift_value, str):
+            raise TypeError(f'opt_default_str is not a { str !r}.')
+        deref(self._struct_cpp_obj).opt_default_str_ref().assign(cmove(bytes_to_string(_fbthrift_value.encode('utf-8'))))
+
+    cdef void _set_field_10(self, _fbthrift_value) except *:
+        # for field opt_default_enum
+        if _fbthrift_value is None:
+            __reset_field[_module_cbindings.cSimpleStruct](deref(self._struct_cpp_obj), 10)
+            return
+        if not isinstance(_fbthrift_value, _fbthrift_BadEnum) and not isinstance(_fbthrift_value, _module_types.AnEnum):
+            raise TypeError(f'field opt_default_enum value: {repr(_fbthrift_value)} is not of the enum type { _module_types.AnEnum }.')
+        deref(self._struct_cpp_obj).opt_default_enum_ref().assign(<_module_cbindings.cAnEnum><int>_fbthrift_value)
+
 
 @__cython.auto_pickle(False)
 cdef class __HiddenTypeFieldsStruct_FieldsSetter(__StructFieldsSetter):
@@ -231,7 +297,7 @@ cdef class __ComplexStruct_FieldsSetter(__StructFieldsSetter):
             __reset_field[_module_cbindings.cComplexStruct](deref(self._struct_cpp_obj), 0)
             return
         if not isinstance(_fbthrift_value, _module_types.SimpleStruct):
-            raise TypeError(f'structOne is not a { _module_types.SimpleStruct !r}.')
+            _fbthrift_value = _from_python_or_raise(_fbthrift_value, "structOne", _module_types.SimpleStruct)
         deref(self._struct_cpp_obj).structOne_ref().assign(deref((<_module_types.SimpleStruct?> _fbthrift_value)._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE))
 
     cdef void _set_field_1(self, _fbthrift_value) except *:
@@ -240,7 +306,7 @@ cdef class __ComplexStruct_FieldsSetter(__StructFieldsSetter):
             __reset_field[_module_cbindings.cComplexStruct](deref(self._struct_cpp_obj), 1)
             return
         if not isinstance(_fbthrift_value, _module_types.SimpleStruct):
-            raise TypeError(f'structTwo is not a { _module_types.SimpleStruct !r}.')
+            _fbthrift_value = _from_python_or_raise(_fbthrift_value, "structTwo", _module_types.SimpleStruct)
         deref(self._struct_cpp_obj).structTwo_ref().assign(deref((<_module_types.SimpleStruct?> _fbthrift_value)._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE))
 
     cdef void _set_field_2(self, _fbthrift_value) except *:
@@ -331,7 +397,7 @@ cdef class __BinaryUnionStruct_FieldsSetter(__StructFieldsSetter):
             __reset_field[_module_cbindings.cBinaryUnionStruct](deref(self._struct_cpp_obj), 0)
             return
         if not isinstance(_fbthrift_value, _module_types.BinaryUnion):
-            raise TypeError(f'u is not a { _module_types.BinaryUnion !r}.')
+            _fbthrift_value = _from_python_or_raise(_fbthrift_value, "u", _module_types.BinaryUnion)
         deref(self._struct_cpp_obj).u_ref().assign(deref((<_module_types.BinaryUnion?> _fbthrift_value)._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE))
 
 
@@ -433,7 +499,7 @@ cdef class __CustomFields_FieldsSetter(__StructFieldsSetter):
             __reset_field[_module_cbindings.cCustomFields](deref(self._struct_cpp_obj), 8)
             return
         if not isinstance(_fbthrift_value, _module_types.SimpleStruct):
-            raise TypeError(f'struct_field is not a { _module_types.SimpleStruct !r}.')
+            _fbthrift_value = _from_python_or_raise(_fbthrift_value, "struct_field", _module_types.SimpleStruct)
         deref(self._struct_cpp_obj).struct_field_ref().assign(deref((<_module_types.SimpleStruct?> _fbthrift_value)._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE))
 
 
@@ -535,7 +601,7 @@ cdef class __CustomTypedefFields_FieldsSetter(__StructFieldsSetter):
             __reset_field[_module_cbindings.cCustomTypedefFields](deref(self._struct_cpp_obj), 8)
             return
         if not isinstance(_fbthrift_value, _module_types.SimpleStruct):
-            raise TypeError(f'struct_field is not a { _module_types.SimpleStruct !r}.')
+            _fbthrift_value = _from_python_or_raise(_fbthrift_value, "struct_field", _module_types.SimpleStruct)
         deref(self._struct_cpp_obj).struct_field_ref().assign(deref((<_module_types.SimpleStruct?> _fbthrift_value)._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE))
 
 
@@ -637,6 +703,6 @@ cdef class __AdaptedTypedefFields_FieldsSetter(__StructFieldsSetter):
             __reset_field[_module_cbindings.cAdaptedTypedefFields](deref(self._struct_cpp_obj), 8)
             return
         if not isinstance(_fbthrift_value, _module_types.SimpleStruct):
-            raise TypeError(f'struct_field is not a { _module_types.SimpleStruct !r}.')
+            _fbthrift_value = _from_python_or_raise(_fbthrift_value, "struct_field", _module_types.SimpleStruct)
         deref(self._struct_cpp_obj).struct_field_ref().assign(deref((<_module_types.SimpleStruct?> _fbthrift_value)._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE))
 

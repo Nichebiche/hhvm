@@ -39,6 +39,8 @@ class service_with_special_namesServiceInfoHolder : public apache::thrift::Servi
 namespace apache::thrift {
 template <>
 class ServiceHandler<::test_cpp2::cpp_reflection::service_with_special_names> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::test_cpp2::cpp_reflection::service_with_special_names>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "service_with_special_names"; }
 
@@ -334,6 +336,13 @@ class ServiceHandler<::test_cpp2::cpp_reflection::service_with_special_names> : 
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_fields{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::test_cpp2::cpp_reflection::service_with_special_names, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 8811943787698819311;
+  static constexpr ::std::string_view definitionKey = {"\x33\x94\x64\x9b\x7a\x91\xb3\xf6\x2f\x1d\x55\x72\x46\x35\x56\x65", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace test_cpp2::cpp_reflection {

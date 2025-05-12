@@ -133,10 +133,6 @@ trait CClientBase {
    *   f();
    */
   public async function f(): Awaitable<void> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = C_f_args::withDefaultValues();
     await $this->asyncHandler_->genBefore(CStaticMetadata::THRIFT_SVC_NAME, "f", $args);
@@ -173,10 +169,6 @@ trait CClientBase {
    *   throws (1: Bang bang);
    */
   public async function thing(int $a, string $b, Set<int> $c): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = C_thing_args::fromShape(shape(
       'a' => $a,
@@ -185,7 +177,7 @@ trait CClientBase {
     ));
     await $this->asyncHandler_->genBefore(CStaticMetadata::THRIFT_SVC_NAME, "thing", $args);
     $currentseqid = $this->sendImplHelper($args, "thing", false, CStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(C_thing_result::class, "thing", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(C_thing_result::class, "thing", false, $currentseqid, $rpc_options))[0];
   }
 
 }
@@ -437,6 +429,15 @@ class C_numbers_StreamResponse extends \ThriftSyncStructWithResult implements \I
     return shape(
       'struct' => dict[],
       'fields' => dict[
+        'success' => shape(
+          'field' => dict[],
+          'type' => dict[
+            '\facebook\thrift\annotation\rust\NewType' => \facebook\thrift\annotation\rust\NewType::fromShape(
+              shape(
+              )
+            ),
+          ],
+        ),
       ],
     );
   }

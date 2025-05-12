@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <folly/coro/Sleep.h>
 #include <thrift/lib/cpp2/GeneratedCodeHelper.h>
@@ -226,7 +226,8 @@ TEST_F(SinkServiceTest, SinkInitialThrowsOnFinalResponseCalled) {
               "initialThrow",
               SerializedRequest(folly::IOBuf::copyBuffer(req)),
               std::make_shared<transport::THeader>(),
-              &callback);
+              &callback,
+              nullptr /* frameworkMetadata */);
           co_await responseReceived;
           if (onFirstResponseBool) {
             co_await onFinalResponseCalled;

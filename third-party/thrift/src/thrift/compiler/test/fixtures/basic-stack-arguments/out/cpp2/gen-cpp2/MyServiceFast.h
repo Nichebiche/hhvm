@@ -36,6 +36,8 @@ class MyServiceFastServiceInfoHolder : public apache::thrift::ServiceInfoHolder 
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::MyServiceFast> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::MyServiceFast>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "MyServiceFast"; }
 
@@ -55,6 +57,13 @@ class ServiceHandler<::cpp2::MyServiceFast> : public apache::thrift::ServerInter
   static ::cpp2::MyServiceFastServiceInfoHolder __fbthrift_serviceInfoHolder;
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::MyServiceFast, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -3445220662518901917;
+  static constexpr ::std::string_view definitionKey = {"\x51\xd4\xc1\x3f\x66\xd3\xfc\xc5\x40\xd9\x05\x1e\x39\xe0\x79\x37", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

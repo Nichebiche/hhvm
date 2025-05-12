@@ -20,6 +20,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -101,11 +102,27 @@ struct source {
   std::string_view text; // The source text including a terminating '\0'.
 };
 
+// A class that abstracts the reading of files from the file system. The
+// backend could read from a real file system, or be an in-memory
+// representation itself.
+//
+// The source_manager will pull sources from the backend as needed, and
+// perform indexing on the received contents.
+class source_manager_backend {
+ public:
+  virtual ~source_manager_backend() noexcept = default;
+  // Returns the file contents at the provided path, or empty optional if the
+  // path is not found.
+  virtual std::optional<std::vector<char>> read_file(std::string_view path) = 0;
+};
+
 // A source manager that caches sources in memory, loads files and enables
 // resolution of offset-based source locations into file names, lines and
 // columns.
 class source_manager {
  private:
+  std::unique_ptr<source_manager_backend> backend_;
+
   struct source_info {
     std::string file_name;
     std::vector<char> text;
@@ -131,11 +148,25 @@ class source_manager {
   source add_source(std::string_view file_name, std::vector<char> text);
 
  public:
+  // Creates a source_manager with the default (filesystem-based) backend.
+  source_manager();
+  // Creates a source_manager with the user-provided backend implementation.
+  // If the backend is null, then only virtual files can be read.
+  explicit source_manager(std::unique_ptr<source_manager_backend> backend)
+      : backend_(std::move(backend)) {}
+
+  source_manager(source_manager&) noexcept = delete;
+  source_manager& operator=(source_manager&) noexcept = delete;
+  source_manager(source_manager&&) noexcept = default;
+  source_manager& operator=(source_manager&&) noexcept = default;
+  ~source_manager() noexcept = default;
+
   // Loads a file and returns a source object representing its content.
-  // The file can be a real file or a virtual one previously registered with
-  // add_virtual_file.
-  // Returns an empty optional if opening or reading the file fails.
-  // Makes use of the result of previous calls to find_include_file.
+  // The file can be a real file (provided by the backend), or a virtual one
+  // previously registered with add_virtual_file.
+  //
+  // Returns an empty optional if opening or reading the file fails. Makes use
+  // of the result of previous calls to find_include_file.
   std::optional<source> get_file(std::string_view file_name);
 
   std::string get_file_path(std::string_view file_name) const;

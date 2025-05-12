@@ -10,7 +10,6 @@
 
 #include <folly/Conv.h>
 #include <folly/fibers/EventBaseLoopController.h>
-#include <folly/fibers/FiberManager.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/synchronization/Baton.h>
@@ -18,6 +17,7 @@
 
 #include <mcrouter/lib/network/AsyncMcClient.h>
 #include <mcrouter/options.h>
+#include "mcrouter/RoutingPrefix.h"
 #include "mcrouter/lib/network/gen/MemcacheConnection.h"
 #include "mcrouter/lib/network/test/ListenSocket.h"
 #include "mcrouter/lib/network/test/MockMcThriftServerHandler.h"
@@ -184,7 +184,8 @@ TEST(MemcacheInternalConnectionTest, simpleInternalConnection) {
   auto server = TestServer::create(std::move(config));
   facebook::memcache::McrouterOptions mcrouterOptions;
   mcrouterOptions.num_proxies = 1;
-  mcrouterOptions.default_route = "/oregon/*/";
+  mcrouterOptions.default_route =
+      facebook::memcache::mcrouter::RoutingPrefix("/oregon/*/");
   mcrouterOptions.config_str = folly::sformat(
       R"(
         {{
@@ -241,7 +242,8 @@ TEST(MemcachePooledConnectionTest, PooledInternalConnection) {
   auto server = TestServer::create(std::move(config));
   facebook::memcache::McrouterOptions mcrouterOptions;
   mcrouterOptions.num_proxies = 1;
-  mcrouterOptions.default_route = "/oregon/*/";
+  mcrouterOptions.default_route =
+      facebook::memcache::mcrouter::RoutingPrefix("/oregon/*/");
   mcrouterOptions.config_str = folly::sformat(
       R"(
         {{

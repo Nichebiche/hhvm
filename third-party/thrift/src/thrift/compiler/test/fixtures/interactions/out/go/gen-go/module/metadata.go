@@ -15,7 +15,7 @@ import (
 
 var _ = shared.GoUnusedProtection__
 // (needed to ensure safety because of naive import list construction)
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = maps.Copy[map[int]int, map[int]int]
 var _ = metadata.GoUnusedProtection__
 
@@ -23,7 +23,7 @@ var _ = metadata.GoUnusedProtection__
 var (
     premadeThriftType_string = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE),
         )
     }()
     premadeThriftType_module_ShouldBeBoxed = func() *metadata.ThriftType {
@@ -40,7 +40,7 @@ var (
     }()
     premadeThriftType_void = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_VOID_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_VOID_TYPE),
         )
     }()
 )
@@ -239,7 +239,7 @@ func getMetadataThriftPrimitiveType(s *thrift.CodecPrimitiveSpec) *metadata.Thri
 		value = metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE
 	}
 
-	return value.Ptr()
+	return thrift.Pointerize(value)
 }
 
 func getMetadataThriftEnumType(s *thrift.CodecEnumSpec) *metadata.ThriftEnumType {

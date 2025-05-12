@@ -20,7 +20,6 @@
 #include "hphp/runtime/vm/jit/tc-region.h"
 
 #include "hphp/runtime/base/init-fini-node.h"
-#include "hphp/runtime/server/http-server.h"
 #include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/debug/debug.h"
 #include "hphp/runtime/vm/jit/cfg.h"
@@ -29,10 +28,6 @@
 #include "hphp/runtime/vm/jit/mcgen-translate.h"
 #include "hphp/runtime/vm/jit/prof-data.h"
 #include "hphp/runtime/vm/jit/prof-data-serialize.h"
-#include "hphp/runtime/vm/jit/relocation.h"
-#include "hphp/runtime/vm/jit/smashable-instr.h"
-#include "hphp/runtime/vm/jit/srcdb.h"
-#include "hphp/runtime/vm/jit/trans-db.h"
 #include "hphp/runtime/vm/jit/trans-rec.h"
 
 #include "hphp/util/configs/codecache.h"
@@ -47,8 +42,9 @@
 #include <folly/gen/Base.h>
 #include <folly/json/json.h>
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
+extern "C" __attribute__((weak)) uint32_t __roar_api_pending_warmups();
 extern "C" __attribute__((weak)) int _roar_upcall_getWarmupStatus();
 
 namespace HPHP::jit::tc {
@@ -126,7 +122,7 @@ F(free_blocks)
 
 #define F(name) \
   static std::map<std::string, ServiceData::ExportedCounter*> s_ ## name ## _counters;
-FOREACH_ALLOC_FREE_COUNTER;
+FOREACH_ALLOC_FREE_COUNTER
 #undef F
 
 static InitFiniNode initCodeSizeCounters([] {
@@ -268,6 +264,7 @@ void reportJitMaturity() {
   constexpr uint64_t kMaxMaturityBeforeRTA = 70;
   auto const beforeRetranslateAll =
     mcgen::retranslateAllPending() || isJitSerializing();
+
   // If retranslateAll is enabled, wait until it finishes before counting in
   // optimized translations.
   const size_t hotSize = beforeRetranslateAll ? 0 : getOptMainUsage();
@@ -290,14 +287,23 @@ void reportJitMaturity() {
              static_cast<size_t>(profSize * Cfg::Jit::MaturityProfWeight));
   auto const fullSize = Cfg::Jit::MatureSize;
 
+  // If running under ROAR, limit JIT maturity before ROAR finishes its warmup.
+  constexpr uint64_t kMaxMaturityBeforeROARWarmup = 70;
+  auto const beforeROARWarmup = __roar_api_pending_warmups &&
+                                __roar_api_pending_warmups() != 0;
+
   int64_t maturity = before;
-  if (beforeRetranslateAll) {
+  if (beforeROARWarmup) {
+    maturity = std::min(kMaxMaturityBeforeROARWarmup, codeSize * 100 / fullSize);
+  } else if (beforeRetranslateAll) {
     maturity = std::min(kMaxMaturityBeforeRTA, codeSize * 100 / fullSize);
   } else if (liveSize >= Cfg::Jit::MaxLiveMainUsage ||
              code().main().used() >= Cfg::CodeCache::AMaxUsage ||
              code().cold().used() >= Cfg::CodeCache::AColdMaxUsage ||
              code().frozen().used() >= Cfg::CodeCache::AFrozenMaxUsage) {
     maturity = g_maxJitMaturity;
+  } else if (Cfg::Jit::PGOOnly && mcgen::retranslateAllComplete()) {
+    maturity = 100;
   } else if (codeSize >= fullSize) {
     maturity = 99;
   } else {
@@ -554,7 +560,15 @@ std::string warmupStatusString() {
   }
 
   // If we are running with ROAR, we also should wait for PGO/CSPGO to be
-  // complete before reporting warmed up.
+  // complete before reporting warmed up. Prefer using the thinlib api,
+  // but also try the message-based upcall in case this is an older ROAR.
+  if (status_str.empty() && __roar_api_pending_warmups) {
+    int roar_warmup_status = __roar_api_pending_warmups();
+    if (roar_warmup_status != 0) {
+      status_str = "Waiting on ROAR warmup.\n";
+    }
+  }
+
   if (status_str.empty() && _roar_upcall_getWarmupStatus) {
     int roar_warmup_status = _roar_upcall_getWarmupStatus();
     if (roar_warmup_status != 0) {

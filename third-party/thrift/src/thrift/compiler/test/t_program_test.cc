@@ -16,12 +16,11 @@
 
 #include <thrift/compiler/ast/t_program.h>
 
-#include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <thrift/compiler/ast/t_enum.h>
 #include <thrift/compiler/ast/t_struct.h>
 #include <thrift/compiler/ast/t_union.h>
@@ -127,7 +126,8 @@ TEST(TProgram, AddDefinitionUri) {
     auto& def = program.add_def(std::make_unique<t_struct>(&program, "Struct"));
     EXPECT_FALSE(def.explicit_uri());
     EXPECT_EQ(def.uri(), "test.dev/foo/bar/Struct");
-    EXPECT_EQ(&def, program.scope()->find_by_uri("test.dev/foo/bar/Struct"));
+    EXPECT_EQ(
+        &def, program.global_scope()->find_by_uri("test.dev/foo/bar/Struct"));
   }
   { // Explicit override.
     auto& def = program.add_def(std::make_unique<t_enum>(&program, "Enum"), "");
@@ -136,7 +136,7 @@ TEST(TProgram, AddDefinitionUri) {
   }
   { // Explicit annotation override.
     auto node = std::make_unique<t_union>(&program, "Union");
-    node->set_annotation("thrift.uri");
+    node->set_unstructured_annotation("thrift.uri");
     auto& def = program.add_def(std::move(node));
     EXPECT_TRUE(def.explicit_uri());
     EXPECT_EQ(def.uri(), "");

@@ -21,7 +21,7 @@
 
 #include <proxygen/lib/http/codec/HTTP2Constants.h>
 
-namespace proxygen { namespace http2 {
+namespace proxygen::http2 {
 
 //////// Constants ////////
 
@@ -42,7 +42,8 @@ enum class FrameType : uint8_t {
   GOAWAY = 7,
   WINDOW_UPDATE = 8,
   CONTINUATION = 9,
-  ALTSVC = 10,    // not in current draft so frame type has not been assigned
+  ALTSVC = 10, // not in current draft so frame type has not been assigned
+  RFC9218_PRIORITY = 16,
   PADDING = 0xbb, // not in current draft, nor likely to ever be used, so will
                   // be ignored
 
@@ -157,21 +158,17 @@ ErrorCode parseDataEnd(folly::io::Cursor& cursor,
  *
  * @param cursor The cursor to pull data from.
  * @param header The frame header for the frame being parsed.
- * @param outPriority If PRIORITY flag is set, this will be filled with
- *                    the priority information from this frame.
  * @param outBuf The buf to fill with header data.
  * @return NO_ERROR for successful parse. The connection error code to
  *         return in a GOAWAY frame if failure.
  */
 ErrorCode parseHeaders(folly::io::Cursor& cursor,
                        const FrameHeader& header,
-                       folly::Optional<PriorityUpdate>& outPriority,
                        std::unique_ptr<folly::IOBuf>& outBuf) noexcept;
 
 ErrorCode parseExHeaders(folly::io::Cursor& cursor,
                          const FrameHeader& header,
                          HTTPCodec::ExAttributes& outExAttributes,
-                         folly::Optional<PriorityUpdate>& outPriority,
                          std::unique_ptr<folly::IOBuf>& outBuf) noexcept;
 
 /**
@@ -181,14 +178,16 @@ ErrorCode parseExHeaders(folly::io::Cursor& cursor,
  *
  * @param cursor The cursor to pull data from.
  * @param header The frame header for the frame being parsed.
+ * @param priStream The stream to be prioritized.
  * @param outPriority On success, filled with the priority information
  *                    from this frame.
  * @return NO_ERROR for successful parse. The connection error code to
  *         return in a GOAWAY frame if failure.
  */
-ErrorCode parsePriority(folly::io::Cursor& cursor,
-                        const FrameHeader& header,
-                        PriorityUpdate& outPriority) noexcept;
+ErrorCode parseRFC9218Priority(folly::io::Cursor& cursor,
+                               const FrameHeader& header,
+                               uint32_t& priStream,
+                               std::string& outPriority);
 
 /**
  * This function parses the section of the RST_STREAM frame after the
@@ -403,8 +402,6 @@ size_t writeData(folly::IOBufQueue& writeBuf,
  *                 underlying buffers inside this function.
  * @param headersLen The length of the encoded headers data (already in writBuf)
  * @param stream The stream identifier of the HEADERS frame.
- * @param priority If present, the priority depedency information to
- *                 update the stream with.
  * @param padding If not kNoPadding, adds 1 byte pad len and @padding pad bytes
  * @param endStream True iff this frame ends the stream.
  * @param endHeaders True iff no CONTINUATION frames will follow this frame.
@@ -415,7 +412,6 @@ size_t writeHeaders(uint8_t* headerBuf,
                     folly::IOBufQueue& queue,
                     size_t headersLen,
                     uint32_t stream,
-                    folly::Optional<PriorityUpdate> priority,
                     folly::Optional<uint8_t> padding,
                     bool endStream,
                     bool endHeaders) noexcept;
@@ -435,8 +431,6 @@ size_t writeHeaders(uint8_t* headerBuf,
  * @param headersLen The length encoded headers (already in queue).
  * @param stream The stream identifier of the ExHEADERS frame.
  * @param exAttributes Attributes specific to ExHEADERS frame.
- * @param priority If present, the priority depedency information to
- *                 update the stream with.
  * @param padding If not kNoPadding, adds 1 byte pad len and @padding pad bytes
  * @param endStream True iff this frame ends the stream.
  * @param endHeaders True iff no CONTINUATION frames will follow this frame.
@@ -448,7 +442,6 @@ size_t writeExHeaders(uint8_t* headerBuf,
                       size_t headersLen,
                       uint32_t stream,
                       const HTTPCodec::ExAttributes& exAttributes,
-                      const folly::Optional<PriorityUpdate>& priority,
                       const folly::Optional<uint8_t>& padding,
                       bool endStream,
                       bool endHeaders) noexcept;
@@ -462,9 +455,9 @@ size_t writeExHeaders(uint8_t* headerBuf,
  * @param priority The priority depedency information to update the stream with.
  * @return The number of bytes written to writeBuf.
  */
-size_t writePriority(folly::IOBufQueue& writeBuf,
-                     uint32_t stream,
-                     PriorityUpdate priority) noexcept;
+size_t writeRFC9218Priority(folly::IOBufQueue& writeBuf,
+                            uint32_t stream,
+                            std::string& priority);
 
 /**
  * Generate an entire RST_STREAM frame, including the common frame
@@ -675,4 +668,4 @@ uint8_t calculatePreHeaderBlockSize(bool hasAssocStream,
                                     bool hasPriority,
                                     bool hasPadding);
 
-}} // namespace proxygen::http2
+} // namespace proxygen::http2

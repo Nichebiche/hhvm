@@ -17,7 +17,7 @@
 #include <proxygen/lib/http/codec/HQUtils.h>
 #include <proxygen/lib/http/codec/compress/QPACKCodec.h>
 
-namespace proxygen { namespace hq {
+namespace proxygen::hq {
 
 using namespace folly;
 using namespace folly::io;
@@ -196,7 +196,7 @@ void HQStreamCodec::onHeadersComplete(HTTPHeaderSize decodedSize,
     LOG(ERROR) << "Failed parsing header list for stream=" << streamId_
                << ", error=" << decodeInfo_.parsingError;
     if (!decodeInfo_.headerErrorValue.empty()) {
-      std::cerr << " value=" << decodeInfo_.headerErrorValue << std::endl;
+      DVLOG(4) << " value=" << decodeInfo_.headerErrorValue;
     }
     HTTPException err(
         HTTPException::Direction::INGRESS,
@@ -209,7 +209,7 @@ void HQStreamCodec::onHeadersComplete(HTTPHeaderSize decodedSize,
     } else {
       err.setHttpStatusCode(400);
     }
-    err.setProxygenError(kErrorParseHeader);
+    err.setProxygenError(decodeInfo_.proxygenError.value_or(kErrorParseHeader));
     // Have to clone it
     err.setPartialMsg(std::make_unique<HTTPMessage>(*decodeInfo_.msg));
     callback_->onError(streamId_, err, true);
@@ -312,7 +312,6 @@ void HQStreamCodec::generatePushPromise(folly::IOBufQueue& writeBuf,
   generateHeaderImpl(
       writeBuf, msg, pushId, size, folly::none /* extraHeaders */);
 }
-
 void HQStreamCodec::generateHeaderImpl(
     folly::IOBufQueue& writeBuf,
     const HTTPMessage& msg,
@@ -340,12 +339,13 @@ void HQStreamCodec::generateHeaderImpl(
   // HTTP/2 serializes priority here, but HQ priorities need to go on the
   // control stream
 
-  WriteResult res;
-  if (pushId) {
-    res = hq::writePushPromise(writeBuf, *pushId, std::move(result));
-  } else {
-    res = hq::writeHeaders(writeBuf, std::move(result));
-  }
+  auto res = [&]() -> WriteResult {
+    if (pushId) {
+      return hq::writePushPromise(writeBuf, *pushId, std::move(result));
+    } else {
+      return hq::writeHeaders(writeBuf, std::move(result));
+    }
+  }();
 
   if (res.hasError()) {
     LOG(ERROR) << __func__ << ": failed to write "
@@ -384,7 +384,6 @@ size_t HQStreamCodec::generateBodyDSR(StreamID stream,
   // Assuming we have generated a single DATA frame.
   return length;
 }
-
 size_t HQStreamCodec::generateTrailers(folly::IOBufQueue& writeBuf,
                                        StreamID stream,
                                        const HTTPHeaders& trailers) {
@@ -402,8 +401,9 @@ size_t HQStreamCodec::generateTrailers(folly::IOBufQueue& writeBuf,
       std::string(),
       trailers,
       debugLevel_);
-  WriteResult res;
-  res = hq::writeHeaders(writeBuf, std::move(encodeRes.stream));
+  auto res = [&]() -> WriteResult {
+    return hq::writeHeaders(writeBuf, std::move(encodeRes.stream));
+  }();
 
   if (res.hasError()) {
     LOG(ERROR) << __func__ << ": failed to write trailers: " << res.error();
@@ -436,4 +436,4 @@ CompressionInfo HQStreamCodec::getCompressionInfo() const {
   return headerCodec_.getCompressionInfo();
 }
 
-}} // namespace proxygen::hq
+} // namespace proxygen::hq

@@ -77,6 +77,10 @@ class ThriftRocketServerHandler : public RocketServerHandler {
 
   void handleSetupFrame(
       SetupFrame&& frame, RocketServerConnection& context) final;
+  folly::Expected<std::optional<CustomCompressionSetupResponse>, std::string>
+  handleSetupFrameCustomCompression(
+      CompressionSetupRequest const& setupRequest,
+      RocketServerConnection& connection);
   void handleRequestResponseFrame(
       RequestResponseFrame&& frame, RocketServerFrameContext&& context) final;
   void handleRequestFnfFrame(
@@ -139,7 +143,7 @@ class ThriftRocketServerHandler : public RocketServerHandler {
       Payload&& payload,
       F&& makeRequest,
       RpcKind expectedKind,
-      bool decodeMetadataUsingBinary);
+      RocketServerConnection& connection);
 
   FOLLY_NOINLINE void handlePreprocessResult(
       ThriftRequestCoreUniquePtr request,

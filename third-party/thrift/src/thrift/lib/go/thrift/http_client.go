@@ -103,8 +103,8 @@ func (p *httpClient) Read(buf []byte) (int, error) {
 	return n, types.NewTransportExceptionFromError(err)
 }
 
-func (p *httpClient) ReadByte() (c byte, err error) {
-	return readByte(&p.responseBuffer)
+func (p *httpClient) ReadByte() (byte, error) {
+	return p.responseBuffer.ReadByte()
 }
 
 func (p *httpClient) Write(buf []byte) (int, error) {
@@ -116,7 +116,7 @@ func (p *httpClient) WriteByte(c byte) error {
 	return p.requestBuffer.WriteByte(c)
 }
 
-func (p *httpClient) WriteString(s string) (n int, err error) {
+func (p *httpClient) WriteString(s string) (int, error) {
 	return p.requestBuffer.WriteString(s)
 }
 
@@ -156,6 +156,6 @@ func (p *httpClient) Flush() error {
 	return nil
 }
 
-func (p *httpClient) RemainingBytes() uint64 {
-	return uint64(p.responseBuffer.Len())
+func (p *httpClient) Len() int {
+	return p.responseBuffer.Len()
 }

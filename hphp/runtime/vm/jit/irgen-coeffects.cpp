@@ -18,7 +18,6 @@
 #include "hphp/runtime/vm/jit/coeffect-fun-param-profile.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
 #include "hphp/runtime/vm/jit/irgen-internal.h"
-#include "hphp/runtime/vm/jit/irgen-interpone.h"
 #include "hphp/runtime/vm/jit/irgen-minstr.h"
 #include "hphp/runtime/vm/jit/irgen-state.h"
 #include "hphp/runtime/vm/jit/ssa-tmp.h"
@@ -321,8 +320,7 @@ SSATmp* emitFunParam(IRGS& env, const Func* f, uint32_t numArgsInclUnpack,
               [&] {
                 // Rules
                 auto const obj = gen(env, AssertType, TObj, tv);
-                auto const addr = gen(env, LdPropAddr, IndexData { 0 }, TInt, obj);
-                return gen(env, LdMem, TInt, addr);
+                return gen(env, LdClosureArg, IndexData { 0 }, TInt, obj);
               },
               [&] {
                 // Statically known coeffects
@@ -391,8 +389,7 @@ SSATmp* emitClosureParentScope(IRGS& env, const Func* f, SSATmp* prologueCtx) {
   auto const cls = f->implCls();
   assertx(cls);
   auto const slot = cls->getCoeffectsProp();
-  auto const addr = ldPropAddr(env, prologueCtx, nullptr, cls, slot, TInt);
-  return gen(env, LdMem, TInt, addr);
+  return ldClosureArg(env, prologueCtx, cls, slot, TInt);
 }
 
 SSATmp* emitGeneratorThis(IRGS& env, const Func* f, SSATmp* prologueCtx) {

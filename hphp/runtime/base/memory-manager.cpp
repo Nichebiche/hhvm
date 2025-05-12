@@ -19,8 +19,6 @@
 #include <cstdint>
 #include <limits>
 
-#include "hphp/runtime/base/builtin-functions.h"
-#include "hphp/runtime/base/exceptions.h"
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/stack-logger.h"
 #include "hphp/runtime/base/surprise-flags.h"
@@ -28,12 +26,8 @@
 #include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/base/req-root.h"
 #include "hphp/runtime/base/heap-graph.h"
-#include "hphp/runtime/server/http-server.h"
 
-#include "hphp/util/alloc.h"
 #include "hphp/util/configs/gc.h"
-#include "hphp/util/logger.h"
-#include "hphp/util/process.h"
 #include "hphp/util/ptr-map.h"
 #include "hphp/util/struct-log.h"
 #include "hphp/util/timer.h"
@@ -53,7 +47,7 @@ __thread bool tl_sweeping;
 THREAD_LOCAL_FLAT(MemoryManager, tl_heap);
 __thread size_t tl_heap_id; // thread's current heap instance id
 
-TRACE_SET_MOD(mm);
+TRACE_SET_MOD(mm)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -432,7 +426,7 @@ void MemoryManager::flush() {
  * case c and combine the lists eventually.
  */
 
-constexpr const std::array<char*,NumHeaderKinds> header_names = {{
+constexpr const std::array<const char*,NumHeaderKinds> header_names = {{
   "Vec", "BespokeVec", "Dict", "BespokeDict", "Keyset", "BespokeKeyset",
   "String", "Resource", "ClsMeth", "RClsMeth", "RFunc",
   "Object", "NativeObject", "WaitHandle", "AsyncFuncWH", "AwaitAllWH",

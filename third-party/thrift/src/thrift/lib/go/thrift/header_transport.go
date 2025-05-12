@@ -26,6 +26,7 @@ import (
 	"net"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/klauspost/compress/zstd"
 )
 
 const (
@@ -128,7 +129,7 @@ func (t *headerTransport) GetResponseHeaders() map[string]string {
 func (t *headerTransport) AddTransform(trans TransformID) error {
 	if sup, ok := supportedTransforms[trans]; !ok || !sup {
 		return types.NewTransportException(
-			types.NOT_IMPLEMENTED, fmt.Sprintf("unimplemented transform ID: %s (%#x)", trans.String(), int64(trans)),
+			types.NOT_SUPPORTED, fmt.Sprintf("unsupported transform ID: %s (%#x)", trans.String(), int64(trans)),
 		)
 	}
 	for _, t := range t.writeTransforms {
@@ -257,9 +258,9 @@ func (t *headerTransport) WriteString(s string) (int, error) {
 	return n, types.NewTransportExceptionFromError(err)
 }
 
-// RemainingBytes returns how many bytes remain in the current recv framebuffer.
-func (t *headerTransport) RemainingBytes() uint64 {
-	return t.frameSize
+// Len returns how many bytes remain in the current recv framebuffer.
+func (t *headerTransport) Len() int {
+	return int(t.frameSize)
 }
 
 func applyTransforms(buf *bytes.Buffer, transforms []TransformID) (*bytes.Buffer, error) {
@@ -283,7 +284,15 @@ func applyTransforms(buf *bytes.Buffer, transforms []TransformID) (*bytes.Buffer
 			buf, tmpbuf = tmpbuf, buf
 			tmpbuf.Reset()
 		case TransformZstd:
-			err := zstdWriter(tmpbuf, buf)
+			zwr, err := zstd.NewWriter(tmpbuf)
+			if err != nil {
+				return nil, err
+			}
+			_, err = buf.WriteTo(zwr)
+			if err != nil {
+				return nil, err
+			}
+			err = zwr.Close()
 			if err != nil {
 				return nil, err
 			}
@@ -291,7 +300,7 @@ func applyTransforms(buf *bytes.Buffer, transforms []TransformID) (*bytes.Buffer
 			tmpbuf.Reset()
 		default:
 			return nil, types.NewTransportException(
-				types.NOT_IMPLEMENTED, fmt.Sprintf("unimplemented transform ID: %s (%#x)", trans.String(), int64(trans)),
+				types.NOT_SUPPORTED, fmt.Sprintf("unsupported transform ID: %s (%#x)", trans.String(), int64(trans)),
 			)
 		}
 	}

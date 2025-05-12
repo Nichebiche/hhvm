@@ -21,7 +21,6 @@
 #include "hphp/runtime/base/surprise-flags.h"
 #include "hphp/runtime/base/vanilla-vec.h"
 
-#include "hphp/runtime/vm/bytecode.h"
 #include "hphp/runtime/vm/event-hook.h"
 #include "hphp/runtime/vm/resumable.h"
 
@@ -54,7 +53,7 @@ namespace HPHP::jit {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(ustubs);
+TRACE_SET_MOD(ustubs)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -130,8 +129,8 @@ void freeAFWH(c_AsyncFunctionWaitHandle* wh) {
  * Store the result provided by `data' and `type' into the wait handle `wh'
  * and mark it as succeeded.
  *
- * Note that this overwrites parentChain and contextIdx, so these fields need
- * to be loaded before the result is stored.
+ * Note that this overwrites parentChain and contextStateIndex, so these fields
+ * need to be loaded before the result is stored.
  */
 void storeWHResult(Vout& v, PhysReg data, PhysReg type, Vptr wh,
                    A::Kind whKind) {
@@ -170,7 +169,7 @@ void unblockParents(Vout& v, Vreg firstBl) {
 namespace {
 constexpr ptrdiff_t ar_rel(ptrdiff_t off) {
   return off - c_AsyncFunctionWaitHandle::arOff();
-};
+}
 } // namespace
 
 TCA emitAsyncSwitchCtrl(CodeBlock& cb, DataBlock& data, TCA* inner, const UniqueStubs& us,
@@ -289,13 +288,13 @@ void asyncFuncMaybeRetToAsyncFunc(Vout& v, PhysReg rdata, PhysReg rtype,
   v << cmpqim{0, parentBl[afwhToBl(AFWH::resumeAddrOff())], isNullAddr};
   ifThen(v, CC_E, isNullAddr, cannotResume);
 
-  // Check parentBl->getWH()->getContextIdx() == child->getContextIdx().
+  // Check parentBl->getWH()->getContextStateIndex() == child->getContextStateIndex().
   auto const childContextIdx = v.makeReg();
   auto const parentContextIdx = v.makeReg();
   auto const inSameContext = v.makeReg();
 
-  v << loadb{rvmfp()[afwhToAr(AFWH::contextIdxOff())], childContextIdx};
-  v << loadb{parentBl[afwhToBl(AFWH::contextIdxOff())], parentContextIdx};
+  v << loadb{rvmfp()[afwhToAr(AFWH::ctxStateIdxOff())], childContextIdx};
+  v << loadb{parentBl[afwhToBl(AFWH::ctxStateIdxOff())], parentContextIdx};
   v << cmpb{parentContextIdx, childContextIdx, inSameContext};
   ifThen(v, CC_NE, inSameContext, cannotResume);
 
@@ -482,7 +481,11 @@ TCA emitAsyncFuncRetSlow(CodeBlock& cb, DataBlock& data, TCA asyncFuncRet,
     irlower::emitCheckSurpriseFlags(v, rvmsp(), slowPath);
 
     // The return event hook cleared the surprise, continue on the fast path.
-    v << jmpi{asyncFuncRet, vm_regs_with_sp() | rarg(0) | rarg(1)};
+    if (LIKELY(!Cfg::Eval::FastMethodInterceptNoAsyncOpt)) {
+      v << jmpi{asyncFuncRet, vm_regs_with_sp() | rarg(0) | rarg(1)};
+    } else {
+      v << jmp{slowPath};
+    }
 
     // Slow path.
     v = slowPath;

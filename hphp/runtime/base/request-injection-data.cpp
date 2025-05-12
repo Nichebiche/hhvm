@@ -17,8 +17,6 @@
 #include "hphp/runtime/base/request-injection-data.h"
 
 #include <atomic>
-#include <cinttypes>
-#include <filesystem>
 #include <limits>
 #include <string>
 #include <thread>
@@ -34,7 +32,6 @@
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/rds-header.h"
 #include "hphp/runtime/base/runtime-option.h"
-#include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/ext/string/ext_string.h"
 #include "hphp/runtime/vm/debugger-hook.h"
 #include "hphp/runtime/vm/vm-regs.h"
@@ -146,7 +143,7 @@ bool RequestInjectionData::setAllowedDirectories(const std::string& value) {
   // Backwards compat with ;
   // but moving forward should use PATH_SEPARATOR
   std::vector<std::string> boom;
-  if (value.find(";") != std::string::npos) {
+  if (value.find(';') != std::string::npos) {
     folly::split(';', value, boom, true);
     m_open_basedir_separator = ";";
   } else {
@@ -594,7 +591,8 @@ void RequestInjectionData::updateJit() {
     !(Cfg::Jit::DisabledByHphpd && m_debuggerAttached) &&
     !m_coverage &&
     (rl_typeProfileLocals.isNull() || !isForcedToInterpret()) &&
-    !m_vsdebugDisablesJit;
+    !m_vsdebugDisablesJit &&
+    !m_jitFolding;
 }
 
 void RequestInjectionData::clearFlag(SurpriseFlag flag) {

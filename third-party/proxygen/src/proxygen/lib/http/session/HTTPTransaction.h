@@ -94,7 +94,7 @@ class DSRRequestSender {
  * by another Transport, and create outgoing requests on the upstream
  * connection(s), with each request represented as a new Transaction.
  *
- * With a multiplexing protocol like SPDY on both sides of a proxy,
+ * With a multiplexing protocol like H2 on both sides of a proxy,
  * the cardinality relationship can be:
  *
  *                 +-----------+     +-----------+     +-------+
@@ -218,7 +218,7 @@ class HTTPTransactionHandler : public TraceEventObserver {
    * previously called pauseIngress(), this callback will be delayed until
    * you call resumeIngress(). Trailers can be received once right before
    * the EOM of a chunked HTTP/1.1 reponse or multiple times per
-   * transaction from SPDY and HTTP/2.0 HEADERS frames.
+   * transaction from HTTP/2 HEADERS frames.
    */
   virtual void onTrailers(std::unique_ptr<HTTPHeaders> trailers) noexcept = 0;
 
@@ -293,7 +293,7 @@ class HTTPTransactionHandler : public TraceEventObserver {
   /**
    * Inform the handler that a GOAWAY has been received on the
    * transport. This callback will only be invoked if the transport is
-   * SPDY or HTTP/2. It may be invoked multiple times, as HTTP/2 allows this.
+   * HTTP/2 or HTTP/3. It may be invoked multiple times.
    *
    * @param code The error code received in the GOAWAY frame
    */
@@ -553,9 +553,6 @@ class HTTPTransaction
 
     virtual size_t sendAbort(HTTPTransaction* txn,
                              ErrorCode statusCode) noexcept = 0;
-
-    virtual size_t sendPriority(HTTPTransaction* txn,
-                                const http2::PriorityUpdate& pri) noexcept = 0;
     /*
      * Updates the Local priority for the transaction.
      * For an upstream transaction it also sends the priority update to the peer
@@ -683,9 +680,11 @@ class HTTPTransaction
     }
 
     folly::Expected<WebTransport::FCState, WebTransport::ErrorCode>
-    sendWebTransportStreamData(HTTPCodec::StreamID /*id*/,
-                               std::unique_ptr<folly::IOBuf> /*data*/,
-                               bool /*eof*/) override {
+    sendWebTransportStreamData(
+        HTTPCodec::StreamID /*id*/,
+        std::unique_ptr<folly::IOBuf> /*data*/,
+        bool /*eof*/,
+        WebTransport::ByteEventCallback* /* deliveryCallback */) override {
       LOG(FATAL) << __func__ << " not supported";
       folly::assume_unreachable();
     }
@@ -739,8 +738,9 @@ class HTTPTransaction
     }
 
     folly::Expected<folly::Unit, WebTransport::ErrorCode>
-    stopReadingWebTransportIngress(HTTPCodec::StreamID /*id*/,
-                                   uint32_t /*errorCode*/) override {
+    stopReadingWebTransportIngress(
+        HTTPCodec::StreamID /*id*/,
+        folly::Optional<uint32_t> /*errorCode*/) override {
       LOG(FATAL) << __func__ << " not supported";
       folly::assume_unreachable();
     }
@@ -756,6 +756,10 @@ class HTTPTransaction
 
     virtual folly::Optional<HTTPTransaction::ConnectionToken>
     getConnectionToken() const noexcept = 0;
+
+    virtual bool serverEarlyResponseEnabled() const noexcept {
+      return false;
+    }
   };
 
   using TransportCallback = HTTPTransactionTransportCallback;
@@ -766,7 +770,7 @@ class HTTPTransaction
    * made on the borders of the L7 chunking/data frames of the outbound
    * messages.
    *
-   * priority is only used by SPDY. The -1 default makes sure that all
+   * priority is not used by HTTP/1.1. The -1 default makes sure that all
    * plain HTTP transactions land up in the same queue as the control data.
    */
   HTTPTransaction(
@@ -1665,17 +1669,8 @@ class HTTPTransaction
 
   /**
    * Change the priority of this transaction, may generate a PRIORITY frame.
-   * The first variant is SPDY priority. The second is HTTP/2 priority. The
-   * third one is a new proposal in a draft for both HTTP/2 and HTTP/3.
    */
-  void updateAndSendPriority(int8_t newPriority);
-  void updateAndSendPriority(const http2::PriorityUpdate& pri);
   virtual void updateAndSendPriority(HTTPPriority pri);
-
-  /**
-   * Notify of priority change, will not generate a PRIORITY frame
-   */
-  void onPriorityUpdate(const http2::PriorityUpdate& priority);
 
   /**
    * Add a callback waiting for this transaction to have a transport with
@@ -1904,6 +1899,11 @@ class HTTPTransaction
   // and returns the number of bytes written to the transport
   size_t maybeSendDeferredNoError();
 
+  // Whether the stream has been upgraded to some other protocol
+  bool isUpgraded() const {
+    return upgraded_ || wtConnectStream_ || isExTransaction();
+  }
+
   class RateLimitCallback : public folly::HHWheelTimer::Callback {
    public:
     explicit RateLimitCallback(HTTPTransaction& txn) : txn_(txn) {
@@ -2105,6 +2105,8 @@ class HTTPTransaction
    * been queued.
    */
   bool deferredNoError_ : 1;
+
+  bool upgraded_ : 1;
 
   /**
    * If this transaction represents a request (ie, it is backed by an

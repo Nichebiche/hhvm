@@ -8,6 +8,7 @@
 
 open Core
 module Codes = Error_codes.Warning
+module SN = Naming_special_names
 
 let severity = User_error.Warning
 
@@ -70,6 +71,60 @@ module Sketchy_equality = struct
   let quickfixes _ = []
 end
 
+module Safe_abstract : Warning with type t = Typing_warning.Safe_abstract.t =
+struct
+  open Typing_warning.Safe_abstract
+
+  type t = Typing_warning.Safe_abstract.t
+
+  let claim : t -> string = function
+    (* TODO(T213971384): better error messages and quickfixes *)
+    | { kind = Call_abstract { method_ }; class_; reason = _ } ->
+      Printf.sprintf
+        "Unsafe call: `%s::%s` might not exist because the receiver might be abstract."
+        (Utils.strip_ns class_)
+        method_
+    | { kind = Call_needs_concrete { method_ }; class_; reason = _ } ->
+      Printf.sprintf
+        "Unsafe call: %s::%s has `<<__NeedsConcrete>>`, but the receiver might be abstract."
+        (Utils.strip_ns class_)
+        method_
+    | { kind = Const_access_abstract { const }; class_; reason = _ } ->
+      Printf.sprintf
+        "Unsafe class constant access: %s::%s might not exist because the receiver might be abstract."
+        (Utils.strip_ns class_)
+        const
+    | { kind = New_abstract; class_; reason = _ } ->
+      Printf.sprintf
+        "Unsafe use of `new`: `%s` might be abstract"
+        (Utils.strip_ns class_)
+
+  let code { kind; _ } : Codes.t =
+    match kind with
+    | Call_abstract _ -> Codes.SafeAbstractCall
+    | New_abstract -> Codes.SafeAbstractNew
+    | Const_access_abstract _ -> Codes.SafeAbstractConstAccess
+    | Call_needs_concrete _ -> Codes.SafeAbstractCallNeedsConcrete
+
+  let codes : Codes.t list =
+    [
+      Codes.SafeAbstractCall;
+      Codes.SafeAbstractNew;
+      Codes.SafeAbstractCallNeedsConcrete;
+    ]
+
+  let reasons { class_; reason; _ } : Pos_or_decl.t Message.t list =
+    match reason with
+    | Some reason ->
+      [
+        ( Typing_reason.to_pos reason,
+          Printf.sprintf "%s is from " (Utils.strip_ns class_) );
+      ]
+    | None -> []
+
+  let quickfixes _ : Pos.t Quickfix.t list = []
+end
+
 module Is_as_always = struct
   type t = Typing_warning.Is_as_always.t
 
@@ -110,20 +165,17 @@ module Is_as_always = struct
     match kind with
     | Typing_warning.Is_as_always.Is_is_always_true ->
       Lints_codes.Codes.is_always_true
-    | Typing_warning.Is_as_always.Is_is_always_false ->
-      Lints_codes.Codes.is_always_false
-    | Typing_warning.Is_as_always.As_always_succeeds _ ->
-      Lints_codes.Codes.as_always_succeeds
-    | Typing_warning.Is_as_always.As_always_fails ->
-      Lints_codes.Codes.as_always_fails
+    | Is_is_always_false -> Lints_codes.Codes.is_always_false
+    | As_always_succeeds _ -> Lints_codes.Codes.as_always_succeeds
+    | As_always_fails -> Lints_codes.Codes.as_always_fails
 
   let lint_quickfix { Typing_warning.Is_as_always.kind; _ } =
     match kind with
     | Typing_warning.Is_as_always.Is_is_always_true
-    | Typing_warning.Is_as_always.Is_is_always_false
-    | Typing_warning.Is_as_always.As_always_fails ->
+    | Is_is_always_false
+    | As_always_fails ->
       None
-    | Typing_warning.Is_as_always.As_always_succeeds quickfix -> Some quickfix
+    | As_always_succeeds quickfix -> Some quickfix
 
   let quickfixes _ = []
 end
@@ -157,10 +209,8 @@ module Sketchy_null_check = struct
         "use `%s ?? $default` instead of `%s ?: $default`"
         name
         name
-    | Typing_warning.Sketchy_null_check.Eq ->
-      Printf.sprintf "use `%s is null` instead" name
-    | Typing_warning.Sketchy_null_check.Neq ->
-      Printf.sprintf "use `%s is nonnull` instead" name
+    | Eq -> Printf.sprintf "use `%s is null` instead" name
+    | Neq -> Printf.sprintf "use `%s is nonnull` instead" name
 
   let reasons _ = []
 
@@ -321,7 +371,9 @@ module Equality_check = struct
 
   let lint_code { kind; _ } =
     match kind with
-    | Equality _ -> Lints_codes.Codes.non_equatable_comparison
+    | Equality _
+    | Switch ->
+      Lints_codes.Codes.non_equatable_comparison
     | Contains
     | Contains_key ->
       Lints_codes.Codes.invalid_contains_check
@@ -334,6 +386,11 @@ module Equality_check = struct
       Printf.sprintf
         "Invalid comparison: This expression will always return %s.\nA value of type %s can never be equal to a value of type %s"
         (string_of_bool b |> Markdown_lite.md_codify)
+        (Markdown_lite.md_codify ty1)
+        (Markdown_lite.md_codify ty2)
+    | Switch ->
+      Printf.sprintf
+        "Invalid case: This case will never match.\nA value of type %s can never be equal to a value of type %s"
         (Markdown_lite.md_codify ty1)
         (Markdown_lite.md_codify ty2)
     | Contains ->
@@ -433,10 +490,79 @@ module Class_pointer_to_string = struct
   let quickfixes _ = []
 end
 
+module No_disjoint_union_check = struct
+  type t = Typing_warning.No_disjoint_union_check.t
+
+  let code = Codes.NoDisjointUnion
+
+  let codes = [code]
+
+  let code _ = code
+
+  let claim _ = "Invalid type argument due to disjoint types in a union"
+
+  let reasons Typing_warning.No_disjoint_union_check.{ disjuncts; tparam_pos } =
+    let disjuncts = Lazy.force disjuncts in
+    let disjunct_reasons =
+      List.map disjuncts ~f:(fun (pos, ty) ->
+          (pos, Markdown_lite.md_codify ty ^ " is one of the disjoint types"))
+    in
+    disjunct_reasons
+    @ [
+        ( tparam_pos,
+          "This type parameter is marked with "
+          ^ Markdown_lite.md_codify SN.UserAttributes.uaNoDisjointUnion
+          ^ " to indicate that disjoint unions are errors" );
+      ]
+
+  let quickfixes _ = []
+end
+
+module Switch_redundancy = struct
+  open Typing_warning.Switch_redundancy
+
+  type t = Typing_warning.Switch_redundancy.t
+
+  let code = Codes.SwitchRedundancy
+
+  let codes = [code]
+
+  let code _ = code
+
+  let claim = function
+    | SwitchHasRedundancy { redundancy_size; _ } ->
+      "This switch statement contains redundant cases."
+      ^ " There are "
+      ^ string_of_int redundancy_size
+      ^ " redundant cases."
+    | DuplicatedCase { case; _ } ->
+      "This switch case, "
+      ^ Markdown_lite.md_codify (Lazy.force case)
+      ^ ", occurred before."
+      ^ " It will never be matched."
+    | RedundantDefault ->
+      "All cases are already covered."
+      ^ " Redundant `default` cases prevent detection of future errors."
+
+  let reasons = function
+    | SwitchHasRedundancy { positions; _ } ->
+      List.map (Lazy.force positions) ~f:(fun p ->
+          (Pos_or_decl.of_raw_pos p, "The case is redundant."))
+    | DuplicatedCase { first_occurrence; _ } ->
+      [
+        ( Pos_or_decl.of_raw_pos first_occurrence,
+          "This is the original occurrence of the case." );
+      ]
+    | RedundantDefault -> []
+
+  let quickfixes _ = []
+end
+
 let module_of (type a x) (kind : (x, a) Typing_warning.kind) :
     (module Warning with type t = x) =
   match kind with
   | Typing_warning.Sketchy_equality -> (module Sketchy_equality)
+  | Typing_warning.Safe_abstract -> (module Safe_abstract)
   | Typing_warning.Is_as_always -> (module Is_as_always)
   | Typing_warning.Sketchy_null_check -> (module Sketchy_null_check)
   | Typing_warning.Non_disjoint_check -> (module Non_disjoint_check)
@@ -445,6 +571,8 @@ let module_of (type a x) (kind : (x, a) Typing_warning.kind) :
   | Typing_warning.Equality_check -> (module Equality_check)
   | Typing_warning.Duplicate_properties -> (module Duplicated_properties)
   | Typing_warning.Class_pointer_to_string -> (module Class_pointer_to_string)
+  | Typing_warning.No_disjoint_union_check -> (module No_disjoint_union_check)
+  | Typing_warning.Switch_redundancy -> (module Switch_redundancy)
 
 let module_of_migrated
     (type x) (kind : (x, Typing_warning.migrated) Typing_warning.kind) :
@@ -476,7 +604,6 @@ let add tcopt (type a x) ((pos, kind, warning) : (x, a) Typing_warning.t) : unit
         reasons = M.reasons warning;
         explanation = Explanation.empty;
         quickfixes = M.quickfixes warning;
-        flags = User_error_flags.empty;
         custom_msgs = [];
         is_fixmed = false;
         function_pos = None;

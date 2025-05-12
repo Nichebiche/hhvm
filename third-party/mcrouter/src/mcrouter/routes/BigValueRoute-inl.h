@@ -48,6 +48,8 @@ InputIterator reduce(InputIterator begin, InputIterator end) {
 // complete.
 uint64_t hashBigValue(const folly::IOBuf& value);
 
+BigValueRouteOptions parseBigValueRouteSettings(const folly::dynamic& json);
+
 } // namespace detail
 
 template <class RouterInfo>
@@ -190,6 +192,9 @@ std::vector<McGetRequest> BigValueRoute<RouterInfo>::chunkGetRequests(
     auto& bigGetReq =
         bigGetReqs.emplace_back(createChunkKey(baseKey, i, info.suffix()));
     bigGetReq.usecaseId_ref().copy_from(req.usecaseId_ref());
+    if constexpr (HasFlagsTrait<FromRequest>::value) {
+      bigGetReq.flags_ref() = *req.flags_ref();
+    }
   }
 
   return bigGetReqs;
@@ -245,6 +250,7 @@ BigValueRoute<RouterInfo>::chunkUpdateRequests(const Request& req) const {
     chunkReq.value_ref() = std::move(chunkValue);
     chunkReq.exptime_ref() = *req.exptime_ref();
     chunkReq.usecaseId_ref().copy_from(req.usecaseId_ref());
+    chunkReq.flags_ref() = *req.flags_ref();
   }
 
   return std::make_pair(std::move(chunkReqs), info);
@@ -302,6 +308,7 @@ McLeaseGetReply BigValueRoute<RouterInfo>::doLeaseGetRoute(
   // invalidate the metadata piece later on.
   const auto key = req.key_ref()->fullKey();
   McGetsRequest getsMetadataReq(key);
+  getsMetadataReq.flags_ref() = *req.flags_ref();
   const auto reqs = chunkGetRequests(req, chunksInfo);
   std::vector<std::function<McGetReply()>> fs;
   fs.reserve(reqs.size());
@@ -349,6 +356,7 @@ McLeaseGetReply BigValueRoute<RouterInfo>::doLeaseGetRoute(
     McCasRequest invalidateReq(key);
     invalidateReq.exptime_ref() = -1;
     invalidateReq.casToken_ref() = *getsMetadataReply.casToken_ref();
+    invalidateReq.flags_ref() = *req.flags_ref();
     auto invalidateReply = ch_->route(invalidateReq);
     if (isErrorResult(*invalidateReply.result_ref())) {
       McLeaseGetReply errorReply(*invalidateReply.result_ref());
@@ -433,11 +441,22 @@ folly::IOBuf BigValueRoute<RouterInfo>::createChunkKey(
 }
 
 template <class RouterInfo>
-typename RouterInfo::RouteHandlePtr makeBigValueRoute(
+typename RouterInfo::RouteHandlePtr makeBigValueRouteInternal(
     typename RouterInfo::RouteHandlePtr rh,
     BigValueRouteOptions options) {
   return makeRouteHandleWithInfo<RouterInfo, BigValueRoute>(
       std::move(rh), std::move(options));
+}
+
+template <class RouterInfo>
+typename RouterInfo::RouteHandlePtr makeBigValueRoute(
+    RouteHandleFactory<typename RouterInfo::RouteHandleIf>& factory,
+    const folly::dynamic& json) {
+  checkLogic(json.isObject(), "BigValueRoute is not an object");
+  checkLogic(json.count("target"), "BigValueRoute: Missing target parameter");
+
+  return makeRouteHandleWithInfo<RouterInfo, BigValueRoute>(
+      factory.create(json["target"]), detail::parseBigValueRouteSettings(json));
 }
 
 } // namespace mcrouter

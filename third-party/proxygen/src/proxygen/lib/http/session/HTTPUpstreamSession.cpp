@@ -17,6 +17,49 @@
 
 namespace proxygen {
 
+HTTPUpstreamSession::HTTPUpstreamSession(
+    const WheelTimerInstance& wheelTimer,
+    folly::AsyncTransport::UniquePtr&& sock,
+    const folly::SocketAddress& localAddr,
+    const folly::SocketAddress& peerAddr,
+    std::unique_ptr<HTTPCodec> codec,
+    const wangle::TransportInfo& tinfo,
+    InfoCallback* infoCallback)
+    : HTTPSession(wheelTimer,
+                  std::move(sock),
+                  localAddr,
+                  peerAddr,
+                  nullptr,
+                  std::move(codec),
+                  tinfo,
+                  infoCallback) {
+  if (sock_) {
+    auto asyncSocket = sock_->getUnderlyingTransport<folly::AsyncSocket>();
+    if (asyncSocket) {
+      asyncSocket->setBufferCallback(this);
+    }
+  }
+  CHECK_EQ(codec_->getTransportDirection(), TransportDirection::UPSTREAM);
+}
+
+// uses folly::HHWheelTimer instance which is used on client side & thrift
+HTTPUpstreamSession::HTTPUpstreamSession(
+    folly::HHWheelTimer* wheelTimer,
+    folly::AsyncTransport::UniquePtr&& sock,
+    const folly::SocketAddress& localAddr,
+    const folly::SocketAddress& peerAddr,
+    std::unique_ptr<HTTPCodec> codec,
+    const wangle::TransportInfo& tinfo,
+    InfoCallback* infoCallback)
+    : HTTPUpstreamSession(WheelTimerInstance(wheelTimer),
+                          std::move(sock),
+                          localAddr,
+                          peerAddr,
+                          std::move(codec),
+                          tinfo,
+                          infoCallback) {
+}
+
 HTTPUpstreamSession::~HTTPUpstreamSession() {
 }
 
@@ -60,20 +103,6 @@ bool HTTPUpstreamSession::isClosing() const {
 void HTTPUpstreamSession::startNow() {
   // startNow in base class CHECKs this session has not started.
   HTTPSession::startNow();
-  // Upstream specific:
-  // create virtual priority nodes and send Priority frames to peer if necessary
-  if (priorityMapFactory_) {
-    priorityAdapter_ = priorityMapFactory_->createVirtualStreams(this);
-    scheduleWrite();
-  } else {
-    // TODO/T17420249 Move this to the PriorityAdapter and remove it from the
-    // codec.
-    auto bytes = codec_->addPriorityNodes(
-        txnEgressQueue_, writeBuf_, maxVirtualPriorityLevel_);
-    if (bytes) {
-      scheduleWrite();
-    }
-  }
 }
 
 HTTPTransaction* HTTPUpstreamSession::newTransaction(
@@ -160,13 +189,6 @@ bool HTTPUpstreamSession::onNativeProtocolUpgrade(
 
   bool ret =
       onNativeProtocolUpgradeImpl(streamID, std::move(codec), protocolString);
-  if (ret) {
-    auto bytes = codec_->addPriorityNodes(
-        txnEgressQueue_, writeBuf_, maxVirtualPriorityLevel_);
-    if (bytes) {
-      scheduleWrite();
-    }
-  }
   return ret;
 }
 

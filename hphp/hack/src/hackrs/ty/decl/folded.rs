@@ -26,10 +26,6 @@ use pos::TypeName;
 use serde::Deserialize;
 use serde::Serialize;
 
-pub use crate::decl::subst::Subst;
-use crate::decl::ty::ConsistentKind;
-use crate::decl::ty::Enforceable;
-use crate::decl::ty::XhpEnumValue;
 use crate::decl::CeVisibility;
 use crate::decl::ClassConstKind;
 use crate::decl::ClassConstRef;
@@ -39,6 +35,10 @@ use crate::decl::Tparam;
 use crate::decl::Ty;
 use crate::decl::Typeconst;
 use crate::decl::XhpAttribute;
+pub use crate::decl::subst::Subst;
+use crate::decl::ty::ConsistentKind;
+use crate::decl::ty::Enforceable;
+use crate::decl::ty::XhpEnumValue;
 use crate::decl_error::DeclError;
 use crate::reason::Reason;
 
@@ -333,12 +333,14 @@ impl FoldedElement {
         self.flags.set(ClassEltFlags::SUPPORT_DYNAMIC_TYPE, p)
     }
 
-    pub fn is_readonly_prop(&self) -> bool {
-        self.flags.contains(ClassEltFlags::READONLY_PROP)
+    pub fn is_readonly_prop_or_needs_concrete(&self) -> bool {
+        self.flags
+            .contains(ClassEltFlags::READONLY_PROP_OR_NEEDS_CONCRETE)
     }
 
-    pub fn set_is_readonly_prop(&mut self, p: bool) {
-        self.flags.set(ClassEltFlags::READONLY_PROP, p)
+    pub fn set_is_readonly_prop_or_needs_concrete(&mut self, p: bool) {
+        self.flags
+            .set(ClassEltFlags::READONLY_PROP_OR_NEEDS_CONCRETE, p)
     }
 
     pub fn needs_init(&self) -> bool {

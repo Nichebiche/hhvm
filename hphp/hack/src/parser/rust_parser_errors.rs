@@ -860,9 +860,7 @@ fn param_with_callconv_has_default<'a>(node: S<'a>) -> Option<S<'a>> {
 }
 
 fn does_unop_create_write(token_kind: Option<TokenKind>) -> bool {
-    token_kind.map_or(false, |x| {
-        matches!(x, TokenKind::PlusPlus | TokenKind::MinusMinus)
-    })
+    token_kind.is_some_and(|x| matches!(x, TokenKind::PlusPlus | TokenKind::MinusMinus))
 }
 
 fn does_decorator_create_write(token_kind: Option<TokenKind>) -> bool {
@@ -1028,7 +1026,7 @@ fn is_good_scope_resolution_qualifier(node: S<'_>, static_allowed: bool) -> bool
 }
 
 fn does_binop_create_write_on_left(token_kind: Option<TokenKind>) -> bool {
-    token_kind.map_or(false, |x| match x {
+    token_kind.is_some_and(|x| match x {
         TokenKind::Equal
         | TokenKind::BarEqual
         | TokenKind::PlusEqual
@@ -1095,7 +1093,7 @@ fn get_positions_binop_allows_await(t: S<'_>) -> BinopAllowsAwaitInPositions {
 
 fn unop_allows_await(t: S<'_>) -> bool {
     use TokenKind::*;
-    token_kind(t).map_or(false, |t| match t {
+    token_kind(t).is_some_and(|t| match t {
         Exclamation | Tilde | Plus | Minus | At | Clone | Print | Readonly | DotDotDot => true,
         _ => false,
     })
@@ -1412,7 +1410,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
                     self.env
                         .context
                         .active_classish
-                        .map_or(false, |parent_classish| match &parent_classish.children {
+                        .is_some_and(|parent_classish| match &parent_classish.children {
                             ClassishDeclaration(cd) => {
                                 let kind = token_kind(&cd.keyword);
                                 kind == Some(TokenKind::Interface) || kind == Some(TokenKind::Trait)
@@ -1637,7 +1635,16 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
                     .iter()
                     .filter(|x: &S<'a>| is_visibility(x))
                     .collect();
-                if modifiers.len() > 1 {
+                // it is illegal to have multiple visibility modifiers except protected internal or internal protected combinations
+                if modifiers.len() == 2
+                    && ((modifiers[0].is_protected() && modifiers[1].is_internal())
+                        || (modifiers[0].is_internal() && modifiers[1].is_protected()))
+                {
+                    self.check_can_use_feature(
+                        modifiers.last().unwrap(),
+                        &FeatureName::ProtectedInternal,
+                    );
+                } else if modifiers.len() > 1 {
                     self.errors.push(make_error_from_node(
                         modifiers.last().unwrap(),
                         errors::multiple_visibility_modifiers_for_declaration(decl_name),
@@ -1721,7 +1728,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
         self.env
             .context
             .active_callable
-            .map_or(false, |node| match &node.children {
+            .is_some_and(|node| match &node.children {
                 AnonymousFunction(_) | LambdaExpression(_) | AwaitableCreationExpression(_) => true,
                 _ => false,
             })
@@ -1821,7 +1828,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
 
     fn has_inout_params(&self) -> bool {
         self.get_params_for_enclosing_callable()
-            .map_or(false, |function_parameter_list| {
+            .is_some_and(|function_parameter_list| {
                 syntax_to_list_no_separators(function_parameter_list)
                     .any(is_parameter_with_callconv)
             })
@@ -1837,7 +1844,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
         self.env
             .context
             .active_callable
-            .map_or(false, |node| match &node.children {
+            .is_some_and(|node| match &node.children {
                 FunctionDeclaration(x) => from_header(&x.declaration_header),
                 MethodishDeclaration(x) => from_header(&x.function_decl_header),
                 AnonymousFunction(x) => !x.async_keyword.is_missing(),
@@ -2020,6 +2027,9 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
         for node in attr_spec_to_node_list(attrs) {
             match self.attr_name(node) {
                 Some(n) => {
+                    if sn::user_attributes::is_simplihack(n) {
+                        self.check_can_use_feature(node, &FeatureName::SimpliHack)
+                    }
                     if (sn::user_attributes::ignore_readonly_local_errors(n)
                         || sn::user_attributes::ignore_coeffect_local_errors(n)
                         || sn::user_attributes::is_native(n))
@@ -2042,6 +2052,9 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
                         self.check_can_use_feature(node, &FeatureName::RequirePackage);
                         self.check_require_package_args_are_string_literals(node);
                         self.check_package_version_for_feature(node, &FeatureName::RequirePackage);
+                    }
+                    if sn::user_attributes::is_no_disjoint_union(n) {
+                        self.check_can_use_feature(node, &FeatureName::NoDisjointUnion);
                     }
                 }
                 None => {}
@@ -2121,6 +2134,8 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
                     || errors::no_generics_on_constructors,
                     &x.type_parameter_list,
                 );
+
+                self.check_type_parameters_attributes(&x.type_parameter_list);
 
                 if let Some(clashing_name) = self.class_constructor_param_promotion_clash(node) {
                     let class_name = self.active_classish_name().unwrap_or("");
@@ -2283,12 +2298,23 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
         }
     }
 
+    fn check_type_parameters_attributes(&mut self, x: S<'a>) {
+        if let TypeParameters(x) = &x.children {
+            syntax_to_list_no_separators(&x.parameters).for_each(|x| {
+                if let TypeParameter(x) = &x.children {
+                    let tparam_attributes = &x.attribute_spec;
+                    self.check_attr_enabled(tparam_attributes);
+                }
+            })
+        }
+    }
+
     fn is_in_construct_method(&self) -> bool {
         if self.is_immediately_in_lambda() {
             false
         } else {
             self.first_parent_function_name()
-                .map_or(false, |s| s == sn::members::__CONSTRUCT)
+                .is_some_and(|s| s == sn::members::__CONSTRUCT)
         }
     }
 
@@ -2674,11 +2700,10 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
     }
 
     fn is_in_unyieldable_magic_method(&self) -> bool {
-        self.first_parent_function_name()
-            .map_or(false, |s| match s {
-                sn::members::__INVOKE => false,
-                _ => sn::members::AS_SET.contains(&s),
-            })
+        self.first_parent_function_name().is_some_and(|s| match s {
+            sn::members::__INVOKE => false,
+            _ => sn::members::AS_SET.contains(&s),
+        })
     }
 
     fn check_disallowed_variables(&mut self, node: S<'a>) {
@@ -2705,7 +2730,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
                     // it will be properly lifted in closure convert
                     if self
                         .first_parent_function_name()
-                        .map_or(true, |s| s == "include")
+                        .is_none_or(|s| s == "include")
                     {
                         return {};
                     }
@@ -3256,11 +3281,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
             }
 
             ListExpression(_) => {
-                if self
-                    .parents
-                    .last()
-                    .map_or(false, |e| e.is_return_statement())
-                {
+                if self.parents.last().is_some_and(|e| e.is_return_statement()) {
                     self.errors
                         .push(make_error_from_node(node, errors::list_must_be_lvar))
                 }
@@ -3928,7 +3949,7 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
             let classish_sealed_arg_not_classname = |self_: &mut Self| {
                 attr_spec_to_node_list(&cd.attribute).any(|node| {
                     self_.attr_name(node) == Some(sn::user_attributes::SEALED)
-                        && self_.attr_args(node).map_or(false, |mut args| {
+                        && self_.attr_args(node).is_some_and(|mut args| {
                             args.any(|arg_node| match &arg_node.children {
                                 ScopeResolutionExpression(x) => self_.text(&x.name) != "class",
                                 _ => true,
@@ -5538,9 +5559,10 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
             RequireClauseConstraint(_) => {
                 self.check_can_use_feature(node, &FeatureName::RequireConstraint)
             }
-            ClassishDeclaration(_) => {
+            ClassishDeclaration(children) => {
                 self.classish_errors(node);
                 self.class_reified_param_errors(node);
+                self.check_type_parameters_attributes(&children.type_parameters);
             }
 
             EnumClassDeclaration(_) => {
@@ -5643,6 +5665,9 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
         }
 
         match &node.children {
+            ClosureTypeSpecifier(c) if !c.type_parameters.is_missing() => {
+                self.check_can_use_feature(node, &FeatureName::PolymorphicFunctionHints)
+            }
             UnionTypeSpecifier(_) | IntersectionTypeSpecifier(_) => {
                 self.check_can_use_feature(node, &FeatureName::UnionIntersectionTypeHints)
             }
@@ -5819,9 +5844,6 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
             self.errors
                 .push(make_error_from_node(prefix, errors::expression_tree_name))
         }
-        if self.context.expression_tree_depth > 0 && !self.context.active_expression_tree {
-            self.check_can_use_feature(node, &FeatureName::ExpressionTreeNest)
-        }
 
         *prev_context = Some(self.env.context.clone());
         self.context.active_expression_tree = true;
@@ -5849,6 +5871,9 @@ impl<'a, State: 'a + Clone> ParserErrors<'a, State> {
         attributes.for_each(|attr| match attr.trim() {
             sn::user_attributes::STRICT_SWITCH => {
                 self.check_can_use_feature(node, &FeatureName::StrictSwitch)
+            }
+            sn::user_attributes::SIMPLIHACK => {
+                self.check_can_use_feature(node, &FeatureName::SimpliHack)
             }
             _ => {}
         });

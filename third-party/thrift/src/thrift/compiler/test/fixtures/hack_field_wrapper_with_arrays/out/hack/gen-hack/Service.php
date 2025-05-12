@@ -69,10 +69,6 @@ trait ServiceClientBase {
    *        2: include.MyStruct arg2);
    */
   public async function func(string $arg1, ?MyStruct $arg2): Awaitable<int> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Service_func_args::fromShape(shape(
       'arg1' => $arg1,
@@ -80,7 +76,7 @@ trait ServiceClientBase {
     ));
     await $this->asyncHandler_->genBefore(ServiceStaticMetadata::THRIFT_SVC_NAME, "func", $args);
     $currentseqid = $this->sendImplHelper($args, "func", false, ServiceStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Service_func_result::class, "func", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Service_func_result::class, "func", false, $currentseqid, $rpc_options))[0];
   }
 
 }

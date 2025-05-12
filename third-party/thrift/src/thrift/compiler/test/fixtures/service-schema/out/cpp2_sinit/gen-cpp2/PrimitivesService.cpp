@@ -22,9 +22,13 @@ apache::thrift::ServiceHandler<::cpp2::PrimitivesService>::CreateMethodMetadataR
 #if defined(THRIFT_SCHEMA_AVAILABLE)
 std::optional<apache::thrift::schema::DefinitionsSchema> apache::thrift::ServiceHandler<::cpp2::PrimitivesService>::getServiceSchema() {
   std::optional<apache::thrift::schema::DefinitionsSchema> ret = schema::DefinitionsSchema{};
-  ret->schema = ::apache::thrift::SchemaRegistry::mergeSchemas(::cpp2::module_constants::_fbthrift_schema_b747839c13cb3aa5_includes());
+  ret->schema = ::apache::thrift::schema::detail::mergeSchemas(::cpp2::module_constants::_fbthrift_schema_b747839c13cb3aa5_includes());
   ret->definitions = { {"\x0d\x05\x1d\xbc\xb2\xd5\x1d\x8f\x95\x45\xbb\x51\xfa\xcf\x0f\xfe", 16} };
   return ret;
+}
+
+std::vector<folly::not_null<const apache::thrift::schema::ServiceNode*>> apache::thrift::ServiceHandler<::cpp2::PrimitivesService>::getServiceSchemaNodes() {
+  return {&apache::thrift::SchemaRegistry::get().getNode<::cpp2::PrimitivesService>()};
 }
 #endif
 
@@ -448,3 +452,8 @@ apache::thrift::ServiceRequestInfoMap PrimitivesServiceServiceInfoHolder::static
   return requestInfoMap;
 }
 } // namespace cpp2
+
+namespace apache::thrift::detail {
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::PrimitivesService, false>::bundle)() =
+    &::cpp2::module_constants::_fbthrift_schema_b747839c13cb3aa5_includes;
+}

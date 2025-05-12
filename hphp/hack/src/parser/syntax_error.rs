@@ -490,6 +490,10 @@ pub const pair_initializer_arity: Error =
     Cow::Borrowed("Pair objects must have exactly 2 elements");
 pub const invalid_reified: Error =
     Cow::Borrowed("`reify` keyword can only appear at function or class type parameter position");
+pub const bound_on_transparent_type_alias_generic: Error = Cow::Borrowed(concat!(
+    "A type alias declaration cannot both use `type` and have a constraint on ",
+    "its type parameters. Did you mean `newtype`?"
+));
 pub const invalid_namespace_name: Error =
     Cow::Borrowed("Cannot use namespace with xhp-style names (contains `:` or `-`)");
 pub const invalid_namespace_alias: Error =
@@ -920,6 +924,7 @@ pub fn invalid_modifier_for_declaration(decl: &str, modifier: &str) -> Error {
 pub fn duplicate_modifiers_for_declaration(decl: &str) -> Error {
     Cow::Owned(format!("{} cannot have duplicate modifiers", decl))
 }
+// TODO(T223852815): need to change errors message when protected internal is released
 pub fn multiple_visibility_modifiers_for_declaration(decl: &str) -> Error {
     Cow::Owned(format!(
         "{} cannot have multiple visibility modifiers",
@@ -1065,18 +1070,6 @@ pub fn policy_sharded_memoized_without_policied(kind: &str) -> Error {
     Cow::Owned(format!(
         "This {} requires a zoned context to be memoized using __Memoize(#KeyedByIC) or __MemoizeLSB(#KeyedByIC)",
         kind
-    ))
-}
-
-pub fn memoize_make_ic_inaccessible_without_defaults(kind: &str, is_special_case: bool) -> Error {
-    let context = if is_special_case {
-        "#NotKeyedByICAndLeakIC__DO_NOT_USE"
-    } else {
-        "#MakeICInaccessible"
-    };
-    Cow::Owned(format!(
-        "This {} requires the defaults, leak_safe_shallow, or leak_safe_local context to be memoized using {}",
-        kind, context
     ))
 }
 
@@ -1350,3 +1343,22 @@ pub fn no_continue_in_finally(blk_token: TokenKind, stmt_token: TokenKind) -> Er
         blk_token.to_string()
     ))
 }
+
+pub const asio_low_pri_check: Error =
+    Cow::Borrowed("Only non-generator async functions can be marked low priority.");
+
+pub const polymorphic_function_hint_attribute_spec: Error = Cow::Borrowed(
+    "Attributes with parameters are not allowed for type parameters in polymorphic function hints or polymorphic lambda signatures.",
+);
+
+pub const polymorphic_function_hint_reified: Error = Cow::Borrowed(
+    "Reified generics are not allowed in polymorphic function hints or polymorphic lambda signatures.",
+);
+
+pub const polymorphic_function_hint_hkt: Error = Cow::Borrowed(
+    "Higher-kinded generics are not allowed in polymorphic function hints or polymorphic lambda signatures.",
+);
+
+pub const polymorphic_function_hint_variance: Error = Cow::Borrowed(
+    "Variance annotation are not allowed on generics in polymorphic function hints or polymorphic lambda signatures.",
+);

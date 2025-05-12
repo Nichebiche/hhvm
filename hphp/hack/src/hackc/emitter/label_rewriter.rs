@@ -3,8 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 
-use env::emitter::Emitter;
 use env::LabelGen;
+use env::emitter::Emitter;
 use hash::HashMap;
 use hash::HashSet;
 use hhbc::Instruct;
@@ -187,8 +187,9 @@ where
             | Opcode::ArrayUnmarkLegacy
             | Opcode::AssertRATL(..)
             | Opcode::AssertRATStk(..)
-            | Opcode::AwaitAll(..)
             | Opcode::Await
+            | Opcode::AwaitAll(..)
+            | Opcode::AwaitLowPri
             | Opcode::BareThis(..)
             | Opcode::BaseC(..)
             | Opcode::BaseGC(..)
@@ -222,6 +223,7 @@ where
             | Opcode::CheckThis
             | Opcode::ClassGetC(..)
             | Opcode::ClassGetTS
+            | Opcode::ClassGetTSWithGenerics
             | Opcode::ClassHasReifiedGenerics
             | Opcode::ClassName
             | Opcode::Clone
@@ -329,6 +331,7 @@ where
             | Opcode::QueryM(..)
             | Opcode::RaiseClassStringConversionNotice
             | Opcode::RecordReifiedGeneric
+            | Opcode::ReifiedInit(..)
             | Opcode::ReqDoc
             | Opcode::ReqOnce
             | Opcode::Req
@@ -380,6 +383,7 @@ where
             | Opcode::VerifyRetNonNullC
             | Opcode::VerifyRetTypeC
             | Opcode::VerifyRetTypeTS
+            | Opcode::VerifyTypeTS
             | Opcode::WHResult
             | Opcode::YieldK
             | Opcode::Yield,

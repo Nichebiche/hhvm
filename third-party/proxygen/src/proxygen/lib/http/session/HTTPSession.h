@@ -48,7 +48,6 @@ class HTTPSession
     , public HTTPTransaction::Transport
     , public ByteEventTracker::Callback
     , protected folly::AsyncTransport::BufferCallback
-    , protected HTTPPriorityMapFactoryProvider
     , private FlowControlFilter::Callback
     , private HTTPCodec::Callback
     , private folly::EventBase::LoopCallback
@@ -208,20 +207,6 @@ class HTTPSession
    * the number of bytes written on the transport to send the ping.
    */
   size_t sendPing() override;
-
-  /**
-   * Sends a priority message on this session.  If the underlying protocol
-   * doesn't support priority, this is a no-op.  A new stream identifier will
-   * be selected and returned.
-   */
-  HTTPCodec::StreamID sendPriority(http2::PriorityUpdate pri) override;
-
-  /**
-   * As above, but updates an existing priority node.  Do not use for
-   * real nodes, prefer HTTPTransaction::changePriority.
-   */
-  size_t sendPriority(HTTPCodec::StreamID id,
-                      http2::PriorityUpdate pri) override;
 
   /**
    * Send a CERTIFICATE_REQUEST frame. If the underlying protocol doesn't
@@ -408,14 +393,6 @@ class HTTPSession
 
   size_t getCodecSendWindowSize() const;
 
-  /**
-   * Sends a priority message on this session.  If the underlying protocol
-   * doesn't support priority, this is a no-op.  Returns the number of bytes
-   * written on the transport
-   */
-  size_t sendPriorityImpl(HTTPCodec::StreamID streamID,
-                          http2::PriorityUpdate pri);
-
   bool onNativeProtocolUpgradeImpl(HTTPCodec::StreamID txn,
                                    std::unique_ptr<HTTPCodec> codec,
                                    const std::string& protocolString);
@@ -474,8 +451,6 @@ class HTTPSession
   void onWindowUpdate(HTTPCodec::StreamID stream, uint32_t amount) override;
   void onSettings(const SettingsList& settings) override;
   void onSettingsAck() override;
-  void onPriority(HTTPCodec::StreamID stream,
-                  const HTTPMessage::HTTP2Priority&) override;
   void onPriority(HTTPCodec::StreamID, const HTTPPriority&) override;
   void onCertificateRequest(uint16_t requestId,
                             std::unique_ptr<folly::IOBuf> authRequest) override;
@@ -512,8 +487,6 @@ class HTTPSession
                  const HTTPHeaders* trailers) noexcept override;
   size_t sendAbort(HTTPTransaction* txn,
                    ErrorCode statusCode) noexcept override;
-  size_t sendPriority(HTTPTransaction* txn,
-                      const http2::PriorityUpdate& pri) noexcept override;
   size_t changePriority(HTTPTransaction* /*txn*/,
                         HTTPPriority /* pri */) noexcept override;
   void detach(HTTPTransaction* txn) noexcept override;
@@ -530,6 +503,9 @@ class HTTPSession
       HTTPTransaction::Handler* handler,
       HTTPCodec::StreamID controlStream,
       bool unidirectional = false) noexcept override;
+  bool serverEarlyResponseEnabled() const noexcept override {
+    return HTTPSessionBase::getServerEarlyResponseEnabled();
+  }
 
   const HTTPCodec& getCodec() const noexcept override {
     return codec_.getChainEnd();
@@ -824,8 +800,6 @@ class HTTPSession
   void invalidStream(HTTPCodec::StreamID stream,
                      ErrorCode code = ErrorCode::STREAM_CLOSED);
 
-  http2::PriorityUpdate getMessagePriority(const HTTPMessage* msg);
-
   bool isConnWindowFull() const {
     return connFlowControl_ && connFlowControl_->getAvailableSend() == 0;
   }
@@ -924,7 +898,7 @@ class HTTPSession
       pendingWrite_;
 
   /**
-   * Connection level flow control for SPDY >= 3.1 and HTTP/2
+   * Connection level flow control for HTTP/2
    */
   FlowControlFilter* connFlowControl_{nullptr};
 

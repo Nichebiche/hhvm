@@ -15,16 +15,12 @@
 */
 #include "hphp/hhbbc/parse.h"
 
-#include <thread>
-#include <unordered_map>
 #include <map>
 
-#include <boost/variant.hpp>
+#include <variant>
 #include <algorithm>
 #include <iterator>
 #include <memory>
-#include <set>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -50,14 +46,13 @@
 #include "hphp/hhbbc/func-util.h"
 #include "hphp/hhbbc/optimize.h"
 #include "hphp/hhbbc/representation.h"
-#include "hphp/hhbbc/unit-util.h"
 #include "hphp/hhbbc/wide-func.h"
 
 #include "hphp/util/configs/eval.h"
 
 namespace HPHP::HHBBC {
 
-TRACE_SET_MOD(hhbbc_parse);
+TRACE_SET_MOD(hhbbc_parse)
 
 namespace {
 
@@ -81,7 +76,7 @@ struct ParseUnitState {
    * have the full SourceLocTable information in it, so we're limited
    * to line numbers.
    */
-  boost::variant< SourceLocTable
+  std::variant< SourceLocTable
                 , LineTable
                 > srcLocInfo;
 
@@ -253,20 +248,19 @@ MKey make_mkey(const php::Func& /*func*/, MemberKey mk) {
 template<class FindBlock>
 void populate_block(ParseUnitState& puState,
                     const FuncEmitter& fe,
+                    const UnitEmitter& ue,
                     php::Func& func,
                     php::Block& blk,
                     PC pc,
                     PC const past,
                     bool& sawCreateCl,
                     FindBlock findBlock) {
-  auto const& ue = fe.ue();
-
   auto decode_stringvec = [&] {
     auto const vecLen = decode_iva(pc);
     CompactVector<LSString> keys;
     keys.reserve(vecLen);
     for (auto i = size_t{0}; i < vecLen; ++i) {
-      keys.push_back(ue.lookupLitstr(decode<int32_t>(pc)));
+      keys.push_back(ue.lookupLitstrId(decode<int32_t>(pc)));
     }
     return keys;
   };
@@ -289,7 +283,7 @@ void populate_block(ParseUnitState& puState,
     for (int32_t i = 0; i < vecLen - 1; ++i) {
       auto const id = decode<Id>(pc);
       auto const offset = decode<Offset>(pc);
-      ret.emplace_back(ue.lookupLitstr(id),
+      ret.emplace_back(ue.lookupLitstrId(id),
                        findBlock(opPC + offset - fe.bc()));
     }
 
@@ -339,9 +333,9 @@ void populate_block(ParseUnitState& puState,
                          return id;                              \
                        }();
 #define IMM_DA(n)      auto dbl##n = decode<double>(pc);
-#define IMM_SA(n)      auto str##n = ue.lookupLitstr(decode<Id>(pc));
+#define IMM_SA(n)      auto str##n = ue.lookupLitstrId(decode<Id>(pc));
 #define IMM_RATA(n)    auto rat = decodeRAT(ue, pc);
-#define IMM_AA(n)      auto arr##n = ue.lookupArray(decode<Id>(pc));
+#define IMM_AA(n)      auto arr##n = ue.lookupArrayId(decode<Id>(pc));
 #define IMM_BA(n)      assertx(next == past);     \
                        auto target##n = findBlock(  \
                          opPC + decode<Offset>(pc) - fe.bc());
@@ -546,7 +540,8 @@ void link_entry_points(php::Func& func,
 
 void build_cfg(ParseUnitState& puState,
                php::Func& func,
-               const FuncEmitter& fe) {
+               const FuncEmitter& fe,
+               const UnitEmitter& ue) {
   auto const blockStarts = findBasicBlocks(fe);
 
   FTRACE(3, "    blocks are at: {}\n",
@@ -595,7 +590,7 @@ void build_cfg(ParseUnitState& puState,
       block->throwExit = func.exnNodes[it->second].region.catchEntry;
     }
 
-    populate_block(puState, fe, func, *block, bcStart, bcStop,
+    populate_block(puState, fe, ue, func, *block, bcStart, bcStop,
                    sawCreateCl, findBlock);
     forEachNonThrowSuccessor(*block, [&] (BlockId blkId) {
         predSuccCounts[blkId].first++;
@@ -618,17 +613,18 @@ void build_cfg(ParseUnitState& puState,
   }
 }
 
-void add_frame_variables(php::Func& func, const FuncEmitter& fe) {
+void add_frame_variables(php::Func& func, const FuncEmitter& fe, const UnitEmitter& ue) {
   for (auto& param : fe.params) {
     func.params.push_back(
       php::Param {
         param.defaultValue,
         NoBlockId,
-        param.userType,
+        param.userType.ptr(ue),
         param.typeConstraints,
         param.userAttributes,
-        param.phpCode,
+        param.phpCode.ptr(ue),
         param.isInOut(),
+        param.isOutOnly(),
         param.isReadonly(),
         param.isVariadic(),
         param.isOptional(),
@@ -661,7 +657,8 @@ const StaticString
 std::unique_ptr<php::Func> parse_func(ParseUnitState& puState,
                                       php::Unit* unit,
                                       php::Class* cls,
-                                      const FuncEmitter& fe) {
+                                      const FuncEmitter& fe,
+                                      const UnitEmitter& ue) {
   if (fe.hasSourceLocInfo()) {
     puState.srcLocInfo = fe.createSourceLocTable();
   } else {
@@ -682,9 +679,9 @@ std::unique_ptr<php::Func> parse_func(ParseUnitState& puState,
                                        AttrPersistent);
 
   ret->userAttributes     = fe.userAttributes;
-  ret->returnUserType     = fe.retUserType;
+  ret->returnUserType     = fe.retUserType.ptr(ue);
   ret->retTypeConstraints = fe.retTypeConstraints;
-  ret->originalFilename   = fe.originalFilename;
+  ret->originalUnit       = fe.originalUnit;
   ret->originalModuleName = unit->moduleName;
 
   ret->isClosureBody       = fe.isClosureBody;
@@ -733,7 +730,7 @@ std::unique_ptr<php::Func> parse_func(ParseUnitState& puState,
     return true;
   }();
 
-  add_frame_variables(*ret, fe);
+  add_frame_variables(*ret, fe, ue);
 
   if (!RuntimeOption::ConstantFunctions.empty()) {
     auto const name = [&] {
@@ -814,7 +811,7 @@ std::unique_ptr<php::Func> parse_func(ParseUnitState& puState,
     }
   }
 
-  build_cfg(puState, *ret, fe);
+  build_cfg(puState, *ret, fe, ue);
 
   return ret;
 }
@@ -822,10 +819,11 @@ std::unique_ptr<php::Func> parse_func(ParseUnitState& puState,
 void parse_methods(ParseUnitState& puState,
                    php::Class* ret,
                    php::Unit* unit,
-                   const PreClassEmitter& pce) {
+                   const PreClassEmitter& pce,
+                   const UnitEmitter& ue) {
   std::unique_ptr<php::Func> cinit;
   for (auto& me : pce.methods()) {
-    auto f = parse_func(puState, unit, ret, *me);
+    auto f = parse_func(puState, unit, ret, *me, ue);
     if (f->name == s_86cinit.get()) {
       cinit = std::move(f);
     } else {
@@ -872,7 +870,8 @@ const StaticString s_DynamicallyConstructible("__DynamicallyConstructible");
 
 std::unique_ptr<php::Class> parse_class(ParseUnitState& puState,
                                         php::Unit* unit,
-                                        const PreClassEmitter& pce) {
+                                        const PreClassEmitter& pce,
+                                        const UnitEmitter& ue) {
   FTRACE(2, "  class: {}\n", pce.name()->data());
 
   auto ret                = std::make_unique<php::Class>();
@@ -917,13 +916,13 @@ std::unique_ptr<php::Class> parse_class(ParseUnitState& puState,
   copy(ret->usedTraitNames,  pce.usedTraits());
   copy(ret->requirements,    pce.requirements());
 
-  parse_methods(puState, ret.get(), unit, pce);
+  parse_methods(puState, ret.get(), unit, pce, ue);
   add_stringish(ret.get());
 
   auto& propMap = pce.propMap();
   for (size_t idx = 0; idx < propMap.size(); ++idx) {
     auto& prop = propMap[idx];
-    assertx(prop.typeConstraints().main().validForProp());
+    assertx(prop.typeConstraints().validForProp());
     ret->properties.push_back(
       php::Prop {
         prop.name(),
@@ -1110,7 +1109,7 @@ std::unique_ptr<php::TypeAlias> parse_type_alias(const TypeAliasEmitter& te) {
 }
 
 ParsedUnit parse_unit(const UnitEmitter& ue) {
-  Trace::Bump bumper{Trace::hhbbc_parse, kSystemLibBump, ue.isASystemLib()};
+  Trace::Bump bumper{Trace::hhbbc_parse, kSystemLibBump, ue.isSystemLib()};
   FTRACE(2, "parse_unit {}\n", ue.m_filepath->data());
 
   ParsedUnit ret;
@@ -1153,14 +1152,14 @@ ParsedUnit parse_unit(const UnitEmitter& ue) {
   ParseUnitState puState;
 
   for (auto const pce : ue.preclasses()) {
-    auto cls = parse_class(puState, ret.unit.get(), *pce);
+    auto cls = parse_class(puState, ret.unit.get(), *pce, ue);
     ret.unit->classes.emplace_back(cls->name);
     ret.classes.emplace_back(std::move(cls));
   }
 
   for (auto const& fe : ue.fevec()) {
     assertx(!fe->pce());
-    auto func = parse_func(puState, ret.unit.get(), nullptr, *fe);
+    auto func = parse_func(puState, ret.unit.get(), nullptr, *fe, ue);
     ret.unit->funcs.emplace_back(func->name);
     ret.funcs.emplace_back(std::move(func));
   }

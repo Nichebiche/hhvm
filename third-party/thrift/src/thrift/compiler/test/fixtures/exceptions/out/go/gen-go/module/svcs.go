@@ -9,6 +9,7 @@ package module
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,8 +19,9 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type Raiser interface {
@@ -30,8 +32,11 @@ type Raiser interface {
 }
 
 type RaiserClientInterface interface {
-    thrift.ClientInterface
-    Raiser
+    io.Closer
+    DoBland(ctx context.Context) (error)
+    DoRaise(ctx context.Context) (error)
+    Get200(ctx context.Context) (string, error)
+    Get500(ctx context.Context) (string, error)
 }
 
 type RaiserClient struct {
@@ -46,8 +51,12 @@ func NewRaiserChannelClient(channel thrift.RequestChannel) *RaiserClient {
     }
 }
 
-func NewRaiserClient(prot thrift.Protocol) *RaiserClient {
-    return NewRaiserChannelClient(thrift.NewSerialChannel(prot))
+func NewRaiserClient(prot thrift.DO_NOT_USE_ChannelWrapper) *RaiserClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewRaiserChannelClient(channel)
 }
 
 func (c *RaiserClient) Close() error {
@@ -55,66 +64,66 @@ func (c *RaiserClient) Close() error {
 }
 
 func (c *RaiserClient) DoBland(ctx context.Context) (error) {
-    in := &reqRaiserDoBland{
+    fbthriftReq := &reqRaiserDoBland{
     }
-    out := newRespRaiserDoBland()
-    err := c.ch.Call(ctx, "doBland", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespRaiserDoBland()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "doBland", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
 
 func (c *RaiserClient) DoRaise(ctx context.Context) (error) {
-    in := &reqRaiserDoRaise{
+    fbthriftReq := &reqRaiserDoRaise{
     }
-    out := newRespRaiserDoRaise()
-    err := c.ch.Call(ctx, "doRaise", in, out)
-    if err != nil {
-        return err
-    } else if out.B != nil {
-        return out.B
-    } else if out.F != nil {
-        return out.F
-    } else if out.S != nil {
-        return out.S
+    fbthriftResp := newRespRaiserDoRaise()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "doRaise", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
+    } else if fbthriftResp.B != nil {
+        return fbthriftResp.B
+    } else if fbthriftResp.F != nil {
+        return fbthriftResp.F
+    } else if fbthriftResp.S != nil {
+        return fbthriftResp.S
     }
     return nil
 }
 
 func (c *RaiserClient) Get200(ctx context.Context) (string, error) {
-    in := &reqRaiserGet200{
+    fbthriftReq := &reqRaiserGet200{
     }
-    out := newRespRaiserGet200()
-    err := c.ch.Call(ctx, "get200", in, out)
-    if err != nil {
-        return "", err
+    fbthriftResp := newRespRaiserGet200()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "get200", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return "", fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *RaiserClient) Get500(ctx context.Context) (string, error) {
-    in := &reqRaiserGet500{
+    fbthriftReq := &reqRaiserGet500{
     }
-    out := newRespRaiserGet500()
-    err := c.ch.Call(ctx, "get500", in, out)
-    if err != nil {
-        return "", err
-    } else if out.F != nil {
-        return "", out.F
-    } else if out.B != nil {
-        return "", out.B
-    } else if out.S != nil {
-        return "", out.S
+    fbthriftResp := newRespRaiserGet500()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "get500", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return "", fbthriftErr
+    } else if fbthriftResp.F != nil {
+        return "", fbthriftResp.F
+    } else if fbthriftResp.B != nil {
+        return "", fbthriftResp.B
+    } else if fbthriftResp.S != nil {
+        return "", fbthriftResp.S
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
 type RaiserProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            Raiser
+    handler              Raiser
 }
 
 func NewRaiserProcessor(handler Raiser) *RaiserProcessor {
@@ -170,16 +179,16 @@ type procFuncRaiserDoBland struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncRaiserDoBland)(nil)
 
-func (p *procFuncRaiserDoBland) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncRaiserDoBland) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqRaiserDoBland()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncRaiserDoBland) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncRaiserDoBland) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -187,16 +196,16 @@ func (p *procFuncRaiserDoBland) Write(seqId int32, result thrift.WritableStruct,
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("doBland", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("doBland", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -220,16 +229,16 @@ type procFuncRaiserDoRaise struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncRaiserDoRaise)(nil)
 
-func (p *procFuncRaiserDoRaise) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncRaiserDoRaise) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqRaiserDoRaise()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncRaiserDoRaise) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncRaiserDoRaise) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch v := result.(type) {
@@ -249,16 +258,16 @@ func (p *procFuncRaiserDoRaise) Write(seqId int32, result thrift.WritableStruct,
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("doRaise", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("doRaise", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -294,16 +303,16 @@ type procFuncRaiserGet200 struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncRaiserGet200)(nil)
 
-func (p *procFuncRaiserGet200) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncRaiserGet200) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqRaiserGet200()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncRaiserGet200) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncRaiserGet200) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -311,16 +320,16 @@ func (p *procFuncRaiserGet200) Write(seqId int32, result thrift.WritableStruct, 
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("get200", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("get200", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -345,16 +354,16 @@ type procFuncRaiserGet500 struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncRaiserGet500)(nil)
 
-func (p *procFuncRaiserGet500) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncRaiserGet500) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqRaiserGet500()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncRaiserGet500) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncRaiserGet500) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch v := result.(type) {
@@ -374,16 +383,16 @@ func (p *procFuncRaiserGet500) Write(seqId int32, result thrift.WritableStruct, 
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("get500", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("get500", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

@@ -1,5 +1,5 @@
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ffi::Vector;
 use hhbc::Opcode;
 use itertools::Itertools;
@@ -307,6 +307,7 @@ fn is_cow_instr(instr: &NodeInstr) -> bool {
             | Opcode::AssertRATStk(..)
             | Opcode::Await
             | Opcode::AwaitAll(..)
+            | Opcode::AwaitLowPri
             | Opcode::BareThis(..)
             | Opcode::BreakTraceHint
             | Opcode::CheckProp(..)
@@ -315,6 +316,7 @@ fn is_cow_instr(instr: &NodeInstr) -> bool {
             | Opcode::CheckThis
             | Opcode::ClassGetC(..)
             | Opcode::ClassGetTS
+            | Opcode::ClassGetTSWithGenerics
             | Opcode::ClassHasReifiedGenerics
             | Opcode::ClassName
             | Opcode::ClsCns(..)
@@ -338,7 +340,8 @@ fn is_cow_instr(instr: &NodeInstr) -> bool {
             | Opcode::MemoGetEager(..)
             | Opcode::ParentCls
             | Opcode::PopU
-            | Opcode::PopU2,
+            | Opcode::PopU2
+            | Opcode::ReifiedInit(..),
         ) => false,
 
         // Casting
@@ -359,7 +362,8 @@ fn is_cow_instr(instr: &NodeInstr) -> bool {
             | Opcode::VerifyParamTypeTS(..)
             | Opcode::VerifyRetNonNullC
             | Opcode::VerifyRetTypeC
-            | Opcode::VerifyRetTypeTS,
+            | Opcode::VerifyRetTypeTS
+            | Opcode::VerifyTypeTS,
         ) => false,
 
         NodeInstr::Opcode(

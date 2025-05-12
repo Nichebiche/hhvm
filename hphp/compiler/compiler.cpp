@@ -27,7 +27,6 @@
 
 #include "hphp/runtime/base/config.h"
 #include "hphp/runtime/base/configs/configs.h"
-#include "hphp/runtime/base/configs/repo-global-data-generated.h"
 #include "hphp/runtime/base/file-util.h"
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/preg.h"
@@ -43,16 +42,11 @@
 #include "hphp/runtime/vm/type-alias-emitter.h"
 #include "hphp/runtime/vm/unit-emitter.h"
 
-#include "hphp/util/async-func.h"
 #include "hphp/util/build-info.h"
 #include "hphp/util/configs/eval.h"
-#include "hphp/util/current-executable.h"
 #include "hphp/util/exception.h"
 #include "hphp/util/hdf.h"
-#include "hphp/util/job-queue.h"
 #include "hphp/util/logger.h"
-#include "hphp/util/process.h"
-#include "hphp/util/process-exec.h"
 #include "hphp/util/rds-local.h"
 #include "hphp/util/text-util.h"
 #include "hphp/util/timer.h"
@@ -63,10 +57,6 @@
 #include "hphp/hhvm/process-init.h"
 
 #include <sys/types.h>
-#ifndef _MSC_VER
-#include <sys/wait.h>
-#include <dlfcn.h>
-#endif
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/program_options/options_description.hpp>
@@ -100,7 +90,6 @@ struct CompilerOptions {
   std::vector<std::string> config;
   std::vector<std::string> confStrings;
   std::vector<std::string> iniStrings;
-  std::string repoOptionsDir;
   std::string inputDir;
   std::vector<std::string> inputs;
   std::string inputList;
@@ -119,6 +108,7 @@ struct CompilerOptions {
   std::string filecache;
   bool coredump;
   std::string ondemandEdgesPath;
+  std::string filesInBuildPath;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -198,16 +188,9 @@ bool addAutoloadQueryToPackage(Package& package, const std::string& queryStr) {
 void addListToPackage(Package& package, const std::vector<std::string>& dirs,
                      const CompilerOptions& po) {
   namespace fs = std::filesystem;
-  std::string prefix{""};
-  if (po.repoOptionsDir != po.inputDir) {
-    auto const input = fs::path(po.inputDir);
-    auto const rdr = fs::path(po.repoOptionsDir);
-    prefix = fs::relative(po.repoOptionsDir, po.inputDir).native();
-    if (!prefix.empty() && prefix.back() != '/') prefix += '/';
-  }
   for (auto const& dir : dirs) {
     Logger::FInfo("adding autoload dir {}", dir);
-    package.addDirectory(prefix + dir);
+    package.addDirectory(dir);
   }
 }
 
@@ -505,8 +488,6 @@ int prepareOptions(CompilerOptions &po, int argc, char **argv) {
     ("version", "display version number")
     ("format,f", value<std::vector<std::string>>(&formats)->composing(),
      "HHBC Output format: binary (default) | hhas | text | none")
-    ("repo-options-dir", value<std::string>(&po.repoOptionsDir),
-     "repo options directory")
     ("input-dir", value<std::string>(&po.inputDir), "input directory")
     ("inputs,i", value<std::vector<std::string>>(&po.inputs)->composing(),
      "input file names")
@@ -564,6 +545,9 @@ int prepareOptions(CompilerOptions &po, int argc, char **argv) {
     ("report-ondemand-edges",
      value<std::string>(&po.ondemandEdgesPath),
      "Write parse-on-demand dependency edges to the specified file")
+    ("report-files-in-build",
+     value<std::string>(&po.filesInBuildPath),
+     "Write the list of files included in the build to the specified file")
     ;
 
   positional_options_description p;
@@ -609,7 +593,7 @@ int prepareOptions(CompilerOptions &po, int argc, char **argv) {
     std::cout << desc << "\n";
     return 1;
   }
-  if (vm.count("version")) {
+  if (vm.contains("version")) {
     std::cout << "HipHop Repo Compiler";
     std::cout << " " << HHVM_VERSION;
     std::cout << " (" << (debug ? "dbg" : "rel") << ")\n";
@@ -618,12 +602,12 @@ int prepareOptions(CompilerOptions &po, int argc, char **argv) {
     return 1;
   }
 
-  if (vm.count("compiler-id")) {
+  if (vm.contains("compiler-id")) {
     std::cout << compilerId() << "\n";
     return 1;
   }
 
-  if (vm.count("repo-schema")) {
+  if (vm.contains("repo-schema")) {
     std::cout << repoSchemaId() << "\n";
     return 1;
   }
@@ -717,12 +701,6 @@ int prepareOptions(CompilerOptions &po, int argc, char **argv) {
   if (po.inputDir.empty()) po.inputDir = '.';
   po.inputDir = FileUtil::normalizeDir(po.inputDir);
 
-  if (po.repoOptionsDir.empty()) {
-    po.repoOptionsDir = po.inputDir;
-  } else {
-    po.repoOptionsDir = FileUtil::normalizeDir(po.repoOptionsDir);
-  }
-
   for (auto const& dir : po.excludeDirs) {
     Option::PackageExcludeDirs.insert(FileUtil::normalizeDir(dir));
   }
@@ -815,6 +793,12 @@ void logPhaseStats(const std::string& phase, const Package& package,
       std::chrono::duration_cast<std::chrono::microseconds>(*t).count()
     );
   }
+  if (auto const t = package.filteredPackageTime()) {
+    sample.setInt(
+      phase + "_filteredPackage_micros",
+      std::chrono::duration_cast<std::chrono::microseconds>(*t).count()
+    );
+  }
 
   stats.logSample(phase, sample);
 }
@@ -888,7 +872,7 @@ std::unique_ptr<UnitIndex> computeIndex(
   Package indexPackage{po.inputDir, executor, client, po.coredump};
   Timer indexTimer(Timer::WallTime, "indexing");
 
-  auto const& repoFlags = RepoOptions::forFile(po.repoOptionsDir).flags();
+  auto const& repoFlags = RepoOptions::forFile(po.inputDir.c_str()).flags();
   auto const& dirs = repoFlags.autoloadRepoBuildSearchDirs();
   auto const queryStr = repoFlags.autoloadQuery();
   if (!dirs.empty()) {
@@ -1125,14 +1109,14 @@ bool process(CompilerOptions &po) {
 
   if (!Cfg::Eval::ActiveDeployment.empty()) {
     auto const& packageInfo =
-      RepoOptions::forFile(po.repoOptionsDir).packageInfo();
+      RepoOptions::forFile(po.inputDir.c_str()).packageInfo();
     auto const activeDeployment =
       packageInfo.deployments().find(Cfg::Eval::ActiveDeployment);
     if (activeDeployment == end(packageInfo.deployments())) {
       Logger::FError("The active deployment is set to {}; "
                      "however, it is not defined in the {}/{} file",
                      Cfg::Eval::ActiveDeployment,
-                     po.repoOptionsDir,
+                     po.inputDir,
                      Cfg::Eval::PackagesTomlFileName);
       return false;
     }
@@ -1150,7 +1134,7 @@ bool process(CompilerOptions &po) {
       // files that do not have a __PackageOverride and do not match an
       // include_path belong to the default package, which is always included
       // in the active deployment
-      pathsInDeployment.push_back(std::pair(Cfg::Server::SourceRoot + po.repoOptionsDir, true));
+      pathsInDeployment.push_back(std::pair(Cfg::Server::SourceRoot + po.inputDir, true));
     } else {
       // PackageV1: precompute the set of modules in the current deployment
       moduleInDeployment.reserve(index->modules.size());
@@ -1347,26 +1331,32 @@ bool process(CompilerOptions &po) {
   // Emit a group of files that were parsed remotely
   auto const emitRemoteUnit = [&] (
       const std::vector<std::filesystem::path>& rpaths,
-      bool isOnDemand
+      bool forceInclusion
   ) -> coro::Task<Package::EmitCallBackResult> {
     Package::ParseMetaVec parseMetas;
     Package::ParseMetaItemsToSkipSet itemsToSkip;
 
     auto const shouldIncludeInBuild = [&] (const Package::ParseMeta& p) {
-      if (Cfg::Eval::ActiveDeployment.empty()) return true;
+      if (Cfg::Eval::ActiveDeployment.empty() || forceInclusion) return true;
       if (Cfg::Eval::PackageV2) {
+        // emit should never be invoked on files excluded from the build
+        // with --exclude-file or --exclude-pattern
+        auto file = p.m_filepath->toCppString();
+        always_assert(!Option::PackageExcludeFiles.count(file) &&
+          !Option::IsFileExcluded(file, Option::PackageExcludePatterns));
+
         if (p.m_packageOverride) {
           auto const& packageInfo =
-            RepoOptions::forFile(po.repoOptionsDir).packageInfo();
+            RepoOptions::forFile(po.inputDir.c_str()).packageInfo();
           auto const activeDeployment =
             packageInfo.deployments().find(Cfg::Eval::ActiveDeployment);
           return ((activeDeployment->second).m_packages.contains(p.m_packageOverride->data()));
         }
         // match file with the include_path declarations and return
         // if most precise one that matches belongs to the active deployment
-        auto const file = p.m_filepath->toCppString();
         for (auto const& it : pathsInDeployment) {
-          if (file.size() >= it.first.size() && std::equal(it.first.begin(), it.first.end(), file.begin())) {
+          if (file.size() >= it.first.size() &&
+              std::equal(it.first.begin(), it.first.end(), file.begin())) {
             return it.second;
           }
         }
@@ -1374,7 +1364,6 @@ bool process(CompilerOptions &po) {
       }
       // If the unit defines any modules, then it is always included
       if (!p.m_definitions.m_modules.empty()) return true;
-      if (Option::ForceEnableSymbolRefs && isOnDemand) return true;
       return p.m_module_use && moduleInDeployment.contains(p.m_module_use);
     };
 
@@ -1473,7 +1462,7 @@ bool process(CompilerOptions &po) {
 
     // Parse the input files specified on the command line
     addInputsToPackage(*parsePackage, po);
-    auto const& repoFlags = RepoOptions::forFile(po.repoOptionsDir).flags();
+    auto const& repoFlags = RepoOptions::forFile(po.inputDir.c_str()).flags();
     auto const& dirs = repoFlags.autoloadRepoBuildSearchDirs();
     auto const queryStr = repoFlags.autoloadQuery();
     if (!dirs.empty()) {
@@ -1513,7 +1502,7 @@ bool process(CompilerOptions &po) {
     }
 
     if (!coro::blockingWait(package->emit(*index, emitRemoteUnit, emitLocalUnit,
-                                          po.ondemandEdgesPath))) {
+                                          po.ondemandEdgesPath, po.filesInBuildPath))) {
       return false;
     }
 
@@ -1580,7 +1569,7 @@ bool process(CompilerOptions &po) {
     if (!Option::GenerateBinaryHHBC) return true;
     Timer _{Timer::WallTime, "finalizing repo"};
     auto const& packageInfo =
-      RepoOptions::forFile(po.repoOptionsDir).packageInfo();
+      RepoOptions::forFile(po.inputDir.c_str()).packageInfo();
     repo->finish(getGlobalData(), *autoload, packageInfo);
     return true;
   };

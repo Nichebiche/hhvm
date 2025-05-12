@@ -59,24 +59,8 @@
                                                                     f_readonly_this = None; 
                                                                     f_annotation = (); 
                                                                     f_readonly_ret = None; 
-                                                                    f_ret = ((), None);
-                                                                    f_params =
-                                                                    [{ param_annotation = ();
-                                                                    param_type_hint =
-                                                                    (
-                                                                    (),
-                                                                    (Some (
-                                                                    [4:14-47],
-                                                                    (
-                                                                    Happly (([4:14-47], "\\HH\\supportdyn"), [([4:14-47], (Hshape { nsi_allows_unknown_fields = true; nsi_field_map = [] }))])))));
-                                                                    param_pos = [4:14-47]; 
-                                                                    param_name = "$0fv_shape"; 
-                                                                    param_info = (Param_optional (Some ((), [4:14-47], (Shape [])))); 
-                                                                    param_readonly = None; 
-                                                                    param_splat = None; 
-                                                                    param_callconv = Pnormal; 
-                                                                    param_user_attributes = []; 
-                                                                    param_visibility = None }]; 
+                                                                    f_ret = ((), None); 
+                                                                    f_params = []; 
                                                                     f_ctxs = (Some ([4:14-47], [([4:14-47], (Happly (([4:14-47], "\\HH\\Contexts\\defaults"), [])))])); 
                                                                     f_unsafe_ctxs = None;
                                                                     f_body =
@@ -164,7 +148,8 @@
                                                                     f_external = false; 
                                                                     f_doc_comment = None }; 
                                                                     ef_use = [((), ([4:3-13], $0fp0))]; 
-                                                                    ef_closure_class_name = None })))
+                                                                    ef_closure_class_name = None; 
+                                                                    ef_is_expr_tree_virtual_expr = false })))
                                                                 ])));
                                                        (Anormal
                                                           ((), [4:14-47],
@@ -304,8 +289,8 @@
                                  f_fun_kind = FSync; f_user_attributes = []; 
                                  f_external = false; f_doc_comment = None },
                                [((), ([4:37-40], $0fp0))])));
-                           targs = []; args = []; unpacked_arg = None }))
-                     }))))
+                           targs = []; args = []; unpacked_arg = None }));
+                     et_free_vars = None }))))
             ]
           };
         f_fun_kind = FSync; f_user_attributes = [{ ua_name = ([3:10-14], "__SupportDynamicType"); ua_params = [] }]; 

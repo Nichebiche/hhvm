@@ -23,6 +23,9 @@ cdef extern from *:
     #undef _serialize
     """
 
+cdef extern from "<Python.h>":
+    cdef int PyObject_CheckBuffer(object)
+
 
 def serialize_iobuf(strct, cProtocol protocol=cProtocol.COMPACT):
     if not isinstance(strct, (StructOrUnion, GeneratedError)):
@@ -34,22 +37,28 @@ def serialize_iobuf(strct, cProtocol protocol=cProtocol.COMPACT):
 def serialize(struct, cProtocol protocol=cProtocol.COMPACT):
     return b''.join(serialize_iobuf(struct, protocol))
 
+# some users define custom cpp extensions that implement buffer protocol
+cdef inline _is_buffer(object obj):
+    return PyObject_CheckBuffer(obj) == 1
+
 def deserialize_with_length(klass, buf, cProtocol protocol=cProtocol.COMPACT, *, fully_populate_cache=False):
     if not issubclass(klass, (StructOrUnion, GeneratedError)):
         raise TypeError("thrift-python deserialization only supports thrift-python types")
-    if not isinstance(buf, (IOBuf, bytes, bytearray, memoryview)):
+    if not isinstance(buf, (IOBuf, bytes, bytearray, memoryview)) and not _is_buffer(buf):
         raise TypeError("buf must be IOBuf, bytes, bytearray, or memoryview")
     cdef IOBuf iobuf = buf if isinstance(buf, IOBuf) else IOBuf(buf)
-    inst = klass.__new__(klass)
     cdef uint32_t length
     try:
         if issubclass(klass, Struct):
+            inst = klass._fbthrift_new()
             length = (<Struct>inst)._deserialize(iobuf, protocol)
             if fully_populate_cache:
                 (<Struct>inst)._fbthrift_fully_populate_cache()
         elif issubclass(klass, Union):
+            inst = klass.__new__(klass)
             length = (<Union>inst)._deserialize(iobuf, protocol)
         else:
+            inst = klass.__new__(klass)
             length = (<GeneratedError>inst)._deserialize(iobuf, protocol)
     except Exception as e:
         raise Error.__new__(Error, *e.args) from None

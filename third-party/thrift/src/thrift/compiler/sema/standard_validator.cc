@@ -56,13 +56,13 @@ const t_structured* get_mixin_type(const t_field& field) {
 }
 
 bool has_experimental_annotation(sema_context& ctx, const t_named& node) {
-  if (node.find_structured_annotation_or_null(kExperimentalUri)) {
+  if (node.has_structured_annotation(kExperimentalUri)) {
     return true;
   }
   for (int pos = ctx.nodes().size() - 1; pos >= 0; --pos) {
     const auto* parent = dynamic_cast<const t_named*>(ctx.nodes().at(pos));
     if (parent != nullptr &&
-        parent->find_structured_annotation_or_null(kExperimentalUri)) {
+        parent->has_structured_annotation(kExperimentalUri)) {
       return true;
     }
   }
@@ -212,7 +212,7 @@ class adapter_or_wrapper_checker {
     auto type = field.type().get_type();
 
     bool structured_annotation_on_field =
-        field.find_structured_annotation_or_null(structured_adapter_annotation);
+        field.has_structured_annotation(structured_adapter_annotation);
 
     bool structured_annotation_on_typedef =
         t_typedef::get_first_structured_annotation_or_null(
@@ -236,7 +236,7 @@ class adapter_or_wrapper_checker {
       const char* structured_adapter_annotation_error_name,
       const char* structured_wrapper_annotation_error_name) {
     bool has_adapter_annotation =
-        node.find_structured_annotation_or_null(structured_adapter_annotation);
+        node.has_structured_annotation(structured_adapter_annotation);
     if (!has_adapter_annotation) {
       return;
     }
@@ -253,11 +253,11 @@ class adapter_or_wrapper_checker {
     }
 
     auto has_wrapper =
-        type->find_structured_annotation_or_null(structured_wrapper_annotation);
+        type->has_structured_annotation(structured_wrapper_annotation);
     std::string typedef_name = type->name();
     while (!has_wrapper) {
       if (const auto* inner_typedf = dynamic_cast<const t_typedef*>(type)) {
-        has_wrapper = inner_typedf->find_structured_annotation_or_null(
+        has_wrapper = inner_typedf->has_structured_annotation(
             structured_wrapper_annotation);
         typedef_name = inner_typedf->name();
         type = inner_typedf->get_type();
@@ -269,9 +269,9 @@ class adapter_or_wrapper_checker {
         } else {
           break;
         }
-      } else if (type->is_struct()) {
-        has_wrapper = type->find_structured_annotation_or_null(
-            structured_wrapper_annotation);
+      } else if (type->is_struct_or_union()) {
+        has_wrapper =
+            type->has_structured_annotation(structured_wrapper_annotation);
         typedef_name = type->name();
         break;
       } else {
@@ -334,8 +334,7 @@ void validate_identifier_is_not_reserved(
   //  1. the node was generated.
   //  2. @thrift.AllowedReservedIdentifier is present.
   if (node.generated() ||
-      node.find_structured_annotation_or_null(kAllowReservedIdentifierUri) !=
-          nullptr) {
+      node.has_structured_annotation(kAllowReservedIdentifierUri)) {
     return;
   }
   ctx.check(
@@ -349,8 +348,7 @@ void validate_filename_is_not_reserved(sema_context& ctx, const t_named& node) {
   //  1. the node was generated.
   //  2. @thrift.AllowReservedFilename is present.
   if (node.generated() ||
-      node.find_structured_annotation_or_null(kAllowReservedFilenameUri) !=
-          nullptr) {
+      node.has_structured_annotation(kAllowReservedFilenameUri)) {
     return;
   }
   ctx.check(
@@ -429,15 +427,12 @@ void validate_extends_service_function_name_uniqueness(
   }
 }
 
-void validate_throws_exceptions(sema_context& ctx, const t_throws& node) {
-  for (const auto& except : node.fields()) {
-    auto except_type = except.type()->get_true_type();
-    ctx.check(
-        dynamic_cast<const t_exception*>(except_type),
-        except,
-        "Non-exception type, `{}`, in throws.",
-        except_type->name());
-  }
+void validate_throws_exceptions(sema_context& ctx, const t_field& except) {
+  auto except_type = except.type()->get_true_type();
+  ctx.check(
+      dynamic_cast<const t_exception*>(except_type),
+      "Non-exception type, `{}`, in throws.",
+      except_type->name());
 }
 
 // Checks for a redefinition of a field in the same t_structured, including
@@ -465,7 +460,7 @@ void validate_field_names_uniqueness(
 void validate_exception_message_annotation_is_only_in_exceptions(
     sema_context& ctx, const t_structured& node) {
   for (const auto& f : node.fields()) {
-    if (f.find_structured_annotation_or_null(kExceptionMessageUri)) {
+    if (f.has_structured_annotation(kExceptionMessageUri)) {
       ctx.check(
           node.is_exception(),
           f,
@@ -487,7 +482,7 @@ void validate_union_field_attributes(sema_context& ctx, const t_union& node) {
           field.qualifier() == t_field_qualifier::required ? "required"
                                                            : "optional",
           field.name());
-    } else if (field.find_structured_annotation_or_null(kTerseWriteUri)) {
+    } else if (field.has_structured_annotation(kTerseWriteUri)) {
       ctx.error(
           field,
           "`@thrift.TerseWrite` cannot be applied to union fields (in `{}`).",
@@ -504,22 +499,21 @@ void validate_boxed_field_attributes(sema_context& ctx, const t_field& node) {
     return;
   }
 
-  const bool ref = node.has_annotation({
+  const bool ref = node.has_unstructured_annotation({
                        "cpp.ref",
                        "cpp2.ref",
                        "cpp.ref_type",
                        "cpp2.ref_type",
                    }) ||
-      node.find_structured_annotation_or_null(kCppRefUri);
+      node.has_structured_annotation(kCppRefUri);
 
-  const bool box = node.has_annotation({
+  const bool box = node.has_unstructured_annotation({
                        "cpp.box",
                        "thrift.box",
                    }) ||
-      node.find_structured_annotation_or_null(kBoxUri);
+      node.has_structured_annotation(kBoxUri);
 
-  const bool intern_box =
-      node.find_structured_annotation_or_null(kInternBoxUri);
+  const bool intern_box = node.has_structured_annotation(kInternBoxUri);
 
   if (ref + box + intern_box > 1) {
     ctx.error(
@@ -552,8 +546,7 @@ void validate_boxed_field_attributes(sema_context& ctx, const t_field& node) {
       // annotated with `@cpp.AllowLegacyNonOptionalRef`.
 
       const bool report_error =
-          node.find_structured_annotation_or_null(
-              kCppAllowLegacyNonOptionalRefUri) == nullptr;
+          !node.has_structured_annotation(kCppAllowLegacyNonOptionalRefUri);
 
       ctx.report(
           node,
@@ -568,7 +561,7 @@ void validate_boxed_field_attributes(sema_context& ctx, const t_field& node) {
 
   if (intern_box) {
     ctx.check(
-        node.type()->get_true_type()->is_struct(),
+        node.type()->get_true_type()->is_struct_or_union(),
         "The `@thrift.InternBox` annotation can only be used with a struct field.");
     // TODO(dokwon): Add support for custom defaults and remove this check.
     ctx.check(
@@ -652,7 +645,7 @@ void validate_const_type_and_value(sema_context& ctx, const t_const& node) {
     detail::check_duplicate_keys(ctx, node);
   }
   ctx.check(
-      !node.find_structured_annotation_or_null(kCppAdapterUri) ||
+      !node.has_structured_annotation(kCppAdapterUri) ||
           has_experimental_annotation(ctx, node),
       "Using adapters on const `{}` is only allowed in the experimental mode.",
       node.name());
@@ -669,6 +662,7 @@ std::string_view field_qualifier_to_string(t_field_qualifier qualifier) {
     case t_field_qualifier::terse:
       return "terse";
   }
+  abort();
 }
 
 void validate_field_default_value(sema_context& ctx, const t_field& field) {
@@ -709,14 +703,19 @@ void validate_field_default_value(sema_context& ctx, const t_field& field) {
           field.name(),
           parent_node.name());
       break;
-    case t_field_qualifier::terse:
-      ctx.warning(
+    case t_field_qualifier::terse: {
+      if (detail::is_initializer_default_value(
+              field.type().deref(), *field.default_value())) {
+        return;
+      }
+      ctx.error(
           field,
           "Terse field should not have custom default value: "
           "`{}` (in `{}`).",
           field.name(),
           parent_node.name());
       break;
+    }
     default:
       break;
   }
@@ -786,7 +785,8 @@ void validate_field_id(sema_context& ctx, const t_field& node) {
 
   ctx.check(
       node.id() != 0 ||
-          node.has_annotation("cpp.deprecated_allow_zero_as_field_id"),
+          node.has_unstructured_annotation(
+              "cpp.deprecated_allow_zero_as_field_id"),
       "Zero value (0) not allowed as a field id for `{}`",
       node.name());
 
@@ -799,7 +799,7 @@ void validate_field_id(sema_context& ctx, const t_field& node) {
 
 void validate_compatibility_with_lazy_field(
     sema_context& ctx, const t_structured& node) {
-  if (has_lazy_field(node) && node.has_annotation("cpp.methods")) {
+  if (has_lazy_field(node) && node.has_unstructured_annotation("cpp.methods")) {
     ctx.error(
         "cpp.methods is incompatible with lazy deserialization in struct `{}`",
         node.get_name());
@@ -813,9 +813,9 @@ void validate_compatibility_with_lazy_field(
  */
 void validate_ref_annotation(sema_context& ctx, const t_field& node) {
   const bool hasStructuredAnnotation =
-      node.find_structured_annotation_or_null(kCppRefUri) != nullptr;
+      node.has_structured_annotation(kCppRefUri);
 
-  const bool hasUnstructuredAnnotation = node.has_annotation(
+  const bool hasUnstructuredAnnotation = node.has_unstructured_annotation(
       {"cpp.ref", "cpp2.ref", "cpp.ref_type", "cpp2.ref_type"});
 
   const int count = hasStructuredAnnotation + hasUnstructuredAnnotation;
@@ -823,8 +823,7 @@ void validate_ref_annotation(sema_context& ctx, const t_field& node) {
     // Neither @cpp.Ref nor cpp[2].ref[_type].
     // Check that there is no @cpp.AllowedLegacyNonOptionalRef
     ctx.check(
-        node.find_structured_annotation_or_null(
-            kCppAllowLegacyNonOptionalRefUri) == nullptr,
+        !node.has_structured_annotation(kCppAllowLegacyNonOptionalRefUri),
         "Cannot annotate field with @cpp.AllowLegacyNonOptionalRef unless it "
         "is a reference field (i.e., @cpp.Ref): `{}`.",
         node.name());
@@ -888,7 +887,7 @@ void validate_ref_unique_and_box_annotation(
     return;
   }
 
-  if (node.has_annotation({"cpp.ref", "cpp2.ref"})) {
+  if (node.has_unstructured_annotation({"cpp.ref", "cpp2.ref"})) {
     if (adapter_annotation) {
       ctx.error(
           "cpp.ref, cpp2.ref are deprecated. Please use @thrift.Box "
@@ -901,7 +900,7 @@ void validate_ref_unique_and_box_annotation(
           node.name());
     }
   }
-  if (node.has_annotation({"cpp.ref_type", "cpp2.ref_type"})) {
+  if (node.has_unstructured_annotation({"cpp.ref_type", "cpp2.ref_type"})) {
     if (adapter_annotation) {
       ctx.error(
           "cpp.ref_type = `unique`, cpp2.ref_type = `unique` are deprecated. "
@@ -915,7 +914,7 @@ void validate_ref_unique_and_box_annotation(
           node.name());
     }
   }
-  if (node.find_structured_annotation_or_null(kCppRefUri) != nullptr) {
+  if (node.has_structured_annotation(kCppRefUri)) {
     if (adapter_annotation) {
       ctx.error(
           "@cpp.Ref{{type = cpp.RefType.Unique}} is deprecated. Please use "
@@ -932,7 +931,7 @@ void validate_ref_unique_and_box_annotation(
 
 void validate_function_priority_annotation(
     sema_context& ctx, const t_node& node) {
-  if (auto* priority = node.find_annotation_or_null("priority")) {
+  if (auto* priority = node.find_unstructured_annotation_or_null("priority")) {
     const std::string choices[] = {
         "HIGH_IMPORTANT", "HIGH", "IMPORTANT", "NORMAL", "BEST_EFFORT"};
     auto* end = choices + sizeof(choices) / sizeof(choices[0]);
@@ -951,14 +950,14 @@ void validate_exception_message_annotation(
   // - of type STRING
   const t_field* field = nullptr;
   for (const auto& f : node.fields()) {
-    if (f.find_structured_annotation_or_null(kExceptionMessageUri)) {
+    if (f.has_structured_annotation(kExceptionMessageUri)) {
       ctx.check(!field, f, "Duplicate message annotation.");
       field = &f;
     }
   }
-  if (node.has_annotation("message")) {
+  if (node.has_unstructured_annotation("message")) {
     ctx.check(!field, "Duplicate message annotation.");
-    const std::string& v = node.get_annotation("message");
+    const std::string& v = node.get_unstructured_annotation("message");
     field = node.get_field_by_name(v);
     ctx.check(
         field,
@@ -996,24 +995,23 @@ void validate_interaction_annotations(
     sema_context& ctx, const t_interaction& node) {
   for (auto* func : node.get_functions()) {
     ctx.check(
-        !func->has_annotation("thread") &&
-            !func->find_structured_annotation_or_null(kCppProcessInEbThreadUri),
+        !func->has_unstructured_annotation("thread") &&
+            !func->has_structured_annotation(kCppProcessInEbThreadUri),
         "Interaction methods cannot be individually annotated with "
         "thread='eb'. Use process_in_event_base on the interaction instead.");
   }
-  if (node.has_annotation("process_in_event_base") ||
-      node.find_structured_annotation_or_null(kCppProcessInEbThreadUri)) {
+  if (node.has_unstructured_annotation("process_in_event_base") ||
+      node.has_structured_annotation(kCppProcessInEbThreadUri)) {
     ctx.check(
-        !node.has_annotation("serial") &&
-            !node.find_structured_annotation_or_null(kSerialUri),
+        !node.has_unstructured_annotation("serial") &&
+            !node.has_structured_annotation(kSerialUri),
         "EB interactions are already serial");
   }
 }
 
 void validate_cpp_deprecated_terse_write_annotation(
     sema_context& ctx, const t_field& field) {
-  if (field.find_structured_annotation_or_null(kCppDeprecatedTerseWriteUri) ==
-      nullptr) {
+  if (!field.has_structured_annotation(kCppDeprecatedTerseWriteUri)) {
     return;
   }
   if (field.qualifier() != t_field_qualifier::none) {
@@ -1025,7 +1023,7 @@ void validate_cpp_deprecated_terse_write_annotation(
     return;
   }
   const t_type* type = field.get_type()->get_true_type();
-  if (type->is_struct() || type->is_exception() || type->is_union()) {
+  if (type->is_struct_or_union() || type->is_exception()) {
     ctx.error(
         field,
         "@cpp.DeprecatedTerseWrite is not supported for structured types.");
@@ -1208,7 +1206,13 @@ void validate_reserved_ids_enum(sema_context& ctx, const t_enum& node) {
 }
 
 bool owns_annotations(const t_type* type) {
-  if (type->annotations().empty()) {
+  if (std::none_of(
+          type->unstructured_annotations().begin(),
+          type->unstructured_annotations().end(),
+          [](const auto& a) {
+            return a.second.from ==
+                deprecated_annotation_value::origin::unstructured;
+          })) {
     return false;
   }
   if (dynamic_cast<const t_container*>(type)) {
@@ -1228,12 +1232,10 @@ bool owns_annotations(t_type_ref type) {
 
 void validate_custom_cpp_type_annotations(
     sema_context& ctx, const t_named& node) {
-  const bool hasAdapter =
-      node.find_structured_annotation_or_null(kCppAdapterUri);
-  bool hasCppType = node.has_annotation(
+  const bool hasAdapter = node.has_structured_annotation(kCppAdapterUri);
+  bool hasCppType = node.has_unstructured_annotation(
       {"cpp.type", "cpp2.type", "cpp.template", "cpp2.template"});
-  const bool hasStructuredCppType =
-      node.find_structured_annotation_or_null(kCppTypeUri);
+  const bool hasStructuredCppType = node.has_structured_annotation(kCppTypeUri);
 
   ctx.check(
       !(hasCppType && hasAdapter),
@@ -1247,7 +1249,8 @@ void validate_custom_cpp_type_annotations(
     }
     std::set<std::string> names{
         "cpp.type", "cpp2.type", "cpp.template", "cpp2.template"};
-    for (const auto& [k, v] : node.type().get_type()->annotations()) {
+    for (const auto& [k, v] :
+         node.type().get_type()->unstructured_annotations()) {
       if (names.count(k) && v.src_range.begin != source_location{}) {
         return true;
       }
@@ -1265,10 +1268,6 @@ void validate_custom_cpp_type_annotations(
         has_real_annotation(*t)) {
       hasUnnamedCppType = true;
     }
-  }
-  if (hasUnnamedCppType) {
-    ctx.warning(
-        "The cpp.type/cpp.template annotations are deprecated, use @cpp.Type instead");
   }
   if (hasAdapter && (hasUnnamedCppType || hasStructuredCppType)) {
     // TODO (T169470476): make this an error
@@ -1308,6 +1307,14 @@ struct ValidateAnnotationPositions {
       err(ctx);
     }
   }
+  void operator()(sema_context& ctx, const t_typedef& node) {
+    if (!ctx.sema_parameters().forbid_unstructured_annotations) {
+      return;
+    }
+    if (owns_annotations(node.type())) {
+      err(ctx);
+    }
+  }
   void operator()(sema_context& ctx, const t_function& node) {
     if (owns_annotations(node.return_type())) {
       err(ctx);
@@ -1336,7 +1343,7 @@ struct ValidateAnnotationPositions {
         if (owns_annotations(ex.type())) {
           err(ctx);
         }
-        if (!ex.annotations().empty()) {
+        if (!ex.unstructured_annotations().empty()) {
           err(ctx);
         }
       }
@@ -1368,8 +1375,8 @@ struct ValidateAnnotationPositions {
   void operator()(sema_context& ctx, const t_field& node) {
     if (owns_annotations(node.type()) &&
         std::any_of(
-            node.type()->annotations().begin(),
-            node.type()->annotations().end(),
+            node.type()->unstructured_annotations().begin(),
+            node.type()->unstructured_annotations().end(),
             [](const auto& pair) {
               return pair.second.src_range.begin != source_location{};
             })) {
@@ -1427,12 +1434,48 @@ void deprecate_annotations(sema_context& ctx, const t_named& node) {
       {"erl.default_value", erlang("DefaultValue")},
       {"iq.node_type", erlang("Iq")},
   };
+  // Add a replacement to `deprecations` map if a removed unstructured
+  // annotation has a structured annotation replacement.
+  std::set<std::string> removed_annotations = {
+      "code",
+      "cpp.indirection",
+      "cpp2.declare_bitwise_ops",
+      "cpp2.enum_type",
+      "cpp2.deprecated_enum_unscoped",
+      "process_in_event_base",
+  };
+  std::map<std::string, std::string> removed_prefixes = {{"rust.", "rust"}};
 
-  for (const auto& [k, v] : node.annotations()) {
-    if (deprecations.count(k)) {
+  for (const auto& [k, v] : node.unstructured_annotations()) {
+    // Exclude lowered type annotations.
+    if (v.from == deprecated_annotation_value::origin::lowered_cpp_type) {
+      continue;
+    }
+    std::optional<std::string> prefix;
+    std::string lang;
+    for (const auto& [p, l] : removed_prefixes) {
+      if (k.find(p) == 0) {
+        prefix = p;
+        lang = l;
+        break;
+      }
+    }
+    bool directly_deprecated = deprecations.count(k) != 0;
+    if (!prefix && !directly_deprecated) {
+      if (removed_annotations.count(k) != 0) {
+        ctx.error("invalid annotation {}", k);
+        continue;
+      }
+      if (v.from == deprecated_annotation_value::origin::unstructured &&
+          ctx.sema_parameters().forbid_unstructured_annotations) {
+        ctx.error("Unstructured annotations are not allowed.");
+      }
+      continue;
+    }
+    std::string replacement;
+    if (directly_deprecated) {
       std::vector<std::string> parts;
       boost::split(parts, deprecations.at(k), [](char c) { return c == '/'; });
-      std::string replacement;
       if (parts.size() == 1) {
         replacement = parts[0];
       } else if (parts.size() == 4) {
@@ -1441,16 +1484,34 @@ void deprecate_annotations(sema_context& ctx, const t_named& node) {
         assert(parts.size() == 5);
         replacement = fmt::format("@{}.{}", parts[3], parts[4]);
       }
-
-      if (node.find_structured_annotation_or_null(deprecations.at(k).c_str())) {
-        ctx.error("Duplicate annotations {} and {}.", k, replacement);
-      } else {
-        ctx.warning(
-            "The annotation {} is deprecated. Please use {} instead.",
-            k,
-            replacement);
-      }
+    } else {
+      replacement = fmt::format(
+          "a structured annotation from thrift/annotation/{}.thrift", lang);
     }
+
+    if (directly_deprecated &&
+        node.has_structured_annotation(deprecations.at(k).c_str())) {
+      ctx.error("Duplicate annotations {} and {}.", k, replacement);
+    } else if (
+        removed_annotations.count(k) != 0 || prefix ||
+        (v.from == deprecated_annotation_value::origin::unstructured &&
+         ctx.sema_parameters().forbid_unstructured_annotations)) {
+      ctx.error(
+          "The annotation {} has been removed. Please use {} instead.",
+          k,
+          replacement);
+    } else {
+      ctx.warning(
+          "The annotation {} is deprecated. Please use {} instead.",
+          k,
+          replacement);
+    }
+  }
+}
+void deprecate_typedef_type_annotations(
+    sema_context& ctx, const t_typedef& node) {
+  if (owns_annotations(node.type())) {
+    deprecate_annotations(ctx, *node.type());
   }
 }
 
@@ -1505,13 +1566,13 @@ void validate_cursor_serialization_adapter_in_container(
 }
 
 void validate_py3_enable_cpp_adapter(sema_context& ctx, const t_typedef& node) {
-  if (node.find_structured_annotation_or_null(kPythonPy3EnableCppAdapterUri)) {
+  if (node.has_structured_annotation(kPythonPy3EnableCppAdapterUri)) {
     const auto& true_type = *node.get_true_type();
     if (!true_type.is_container() && !true_type.is_string_or_binary()) {
       ctx.error(
           "The @python.Py3EnableCppAdapter annotation can only be used on containers and strings.");
     }
-    if (!node.find_structured_annotation_or_null(kCppAdapterUri)) {
+    if (!node.has_structured_annotation(kCppAdapterUri)) {
       ctx.error(
           "The @python.Py3EnableCppAdapter annotation requires the @cpp.Adapter annotation to be present in the same typedef.");
     }
@@ -1550,7 +1611,7 @@ ast_validator standard_validator() {
       &validate_extends_service_function_name_uniqueness);
   validator.add_interaction_visitor(&validate_interaction_nesting);
   validator.add_interaction_visitor(&validate_interaction_annotations);
-  validator.add_throws_visitor(&validate_throws_exceptions);
+  validator.add_thrown_exception_visitor(&validate_throws_exceptions);
   validator.add_function_visitor(&validate_function_priority_annotation);
   validator.add_function_visitor(ValidateAnnotationPositions{});
 
@@ -1599,6 +1660,8 @@ ast_validator standard_validator() {
 
   validator.add_typedef_visitor(&validate_cpp_type_annotation<t_typedef>);
   validator.add_typedef_visitor(&validate_py3_enable_cpp_adapter);
+  validator.add_typedef_visitor(&deprecate_typedef_type_annotations);
+  validator.add_typedef_visitor(ValidateAnnotationPositions());
 
   validator.add_container_visitor(ValidateAnnotationPositions());
   validator.add_enum_visitor(&validate_cpp_enum_type);
@@ -1612,6 +1675,7 @@ ast_validator standard_validator() {
   validator.add_container_visitor(
       &validate_cursor_serialization_adapter_in_container);
   validator.add_function_visitor(&forbid_exception_as_method_type);
+
   validator.add_const_visitor(&forbid_exception_as_const_type);
 
   add_explicit_include_validators(validator);

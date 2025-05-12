@@ -54,10 +54,7 @@ let validator =
         ^ tconst
         ^ " because it is not marked `<<__Enforceable>>`"
 
-    method! on_tgeneric acc r name _tyargs =
-      (* If we allow higher-kinded generics to be enforceable at some point,
-         handle type arguments here *)
-      this#check_generic acc r name
+    method! on_tgeneric acc r name = this#check_generic acc r name
 
     method! on_newtype acc r sid _ as_cstr _super_cstr _ =
       if String.equal (snd sid) SN.Classes.cSupportDyn then
@@ -104,13 +101,23 @@ let validator =
                         end else if
                               Aast.(equal_reify_kind tparam.tp_reified Reified)
                             then
-                          this#on_type
-                            {
-                              acc with
-                              Type_validator
-                              .inside_reified_class_generic_position = true;
-                            }
-                            targ
+                          let old_inside_reified_class_generic_position =
+                            inside_reified_class_generic_position
+                          in
+                          let acc =
+                            this#on_type
+                              {
+                                acc with
+                                Type_validator
+                                .inside_reified_class_generic_position = true;
+                              }
+                              targ
+                          in
+                          {
+                            acc with
+                            Type_validator.inside_reified_class_generic_position =
+                              old_inside_reified_class_generic_position;
+                          }
                         else if inside_reified_class_generic_position then
                           this#on_type acc targ
                         else
@@ -180,6 +187,10 @@ let validator =
       let tyl = TShapeMap.values fdm |> List.map ~f:(fun s -> s.sft_ty) in
       let acc = List.fold_left tyl ~init:acc ~f:this#on_type in
       this#check_for_wildcards acc tyl "shape"
+
+    method! on_tclass_ptr acc r _ty =
+      (* TODO(T199611023) allow when we enforce inner type *)
+      this#invalid acc r "a class pointer type"
 
     method check_generic acc r name =
       (* No need to look at type arguments of generic var, as higher-kinded type params

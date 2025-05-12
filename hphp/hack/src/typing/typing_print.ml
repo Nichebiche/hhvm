@@ -12,7 +12,6 @@
 (*****************************************************************************)
 
 open Hh_prelude
-open Option.Monad_infix
 open Typing_defs
 open Typing_env_types
 open Typing_logic
@@ -265,6 +264,7 @@ module Full = struct
       (match get_node t with
       | Tnonnull -> true
       | _ -> false)
+    | Tmixed -> true
     | _ -> false
 
   let rec fun_type
@@ -803,7 +803,7 @@ module Full = struct
     | Tnonnull -> (fuel, text "nonnull")
     | Tvec_or_dict (x, y) -> list ~fuel "vec_or_dict<" k [x; y] ">"
     | Tapply ((_, s), []) -> (fuel, to_doc s)
-    | Tgeneric (s, []) -> (fuel, to_doc s)
+    | Tgeneric s -> (fuel, to_doc s)
     | Taccess (root_ty, id) ->
       let (fuel, root_ty_doc) = k ~fuel root_ty in
       let access_doc = Concat [root_ty_doc; text "::"; to_doc (snd id)] in
@@ -837,8 +837,7 @@ module Full = struct
       k ~fuel ty
     (* Don't strip_ns here! We want the FULL type, including the initial slash.
       *)
-    | Tapply ((_, s), tyl)
-    | Tgeneric (s, tyl) ->
+    | Tapply ((_, s), tyl) ->
       let (fuel, tys_doc) = list ~fuel "<" k tyl ">" in
       let generic_doc = to_doc s ^^ tys_doc in
       (fuel, generic_doc)
@@ -881,39 +880,28 @@ module Full = struct
       ~fuel
 
   (* For a given type parameter, construct a list of its constraints *)
-  let get_constraints_on_tparam penv tparam =
-    let kind_opt = Typing_env_types.get_pos_and_kind_of_generic penv tparam in
-    match kind_opt with
-    | None -> []
-    | Some (_pos, kind) ->
-      (* Use the names of the parameters themselves to present bounds
-         depending on other parameters *)
-      let param_names = Type_parameter_env.get_parameter_names kind in
-      let params =
-        List.map param_names ~f:(fun name ->
-            Typing_make_type.generic Reason.none name)
-      in
-      let lower = Typing_env_types.get_lower_bounds penv tparam params in
-      let upper = Typing_env_types.get_upper_bounds penv tparam params in
-      let equ = Typing_env_types.get_equal_bounds penv tparam params in
-      let upper =
-        if show_supportdyn penv then
-          upper
-        else
-          (* Don't show "as mixed" if we're not printing supportdyn *)
-          TySet.remove
-            Typing_make_type.(supportdyn Reason.none (mixed Reason.none))
-            upper
-      in
-      (* If we have an equality we can ignore the other bounds *)
-      if not (TySet.is_empty equ) then
-        List.map (TySet.elements equ) ~f:(fun ty ->
-            (tparam, Ast_defs.Constraint_eq, ty))
+  let get_constraints_on_tparam (penv : Typing_env_types.env) tparam =
+    let lower = Typing_env_types.get_lower_bounds penv tparam in
+    let upper = Typing_env_types.get_upper_bounds penv tparam in
+    let equ = Typing_env_types.get_equal_bounds penv tparam in
+    let upper =
+      if show_supportdyn penv then
+        upper
       else
-        List.map (TySet.elements lower) ~f:(fun ty ->
-            (tparam, Ast_defs.Constraint_super, ty))
-        @ List.map (TySet.elements upper) ~f:(fun ty ->
-              (tparam, Ast_defs.Constraint_as, ty))
+        (* Don't show "as mixed" if we're not printing supportdyn *)
+        TySet.remove
+          Typing_make_type.(supportdyn Reason.none (mixed Reason.none))
+          upper
+    in
+    (* If we have an equality we can ignore the other bounds *)
+    if not (TySet.is_empty equ) then
+      List.map (TySet.elements equ) ~f:(fun ty ->
+          (tparam, Ast_defs.Constraint_eq, ty))
+    else
+      List.map (TySet.elements lower) ~f:(fun ty ->
+          (tparam, Ast_defs.Constraint_super, ty))
+      @ List.map (TySet.elements upper) ~f:(fun ty ->
+            (tparam, Ast_defs.Constraint_as, ty))
 
   let rec is_open_mixed env t =
     match get_node t with
@@ -953,18 +941,22 @@ module Full = struct
     | Tnonnull -> (fuel, text "nonnull")
     | Tvec_or_dict (x, y) -> list ~fuel "vec_or_dict<" k [x; y] ">"
     | Toption ty -> begin
+      let (_, ty) = Typing_inference_env.expand_type env.inference_env ty in
       match deref ty with
       | (_, Tnonnull) -> (fuel, text "mixed")
       | (r, Tunion tyl) when List.exists ~f:is_dynamic tyl ->
         (* Unions with null become Toption, which leads to the awkward ?~...
          * The Tunion case can better handle this *)
         k ~fuel (mk (r, Tunion (mk (r, Tprim Nast.Tnull) :: tyl)))
+      (* Drop the extra option *)
+      | (_, Toption _) -> locl_ty ~fuel ~hide_internals to_doc st penv ty
       | _ ->
         let (fuel, d) = k ~fuel ty in
         (fuel, Concat [text "?"; d])
     end
     | Tprim x -> (fuel, tprim x)
-    | Tneg predicate -> type_predicate ~fuel ~negate:true to_doc predicate
+    | Tneg predicate ->
+      type_predicate ~fuel ~negate:true ~hide_internals to_doc st penv predicate
     | Tvar n ->
       let (_, ety) =
         Typing_inference_env.expand_type
@@ -1026,7 +1018,7 @@ module Full = struct
         | _ -> class_doc
       in
       (fuel, class_doc)
-    | Tgeneric (s, []) when SN.Coeffects.is_generated_generic s -> begin
+    | Tgeneric s when SN.Coeffects.is_generated_generic s -> begin
       match String.get s 2 with
       | '[' ->
         (* has the form T/[...] *)
@@ -1040,16 +1032,14 @@ module Full = struct
       end
       | _ -> (fuel, to_doc s)
     end
-    | Tunapplied_alias s
     | Tnewtype (s, [], _)
-    | Tgeneric (s, []) ->
+    | Tgeneric s ->
       (fuel, to_doc s)
     | Tnewtype (n, _, ty)
       when String.equal n SN.Classes.cSupportDyn
            && not (show_supportdyn_penv penv) ->
       k ~fuel ty
-    | Tnewtype (s, tyl, _)
-    | Tgeneric (s, tyl) ->
+    | Tnewtype (s, tyl, _) ->
       let (fuel, tys_doc) = list ~fuel "<" k tyl ">" in
       let generic_doc = to_doc s ^^ tys_doc in
       (fuel, generic_doc)
@@ -1216,53 +1206,70 @@ module Full = struct
       let (fuel, ty_doc) = k ~fuel ty in
       (fuel, Concat [text "class<"; ty_doc; text ">"])
 
-  and type_predicate ~fuel ~negate to_doc predicate =
-    let tag_doc tag =
+  and type_predicate ~fuel ~negate ~hide_internals to_doc st penv predicate =
+    let k ~fuel lty = locl_ty ~fuel ~hide_internals to_doc st penv lty in
+    let tag_doc fuel tag =
       match tag with
-      | BoolTag -> text "bool"
-      | IntTag -> text "int"
-      | StringTag -> text "string"
-      | ArraykeyTag -> text "arraykey"
-      | FloatTag -> text "float"
-      | NumTag -> text "num"
-      | ResourceTag -> text "resource"
-      | NullTag -> text "null"
-      | ClassTag s -> to_doc s
+      | BoolTag -> (fuel, text "bool")
+      | IntTag -> (fuel, text "int")
+      | StringTag -> (fuel, text "string")
+      | ArraykeyTag -> (fuel, text "arraykey")
+      | FloatTag -> (fuel, text "float")
+      | NumTag -> (fuel, text "num")
+      | ResourceTag -> (fuel, text "resource")
+      | NullTag -> (fuel, text "null")
+      | ClassTag (s, tyl) ->
+        let (fuel, targs_doc) =
+          if List.is_empty tyl then
+            (fuel, Nothing)
+          else
+            list ~fuel "<" k tyl ">"
+        in
+        (fuel, to_doc s ^^ targs_doc)
     in
-    let rec predicate_doc predicate =
+    let rec predicate_doc fuel predicate =
       match snd predicate with
-      | IsTag tag -> tag_doc tag
+      | IsTag tag -> tag_doc fuel tag
       | IsTupleOf { tp_required } ->
-        let texts = List.map tp_required ~f:predicate_doc in
-        Concat
-          ([text "("] @ List.intersperse texts ~sep:(text ", ") @ [text ")"])
+        let (fuel, texts) =
+          List.fold_map ~init:fuel tp_required ~f:predicate_doc
+        in
+        ( fuel,
+          Concat
+            ([text "("] @ List.intersperse texts ~sep:(text ", ") @ [text ")"])
+        )
       | IsShapeOf { sp_fields } ->
-        let texts =
-          List.map
+        let (fuel, texts) =
+          List.fold_map
+            ~init:fuel
             (TShapeMap.elements sp_fields)
-            ~f:(fun (key, { sfp_predicate }) ->
+            ~f:(fun fuel (key, { sfp_predicate }) ->
               let key_delim =
                 match key with
                 | Typing_defs.TSFlit_str _ -> text "'"
                 | _ -> Nothing
               in
-              Concat
-                [
-                  key_delim;
-                  text_strip_ns @@ Typing_defs.TShapeField.name key;
-                  key_delim;
-                  Space;
-                  text "=>";
-                  Space;
-                  predicate_doc sfp_predicate;
-                ])
+              let (fuel, pdoc) = predicate_doc fuel sfp_predicate in
+              ( fuel,
+                Concat
+                  [
+                    key_delim;
+                    text_strip_ns @@ Typing_defs.TShapeField.name key;
+                    key_delim;
+                    Space;
+                    text "=>";
+                    Space;
+                    pdoc;
+                  ] ))
         in
-        Concat
-          ([text "shape("]
-          @ List.intersperse texts ~sep:(text ", ")
-          @ [text ")"])
+        ( fuel,
+          Concat
+            ([text "shape("]
+            @ List.intersperse texts ~sep:(text ", ")
+            @ [text ")"]) )
       (* TODO: T196048813 optional, open, fuel? *)
     in
+    let (fuel, pdoc) = predicate_doc fuel predicate in
     let doc =
       Concat
         [
@@ -1272,7 +1279,7 @@ module Full = struct
             "not "
           else
             "is ");
-          predicate_doc predicate;
+          pdoc;
         ]
     in
     (fuel, doc)
@@ -1310,7 +1317,14 @@ module Full = struct
     | Tcan_traverse ct -> tcan_traverse ~fuel k ct
     | Ttype_switch { predicate; ty_true; ty_false } ->
       let (fuel, predicate_doc) =
-        type_predicate ~fuel ~negate:false to_doc predicate
+        type_predicate
+          ~fuel
+          ~negate:false
+          ~hide_internals
+          to_doc
+          st
+          penv
+          predicate
       in
       let (fuel, ty_true_doc) = k ~fuel ty_true in
       let (fuel, ty_false_doc) = k ~fuel ty_false in
@@ -1364,8 +1378,8 @@ module Full = struct
     let penv = Loclenv env in
     match (get_node typ, constraints) with
     | (_, []) -> (fuel, Nothing)
-    | (Tgeneric (tparam, []), [(tparam', ck, typ)])
-      when String.equal tparam tparam' ->
+    | (Tgeneric tparam, [(tparam', ck, typ)]) when String.equal tparam tparam'
+      ->
       tparam_constraint
         ~fuel
         ~ty:(locl_ty ~hide_internals)
@@ -1437,10 +1451,46 @@ module Full = struct
     let str = Libhackfmt.format_doc_unbroken format_env doc |> String.strip in
     (fuel, str)
 
+  (** For functions and methods, interpret supportdyn as use of <<__SupportDynamicType>> attribute *)
+  let add_supportdyn_prefix (type ph) env (x : ph ty) occurrence prefix :
+      _ * ph ty =
+    let add_prefix prefix =
+      text "<<__SupportDynamicType>>" ^^ Newline ^^ prefix
+    in
+    match (occurrence, get_node x) with
+    | ( SymbolOccurrence.{ type_ = Function | Method _; _ },
+        Tnewtype (name, [tyarg], _) )
+      when String.equal name SN.Classes.cSupportDyn ->
+      if show_supportdyn env then
+        (add_prefix prefix, tyarg)
+      else
+        (prefix, tyarg)
+    | ( SymbolOccurrence.{ type_ = Function | Method _; _ },
+        Tapply ((_, name), [tyarg]) )
+      when String.equal name SN.Classes.cSupportDyn ->
+      if show_supportdyn env then
+        (add_prefix prefix, tyarg)
+      else
+        (prefix, tyarg)
+    | (_, _) -> (prefix, x)
+
   let to_string_with_identity
-      ~fuel ~hide_internals env x occurrence definition_opt =
+      (type ph)
+      ~fuel
+      env
+      (x : ph ty)
+      (ty :
+        fuel:Fuel.t ->
+        (string -> t) ->
+        Tvid.Set.t ->
+        penv ->
+        ph ty ->
+        Fuel.t * t)
+      ~default_capability
+      ~constraints
+      occurrence
+      definition_opt =
     let open SymbolOccurrence in
-    let ty = locl_ty ~hide_internals in
     let penv = Loclenv env in
     let prefix =
       let print_mod m = text (SymbolDefinition.string_of_modifier m) ^^ Space in
@@ -1455,17 +1505,7 @@ module Full = struct
         | ms -> Concat (List.map ms ~f:print_mod) ^^ SplitWith Cost.Base
       end
     in
-    (* For functions and methods, interpret supportdyn as use of <<__SupportDynamicType>> attribute *)
-    let (prefix, x) =
-      match (occurrence, get_node x) with
-      | ({ type_ = Function | Method _; _ }, Tnewtype (name, [tyarg], _))
-        when String.equal name SN.Classes.cSupportDyn ->
-        if show_supportdyn env then
-          (text "<<__SupportDynamicType>>" ^^ Newline ^^ prefix, tyarg)
-        else
-          (prefix, tyarg)
-      | (_, _) -> (prefix, x)
-    in
+    let (prefix, x) = add_supportdyn_prefix env x occurrence prefix in
     let (fuel, body_doc) =
       match (occurrence, get_node x) with
       | ({ type_ = Class class_type_id; name; _ }, _) ->
@@ -1501,7 +1541,7 @@ module Full = struct
             penv
             ~verbose:false
             ft
-            (fun_locl_implicit_params ~hide_internals)
+            (fun_implicit_params ty default_capability)
         in
         let fun_doc =
           Concat [text "function"; Space; text_strip_all_ns name; fun_ty_doc]
@@ -1539,15 +1579,51 @@ module Full = struct
         (fuel, doc)
       | _ -> ty ~fuel text_strip_ns Tvid.Set.empty penv x
     in
-    let (fuel, constraints) =
-      constraints_for_type ~fuel ~hide_internals text_strip_ns env x
-    in
     let str =
       Concat [prefix; body_doc; constraints]
       |> Libhackfmt.format_doc format_env
       |> String.strip
     in
     (fuel, str)
+
+  let to_string_locl_with_identity
+      ~fuel ~hide_internals env (x : locl_ty) occurrence definition_opt =
+    let ty = locl_ty ~hide_internals in
+    let (fuel, constraints) =
+      constraints_for_type ~fuel ~hide_internals text_strip_ns env x
+    in
+    to_string_with_identity
+      ~fuel
+      env
+      x
+      ty
+      ~default_capability:(Typing_make_type.default_capability Pos_or_decl.none)
+      ~constraints
+      occurrence
+      definition_opt
+
+  let to_string_decl_with_identity
+      ~fuel ~verbose_fun env (x : decl_ty) occurrence definition_opt =
+    to_string_with_identity
+      ~fuel
+      env
+      x
+      (decl_ty ~verbose_fun)
+      ~default_capability:
+        (Typing_make_type.default_capability_decl Pos_or_decl.none)
+      ~constraints:Nothing
+      occurrence
+      definition_opt
+
+  let to_string_with_identity
+      ~fuel ~hide_internals env (x : locl_ty) occurrence definition_opt =
+    to_string_locl_with_identity
+      ~fuel
+      ~hide_internals
+      env
+      x
+      occurrence
+      definition_opt
 end
 
 (*****************************************************************************)
@@ -1605,7 +1681,7 @@ module ErrorString = struct
     | Tprim tp -> (fuel, tprim tp)
     | Tvar _ -> (fuel, "some value")
     | Tfun _ -> (fuel, "a function")
-    | Tgeneric (s, _) when DependentKind.is_generic_dep_ty s ->
+    | Tgeneric s when DependentKind.is_generic_dep_ty s ->
       let (fuel, ty_str) = ety_to_string ety in
       (fuel, "the expression dependent type " ^ ty_str)
     | Tgeneric _ ->
@@ -1614,13 +1690,15 @@ module ErrorString = struct
     | Tnewtype (n, _, ty)
       when String.equal n SN.Classes.cSupportDyn && not (show_supportdyn env) ->
       type_ ~fuel env ty
-    | Tnewtype (x, _, _) when String.equal x SN.Classes.cClassname ->
-      (fuel, "a classname string")
-    | Tclass_ptr x ->
-      let (fuel, ty_str) = ety_to_string x in
+    | Tnewtype (x, [ty], _) when String.equal x SN.Classes.cClassname ->
+      let (fuel, ty_str) = ety_to_string ty in
+      (fuel, "a classname string for " ^ ty_str)
+    | Tclass_ptr ty ->
+      let (fuel, ty_str) = ety_to_string ty in
       (fuel, "a class pointer for " ^ ty_str)
-    | Tnewtype (x, _, _) when String.equal x SN.Classes.cTypename ->
-      (fuel, "a typename string")
+    | Tnewtype (x, [ty], _) when String.equal x SN.Classes.cTypename ->
+      let (fuel, ty_str) = ety_to_string ty in
+      (fuel, "a typename string for " ^ ty_str)
     | Tnewtype _ ->
       let (fuel, ty_str) = ety_to_string ety in
       (fuel, "a value of type " ^ ty_str)
@@ -1634,12 +1712,6 @@ module ErrorString = struct
       in
       (fuel, prefix ^ ty_str)
     | Tshape _ -> (fuel, "a shape")
-    | Tunapplied_alias _ ->
-      (* FIXME it seems like this function is only for
-         fully-applied types? Tunapplied_alias should only appear
-         in a type argument position then, which inst below
-         prints with a different function (namely Full.locl_ty) *)
-      failwith "Tunapplied_alias is not a type"
     | Taccess (_ty, _id) -> (fuel, "a type constant")
     | Tlabel name -> (fuel, Printf.sprintf "a label (#%s)" name)
     | Tneg predicate ->
@@ -1653,7 +1725,7 @@ module ErrorString = struct
         | NumTag -> "a num"
         | ResourceTag -> "a resource"
         | NullTag -> "null"
-        | ClassTag s -> "a " ^ strip_ns s
+        | ClassTag (s, _) -> "a " ^ strip_ns s
       in
       let rec str predicate =
         match predicate with
@@ -1746,753 +1818,6 @@ module ErrorString = struct
     type_ ~fuel ~ignore_dynamic env ety
 end
 
-module Json = struct
-  open Hh_json
-
-  let param_mode_to_string = function
-    | FPnormal -> "normal"
-    | FPinout -> "inout"
-
-  let string_to_param_mode = function
-    | "normal" -> Some FPnormal
-    | "inout" -> Some FPinout
-    | _ -> None
-
-  let is_like ty =
-    match get_node ty with
-    | Tunion tyl -> List.exists tyl ~f:is_dynamic
-    | _ -> false
-
-  let rec from_type : env -> show_like_ty:bool -> locl_ty -> json =
-   fun env ~show_like_ty ty ->
-    (* Helpers to construct fields that appear in JSON rendering of type *)
-    let obj x = JSON_Object x in
-    let kind p k = [("src_pos", Pos_or_decl.json p); ("kind", JSON_String k)] in
-    let args tys =
-      [("args", JSON_Array (List.map tys ~f:(from_type env ~show_like_ty)))]
-    in
-    let optional_args tys =
-      if List.is_empty tys then
-        []
-      else
-        [
-          ( "optional_args",
-            JSON_Array (List.map tys ~f:(from_type env ~show_like_ty)) );
-        ]
-    in
-    let variadic_arg ty =
-      if is_nothing ty then
-        []
-      else
-        [("variadic_arg", from_type env ~show_like_ty ty)]
-    in
-    let splat_arg ty = [("splat_arg", from_type env ~show_like_ty ty)] in
-    let refs e =
-      match e with
-      | Exact -> []
-      | Nonexact r when Class_refinement.is_empty r -> []
-      | Nonexact { cr_consts } ->
-        let ref_const (id, { rc_bound; rc_is_ctx }) =
-          let is_ctx_json = ("is_ctx", JSON_Bool rc_is_ctx) in
-          match rc_bound with
-          | TRexact ty ->
-            obj
-              [
-                ("type", JSON_String id);
-                ("equal", from_type env ~show_like_ty ty);
-                is_ctx_json;
-              ]
-          | TRloose { tr_lower; tr_upper } ->
-            let ty_list tys =
-              JSON_Array (List.map tys ~f:(from_type env ~show_like_ty))
-            in
-            obj
-              [
-                ("type", JSON_String id);
-                ("lower", ty_list tr_lower);
-                ("upper", ty_list tr_upper);
-                is_ctx_json;
-              ]
-        in
-        [("refs", JSON_Array (List.map (SMap.bindings cr_consts) ~f:ref_const))]
-    in
-    let typ ty = [("type", from_type env ~show_like_ty ty)] in
-    let result ty = [("result", from_type env ~show_like_ty ty)] in
-    let name x = [("name", JSON_String x)] in
-    let optional x = [("optional", JSON_Bool x)] in
-    let is_array x = [("is_array", JSON_Bool x)] in
-    let shape_field_name_to_json shape_field =
-      (* TODO: need to update userland tooling? *)
-      match shape_field with
-      | Typing_defs.TSFregex_group (_, s) -> Hh_json.JSON_Number s
-      | Typing_defs.TSFlit_str (_, s) -> Hh_json.JSON_String s
-      | Typing_defs.TSFclass_const ((_, s1), (_, s2)) ->
-        Hh_json.JSON_Array [Hh_json.JSON_String s1; Hh_json.JSON_String s2]
-    in
-    let make_field (k, v) =
-      obj
-      @@ [("name", shape_field_name_to_json k)]
-      @ optional v.sft_optional
-      @ typ v.sft_ty
-    in
-    let fields fl = [("fields", JSON_Array (List.map fl ~f:make_field))] in
-    let as_type ty = [("as", from_type env ~show_like_ty ty)] in
-    match (get_pos ty, get_node ty) with
-    | (_, Tvar n) ->
-      let (_, ty) =
-        Typing_inference_env.expand_type
-          env.inference_env
-          (mk (get_reason ty, Tvar n))
-      in
-      begin
-        match (get_pos ty, get_node ty) with
-        | (p, Tvar _) -> obj @@ kind p "var"
-        | _ -> from_type env ~show_like_ty ty
-      end
-    | (p, Ttuple { t_required; t_extra = Textra { t_optional; t_variadic } }) ->
-      obj
-      @@ kind p "tuple"
-      @ is_array false
-      @ args t_required
-      @ optional_args t_optional
-      @ variadic_arg t_variadic
-    | (p, Ttuple { t_required; t_extra = Tsplat ty }) ->
-      obj @@ kind p "tuple" @ is_array false @ args t_required @ splat_arg ty
-    | (p, Tany _) -> obj @@ kind p "any"
-    | (p, Tnonnull) -> obj @@ kind p "nonnull"
-    | (p, Tdynamic) -> obj @@ kind p "dynamic"
-    | (p, Tgeneric (s, tyargs)) ->
-      obj @@ kind p "generic" @ is_array true @ name s @ args tyargs
-    | (p, Tunapplied_alias s) -> obj @@ kind p "unapplied_alias" @ name s
-    | (_, Tnewtype (s, _, ty))
-      when String.equal s SN.Classes.cSupportDyn && not (show_supportdyn env) ->
-      from_type env ~show_like_ty ty
-    | (p, Tnewtype (s, _, ty))
-      when Decl_provider.get_class env.decl_env.Decl_env.ctx s
-           |> Decl_entry.to_option
-           >>| Cls.enum_type
-           |> Option.is_some ->
-      obj @@ kind p "enum" @ name s @ as_type ty
-    | (p, Tnewtype (s, tys, ty)) ->
-      obj @@ kind p "newtype" @ name s @ args tys @ as_type ty
-    | (p, Tdependent (DTexpr _, ty)) ->
-      obj
-      @@ kind p "path"
-      @ [("type", obj @@ kind (get_pos ty) "expr")]
-      @ as_type ty
-    | (p, Toption ty) -> begin
-      match get_node ty with
-      | Tnonnull -> obj @@ kind p "mixed"
-      | _ -> obj @@ kind p "nullable" @ args [ty]
-    end
-    | (p, Tprim tp) ->
-      obj @@ kind p "primitive" @ name (Aast_defs.string_of_tprim tp)
-    | (p, Tneg predicate) ->
-      let tag_json tag =
-        match tag with
-        | BoolTag -> name "isbool"
-        | IntTag -> name "isint"
-        | StringTag -> name "isstring"
-        | ArraykeyTag -> name "isarraykey"
-        | FloatTag -> name "isfloat"
-        | NumTag -> name "isnum"
-        | ResourceTag -> name "isresource"
-        | NullTag -> name "isnull"
-        | ClassTag s -> name s
-      in
-      let rec predicate_json predicate =
-        match snd predicate with
-        | IsTag tag -> tag_json tag
-        | IsTupleOf { tp_required } ->
-          let predicates_json =
-            List.map tp_required ~f:(fun p -> obj @@ predicate_json p)
-          in
-          name "istuple" @ [("args", JSON_Array predicates_json)]
-        | IsShapeOf { sp_fields } ->
-          name "isshape"
-          @ [
-              ( "fields",
-                JSON_Array
-                  (List.map
-                     ~f:(fun (field, { sfp_predicate }) ->
-                       obj
-                       @@ [
-                            ("name", shape_field_name_to_json field);
-                            ("predicate", obj @@ predicate_json sfp_predicate);
-                          ])
-                     (TShapeMap.bindings sp_fields)) );
-            ]
-        (* TODO: T196048813 optional, open, fuel? *)
-      in
-      obj @@ kind p "negation" @ predicate_json predicate
-    | (p, Tclass ((_, cid), e, tys)) ->
-      obj @@ kind p "class" @ name cid @ args tys @ refs e
-    | (p, Tshape { s_origin = _; s_unknown_value = shape_kind; s_fields = fl })
-      ->
-      let fields_known = is_nothing shape_kind in
-      obj
-      @@ kind p "shape"
-      @ is_array false
-      @ [("fields_known", JSON_Bool fields_known)]
-      @ fields (TShapeMap.bindings fl)
-    | (p, Tunion []) -> obj @@ kind p "nothing"
-    | (_, Tunion [ty]) -> from_type env ~show_like_ty ty
-    | (p, Tunion tyl) ->
-      if show_like_ty then
-        obj @@ kind p "union" @ args tyl
-      else begin
-        match List.filter tyl ~f:(fun ty -> not (is_dynamic ty)) with
-        | [ty] -> from_type env ~show_like_ty ty
-        | _ -> obj @@ kind p "union" @ args tyl
-      end
-    | (p, Tintersection []) -> obj @@ kind p "mixed"
-    | (_, Tintersection [ty]) -> from_type env ~show_like_ty ty
-    | (p, Tintersection tyl) ->
-      if show_like_ty then
-        obj @@ kind p "intersection" @ args tyl
-      else begin
-        match List.find tyl ~f:is_like with
-        | None -> obj @@ kind p "intersection" @ args tyl
-        | Some ty -> from_type env ~show_like_ty ty
-      end
-    | (p, Tfun ft) ->
-      let fun_kind p = kind p "function" in
-      let callconv cc =
-        [("callConvention", JSON_String (param_mode_to_string cc))]
-      in
-      let readonly_param ro =
-        if ro then
-          [("readonly", JSON_Bool true)]
-        else
-          []
-      in
-      let optional_param opt =
-        if opt then
-          [("optional", JSON_Bool true)]
-        else
-          []
-      in
-      let param fp =
-        obj
-        @@ callconv (get_fp_mode fp)
-        @ readonly_param (get_fp_readonly fp)
-        @ optional_param (get_fp_is_optional fp)
-        @ typ fp.fp_type
-      in
-      let readonly_this ro =
-        if ro then
-          [("readonly_this", JSON_Bool true)]
-        else
-          []
-      in
-      let readonly_ret ro =
-        if ro then
-          [("readonly_return", JSON_Bool true)]
-        else
-          []
-      in
-      let params fps = [("params", JSON_Array (List.map fps ~f:param))] in
-      let capability =
-        match ft.ft_implicit_params.capability with
-        | CapDefaults _ -> []
-        | CapTy capty -> [("capability", from_type env ~show_like_ty capty)]
-      in
-      obj
-      @@ fun_kind p
-      @ readonly_this (get_ft_readonly_this ft)
-      @ params ft.ft_params
-      @ readonly_ret (get_ft_returns_readonly ft)
-      @ result ft.ft_ret
-      @ capability
-    | (p, Tvec_or_dict (ty1, ty2)) ->
-      obj @@ kind p "vec_or_dict" @ args [ty1; ty2]
-    (* TODO akenn *)
-    | (p, Taccess (ty, _id)) -> obj @@ kind p "type_constant" @ args [ty]
-    | (p, Tlabel s) -> obj @@ kind p "label" @ name s
-    | (p, Tclass_ptr ty) -> obj @@ kind p "class_ptr" @ typ ty
-
-  type deserialized_result = (locl_ty, deserialization_error) result
-
-  let wrap_json_accessor f x =
-    match f x with
-    | Ok value -> Ok value
-    | Error access_failure ->
-      Error
-        (Deserialization_error
-           (Hh_json.Access.access_failure_to_string access_failure))
-
-  let wrap_json_accessor_with_default ~default f x =
-    match f x with
-    | Ok value -> Ok value
-    | Error (Hh_json.Access.Missing_key_error _) -> Ok default
-    | Error access_failure ->
-      Error
-        (Deserialization_error
-           (Hh_json.Access.access_failure_to_string access_failure))
-
-  let wrap_json_accessor_with_opt f x =
-    match f x with
-    | Ok value -> Ok (Some value)
-    | Error (Hh_json.Access.Missing_key_error _) -> Ok None
-    | Error access_failure ->
-      Error
-        (Deserialization_error
-           (Hh_json.Access.access_failure_to_string access_failure))
-
-  let get_string x = wrap_json_accessor (Hh_json.Access.get_string x)
-
-  let get_bool x = wrap_json_accessor (Hh_json.Access.get_bool x)
-
-  let get_array x = wrap_json_accessor (Hh_json.Access.get_array x)
-
-  let get_array_opt x =
-    wrap_json_accessor_with_default
-      ~default:([], [])
-      (Hh_json.Access.get_array x)
-
-  let get_val x = wrap_json_accessor (Hh_json.Access.get_val x)
-
-  let get_obj x = wrap_json_accessor (Hh_json.Access.get_obj x)
-
-  let get_obj_opt x = wrap_json_accessor_with_opt (Hh_json.Access.get_obj x)
-
-  let deserialization_error ~message ~keytrace =
-    Error
-      (Deserialization_error
-         (message ^ Hh_json.Access.keytrace_to_string keytrace))
-
-  let not_supported ~message ~keytrace =
-    Error (Not_supported (message ^ Hh_json.Access.keytrace_to_string keytrace))
-
-  let wrong_phase ~message ~keytrace =
-    Error (Wrong_phase (message ^ Hh_json.Access.keytrace_to_string keytrace))
-
-  let to_locl_ty
-      ?(keytrace = []) (ctx : Provider_context.t) (json : Hh_json.json) :
-      deserialized_result =
-    let reason = Reason.none in
-    let ty (ty : locl_phase ty_) : deserialized_result = Ok (mk (reason, ty)) in
-    let rec aux (json : Hh_json.json) ~(keytrace : Hh_json.Access.keytrace) :
-        deserialized_result =
-      Result.Monad_infix.(
-        get_string "kind" (json, keytrace) >>= fun (kind, kind_keytrace) ->
-        match kind with
-        | "this" ->
-          not_supported ~message:"Cannot deserialize 'this' type." ~keytrace
-        | "any" -> ty (Typing_defs.make_tany ())
-        | "mixed" -> ty (Toption (mk (reason, Tnonnull)))
-        | "nonnull" -> ty Tnonnull
-        | "dynamic" -> ty Tdynamic
-        | "label" ->
-          get_string "name" (json, keytrace) >>= fun (name, _name_keytrace) ->
-          ty (Tlabel name)
-        | "generic" ->
-          get_string "name" (json, keytrace) >>= fun (name, _name_keytrace) ->
-          get_bool "is_array" (json, keytrace)
-          >>= fun (is_array, _is_array_keytrace) ->
-          get_array "args" (json, keytrace) >>= fun (args, args_keytrace) ->
-          aux_args args ~keytrace:args_keytrace >>= fun args ->
-          if is_array then
-            ty (Tgeneric (name, args))
-          else
-            wrong_phase ~message:"Tgeneric is a decl-phase type." ~keytrace
-        | "enum" ->
-          get_string "name" (json, keytrace) >>= fun (name, _name_keytrace) ->
-          aux_as json ~keytrace >>= fun as_ty -> ty (Tnewtype (name, [], as_ty))
-        | "unapplied_alias" ->
-          get_string "name" (json, keytrace) >>= fun (name, name_keytrace) ->
-          begin
-            match Decl_provider.get_typedef ctx name with
-            | Decl_entry.Found _typedef -> ty (Tunapplied_alias name)
-            | Decl_entry.DoesNotExist
-            | Decl_entry.NotYetAvailable ->
-              deserialization_error
-                ~message:("Unknown type alias: " ^ name)
-                ~keytrace:name_keytrace
-          end
-        | "newtype" ->
-          get_string "name" (json, keytrace) >>= fun (name, name_keytrace) ->
-          begin
-            match Decl_provider.get_typedef ctx name with
-            | Decl_entry.Found _typedef ->
-              (* We end up only needing the name of the typedef. *)
-              Ok name
-            | Decl_entry.DoesNotExist
-            | Decl_entry.NotYetAvailable ->
-              if String.equal name "HackSuggest" then
-                not_supported
-                  ~message:"HackSuggest types for lambdas are not supported"
-                  ~keytrace
-              else
-                deserialization_error
-                  ~message:("Unknown newtype: " ^ name)
-                  ~keytrace:name_keytrace
-          end
-          >>= fun typedef_name ->
-          get_array "args" (json, keytrace) >>= fun (args, args_keytrace) ->
-          aux_args args ~keytrace:args_keytrace >>= fun args ->
-          aux_as json ~keytrace >>= fun as_ty ->
-          ty (Tnewtype (typedef_name, args, as_ty))
-        | "path" ->
-          get_obj "type" (json, keytrace) >>= fun (type_json, type_keytrace) ->
-          get_string "kind" (type_json, type_keytrace)
-          >>= fun (path_kind, path_kind_keytrace) ->
-          get_array "path" (json, keytrace) >>= fun (ids_array, ids_keytrace) ->
-          let ids =
-            map_array
-              ids_array
-              ~keytrace:ids_keytrace
-              ~f:(fun id_str ~keytrace ->
-                match id_str with
-                | JSON_String id -> Ok id
-                | _ ->
-                  deserialization_error ~message:"Expected a string" ~keytrace)
-          in
-          ids >>= fun _ids ->
-          begin
-            match path_kind with
-            | "expr" ->
-              not_supported
-                ~message:
-                  "Cannot deserialize path-dependent type involving an expression"
-                ~keytrace
-            | "this" ->
-              aux_as json ~keytrace >>= fun _as_ty -> ty (Tgeneric ("this", []))
-            | path_kind ->
-              deserialization_error
-                ~message:("Unknown path kind: " ^ path_kind)
-                ~keytrace:path_kind_keytrace
-          end
-        | "tuple" ->
-          get_array "args" (json, keytrace) >>= fun (args, args_keytrace) ->
-          aux_args args ~keytrace:args_keytrace >>= fun t_required ->
-          get_obj_opt "splat_arg" (json, keytrace) >>= fun splat_arg_obj_opt ->
-          begin
-            match splat_arg_obj_opt with
-            | Some (splat_arg_obj, keytrace) ->
-              aux splat_arg_obj ~keytrace >>= fun t_splat ->
-              ty (Ttuple { t_required; t_extra = Tsplat t_splat })
-            | None ->
-              get_array_opt "optional_args" (json, keytrace)
-              >>= fun (optional_args, optional_args_keytrace) ->
-              aux_args optional_args ~keytrace:optional_args_keytrace
-              >>= fun t_optional ->
-              get_obj_opt "variadic_arg" (json, keytrace) >>= fun popt ->
-              aux_variadic_arg popt >>= fun t_variadic ->
-              ty
-                (Ttuple
-                   { t_required; t_extra = Textra { t_optional; t_variadic } })
-          end
-        | "nullable" ->
-          get_array "args" (json, keytrace) >>= fun (args, keytrace) ->
-          begin
-            match args with
-            | [nullable_ty] ->
-              aux nullable_ty ~keytrace:("0" :: keytrace) >>= fun nullable_ty ->
-              ty (Toption nullable_ty)
-            | _ ->
-              deserialization_error
-                ~message:
-                  (Printf.sprintf
-                     "Unsupported number of args for nullable type: %d"
-                     (List.length args))
-                ~keytrace
-          end
-        | "primitive" ->
-          get_string "name" (json, keytrace) >>= fun (name, keytrace) ->
-          begin
-            match name with
-            | "void" -> Ok Nast.Tvoid
-            | "int" -> Ok Nast.Tint
-            | "bool" -> Ok Nast.Tbool
-            | "float" -> Ok Nast.Tfloat
-            | "string" -> Ok Nast.Tstring
-            | "resource" -> Ok Nast.Tresource
-            | "num" -> Ok Nast.Tnum
-            | "arraykey" -> Ok Nast.Tarraykey
-            | "noreturn" -> Ok Nast.Tnoreturn
-            | _ ->
-              deserialization_error
-                ~message:("Unknown primitive type: " ^ name)
-                ~keytrace
-          end
-          >>= fun prim_ty -> ty (Tprim prim_ty)
-        | "class" ->
-          get_string "name" (json, keytrace) >>= fun (name, _name_keytrace) ->
-          let class_pos =
-            match Decl_provider.get_class ctx name with
-            | Decl_entry.Found class_ty -> Cls.pos class_ty
-            | Decl_entry.DoesNotExist
-            | Decl_entry.NotYetAvailable ->
-              (* Class may not exist (such as in non-strict modes). *)
-              Pos_or_decl.none
-          in
-          get_array "args" (json, keytrace) >>= fun (args, _args_keytrace) ->
-          aux_args args ~keytrace >>= fun tyl ->
-          let refs =
-            match get_array "refs" (json, keytrace) with
-            | Ok (l, _) -> l
-            | Error _ -> []
-          in
-          aux_refs refs ~keytrace >>= fun rs ->
-          (* NB: "class" could have come from either a `Tapply` or a `Tclass`.
-           * Right now, we always return a `Tclass`. *)
-          ty (Tclass ((class_pos, name), Nonexact rs, tyl))
-        | "shape" ->
-          get_array "fields" (json, keytrace)
-          >>= fun (fields, fields_keytrace) ->
-          get_bool "is_array" (json, keytrace)
-          >>= fun (is_array, _is_array_keytrace) ->
-          let unserialize_field field_json ~keytrace :
-              ( Typing_defs.tshape_field_name
-                * locl_phase Typing_defs.shape_field_type,
-                deserialization_error )
-              result =
-            get_val "name" (field_json, keytrace)
-            >>= fun (name, name_keytrace) ->
-            (* We don't need position information for shape field names. They're
-             * only used for error messages and the like. *)
-            let dummy_pos = Pos_or_decl.none in
-            begin
-              match name with
-              | Hh_json.JSON_Number name ->
-                Ok (Typing_defs.TSFregex_group (dummy_pos, name))
-              | Hh_json.JSON_String name ->
-                Ok (Typing_defs.TSFlit_str (dummy_pos, name))
-              | Hh_json.JSON_Array
-                  [Hh_json.JSON_String name1; Hh_json.JSON_String name2] ->
-                Ok
-                  (Typing_defs.TSFclass_const
-                     ((dummy_pos, name1), (dummy_pos, name2)))
-              | _ ->
-                deserialization_error
-                  ~message:"Unexpected format for shape field name"
-                  ~keytrace:name_keytrace
-            end
-            >>= fun shape_field_name ->
-            (* Optional field may be absent for shape-like arrays. *)
-            begin
-              match get_val "optional" (field_json, keytrace) with
-              | Ok _ ->
-                get_bool "optional" (field_json, keytrace)
-                >>| fun (optional, _optional_keytrace) -> optional
-              | Error _ -> Ok false
-            end
-            >>= fun optional ->
-            get_obj "type" (field_json, keytrace)
-            >>= fun (shape_type, shape_type_keytrace) ->
-            aux shape_type ~keytrace:shape_type_keytrace
-            >>= fun shape_field_type ->
-            let shape_field_type =
-              { sft_optional = optional; sft_ty = shape_field_type }
-            in
-            Ok (shape_field_name, shape_field_type)
-          in
-          map_array fields ~keytrace:fields_keytrace ~f:unserialize_field
-          >>= fun fields ->
-          if is_array then
-            (* We don't have enough information to perfectly reconstruct shape-like
-             * arrays. We're missing the keys in the shape map of the shape fields. *)
-            not_supported
-              ~message:"Cannot deserialize shape-like array type"
-              ~keytrace
-          else
-            get_bool "fields_known" (json, keytrace)
-            >>= fun (fields_known, _fields_known_keytrace) ->
-            let shape_kind =
-              if fields_known then
-                Typing_make_type.nothing Reason.none
-              else
-                Typing_make_type.mixed Reason.none
-            in
-            let fields =
-              List.fold fields ~init:TShapeMap.empty ~f:(fun shape_map (k, v) ->
-                  TShapeMap.add k v shape_map)
-            in
-            ty
-              (Tshape
-                 {
-                   s_origin = Missing_origin;
-                   s_fields = fields;
-                   s_unknown_value = shape_kind;
-                 })
-        | "union" ->
-          get_array "args" (json, keytrace) >>= fun (args, keytrace) ->
-          aux_args args ~keytrace >>= fun tyl -> ty (Tunion tyl)
-        | "intersection" ->
-          get_array "args" (json, keytrace) >>= fun (args, keytrace) ->
-          aux_args args ~keytrace >>= fun tyl -> ty (Tintersection tyl)
-        | "function" ->
-          get_array "params" (json, keytrace)
-          >>= fun (params, params_keytrace) ->
-          let params =
-            map_array
-              params
-              ~keytrace:params_keytrace
-              ~f:(fun param ~keytrace ->
-                get_bool "optional" (param, keytrace)
-                >>= fun (optional, _optional_keytrace) ->
-                get_string "callConvention" (param, keytrace)
-                >>= fun (callconv, callconv_keytrace) ->
-                begin
-                  match string_to_param_mode callconv with
-                  | Some callconv -> Ok callconv
-                  | None ->
-                    deserialization_error
-                      ~message:("Unknown calling convention: " ^ callconv)
-                      ~keytrace:callconv_keytrace
-                end
-                >>= fun callconv ->
-                get_obj "type" (param, keytrace)
-                >>= fun (param_type, param_type_keytrace) ->
-                aux param_type ~keytrace:param_type_keytrace
-                >>= fun param_type ->
-                Ok
-                  {
-                    fp_type = param_type;
-                    fp_flags =
-                      make_fp_flags
-                        ~mode:callconv
-                        ~accept_disposable:false
-                        ~is_optional:optional
-                        ~readonly:false
-                        ~ignore_readonly_error:false
-                        ~splat:false;
-                    (* Dummy values: these aren't currently serialized. *)
-                    fp_pos = Pos_or_decl.none;
-                    fp_name = None;
-                    fp_def_value = None;
-                  })
-          in
-          params >>= fun ft_params ->
-          get_obj "result" (json, keytrace) >>= fun (result, result_keytrace) ->
-          aux result ~keytrace:result_keytrace >>= fun ft_ret ->
-          aux_capability json ~keytrace >>= fun capability ->
-          aux_get_bool_with_default "readonly_this" false json ~keytrace
-          >>= fun readonly_this ->
-          aux_get_bool_with_default "readonly_return" false json ~keytrace
-          >>= fun readonly_return ->
-          aux_get_bool_with_default "instantiated" true json ~keytrace
-          >>= fun ft_instantiated ->
-          let funty =
-            {
-              ft_params;
-              ft_implicit_params = { capability };
-              ft_ret;
-              (* Dummy values: these aren't currently serialized. *)
-              ft_tparams = [];
-              ft_where_constraints = [];
-              ft_flags = Typing_defs_flags.Fun.default;
-              ft_cross_package = None;
-              ft_instantiated;
-            }
-          in
-          let funty = set_ft_returns_readonly funty readonly_return in
-          let funty = set_ft_readonly_this funty readonly_this in
-          ty (Tfun funty)
-        | "nothing" -> ty (Tunion [])
-        | _ ->
-          deserialization_error
-            ~message:
-              (Printf.sprintf
-                 "Unknown or unsupported kind '%s' to convert to locl phase"
-                 kind)
-            ~keytrace:kind_keytrace)
-    and map_array :
-        type a.
-        Hh_json.json list ->
-        f:
-          (Hh_json.json ->
-          keytrace:Hh_json.Access.keytrace ->
-          (a, deserialization_error) result) ->
-        keytrace:Hh_json.Access.keytrace ->
-        (a list, deserialization_error) result =
-     fun array ~f ~keytrace ->
-      let array =
-        List.mapi array ~f:(fun i elem ->
-            f elem ~keytrace:(string_of_int i :: keytrace))
-      in
-      Result.all array
-    and aux_args
-        (args : Hh_json.json list) ~(keytrace : Hh_json.Access.keytrace) :
-        (locl_ty list, deserialization_error) result =
-      map_array args ~keytrace ~f:aux
-    and aux_variadic_arg (arg : (Hh_json.json * Hh_json.Access.keytrace) option)
-        : (locl_ty, deserialization_error) result =
-      match arg with
-      | None -> Ok (Typing_make_type.nothing Reason.none)
-      | Some (ty, keytrace) -> aux ty ~keytrace
-    and aux_refs
-        (refs : Hh_json.json list) ~(keytrace : Hh_json.Access.keytrace) :
-        (locl_class_refinement, deserialization_error) result =
-      let of_refined_consts consts = { cr_consts = SMap.of_list consts } in
-      Result.map ~f:of_refined_consts (map_array refs ~keytrace ~f:aux_ref)
-    and aux_ref (json : Hh_json.json) ~(keytrace : Hh_json.Access.keytrace) :
-        (string * locl_refined_const, deserialization_error) result =
-      Result.Monad_infix.(
-        get_bool "is_ctx" (json, keytrace) >>= fun (rc_is_ctx, _) ->
-        get_string "type" (json, keytrace) >>= fun (id, _) ->
-        match Hh_json.Access.get_obj "equal" (json, keytrace) with
-        | Ok (ty_json, ty_keytrace) ->
-          aux ty_json ~keytrace:ty_keytrace >>= fun ty ->
-          Ok (id, { rc_bound = TRexact ty; rc_is_ctx })
-        | Error (Hh_json.Access.Missing_key_error _) ->
-          get_array "lower" (json, keytrace) >>= fun (los_json, los_keytrace) ->
-          get_array "upper" (json, keytrace) >>= fun (ups_json, ups_keytrace) ->
-          map_array los_json ~keytrace:los_keytrace ~f:aux >>= fun tr_lower ->
-          map_array ups_json ~keytrace:ups_keytrace ~f:aux >>= fun tr_upper ->
-          Ok (id, { rc_bound = TRloose { tr_lower; tr_upper }; rc_is_ctx })
-        | Error _ as e -> wrap_json_accessor (fun _ -> e) ())
-    and aux_as (json : Hh_json.json) ~(keytrace : Hh_json.Access.keytrace) :
-        (locl_ty, deserialization_error) result =
-      Result.Monad_infix.(
-        (* as-constraint is optional, check to see if it exists. *)
-        match Hh_json.Access.get_obj "as" (json, keytrace) with
-        | Ok (as_json, as_keytrace) ->
-          aux as_json ~keytrace:as_keytrace >>= fun as_ty -> Ok as_ty
-        | Error (Hh_json.Access.Missing_key_error _) ->
-          Ok (mk (Reason.none, Toption (mk (Reason.none, Tnonnull))))
-        | Error access_failure ->
-          deserialization_error
-            ~message:
-              ("Invalid as-constraint: "
-              ^ Hh_json.Access.access_failure_to_string access_failure)
-            ~keytrace)
-    and aux_capability
-        (json : Hh_json.json) ~(keytrace : Hh_json.Access.keytrace) :
-        (locl_ty capability, deserialization_error) result =
-      Result.Monad_infix.(
-        match Hh_json.Access.get_obj "capability" (json, keytrace) with
-        | Ok (cap_json, cap_keytrace) ->
-          aux cap_json ~keytrace:cap_keytrace >>= fun cap_ty ->
-          Ok (CapTy cap_ty)
-        | Error (Hh_json.Access.Missing_key_error _) ->
-          (* The "capability" key is omitted for CapDefaults during encoding *)
-          Ok (CapDefaults Pos_or_decl.none)
-        | Error access_failure ->
-          deserialization_error
-            ~message:
-              ("Invalid capability: "
-              ^ Hh_json.Access.access_failure_to_string access_failure)
-            ~keytrace)
-    and aux_get_bool_with_default
-        key default (json : Hh_json.json) ~(keytrace : Hh_json.Access.keytrace)
-        : (bool, deserialization_error) result =
-      match Hh_json.Access.get_bool key (json, keytrace) with
-      | Ok (value, _keytrace) -> Ok value
-      | Error (Hh_json.Access.Missing_key_error _) -> Ok default
-      | Error access_failure ->
-        deserialization_error
-          ~message:(Hh_json.Access.access_failure_to_string access_failure)
-          ~keytrace
-    in
-    aux json ~keytrace
-end
-
-let to_json env ?(show_like_ty = false) ty = Json.from_type env ~show_like_ty ty
-
-let json_to_locl_ty = Json.to_locl_ty
-
 (*****************************************************************************)
 (* Prints the internal type of a class, this code is meant to be used for
  * debugging purposes only.
@@ -2568,6 +1893,16 @@ let full_with_identity ~hide_internals env x occurrence definition_opt =
     env.genv.tcopt
     (Full.to_string_with_identity
        ~hide_internals
+       env
+       x
+       occurrence
+       definition_opt)
+
+let full_decl_with_identity env ~verbose_fun x occurrence definition_opt =
+  supply_fuel
+    env.genv.tcopt
+    (Full.to_string_decl_with_identity
+       ~verbose_fun
        env
        x
        occurrence

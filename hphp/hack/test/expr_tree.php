@@ -73,6 +73,10 @@ class ExampleDsl {
     return new ExprTree($pos, $metadata, $ast);
   }
 
+  public static function lift<TInfer>(ExampleDslExpression<TInfer> $x)[]: ExampleDslExpression<TInfer> {
+    return $x;
+  }
+
   // Virtual types. These do not have to be implemented, as they are only used
   // in the virtualized version of the expression tree, to work out the virtual type
   // of literals during type checking.
@@ -321,6 +325,7 @@ class ExampleDsl {
     ?ExprPos $_,
     string $_key,
     ExampleDslExpression<T> $splice_val,
+    ?vec<string> $_macro_vars = null,
   ): ExampleDsl::TAst {
     return "\${".($splice_val->visit($this))."}";
   }
@@ -331,6 +336,21 @@ class ExampleDsl {
   )[]: ExampleDsl::TAst {
     $v = HH\Lib\Vec\map($operand, $kv ==> $kv[0]."=>".$kv[1]);
     return "shape(".concat_arg_list($v).")";
+  }
+
+  // Note, these types are not super narrow,
+  // but they are inferred by the desugaring process rather than
+  // being run against this specific declaration, so that is fine.
+  public static async function shapeAt(ExampleContext $_): Awaitable<ExprTree<ExampleDsl, ExampleDsl::TAst, ExampleMixed>> {
+    throw new Error("No runtime implementation yet");
+  }
+
+  public static async function shapePut(ExampleContext $_): Awaitable<ExprTree<ExampleDsl, ExampleDsl::TAst, ExampleMixed>> {
+    throw new Error("No runtime implementation yet");
+  }
+
+  public static async function shapeIdx(ExampleContext $_): Awaitable<ExprTree<ExampleDsl, ExampleDsl::TAst, ExampleMixed>> {
+    throw new Error("No runtime implementation yet");
   }
 }
 

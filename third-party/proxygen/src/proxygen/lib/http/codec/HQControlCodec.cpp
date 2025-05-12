@@ -9,7 +9,6 @@
 #include <proxygen/lib/http/codec/HQControlCodec.h>
 
 #include <proxygen/lib/http/HTTP3ErrorCode.h>
-#include <proxygen/lib/http/codec/CodecUtil.h>
 #include <proxygen/lib/http/codec/HQUtils.h>
 
 #include <folly/Random.h>
@@ -27,7 +26,7 @@ uint64_t drainingId(proxygen::TransportDirection dir) {
 
 } // namespace
 
-namespace proxygen { namespace hq {
+namespace proxygen::hq {
 
 using namespace folly::io;
 
@@ -251,15 +250,6 @@ size_t HQControlCodec::generateSettings(folly::IOBufQueue& writeBuf) {
   return *writeRes;
 }
 
-size_t HQControlCodec::generatePriority(
-    folly::IOBufQueue& /*writeBuf*/,
-    StreamID /*stream*/,
-    const HTTPMessage::HTTP2Priority& /*pri*/) {
-  CHECK(false) << __func__
-               << " deprecated draft. Use the other generatePriority API";
-  return 0;
-}
-
 size_t HQControlCodec::generatePriority(folly::IOBufQueue& writeBuf,
                                         StreamID stream,
                                         HTTPPriority priority) {
@@ -299,18 +289,4 @@ size_t HQControlCodec::generatePushPriority(folly::IOBufQueue& writeBuf,
   return *writeRet;
 }
 
-size_t HQControlCodec::addPriorityNodes(PriorityQueue& /*queue*/,
-                                        folly::IOBufQueue& /*writeBuf*/,
-                                        uint8_t /*maxLevel*/) {
-
-  CHECK(false) << __func__ << " not implemented";
-  return 0;
-}
-
-HTTPCodec::StreamID HQControlCodec::mapPriorityToDependency(
-    uint8_t /*priority*/) const {
-  CHECK(false) << __func__ << " not implemented";
-  return 0;
-}
-
-}} // namespace proxygen::hq
+} // namespace proxygen::hq

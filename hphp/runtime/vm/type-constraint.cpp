@@ -16,7 +16,7 @@
 
 #include "hphp/runtime/vm/type-constraint.h"
 
-#include <boost/variant.hpp>
+#include <variant>
 
 #include <folly/Format.h>
 #include <folly/MapUtil.h>
@@ -28,28 +28,21 @@
 #include "hphp/runtime/base/annot-type.h"
 
 #include "hphp/runtime/base/autoload-handler.h"
+#include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/datatype.h"
 #include "hphp/runtime/base/execution-context.h"
 #include "hphp/runtime/base/runtime-error.h"
 #include "hphp/runtime/base/tv-type.h"
 #include "hphp/runtime/base/typed-value.h"
-#include "hphp/runtime/base/type-structure-helpers.h"
-#include "hphp/runtime/vm/act-rec.h"
 #include "hphp/runtime/vm/class.h"
 #include "hphp/runtime/vm/func.h"
-#include "hphp/runtime/vm/hhbc.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
-#include "hphp/runtime/vm/repo-global-data.h"
-#include "hphp/runtime/vm/runtime.h"
 #include "hphp/runtime/vm/unit.h"
 #include "hphp/runtime/vm/unit-util.h"
 #include "hphp/runtime/vm/vm-regs.h"
 
-#include "hphp/runtime/ext/std/ext_std_function.h"
-
 namespace HPHP {
 
-TRACE_SET_MOD(runtime);
+TRACE_SET_MOD(runtime)
 
 using ClassConstraint = TypeConstraint::ClassConstraint;
 using UnionConstraint = TypeConstraint::UnionConstraint;
@@ -812,7 +805,7 @@ void bitName(std::string& out, T& value, T bit, const char* name, const char* se
     out.append(name);
     value = (T)(value & ~bit);
   }
-};
+}
 
 std::string showUnionTypeMask(UnionTypeMask mask) {
   std::string res;
@@ -832,7 +825,7 @@ std::string showUnionTypeMask(UnionTypeMask mask) {
   bitName(res, mask, TypeConstraint::kUnionTypeClass, "class");
   assertx(mask == 0);
   return res;
-};
+}
 
 std::string show(TypeConstraintFlags flags) {
   std::string res;
@@ -962,6 +955,14 @@ HPHP::Optional<TypedValue> TypeIntersectionConstraint::defaultValue() const {
   return std::nullopt;
 }
 
+MemoKeyConstraint TypeIntersectionConstraint::getMemoKeyConstraint() const {
+  auto result = MemoKeyConstraint::Any;
+  for (auto const& tc : range()) {
+    result = result & tc.getMemoKeyConstraint();
+  }
+  return result;
+}
+
 namespace {
 
 /*
@@ -991,7 +992,7 @@ const TypeAlias* getTypeAliasWithAutoload(const NamedType* ne,
 struct FoundTypeAlias { const TypeAlias* value; };
 struct FoundClass { const Class* value; };
 struct NotFound {};
-using NamedTypeValue = boost::variant<FoundTypeAlias, FoundClass, NotFound>;
+using NamedTypeValue = std::variant<FoundTypeAlias, FoundClass, NotFound>;
 
 /*
  * Look up a TypeAlias or a Class for the supplied NamedType
@@ -1135,7 +1136,7 @@ TypeConstraint::maybeInequivalentForProp(const TypeConstraint& other) const {
 
   if (isUnion() || other.isUnion()) {
     // unions in property position must match nominally.
-    return !typeName()->tsame(other.typeName());
+   return !typeName()->tsame(other.typeName());
   }
 
   if (isSubObject() && other.isSubObject()) {
@@ -1144,6 +1145,31 @@ TypeConstraint::maybeInequivalentForProp(const TypeConstraint& other) const {
   if (isSubObject() || other.isSubObject()) return true;
 
   return type() != other.type();
+}
+
+bool
+TypeIntersectionConstraint::maybeInequivalentForProp(
+  const TypeIntersectionConstraint& other
+) const {
+  auto check = [](
+    const TypeIntersectionConstraint& one,
+    const TypeIntersectionConstraint& other
+  ) {
+    return std::any_of(
+      one.range().begin(),
+      one.range().end(),
+      [&](auto const& tc) {
+        return std::all_of(
+          other.range().begin(),
+          other.range().end(),
+          [&](auto const& otc) {
+            return tc.maybeInequivalentForProp(otc);
+          }
+        );
+      }
+    );
+  };
+  return check(*this, other) || check(other, *this);
 }
 
 bool TypeConstraint::equivalentForProp(const TypeConstraint& other) const {
@@ -1694,8 +1720,6 @@ void TypeConstraint::verifyStaticProperty(tv_lval val,
 void TypeConstraint::verifyReturnNonNull(TypedValue* tv,
                                          const Class* ctx,
                                          const Func* func) const {
-  const auto DEBUG_ONLY tcs = func->returnTypeConstraints();
-  assertx(!tcs.isNullable());
   if (UNLIKELY(tvIsNull(tv))) {
     verifyReturnFail(tv, ctx, func);
   } else if (debug) {
@@ -2023,36 +2047,34 @@ void TypeConstraint::unresolve() {
   m_u.single.class_.m_clsName.reset();
 }
 
-//////////////////////////////////////////////////////////////////////
-
-MemoKeyConstraint memoKeyConstraintFromTC(const TypeConstraint& tc) {
+MemoKeyConstraint TypeConstraint::getMemoKeyConstraint() const {
   using MK = MemoKeyConstraint;
 
   // Soft constraints aren't useful because they're not enforced.
-  if (!tc.hasConstraint() || tc.isTypeVar() ||
-      tc.isTypeConstant() || tc.isSoft() || tc.isUnion()) {
-    return MK::None;
+  if (!hasConstraint() || isTypeVar() ||
+      isTypeConstant() || isSoft() || isUnion()) {
+    return MK::Any;
   }
 
   // Only a subset of possible type-constraints are useful to use. Namely,
   // single types which might be nullable, and int/string combination.
-  switch (tc.metaType()) {
+  switch (metaType()) {
     case AnnotMetaType::Precise: {
-      auto const dt = tc.underlyingDataType();
-      if (!dt) return MK::None;
+      auto const dt = underlyingDataType();
+      if (!dt) return MK::Any;
       switch (*dt) {
         case KindOfBoolean:
-          return tc.isNullable() ? MK::BoolOrNull : MK::Bool;
+          return isNullable() ? MK::BoolOrNull : MK::Bool;
         case KindOfInt64:
-          return tc.isNullable() ? MK::IntOrNull : MK::Int;
+          return isNullable() ? MK::IntOrNull : MK::Int;
         case KindOfPersistentString:
         case KindOfString:
         case KindOfLazyClass:
-          return tc.isNullable() ? MK::StrOrNull : MK::Str;
+          return isNullable() ? MK::StrOrNull : MK::Str;
         case KindOfObject:
-          return tc.isNullable() ? MK::ObjectOrNull : MK::Object;
+          return isNullable() ? MK::ObjectOrNull : MK::Object;
         case KindOfDouble:
-          return tc.isNullable() ? MK::DblOrNull : MK::Dbl;
+          return isNullable() ? MK::DblOrNull : MK::Dbl;
         case KindOfPersistentVec:
         case KindOfVec:
         case KindOfPersistentDict:
@@ -2061,8 +2083,8 @@ MemoKeyConstraint memoKeyConstraintFromTC(const TypeConstraint& tc) {
         case KindOfKeyset:
         case KindOfClsMeth:
         case KindOfResource:
-        case KindOfEnumClassLabel:
-        case KindOfNull:         return MK::None;
+        case KindOfEnumClassLabel: return MK::Any;
+        case KindOfNull:         return MK::Null;
         case KindOfUninit:
         case KindOfRFunc:
         case KindOfFunc:
@@ -2073,26 +2095,27 @@ MemoKeyConstraint memoKeyConstraintFromTC(const TypeConstraint& tc) {
       not_reached();
     }
     case AnnotMetaType::ArrayKey:
-      return tc.isNullable() ? MK::None : MK::IntOrStr;
+      return isNullable() ? MK::IntOrStrOrNull : MK::IntOrStr;
     case AnnotMetaType::Classname:
-      return tc.isNullable() ? MK::StrOrNull : MK::Str;
+      return isNullable() ? MK::StrOrNull : MK::Str;
     case AnnotMetaType::Class:
-      return tc.isNullable() ? MK::StrOrNull : MK::Str;
+      return isNullable() ? MK::StrOrNull : MK::Str;
     case AnnotMetaType::ClassOrClassname:
-      return tc.isNullable() ? MK::StrOrNull : MK::Str;
+      return isNullable() ? MK::StrOrNull : MK::Str;
     case AnnotMetaType::SubObject:
-      return tc.isNullable() ? MK::ObjectOrNull : MK::Object;
+      return isNullable() ? MK::ObjectOrNull : MK::Object;
+    case AnnotMetaType::Nonnull:
+      return isNullable() ? MK::Any : MK::NonNull;
     case AnnotMetaType::Mixed:
     case AnnotMetaType::Nothing:
     case AnnotMetaType::NoReturn:
-    case AnnotMetaType::Nonnull:
     case AnnotMetaType::This:
     case AnnotMetaType::Callable:
     case AnnotMetaType::Number:
     case AnnotMetaType::VecOrDict:
     case AnnotMetaType::ArrayLike:
     case AnnotMetaType::Unresolved:
-      return MK::None;
+      return MK::Any;
   }
   not_reached();
 }

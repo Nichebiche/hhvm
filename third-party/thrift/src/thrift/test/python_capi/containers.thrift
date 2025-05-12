@@ -60,8 +60,8 @@ struct TemplateLists {
   4: list<fbvector_string> nested_small_vector;
   @cpp.Type{template = "folly::fbvector"}
   5: list<fbvector_fbvector_string> small_vector_tensor;
-// @cpp.Type{template = "std::list"}
-// 6: list<string> list_string;
+  // @cpp.Type{template = "std::list"}
+  // 6: list<string> list_string;
 } (cpp.noncomparable)
 
 struct TemplateSets {
@@ -103,8 +103,10 @@ struct TWrapped {
   2: binary fieldB;
 }
 
-@cpp.Type{name = "::thrift::test::python_capi::CppWrapperT"}
-typedef TWrapped (cpp.indirection) CppWrapper
+@cpp.Adapter{
+  name = "::apache::thrift::IndirectionAdapter<::thrift::test::python_capi::CppWrapperT>",
+}
+typedef TWrapped CppWrapper
 
 typedef list<CppWrapper> ListOfWrapped
 

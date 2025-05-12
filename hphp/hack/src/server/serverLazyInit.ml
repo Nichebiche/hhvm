@@ -576,7 +576,12 @@ let get_files_to_recheck
     ~bucket_size
     genv.workers
     old_dirty_names;
-  let files_to_recheck = ServerIncremental.resolve_files ctx env fanout in
+  let reparsed =
+    Relative_path.Map.keys defs_per_dirty_file |> Relative_path.set_of_list
+  in
+  let files_to_recheck =
+    ServerIncremental.resolve_files ~reparsed ctx env fanout
+  in
   log_fanout_information fanout.Fanout.to_recheck files_to_recheck;
   files_to_recheck
 
@@ -808,17 +813,14 @@ let calculate_fanout_and_defer_or_do_type_check
     result
 
 let get_updates_exn ~(genv : ServerEnv.genv) ~(root : Path.t) :
-    Relative_path.Set.t * Watchman.clock option =
+    Relative_path.Set.t * ServerNotifier.clock option =
   let start_t = Unix.gettimeofday () in
   Hh_logger.log "Getting files changed while parsing...";
   ServerNotifier.wait_until_ready genv.notifier;
   let (changes, clock) = ServerNotifier.get_changes_async genv.notifier in
   let files_changed_while_parsing =
     match changes with
-    | ServerNotifier.StateEnter _
-    | ServerNotifier.StateLeave _
-    | ServerNotifier.Unavailable ->
-      Relative_path.Set.empty
+    | ServerNotifier.Unavailable -> Relative_path.Set.empty
     | ServerNotifier.SyncChanges updates
     | ServerNotifier.AsyncChanges updates ->
       let root = Path.to_string root in
@@ -1033,7 +1035,8 @@ let update_naming_table
     env
     genv
     ~(do_indexing : bool)
-    ~(state_result : loaded_info * Relative_path.Set.t * Watchman.clock option)
+    ~(state_result :
+       loaded_info * Relative_path.Set.t * ServerNotifier.clock option)
     (cgroup_steps : CgroupProfiler.step_group) =
   let ((loaded_info : ServerInitTypes.loaded_info), changed_while_parsing, clock)
       =
@@ -1232,7 +1235,8 @@ let post_saved_state_initialization
     ~(do_indexing : bool)
     ~(genv : ServerEnv.genv)
     ~(env : ServerEnv.env)
-    ~(state_result : loaded_info * Relative_path.Set.t * Watchman.clock option)
+    ~(state_result :
+       loaded_info * Relative_path.Set.t * ServerNotifier.clock option)
     (cgroup_steps : CgroupProfiler.step_group) : ServerEnv.env * float =
   let ( (loaded_info : ServerInitTypes.loaded_info),
         _changed_while_parsing,

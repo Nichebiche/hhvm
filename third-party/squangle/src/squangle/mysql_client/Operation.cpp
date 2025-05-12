@@ -6,6 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fmt/chrono.h>
 #include <folly/Memory.h>
 #include <folly/container/F14Map.h>
 #include <folly/small_vector.h>
@@ -288,6 +289,20 @@ void OperationBase::deferRemoveOperation(Operation* op) const {
   client_.deferRemoveOperation(op);
 }
 
+std::string OperationBase::timeoutMessage(Millis delta) const {
+  return fmt::format("(took {}, timeout was {})", delta, getTimeoutMs());
+}
+
+std::string OperationBase::threadOverloadMessage(Duration cbDelay) const {
+  // This message is used here https://fburl.com/code/d6t3td0r to perform
+  // matching for SLA calculation. Please update the string if you change the
+  // message.
+  return fmt::format(
+      "(CLIENT_OVERLOADED: cb delay {}, {} active conns)",
+      std::chrono::duration_cast<std::chrono::milliseconds>(cbDelay),
+      client_.numStartedAndOpenConnections());
+}
+
 void OperationBase::setPreOperationCallback(ChainedCallback chainedCallback) {
   callbacks_.pre_operation_callback_ = setCallback(
       std::move(callbacks_.pre_operation_callback_),
@@ -418,12 +433,16 @@ db::FailureReason operationResultToFailureReason(OperationResult result) {
 std::unique_ptr<Connection> blockingConnectHelper(ConnectOperation& conn_op) {
   conn_op.run().wait();
   if (!conn_op.ok()) {
-    throw MysqlException(
-        conn_op.result(),
-        conn_op.mysql_errno(),
-        conn_op.mysql_error(),
-        conn_op.getKey(),
-        conn_op.opElapsed());
+    conn_op.connection()
+        ->client()
+        .exceptionBuilder()
+        .buildMysqlException(
+            conn_op.result(),
+            conn_op.mysql_errno(),
+            conn_op.mysql_error(),
+            conn_op.getKey(),
+            conn_op.opElapsed())
+        .throw_exception();
   }
 
   return conn_op.releaseConnection();

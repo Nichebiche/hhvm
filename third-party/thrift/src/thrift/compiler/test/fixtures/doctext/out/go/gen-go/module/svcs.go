@@ -9,6 +9,7 @@ package module
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,8 +19,9 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type C interface {
@@ -28,8 +30,9 @@ type C interface {
 }
 
 type CClientInterface interface {
-    thrift.ClientInterface
-    C
+    io.Closer
+    F(ctx context.Context) (error)
+    Thing(ctx context.Context, a int32, b string, c []int32) (string, error)
 }
 
 type CClient struct {
@@ -44,8 +47,12 @@ func NewCChannelClient(channel thrift.RequestChannel) *CClient {
     }
 }
 
-func NewCClient(prot thrift.Protocol) *CClient {
-    return NewCChannelClient(thrift.NewSerialChannel(prot))
+func NewCClient(prot thrift.DO_NOT_USE_ChannelWrapper) *CClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewCChannelClient(channel)
 }
 
 func (c *CClient) Close() error {
@@ -53,37 +60,37 @@ func (c *CClient) Close() error {
 }
 
 func (c *CClient) F(ctx context.Context) (error) {
-    in := &reqCF{
+    fbthriftReq := &reqCF{
     }
-    out := newRespCF()
-    err := c.ch.Call(ctx, "f", in, out)
-    if err != nil {
-        return err
+    fbthriftResp := newRespCF()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "f", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return fbthriftErr
     }
     return nil
 }
 
 func (c *CClient) Thing(ctx context.Context, a int32, b string, c []int32) (string, error) {
-    in := &reqCThing{
+    fbthriftReq := &reqCThing{
         A: a,
         B: b,
         C: c,
     }
-    out := newRespCThing()
-    err := c.ch.Call(ctx, "thing", in, out)
-    if err != nil {
-        return "", err
-    } else if out.Bang != nil {
-        return "", out.Bang
+    fbthriftResp := newRespCThing()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "thing", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return "", fbthriftErr
+    } else if fbthriftResp.Bang != nil {
+        return "", fbthriftResp.Bang
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
 type CProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            C
+    handler              C
 }
 
 func NewCProcessor(handler C) *CProcessor {
@@ -135,16 +142,16 @@ type procFuncCF struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncCF)(nil)
 
-func (p *procFuncCF) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncCF) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqCF()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncCF) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncCF) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -152,16 +159,16 @@ func (p *procFuncCF) Write(seqId int32, result thrift.WritableStruct, oprot thri
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("f", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("f", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -185,16 +192,16 @@ type procFuncCThing struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncCThing)(nil)
 
-func (p *procFuncCThing) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncCThing) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqCThing()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncCThing) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncCThing) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch v := result.(type) {
@@ -206,16 +213,16 @@ func (p *procFuncCThing) Write(seqId int32, result thrift.WritableStruct, oprot 
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("thing", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("thing", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

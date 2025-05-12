@@ -64,11 +64,15 @@ type common_state = {
 }
 [@@deriving show]
 
+type open_file_state = {
+  entry: Provider_context.entry;
+  errors: Errors.t option ref;
+}
+
 (** The [entry] caches the TAST+errors; the [Errors.t option] stores what was
 the most recent version of the errors to have been returned to clientLsp
 by didOpen/didChange/didClose/codeAction. *)
-type open_files_state =
-  (Provider_context.entry * Errors.t option ref) Relative_path.Map.t
+type open_files_state = open_file_state Relative_path.Map.t
 
 (** istate, "initialized state", is the state the daemon after it has
 finished initialization (i.e. finished loading saved state),
@@ -282,8 +286,7 @@ let batch_update_naming_table_and_invalidate_caches
     ~(naming_table : Naming_table.t)
     ~(sienv : SearchUtils.si_env)
     ~(local_memory : Provider_backend.local_memory)
-    ~(open_files :
-       (Provider_context.entry * Errors.t option ref) Relative_path.Map.t)
+    ~(open_files : open_files_state)
     (changes : Relative_path.Set.t) : Naming_table.t * SearchUtils.si_env =
   let start_time = Unix.gettimeofday () in
   let ClientIdeIncremental.{ changes; naming_table; sienv } =
@@ -298,7 +301,7 @@ let batch_update_naming_table_and_invalidate_caches
       ~ctx
       ~local_memory
       ~changes
-      ~entries:(Relative_path.Map.map open_files ~f:fst)
+      ~entries:(Relative_path.Map.map open_files ~f:(fun { entry; _ } -> entry))
   in
   HackEventLogger.ProfileTypeCheck.invalidate
     ~count:(List.length changes)
@@ -349,11 +352,7 @@ let initialize1
   Relative_path.set_path_prefix Relative_path.Tmp (Path.make "/tmp");
 
   let (config, local_config) =
-    ServerConfig.load
-      ~silent:true
-      ~cli_config_overrides:config
-      ~from:""
-      ~ai_options:None
+    ServerConfig.load ~silent:true ~cli_config_overrides:config ~from:""
   in
   HackEventLogger.set_hhconfig_version
     (ServerConfig.version config |> Config_file.version_to_string_opt);
@@ -383,10 +382,13 @@ let initialize1
            path |> Path.to_string |> Relative_path.create_detect_prefix)
     |> List.map ~f:(fun path ->
            ( path,
-             ( Provider_context.make_entry
-                 ~path
-                 ~contents:Provider_context.Raise_exn_on_attempt_to_read,
-               ref None ) ))
+             {
+               entry =
+                 Provider_context.make_entry
+                   ~path
+                   ~contents:Provider_context.Raise_exn_on_attempt_to_read;
+               errors = ref None;
+             } ))
     |> Relative_path.Map.of_list
   in
   let start_time =
@@ -493,7 +495,10 @@ let open_or_change_file_during_init
       ~contents:(Provider_context.Provided_contents contents)
   in
   let dopen_files =
-    Relative_path.Map.add dstate.dopen_files ~key:path ~data:(entry, ref None)
+    Relative_path.Map.add
+      dstate.dopen_files
+      ~key:path
+      ~data:{ entry; errors = ref None }
   in
   { dstate with dopen_files }
 
@@ -518,7 +523,7 @@ let update_file
     |> Relative_path.create_detect_prefix
   in
   let contents = document.ClientIdeMessage.file_contents in
-  let (entry, published_errors) =
+  let (entry, errors) =
     match Relative_path.Map.find_opt open_files path with
     | None ->
       (* This is a common scenario although I'm not quite sure why *)
@@ -526,13 +531,13 @@ let update_file
           ~path
           ~contents:(Provider_context.Provided_contents contents),
         ref None )
-    | Some (entry, published_errors)
+    | Some { entry; errors }
       when Option.equal
              String.equal
              (Some contents)
              (Provider_context.get_file_contents_if_present entry) ->
       (* we can just re-use the existing entry; contents haven't changed *)
-      (entry, published_errors)
+      (entry, errors)
     | Some _ ->
       (* We'll create a new entry; existing entry caches, if present, will be dropped
          But first, need to clear the Fixme cache. This is a global cache
@@ -544,9 +549,9 @@ let update_file
         ref None )
   in
   let open_files =
-    Relative_path.Map.add open_files ~key:path ~data:(entry, published_errors)
+    Relative_path.Map.add open_files ~key:path ~data:{ entry; errors }
   in
-  (open_files, entry, published_errors)
+  (open_files, entry, errors)
 
 (** like [update_file], but for convenience also produces a ctx for
 use in typechecking. Also ensures that hhi files haven't been deleted
@@ -595,13 +600,16 @@ let get_errors_for_path (istate : istate) (path : Relative_path.t) : Errors.t =
       None
     | ( Some disk_content,
         Some
-          ( ({
-               Provider_context.contents =
-                 Provider_context.(
-                   Contents_from_disk str | Provided_contents str);
-               _;
-             } as entry),
-            _ ) )
+          {
+            entry =
+              {
+                Provider_context.contents =
+                  Provider_context.(
+                    Contents_from_disk str | Provided_contents str);
+                _;
+              } as entry;
+            _;
+          } )
       when String.equal disk_content str ->
       (* file on disk was the same as what we currently have in the entry, and
          the entry very likely already has errors computed for it, so as an optimization
@@ -624,6 +632,9 @@ let get_errors_for_path (istate : istate) (path : Relative_path.t) : Errors.t =
        from the partially cached entry, or will compute errors from the file on disk. *)
     let ctx = make_singleton_ctx istate.icommon entry in
     get_user_facing_errors ~ctx ~error_filter:istate.error_filter ~entry
+
+let path_to_relative_path path =
+  path |> Path.to_string |> Relative_path.create_detect_prefix
 
 (** handle_request invariants: Messages are only ever handled serially; we never
 handle one message while another is being handled. It is a bug if the client sends
@@ -724,20 +735,22 @@ let handle_request
     (Initialized istate, Ok ())
     (* didClose *)
   | (During_init dstate, Did_close file_path) ->
-    let path =
-      file_path |> Path.to_string |> Relative_path.create_detect_prefix
-    in
+    let path = path_to_relative_path file_path in
     ( During_init
         { dstate with dopen_files = close_file dstate.dopen_files path },
       Ok [] )
   | (Initialized istate, Did_close file_path) ->
-    let path =
-      file_path |> Path.to_string |> Relative_path.create_detect_prefix
+    let path = path_to_relative_path file_path in
+    let errors =
+      Errors.get_sorted_error_list (get_errors_for_path istate path)
     in
-    let errors = get_errors_for_path istate path |> Errors.sort_and_finalize in
+    let error_hashes =
+      List.map errors ~f:(fun err ->
+          (User_error.to_absolute err, User_error.hash_error_for_saved_state err))
+    in
     let diagnostics =
       List.map
-        errors
+        error_hashes
         ~f:ClientIdeMessage.diagnostic_of_finalized_error_without_related_hints
     in
     ( Initialized
@@ -745,9 +758,7 @@ let handle_request
       Ok diagnostics )
   (* didOpen or didChange *)
   | (During_init dstate, Did_open_or_change { file_path; file_contents }) ->
-    let path =
-      file_path |> Path.to_string |> Relative_path.create_detect_prefix
-    in
+    let path = path_to_relative_path file_path in
     let dstate = open_or_change_file_during_init dstate path file_contents in
     (During_init dstate, Ok ())
   | (Initialized istate, Did_open_or_change document) ->
@@ -764,8 +775,12 @@ let handle_request
       get_user_facing_errors ~ctx ~error_filter:istate.error_filter ~entry
     in
     published_errors_ref := Some errors;
-    let errors = Errors.sort_and_finalize errors in
-    let diagnostics = Ide_diagnostics.convert ~ctx ~entry errors in
+    let errors = Errors.get_sorted_error_list errors in
+    let error_hashes =
+      List.map errors ~f:(fun err ->
+          (User_error.to_absolute err, User_error.hash_error_for_saved_state err))
+    in
+    let diagnostics = Ide_diagnostics.convert ~ctx ~entry error_hashes in
     (Initialized istate, Ok diagnostics)
   (* Document Symbol *)
   | (During_init dstate, Document_symbol document) ->
@@ -920,7 +935,6 @@ let handle_request
                       ~filename
                       ~symbol_definition
                       ~new_name
-                      ~naming_table:istate.naming_table
                   in
                   let patches =
                     match single_file_patches with
@@ -1042,12 +1056,7 @@ let handle_request
                     Relative_path.create_detect_prefix stringified_path
                   in
                   let single_file_ref =
-                    ServerFindRefs.go_for_single_file
-                      ~ctx
-                      ~action
-                      ~filename
-                      ~name
-                      ~naming_table:istate.naming_table
+                    ServerFindRefs.go_for_single_file ~ctx ~action ~filename
                     |> ServerFindRefs.to_absolute
                   in
                   let urikey =
@@ -1118,9 +1127,7 @@ let handle_request
        Hence, we construct temporary entry to reflect the file which
        contained the target of the resolve. *)
     HackEventLogger.completion_call ~method_name:"Completion_resolve_location";
-    let path =
-      file_path |> Path.to_string |> Relative_path.create_detect_prefix
-    in
+    let path = path_to_relative_path file_path in
     let ctx = make_empty_ctx istate.icommon in
     let (ctx, entry) = Provider_context.add_entry_if_missing ~ctx ~path in
     let result =

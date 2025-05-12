@@ -37,6 +37,7 @@ from thrift.py3.types cimport (
     make_const_shared,
     constant_shared_ptr,
 )
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -65,6 +66,7 @@ cdef object get_types_reflection():
     )
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class Struct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -128,10 +130,7 @@ cdef class Struct(thrift.py3.types.Struct):
 
 
     def __copy__(Struct self):
-        cdef shared_ptr[_module2_cbindings.cStruct] cpp_obj = make_shared[_module2_cbindings.cStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return Struct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -192,6 +191,7 @@ cdef class Struct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.Struct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class BigStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -253,10 +253,7 @@ cdef class BigStruct(thrift.py3.types.Struct):
 
 
     def __copy__(BigStruct self):
-        cdef shared_ptr[_module2_cbindings.cBigStruct] cpp_obj = make_shared[_module2_cbindings.cBigStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return BigStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)

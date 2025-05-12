@@ -39,7 +39,7 @@ bool should_annotate_field(const t_field& field) {
     return false;
   }
 
-  if (field.find_structured_annotation_or_null(kAnnotationUri) != nullptr) {
+  if (field.has_structured_annotation(kAnnotationUri)) {
     // kAnnotation is already present.
     return false;
   }
@@ -47,11 +47,11 @@ bool should_annotate_field(const t_field& field) {
   // Field is not optional, and not already annotated.
   // Is it a @cpp.Ref / cpp[2].ref[_type] ?
 
-  if (field.find_structured_annotation_or_null(kCppRefUri) != nullptr) {
+  if (field.has_structured_annotation(kCppRefUri)) {
     return true;
   }
 
-  if (field.has_annotation(
+  if (field.has_unstructured_annotation(
           {"cpp.ref", "cpp2.ref", "cpp.ref_type", "cpp2.ref_type"})) {
     return true;
   }

@@ -7,8 +7,8 @@ use std::fmt;
 
 use ast_scope::Scope;
 use ast_scope::ScopeItem;
-use env::emitter::Emitter;
 use env::ClassExpr;
+use env::emitter::Emitter;
 use hhbc::DictEntry;
 use hhbc::TypedValue;
 use hhbc_string_utils as string_utils;
@@ -17,10 +17,10 @@ use itertools::Itertools;
 use naming_special_names_rust::math;
 use naming_special_names_rust::members;
 use naming_special_names_rust::typehints;
-use oxidized::aast_visitor::visit_mut;
 use oxidized::aast_visitor::AstParams;
 use oxidized::aast_visitor::NodeMut;
 use oxidized::aast_visitor::VisitorMut;
+use oxidized::aast_visitor::visit_mut;
 use oxidized::ast;
 use oxidized::ast_defs;
 use oxidized::pos::Pos;
@@ -277,8 +277,8 @@ pub fn expr_to_typed_value_(
             Expr_::String(s) => string_expr_to_typed_value(s),
             Expr_::Float(s) => float_expr_to_typed_value(emitter, s),
 
-            Expr_::Id(id) if id.1 == math::NAN => Ok(TypedValue::float(std::f64::NAN)),
-            Expr_::Id(id) if id.1 == math::INF => Ok(TypedValue::float(std::f64::INFINITY)),
+            Expr_::Id(id) if id.1 == math::NAN => Ok(TypedValue::float(f64::NAN)),
+            Expr_::Id(id) if id.1 == math::INF => Ok(TypedValue::float(f64::INFINITY)),
             Expr_::Id(_) => Err(Error::UserDefinedConstant),
 
             Expr_::Collection(x) if x.0.name().eq("keyset") => {
@@ -462,11 +462,11 @@ fn keyset_expr_to_typed_value(
 
 fn float_expr_to_typed_value(_emitter: &Emitter<'_>, s: &str) -> Result<TypedValue, Error> {
     if s == math::INF {
-        Ok(TypedValue::float(std::f64::INFINITY))
+        Ok(TypedValue::float(f64::INFINITY))
     } else if s == math::NEG_INF {
-        Ok(TypedValue::float(std::f64::NEG_INFINITY))
+        Ok(TypedValue::float(f64::NEG_INFINITY))
     } else if s == math::NAN {
-        Ok(TypedValue::float(std::f64::NAN))
+        Ok(TypedValue::float(f64::NAN))
     } else {
         s.parse()
             .map(TypedValue::float)
@@ -479,15 +479,12 @@ fn string_expr_to_typed_value(s: &[u8]) -> Result<TypedValue, Error> {
 }
 
 fn int_expr_to_typed_value(s: &str) -> Result<TypedValue, Error> {
-    Ok(TypedValue::Int(
-        try_type_intlike(s).unwrap_or(std::i64::MAX),
-    ))
+    Ok(TypedValue::Int(try_type_intlike(s).unwrap_or(i64::MAX)))
 }
 
 fn update_duplicates_in_map(
     kvs: Vec<(TypedValue, TypedValue)>,
-) -> impl IntoIterator<Item = DictEntry, IntoIter = impl Iterator<Item = DictEntry> + ExactSizeIterator>
-{
+) -> impl IntoIterator<Item = DictEntry, IntoIter = impl ExactSizeIterator<Item = DictEntry>> {
     kvs.into_iter()
         .collect::<IndexMap<_, _, RandomState>>()
         .into_iter()
@@ -851,7 +848,7 @@ pub fn cast_to_int(x: TypedValue) -> Option<i64> {
                 Some(if f.to_f64() == f64::INFINITY {
                     0
                 } else {
-                    std::i64::MIN
+                    i64::MIN
                 })
             }
             _ => todo!(),
@@ -900,7 +897,7 @@ mod cast_tests {
 
     #[test]
     fn nan_to_int() {
-        let res = cast_to_int(TypedValue::float(std::f64::NAN)).unwrap();
-        assert_eq!(res, std::i64::MIN);
+        let res = cast_to_int(TypedValue::float(f64::NAN)).unwrap();
+        assert_eq!(res, i64::MIN);
     }
 }

@@ -44,7 +44,7 @@
 
 namespace HPHP::jit::irlower {
 
-TRACE_SET_MOD(irlower);
+TRACE_SET_MOD(irlower)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -115,7 +115,7 @@ void cgEndCatch(IRLS& env, const IRInstruction* inst) {
     not_reached();
   }();
 
-  v << jmpi{helper, vm_regs_no_sp()};
+  v << jmpi{helper, doSync ? vm_regs_with_sp() : vm_regs_no_sp()};
 }
 
 void cgUnwindCheckSideExit(IRLS& env, const IRInstruction* inst) {
@@ -136,24 +136,12 @@ void cgLdUnwinderValue(IRLS& env, const IRInstruction* inst) {
   loadTV(v, inst->dst(), dstLoc(env, inst, 0), rvmtl()[unwinderTVOff()]);
 }
 
-void cgEnterTCUnwind(IRLS& env, const IRInstruction* inst) {
-  auto const extra = inst->extra<EnterTCUnwind>();
+void cgStUnwinderExn(IRLS& env, const IRInstruction* inst) {
   auto const exn = srcLoc(env, inst, 0).reg();
   auto& v = vmain(env);
 
   markRDSAccess(v, g_unwind_rds.handle());
-  markRDSAccess(v, g_unwind_rds.handle());
   v << store{exn, rvmtl()[unwinderExnOff()]};
-
-  auto const target = [&] {
-    if (extra->teardown) return tc::ustubs().endCatchHelper;
-    if (inst->func()->hasThisInBody()) {
-      return tc::ustubs().endCatchTeardownThisHelper;
-    }
-    return tc::ustubs().endCatchSkipTeardownHelper;
-  }();
-
-  v << jmpi{target, vm_regs_with_sp()};
 }
 
 IMPL_OPCODE_CALL(DebugBacktrace)
@@ -221,12 +209,6 @@ void cgRaiseForbiddenDynCall(IRLS& env, const IRInstruction* inst) {
 void cgRaiseForbiddenDynConstruct(IRLS& env, const IRInstruction* inst) {
   cgCallHelper(vmain(env), env, CallSpec::direct(raiseForbiddenDynConstruct),
                kVoidDest, SyncOptions::Sync, argGroup(env, inst).ssa(0));
-}
-
-static void raiseMissingDynamicallyReferenced(const Class* cls) {
-  if (folly::Random::oneIn(Cfg::Eval::DynamicallyReferencedNoticeSampleRate)) {
-    raise_notice(Strings::MISSING_DYNAMICALLY_REFERENCED, cls->name()->data());
-  }
 }
 
 void cgRaiseMissingDynamicallyReferenced(IRLS& env, const IRInstruction* inst) {
@@ -351,7 +333,6 @@ IMPL_OPCODE_CALL(ThrowMustBeMutableException)
 IMPL_OPCODE_CALL(ThrowMustBeReadonlyException)
 IMPL_OPCODE_CALL(ThrowMustBeValueTypeException)
 IMPL_OPCODE_CALL(ThrowOutOfBounds)
-IMPL_OPCODE_CALL(ThrowParameterWrongType)
 IMPL_OPCODE_CALL(ThrowReadonlyMismatch)
 
 ///////////////////////////////////////////////////////////////////////////////

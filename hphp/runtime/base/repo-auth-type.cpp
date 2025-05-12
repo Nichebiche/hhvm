@@ -17,12 +17,8 @@
 
 #include <vector>
 
-#include <folly/Hash.h>
-
 #include "hphp/runtime/base/array-data-defs.h"
 #include "hphp/runtime/base/object-data.h"
-#include "hphp/runtime/base/tv-mutate.h"
-#include "hphp/runtime/base/tv-variant.h"
 #include "hphp/runtime/base/typed-value.h"
 
 #include "hphp/runtime/vm/func-emitter.h"
@@ -564,20 +560,20 @@ RepoAuthType decodeRAT(const Unit* unit, const unsigned char*& pc) {
 RepoAuthType decodeRAT(const UnitEmitter& ue, const unsigned char*& pc) {
   return decodeRATImpl(
     pc,
-    [&] (Id id) { return ue.lookupLitstr(id); },
+    [&] (Id id) { return ue.lookupLitstrId(id); },
     [&] (Id id) { return ue.lookupRATArray(id); }
   );
 }
 
-void encodeRAT(FuncEmitter& fe, RepoAuthType rat) {
+void encodeRAT(FuncEmitter& fe, UnitEmitter& ue, RepoAuthType rat) {
   using T = RepoAuthType::Tag;
   static_assert(sizeof(T) == sizeof(uint8_t));
 
   fe.emitByte((uint8_t)rat.tag());
   if (auto const a = rat.array()) {
-    fe.emitIVA(fe.ue().mergeRATArray(a));
+    fe.emitIVA(ue.mergeRATArray(a));
   } else if (auto const n = rat.name()) {
-    fe.emitIVA(fe.ue().mergeLitstr(n));
+    fe.emitIVA(ue.mergeLitstr(n));
   }
 }
 

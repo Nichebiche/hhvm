@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<8b9c9014a3ec5cd49ac756fa2d5ad3f8>>
+// @generated SignedSource<<3c2865f1da2f2599ed0d9591593217d5>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -48,6 +48,13 @@ pub enum CeVisibility<'a> {
     Vprotected(&'a str),
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     Vinternal(&'a str),
+    #[rust_to_ocaml(name = "Vprotected_internal")]
+    VprotectedInternal {
+        #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+        class_id: &'a str,
+        #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
+        module__: &'a str,
+    },
 }
 impl<'a> TrivialDrop for CeVisibility<'a> {}
 arena_deserializer::impl_deserialize_in_arena!(CeVisibility<'arena>);
@@ -455,6 +462,25 @@ arena_deserializer::impl_deserialize_in_arena!(FunType<'arena>);
 
 #[derive(
     Clone,
+    Debug,
+    Deserialize,
+    EqModuloPos,
+    FromOcamlRepIn,
+    Hash,
+    NoPosHash,
+    Serialize,
+    ToOcamlRep
+)]
+#[repr(C)]
+pub struct Ty<'a>(
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)] pub &'a reason::T_<'a>,
+    #[serde(deserialize_with = "arena_deserializer::arena", borrow)] pub Ty_<'a>,
+);
+impl<'a> TrivialDrop for Ty<'a> {}
+arena_deserializer::impl_deserialize_in_arena!(Ty<'arena>);
+
+#[derive(
+    Clone,
     Copy,
     Debug,
     Deserialize,
@@ -469,7 +495,7 @@ arena_deserializer::impl_deserialize_in_arena!(FunType<'arena>);
     Serialize,
     ToOcamlRep
 )]
-#[rust_to_ocaml(attr = "deriving (eq, ord, hash, (show { with_path = false }))")]
+#[rust_to_ocaml(and)]
 #[repr(C, u8)]
 pub enum TypeTag<'a> {
     BoolTag,
@@ -481,7 +507,8 @@ pub enum TypeTag<'a> {
     ResourceTag,
     NullTag,
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
-    ClassTag(&'a ast_defs::Id_<'a>),
+    #[rust_to_ocaml(inline_tuple)]
+    ClassTag(&'a (&'a ast_defs::Id_<'a>, &'a [&'a Ty<'a>])),
 }
 impl<'a> TrivialDrop for TypeTag<'a> {}
 arena_deserializer::impl_deserialize_in_arena!(TypeTag<'arena>);
@@ -501,6 +528,7 @@ arena_deserializer::impl_deserialize_in_arena!(TypeTag<'arena>);
     Serialize,
     ToOcamlRep
 )]
+#[rust_to_ocaml(and)]
 #[repr(C)]
 pub struct ShapeFieldPredicate<'a> {
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
@@ -603,7 +631,6 @@ arena_deserializer::impl_deserialize_in_arena!(TypePredicate_<'arena>);
     ToOcamlRep
 )]
 #[rust_to_ocaml(and)]
-#[rust_to_ocaml(attr = "deriving (eq, ord, hash, (show { with_path = false }))")]
 #[repr(C)]
 pub struct TypePredicate<'a>(
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)] pub &'a reason::Reason<'a>,
@@ -611,25 +638,6 @@ pub struct TypePredicate<'a>(
 );
 impl<'a> TrivialDrop for TypePredicate<'a> {}
 arena_deserializer::impl_deserialize_in_arena!(TypePredicate<'arena>);
-
-#[derive(
-    Clone,
-    Debug,
-    Deserialize,
-    EqModuloPos,
-    FromOcamlRepIn,
-    Hash,
-    NoPosHash,
-    Serialize,
-    ToOcamlRep
-)]
-#[repr(C)]
-pub struct Ty<'a>(
-    #[serde(deserialize_with = "arena_deserializer::arena", borrow)] pub &'a reason::T_<'a>,
-    #[serde(deserialize_with = "arena_deserializer::arena", borrow)] pub Ty_<'a>,
-);
-impl<'a> TrivialDrop for Ty<'a> {}
-arena_deserializer::impl_deserialize_in_arena!(Ty<'arena>);
 
 /// A shape may specify whether or not fields are required. For example, consider
 /// this typedef:
@@ -758,11 +766,9 @@ pub enum Ty_<'a> {
     /// The type of a generic parameter. The constraints on a generic parameter
     /// are accessed through the lenv.tpenv component of the environment, which
     /// is set up when checking the body of a function or method. See uses of
-    /// Typing_phase.add_generic_parameters_and_constraints. The list denotes
-    /// type arguments.
+    /// Typing_phase.add_generic_parameters_and_constraints.
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
-    #[rust_to_ocaml(inline_tuple)]
-    Tgeneric(&'a (&'a str, &'a [&'a Ty<'a>])),
+    Tgeneric(&'a str),
     /// Union type.
     /// The values that are members of this type are the union of the values
     /// that are members of the components of the union.
@@ -816,16 +822,6 @@ pub enum Ty_<'a> {
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     #[rust_to_ocaml(inline_tuple)]
     Tnewtype(&'a (&'a str, &'a [&'a Ty<'a>], &'a Ty<'a>)),
-    /// This represents a type alias that lacks necessary type arguments. Given
-    /// type Foo<T1,T2> = ...
-    /// Tunappliedalias "Foo" stands for usages of plain Foo, without supplying
-    /// further type arguments. In particular, Tunappliedalias always stands for
-    /// a higher-kinded type. It is never used for an alias like
-    /// type Foo2 = ...
-    /// that simply doesn't require type arguments.
-    #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
-    #[rust_to_ocaml(name = "Tunapplied_alias")]
-    TunappliedAlias(&'a str),
     /// see dependent_type
     #[serde(deserialize_with = "arena_deserializer::arena", borrow)]
     #[rust_to_ocaml(inline_tuple)]

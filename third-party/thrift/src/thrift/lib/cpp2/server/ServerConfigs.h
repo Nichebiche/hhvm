@@ -32,6 +32,7 @@
 #include <thrift/lib/cpp2/server/Overload.h>
 #include <thrift/lib/cpp2/server/PreprocessResult.h>
 #include <thrift/lib/cpp2/server/ServiceInterceptorBase.h>
+#include <thrift/lib/cpp2/server/metrics/InterceptorMetricCallback.h>
 #include <thrift/lib/thrift/gen-cpp2/RpcMetadata_types.h>
 
 namespace apache::thrift {
@@ -83,8 +84,8 @@ class ServerConfigs {
   virtual const AdaptiveConcurrencyController&
   getAdaptiveConcurrencyController() const = 0;
 
-  virtual CPUConcurrencyController& getCPUConcurrencyController() = 0;
-  virtual const CPUConcurrencyController& getCPUConcurrencyController()
+  virtual CPUConcurrencyController* getCPUConcurrencyController() = 0;
+  virtual const CPUConcurrencyController* getCPUConcurrencyController()
       const = 0;
 
   // @see ThriftServer::getNumIOWorkerThreads function.
@@ -160,6 +161,12 @@ class ServerConfigs {
   virtual uint32_t getMaxQps() const = 0;
   virtual void setMaxQps(uint32_t maxQps) = 0;
 
+  virtual uint32_t getConcurrencyLimit() const = 0;
+  virtual void setConcurrencyLimit(uint32_t concurrencyLimit) = 0;
+
+  virtual uint32_t getExecutionRate() const = 0;
+  virtual void setExecutionRate(uint32_t executionRate) = 0;
+
   enum class RequestHandlingCapability { NONE, INTERNAL_METHODS_ONLY, ALL };
   /**
    * Determines which requests the server can handle in its current state.
@@ -234,17 +241,15 @@ class ServerConfigs {
     return kEmpty;
   }
 
-  struct ServiceInterceptorInfo {
-    // The naming format is "{module_name}.{interceptor_name}"
-    std::string qualifiedName;
-    std::shared_ptr<ServiceInterceptorBase> interceptor;
-  };
-  virtual const std::vector<ServiceInterceptorInfo>& getServiceInterceptors()
-      const {
-    static const folly::Indestructible<std::vector<ServiceInterceptorInfo>>
+  virtual const std::vector<std::shared_ptr<ServiceInterceptorBase>>&
+  getServiceInterceptors() const {
+    static const folly::Indestructible<
+        std::vector<std::shared_ptr<ServiceInterceptorBase>>>
         kEmpty;
     return *kEmpty;
   }
+
+  virtual InterceptorMetricCallback& getInterceptorMetricCallback() const = 0;
 
  private:
   folly::relaxed_atomic<int32_t> activeRequests_{0};

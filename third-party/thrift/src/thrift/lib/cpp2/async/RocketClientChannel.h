@@ -73,28 +73,32 @@ class RocketClientChannel final : public ClientChannel,
       apache::thrift::MethodMetadata&& methodMetadata,
       SerializedRequest&& request,
       std::shared_ptr<transport::THeader> header,
-      RequestClientCallback::Ptr cb) override;
+      RequestClientCallback::Ptr cb,
+      std::unique_ptr<folly::IOBuf> frameworkMetadata) override;
 
   void sendRequestNoResponse(
       const RpcOptions& rpcOptions,
       apache::thrift::MethodMetadata&& methodMetadata,
       SerializedRequest&& request,
       std::shared_ptr<transport::THeader> header,
-      RequestClientCallback::Ptr cb) override;
+      RequestClientCallback::Ptr cb,
+      std::unique_ptr<folly::IOBuf> frameworkMetadata) override;
 
   void sendRequestStream(
       const RpcOptions& rpcOptions,
       apache::thrift::MethodMetadata&& methodMetadata,
       SerializedRequest&& request,
       std::shared_ptr<transport::THeader> header,
-      StreamClientCallback* clientCallback) override;
+      StreamClientCallback* clientCallback,
+      std::unique_ptr<folly::IOBuf> frameworkMetadata) override;
 
   void sendRequestSink(
       const RpcOptions& rpcOptions,
       apache::thrift::MethodMetadata&& methodMetadata,
       SerializedRequest&& request,
       std::shared_ptr<transport::THeader> header,
-      SinkClientCallback* clientCallback) override;
+      SinkClientCallback* clientCallback,
+      std::unique_ptr<folly::IOBuf> frameworkMetadata) override;
 
   folly::EventBase* getEventBase() const override { return evb_; }
 
@@ -152,6 +156,7 @@ class RocketClientChannel final : public ClientChannel,
       folly::EventBase* evb,
       folly::AsyncTransport::UniquePtr socket,
       RequestSetupMetadata meta,
+      int32_t keepAliveTimeoutMs = 0,
       std::shared_ptr<rocket::ParserAllocatorType> allocatorPtr = nullptr);
 
   RocketClientChannel(const RocketClientChannel&) = delete;
@@ -165,7 +170,8 @@ class RocketClientChannel final : public ClientChannel,
       apache::thrift::ManagedStringView&& methodName,
       SerializedRequest&& request,
       std::shared_ptr<apache::thrift::transport::THeader> header,
-      RequestClientCallback::Ptr cb);
+      RequestClientCallback::Ptr cb,
+      std::unique_ptr<folly::IOBuf> frameworkMetadata);
 
   void sendSingleRequestNoResponse(
       const RpcOptions& rpcOptions,
@@ -189,7 +195,7 @@ class RocketClientChannel final : public ClientChannel,
   template <typename CallbackPtr>
   bool canHandleRequest(CallbackPtr& cb);
 
-  rocket::SetupFrame makeSetupFrame(RequestSetupMetadata meta);
+  RequestSetupMetadata populateSetupMetadata(RequestSetupMetadata&& meta);
 
   int32_t getServerVersion() const;
 

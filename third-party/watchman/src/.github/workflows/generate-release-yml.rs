@@ -1,11 +1,8 @@
 #!/usr/bin/env rust-script
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- */
-
+//! Copyright (c) Meta Platforms, Inc. and affiliates.
+//!
+//! This source code is licensed under the MIT license found in the
+//! LICENSE file in the root directory of this source tree.
 //!
 //! ```cargo
 //! [dependencies]
@@ -21,10 +18,10 @@ use anyhow::anyhow;
 use anyhow::bail;
 use atomicwrites::AllowOverwrite;
 use atomicwrites::AtomicFile;
-use yaml_rust::yaml::Hash;
 use yaml_rust::Yaml;
 use yaml_rust::YamlEmitter;
 use yaml_rust::YamlLoader;
+use yaml_rust::yaml::Hash;
 
 type Pattern = Box<dyn Fn(&str, &str) -> String + 'static>;
 
@@ -33,12 +30,12 @@ fn parse_pattern(pattern: &String) -> Option<(Pattern, Vec<&'static str>)> {
     if pattern.contains("%UBUNTU_LTS_VERSION%") {
         Some((
             Box::new(move |p: &str, s: &str| p.replace("%UBUNTU_LTS_VERSION%", s)),
-            vec!["20", "22"],
+            vec!["22", "24"],
         ))
     } else if pattern.contains("%FEDORA_STABLE_VERSION%") {
         Some((
             Box::new(move |p: &str, s: &str| p.replace("%FEDORA_STABLE_VERSION%", s)),
-            vec!["36", "37", "38"],
+            vec!["40", "41", "42"],
         ))
     } else {
         None

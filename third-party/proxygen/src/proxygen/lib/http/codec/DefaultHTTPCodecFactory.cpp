@@ -12,7 +12,6 @@
 #include <proxygen/lib/http/codec/CodecProtocol.h>
 #include <proxygen/lib/http/codec/HTTP1xCodec.h>
 #include <proxygen/lib/http/codec/HTTP2Codec.h>
-#include <proxygen/lib/http/codec/HTTP2Constants.h>
 
 namespace {
 folly::StringPiece trimTrailingNulls(folly::StringPiece sp) {
@@ -71,6 +70,9 @@ std::unique_ptr<HTTPCodec> DefaultHTTPCodecFactory::getCodec(
       }
       return codec;
     }
+    case CodecProtocol::TUNNEL_LITE:
+      LOG(WARNING) << __func__ << " doesn't support TUNNEL_LITE";
+      return nullptr;
     default:
       // should be unreachable, getCodecProtocolFromStr returns HTTP_1_1 by
       // default

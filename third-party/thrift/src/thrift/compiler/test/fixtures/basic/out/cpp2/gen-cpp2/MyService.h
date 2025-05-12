@@ -36,6 +36,8 @@ class MyServiceServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::test::fixtures::basic::MyService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::test::fixtures::basic::MyService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "MyService"; }
 
@@ -155,6 +157,13 @@ class ServiceHandler<::test::fixtures::basic::MyService> : public apache::thrift
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_rpc_skipped_codegen{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::test::fixtures::basic::MyService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 4623621384729371878;
+  static constexpr ::std::string_view definitionKey = {"\x2c\x98\x5b\xeb\x51\x21\x74\x8c\x7c\xe2\xa0\x9b\xbe\xf5\x54\x63", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace test::fixtures::basic {

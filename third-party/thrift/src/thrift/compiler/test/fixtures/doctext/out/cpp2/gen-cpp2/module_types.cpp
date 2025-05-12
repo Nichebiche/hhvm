@@ -105,6 +105,7 @@ void swap([[maybe_unused]] A& a, [[maybe_unused]] A& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void A::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t A::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t A::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -113,6 +114,7 @@ template void A::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t A::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t A::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t A::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -239,6 +241,7 @@ void swap(U& a, U& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void U::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t U::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t U::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -247,6 +250,7 @@ template void U::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t U::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t U::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t U::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -310,7 +314,7 @@ Bang::Bang(apache::thrift::FragileConstructor, ::std::string message__arg) :
 
 void Bang::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -336,6 +340,7 @@ void swap([[maybe_unused]] Bang& a, [[maybe_unused]] Bang& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Bang::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Bang::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Bang::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -344,6 +349,7 @@ template void Bang::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Bang::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Bang::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Bang::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2

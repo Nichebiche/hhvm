@@ -32,6 +32,10 @@
 namespace HPHP {
 ///////////////////////////////////////////////////////////////////////////////
 
+const StaticString s_xbox("xbox");
+
+///////////////////////////////////////////////////////////////////////////////
+
 using std::string;
 
 XboxTransport::XboxTransport(const folly::StringPiece message,
@@ -263,7 +267,7 @@ struct XboxTask : SweepableResourceData {
 
   XboxTransport *getJob() { return m_job;}
 
-  CLASSNAME_IS("XboxTask");
+  CLASSNAME_IS("XboxTask")
   // overriding ResourceData
   const String& o_getClassNameHook() const override { return classnameof(); }
 

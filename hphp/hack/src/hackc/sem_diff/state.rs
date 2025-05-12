@@ -3,9 +3,9 @@
 use std::collections::hash_map::Entry;
 use std::rc::Rc;
 
+use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use anyhow::Result;
 use hash::HashMap;
 use hhbc::BytesId;
 use hhbc::ClassName;
@@ -1303,7 +1303,8 @@ fn is_checkpoint_instr(instr: &NodeInstr) -> bool {
             | Opcode::VerifyParamTypeTS(..)
             | Opcode::VerifyRetNonNullC
             | Opcode::VerifyRetTypeC
-            | Opcode::VerifyRetTypeTS,
+            | Opcode::VerifyRetTypeTS
+            | Opcode::VerifyTypeTS,
         ) => true,
 
         // Other Opcodes
@@ -1321,6 +1322,7 @@ fn is_checkpoint_instr(instr: &NodeInstr) -> bool {
             | Opcode::AssertRATStk(..)
             | Opcode::Await
             | Opcode::AwaitAll(..)
+            | Opcode::AwaitLowPri
             | Opcode::BareThis(..)
             | Opcode::BaseC(..)
             | Opcode::BaseGC(..)
@@ -1352,6 +1354,7 @@ fn is_checkpoint_instr(instr: &NodeInstr) -> bool {
             | Opcode::CheckThis
             | Opcode::ClassGetC(..)
             | Opcode::ClassGetTS
+            | Opcode::ClassGetTSWithGenerics
             | Opcode::ClassHasReifiedGenerics
             | Opcode::ClassName
             | Opcode::Clone
@@ -1435,6 +1438,7 @@ fn is_checkpoint_instr(instr: &NodeInstr) -> bool {
             | Opcode::QueryM(..)
             | Opcode::RaiseClassStringConversionNotice
             | Opcode::RecordReifiedGeneric
+            | Opcode::ReifiedInit(..)
             | Opcode::Req
             | Opcode::ReqDoc
             | Opcode::ReqOnce
@@ -1529,6 +1533,7 @@ fn clean_opcode(opcode: &Opcode) -> Opcode {
         | Opcode::ArrayMarkLegacy
         | Opcode::ArrayUnmarkLegacy
         | Opcode::Await
+        | Opcode::AwaitLowPri
         | Opcode::BaseH
         | Opcode::BitAnd
         | Opcode::BitNot
@@ -1550,6 +1555,7 @@ fn clean_opcode(opcode: &Opcode) -> Opcode {
         | Opcode::CheckThis
         | Opcode::ClassGetC(_)
         | Opcode::ClassGetTS
+        | Opcode::ClassGetTSWithGenerics
         | Opcode::ClassHasReifiedGenerics
         | Opcode::ClassName
         | Opcode::Clone
@@ -1634,6 +1640,7 @@ fn clean_opcode(opcode: &Opcode) -> Opcode {
         | Opcode::VerifyRetNonNullC
         | Opcode::VerifyRetTypeC
         | Opcode::VerifyRetTypeTS
+        | Opcode::VerifyTypeTS
         | Opcode::WHResult
         | Opcode::Yield
         | Opcode::YieldK => opcode.clone(),
@@ -1649,6 +1656,7 @@ fn clean_opcode(opcode: &Opcode) -> Opcode {
         Opcode::PushL(_) => Opcode::PushL(Local::INVALID),
         Opcode::SetL(_) => Opcode::SetL(Local::INVALID),
         Opcode::UnsetL(_) => Opcode::UnsetL(Local::INVALID),
+        Opcode::ReifiedInit(..) => Opcode::ReifiedInit(Local::INVALID),
 
         Opcode::AwaitAll(_) => Opcode::AwaitAll(LocalRange::EMPTY),
         Opcode::Enter(_) => Opcode::Enter(Label::INVALID),

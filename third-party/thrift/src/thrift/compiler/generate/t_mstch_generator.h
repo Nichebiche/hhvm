@@ -31,14 +31,16 @@
 
 namespace apache::thrift::compiler {
 
-class t_mstch_generator : public t_whisker_base_generator {
+class t_mstch_generator : public t_whisker_generator {
  public:
-  using t_whisker_base_generator::t_whisker_base_generator;
+  using t_whisker_generator::t_whisker_generator;
 
+  using compiler_options_map = t_whisker_generator::compiler_options_map;
   void process_options(
       const std::map<std::string, std::string>& options) override {
-    options_ = options;
-    mstch_context_.options = options;
+    t_whisker_generator::process_options(options);
+    mstch_context_.options = compiler_options();
+    mstch_context_.prototypes = render_state().prototypes.get();
   }
 
  protected:
@@ -70,7 +72,7 @@ class t_mstch_generator : public t_whisker_base_generator {
    */
   const std::string& get_template(const std::string& template_name);
 
-  using t_whisker_base_generator::render;
+  using t_whisker_generator::render;
   /**
    * Render the mstch template with name `template_name` in the given context.
    */
@@ -209,17 +211,15 @@ class t_mstch_generator : public t_whisker_base_generator {
     }
   }
 
+  // DEPRECATED: use has_compiler_option() instead
   bool has_option(const std::string& option) const;
+  // DEPRECATED: use get_compiler_option() instead
   std::optional<std::string> get_option(const std::string& option) const;
-  const std::map<std::string, std::string>& options() const { return options_; }
+  // DEPRECATED: use compiler_options() instead
+  const compiler_options_map& options() const { return compiler_options(); }
 
  private:
-  /**
-   * Option pairs specified on command line for influencing generation behavior.
-   */
-  std::map<std::string, std::string> options_;
-
-  whisker::map globals() const final;
+  whisker::map::raw globals() const final;
   strictness_options strictness() const final;
 
   /**

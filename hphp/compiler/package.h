@@ -66,6 +66,9 @@ struct Package {
   Optional<std::chrono::microseconds> ondemandTime() const {
     return m_ondemandMicros;
   }
+  Optional<std::chrono::microseconds> filteredPackageTime() const {
+    return m_filteredPackageMicros;
+  }
 
   void addSourceFile(const std::string& fileName);
   void addInputList(const std::string& listFileName);
@@ -276,8 +279,11 @@ struct Package {
   using EmitCallback = std::function<
     folly::coro::Task<EmitCallBackResult>(const std::vector<std::filesystem::path>&, bool)
   >;
-  folly::coro::Task<bool> emit(const UnitIndex&, const EmitCallback&,
-                               const LocalCallback&, const std::filesystem::path&);
+  folly::coro::Task<bool> emit(const UnitIndex&,
+                               const EmitCallback&,
+                               const LocalCallback&,
+                               const std::filesystem::path&,
+                               const std::filesystem::path&);
 
 private:
 
@@ -304,12 +310,18 @@ private:
     std::vector<SymbolRefEdge> m_edges;
   };
 
+  struct EmitInfo {
+    OndemandInfo m_ondemand;
+    std::vector<StringData *> m_files_in_build;
+  };
+
   // Partition all files specified for this package into groups.
   // If filterFiles/Dirs==true, ignore excluded files and/or directories
   // according to options.
-  folly::coro::Task<Groups> groupAll(bool filterFiles, bool filterDirs);
-  folly::coro::Task<GroupResult>
-  groupDirectories(std::string, bool filterFiles, bool filterDirs);
+  folly::coro::Task<Groups> groupAll(std::set<std::string>& directoires,
+      bool filterFiles, bool filterDirs, bool failHard = true);
+  folly::coro::Task<GroupResult> groupDirectories(std::string,
+      bool filterFiles, bool filterDirs, bool failHard = true);
   void groupFiles(Groups&, FileAndSizeVec);
 
   folly::coro::Task<void> prepareInputs(Group,
@@ -331,9 +343,12 @@ private:
 
   folly::coro::Task<void> emitAll(const EmitCallback&, const UnitIndex&,
                                   const std::filesystem::path&);
-  folly::coro::Task<OndemandInfo>
+  folly::coro::Task<void> emitAllPackageV2(const EmitCallback&, const UnitIndex&,
+                                           const std::filesystem::path&,
+                                           const std::filesystem::path&);
+  folly::coro::Task<EmitInfo>
   emitGroups(Groups, const EmitCallback&, const UnitIndex&, bool);
-  folly::coro::Task<OndemandInfo>
+  folly::coro::Task<EmitInfo>
   emitGroup(Group, const EmitCallback&, const UnitIndex&, bool);
 
   void resolveOnDemand(OndemandInfo&, const StringData* fromFile,
@@ -348,6 +363,7 @@ private:
   std::atomic<size_t> m_total;
   Optional<std::chrono::microseconds> m_inputMicros;
   Optional<std::chrono::microseconds> m_ondemandMicros;
+  Optional<std::chrono::microseconds> m_filteredPackageMicros;
 
   folly_concurrent_hash_map_simd<std::string, bool> m_filesToParse;
   std::set<std::string> m_directories;

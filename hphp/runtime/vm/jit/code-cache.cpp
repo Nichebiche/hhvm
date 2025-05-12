@@ -16,27 +16,21 @@
 
 #include "hphp/runtime/vm/jit/code-cache.h"
 
-#include "hphp/runtime/vm/func.h"
-#include "hphp/runtime/vm/jit/mcgen.h"
 #include "hphp/runtime/vm/jit/tc.h"
-#include "hphp/runtime/vm/jit/trans-db.h"
-#include "hphp/runtime/vm/jit/translator.h"
 
 #include "hphp/runtime/base/program-functions.h"
 
 #include "hphp/util/alloc.h"
 #include "hphp/util/asm-x64.h"
-#include "hphp/util/bump-mapper.h"
 #include "hphp/util/configs/codecache.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/hugetlb.h"
-#include "hphp/util/managed-arena.h"
 #include "hphp/util/numa.h"
 #include "hphp/util/trace.h"
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -147,13 +141,38 @@ CodeCache::CodeCache() {
     m_totalSize, lowArenaStart, usedBase
   );
 #endif
+  // Use MAP_FIXED_NOREPLACE instead of MAP_FIXED so we actually get
+  // an error if we overlap with an existing mapping.
   auto const allocBase =
     (uintptr_t)mmap(reinterpret_cast<void*>(usedBase), m_totalSize,
                     PROT_READ | PROT_WRITE,
-                    MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
-  always_assert_flog(allocBase == usedBase,
-                     "mmap failed for translation cache (errno = {})",
-                     errno);
+                    MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED_NOREPLACE, -1, 0);
+  if (allocBase != usedBase) {
+#ifdef FOLLY_SANITIZE
+    // If we hit an already existing mapping when running sanitizers,
+    // it's almost certainly because of the ASAN shadow region (which
+    // starts just below the 2GB mark). Keep halving the TC size until
+    // we no longer collide. This isn't a big deal because we don't
+    // expect to run the JIT that much when running sanitizers.
+    if (errno == EEXIST) {
+      if (Cfg::Server::Mode) {
+        Logger::FWarning(
+          "Reducing TC sizes from {:,} to {:,}, "
+          "due to possible ASAN collision\n",
+          m_totalSize, m_totalSize / 2
+        );
+      }
+      cutTCSizeTo(m_totalSize / 2);
+      new (this) CodeCache;
+      return;
+    }
+#endif
+    always_assert_flog(
+      false,
+      "mmap failed for translation cache (error = {})",
+      errno == EEXIST ? "allocated range overlap" : strerror(errno)
+    );
+  }
   always_assert_flog(allocBase >= tc_start_address(),
                      "unexpected tc start address movement");
   CodeAddress base = reinterpret_cast<CodeAddress>(usedBase);

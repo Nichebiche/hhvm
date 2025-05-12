@@ -32,7 +32,6 @@ abstract class ThriftClientBase implements IThriftClient {
   protected ?IThriftMigrationAsyncChannel $channel_;
   protected TClientAsyncHandler $asyncHandler_;
   protected TClientEventHandler $eventHandler_;
-  protected ?string $frameMetadata_;
   protected ?RpcOptions $options_;
 
   protected int $seqid_ = 0;
@@ -85,14 +84,7 @@ abstract class ThriftClientBase implements IThriftClient {
     return $this->eventHandler_;
   }
 
-  public function setHHFrameMetadata(
-    string $frame_metadata,
-  )[write_props]: this {
-    $this->frameMetadata_ = $frame_metadata;
-    return $this;
-  }
-
-  public function getHHFrameMetadata()[]: ?string {
+  final public function getHHFrameMetadata()[]: ?string {
     return null;
   }
 
@@ -331,10 +323,11 @@ abstract class ThriftClientBase implements IThriftClient {
     int $expectedsequenceid,
     RpcOptions $rpc_options,
     shape(?'read_options' => int) $options = shape(),
-  ): Awaitable<TRet> {
+  ): Awaitable<(TRet, ?dict<string, string>)> {
     $channel = $this->channel_;
     $out_transport = $this->output_->getTransport();
     $in_transport = $this->input_->getTransport();
+    $read_headers = null;
     if (
       $channel !== null &&
       $out_transport is \TMemoryBuffer &&
@@ -342,7 +335,7 @@ abstract class ThriftClientBase implements IThriftClient {
     ) {
       $msg = $out_transport->getBuffer();
       $out_transport->resetBuffer();
-      list($result_msg, $_read_headers) =
+      list($result_msg, $read_headers) =
         await $channel->genSendRequestResponse($rpc_options, $msg);
       $in_transport->resetBuffer();
       $in_transport->write($result_msg);
@@ -357,7 +350,7 @@ abstract class ThriftClientBase implements IThriftClient {
       $options,
     );
     await $this->asyncHandler_->genAfter<TRet>($name, $response);
-    return $response;
+    return tuple($response, $read_headers);
   }
 
   protected async function genAwaitNoResponse(

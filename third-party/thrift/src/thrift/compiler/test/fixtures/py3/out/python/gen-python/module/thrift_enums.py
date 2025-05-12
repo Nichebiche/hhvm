@@ -13,11 +13,9 @@ import apache.thrift.metadata.thrift_types as _fbthrift_metadata
 import fbcode.thrift.python.types as _fbthrift_python_types
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_AnEnum:
-    pass
 
 
-class AnEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_AnEnum):
+class AnEnum(_fbthrift_python_types.Enum, int):
     NOTSET = 0
     ONE = 1
     TWO = 2
@@ -38,20 +36,16 @@ class AnEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_AnEnum)
     def _to_python(self) -> "AnEnum":
         return self
 
-    def _to_py3(self) -> "module.types.AnEnum": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.AnEnum(self.value)
+    def _to_py3(self) -> "AnEnum":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_AnEnumRenamed:
-    pass
 
 
-class AnEnumRenamed(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_AnEnumRenamed):
+class AnEnumRenamed(_fbthrift_python_types.Enum, int):
     name_ = 0
     value_ = 1
     renamed_ = 2
@@ -70,20 +64,16 @@ class AnEnumRenamed(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_
     def _to_python(self) -> "AnEnumRenamed":
         return self
 
-    def _to_py3(self) -> "module.types.AnEnumRenamed": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.AnEnumRenamed(self.value)
+    def _to_py3(self) -> "AnEnumRenamed":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_Flags:
-    pass
 
 
-class Flags(_fbthrift_python_types.Flag, _fbthrift_compatible_with_Flags):
+class Flags(_fbthrift_python_types.Flag):
     flag_A = 1
     flag_B = 2
     flag_C = 4
@@ -103,10 +93,8 @@ class Flags(_fbthrift_python_types.Flag, _fbthrift_compatible_with_Flags):
     def _to_python(self) -> "Flags":
         return self
 
-    def _to_py3(self) -> "module.types.Flags": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.Flags(self.value)
+    def _to_py3(self) -> "Flags":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value

@@ -48,7 +48,7 @@ struct Qualifiers {
   1: optional i32 opt;
   2: i32 unq = 1;
   @thrift.TerseWrite
-  3: i32 terse = 2;
+  3: i32 terse;
 }
 
 struct Cookie {
@@ -135,3 +135,17 @@ struct ReadRemaining {
 
 @cpp.UseCursorSerialization
 typedef ReadRemaining ReadRemainingWrapper
+
+@cpp.UseCursorSerialization
+struct Refs {
+  @cpp.Ref{type = cpp.RefType.Unique}
+  1: optional Empty unique;
+  @cpp.Ref{type = cpp.RefType.Shared}
+  2: optional Empty shared;
+  @cpp.Ref{type = cpp.RefType.SharedMutable}
+  3: optional Empty shared_mutable;
+  @thrift.Box
+  4: optional Empty box;
+  @thrift.InternBox
+  5: Empty intern_box;
+}

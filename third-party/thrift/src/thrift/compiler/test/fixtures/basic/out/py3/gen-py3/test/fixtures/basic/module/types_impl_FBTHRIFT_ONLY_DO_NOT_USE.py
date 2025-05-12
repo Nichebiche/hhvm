@@ -12,88 +12,8 @@ import test.fixtures.basic.module.thrift_enums as _fbthrift_python_enums
 _fbthrift__module_name__ = "test.fixtures.basic.module.types"
 
 
-
-class MyEnum(thrift.py3.types.CompiledEnum):
-    MyValue1 = 0
-    MyValue2 = 1
-
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    @staticmethod
-    def __get_metadata__():
-        return _fbthrift_python_enums.gen_metadata_enum_MyEnum()
-
-    @staticmethod
-    def __get_thrift_name__():
-        return "module.MyEnum"
-
-    def _to_python(self):
-        return _fbthrift_python_enums.MyEnum(self._fbthrift_value_)
-
-    def _to_py3(self):
-        return self
-
-    def _to_py_deprecated(self):
-        return self._fbthrift_value_
-
-    def __lt__(self, other):
-        if isinstance(other, MyEnum):
-            return self._fbthrift_value_ < other._fbthrift_value_
-
-        raise NotImplementedError(
-            "'<' only implemented for comparisons with MyEnum"
-        )
-
-    def __int__(self):
-        return self._fbthrift_value_
-
-    def __index__(self):
-        return self._fbthrift_value_
-
-
-
-
-class HackEnum(thrift.py3.types.CompiledEnum):
-    Value1 = 0
-    Value2 = 1
-
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    @staticmethod
-    def __get_metadata__():
-        return _fbthrift_python_enums.gen_metadata_enum_HackEnum()
-
-    @staticmethod
-    def __get_thrift_name__():
-        return "module.HackEnum"
-
-    def _to_python(self):
-        return _fbthrift_python_enums.HackEnum(self._fbthrift_value_)
-
-    def _to_py3(self):
-        return self
-
-    def _to_py_deprecated(self):
-        return self._fbthrift_value_
-
-    def __lt__(self, other):
-        if isinstance(other, HackEnum):
-            return self._fbthrift_value_ < other._fbthrift_value_
-
-        raise NotImplementedError(
-            "'<' only implemented for comparisons with HackEnum"
-        )
-
-    def __int__(self):
-        return self._fbthrift_value_
-
-    def __index__(self):
-        return self._fbthrift_value_
-
-
-
+MyEnum = _fbthrift_python_enums.MyEnum
+HackEnum = _fbthrift_python_enums.HackEnum
 
 
 class __MyUnionType(enum.Enum):
@@ -106,11 +26,9 @@ class __MyUnionType(enum.Enum):
     __module__ = _fbthrift__module_name__
     __slots__ = ()
 
-
 class __UnionToBeRenamedType(enum.Enum):
     reserved_field = 1
     EMPTY = 0
 
     __module__ = _fbthrift__module_name__
     __slots__ = ()
-

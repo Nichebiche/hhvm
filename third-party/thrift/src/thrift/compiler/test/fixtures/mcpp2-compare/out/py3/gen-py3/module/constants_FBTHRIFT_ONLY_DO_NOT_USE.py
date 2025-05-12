@@ -6,8 +6,8 @@
 #
 import thrift.py3.types
 
-import module.types as _module_types
-import includes.types as _includes_types
+import module.types
+import includes.types
 
 from module.containers_FBTHRIFT_ONLY_DO_NOT_USE import (
     Map__string_i64,
@@ -48,7 +48,6 @@ from module.containers_FBTHRIFT_ONLY_DO_NOT_USE import (
     Set__bool,
     Set__Set__bool,
     Set__Set__Set__bool,
-    Map__Bar__double_Baz__i32,
     folly_small_vector_int64_t_8__List__i64,
     folly_sorted_vector_set_std_string__Set__string,
     FakeMap__Map__i64_double,
@@ -57,8 +56,6 @@ from module.containers_FBTHRIFT_ONLY_DO_NOT_USE import (
     std_deque__List__string,
     folly_sorted_vector_set__Set__string,
     folly_sorted_vector_map__Map__i64_string,
-    List__Bar__double,
-    Set__Baz__i32,
     Map__string_folly_IOBuf__binary,
     Map__string_std_unique_ptr_folly_IOBuf__binary,
     Map__i32_string,
@@ -82,8 +79,8 @@ aMap = Map__i32_string( { 1: "foo", 2: "bar" })
 aSet = Set__string(("foo", "bar", ))
 aListOfLists = List__List__i32((List__i32((1, 3, 5, 7, 9, )), List__i32((2, 4, 8, 10, 12, )), ))
 states = List__Map__string_i32((Map__string_i32( { "San Diego": 3211000, "Sacramento": 479600, "SF": 837400 }), Map__string_i32( { "New York": 8406000, "Albany": 98400 }), ))
-AConstList = List__MyEnumA((_module_types.MyEnumA.fieldA, _module_types.MyEnumA.fieldB, __BadEnum(_module_types.MyEnumA, 3), ))
+AConstList = List__MyEnumA((module.types.MyEnumA.fieldA, module.types.MyEnumA.fieldB, __BadEnum(module.types.MyEnumA, 3), ))
 AnIntegerEnum2 = 2
 ListOfIntsFromEnums = List__i32((2, 1, ))
-constEnumA = _module_types.MyEnumA.fieldB
-constEnumB = __BadEnum(_module_types.MyEnumA, 3)
+constEnumA = module.types.MyEnumA.fieldB
+constEnumB = __BadEnum(module.types.MyEnumA, 3)

@@ -17,6 +17,7 @@
 
 #include "hphp/runtime/vm/srckey.h"
 #include "hphp/runtime/vm/jit/extra-data.h"
+#include "hphp/runtime/vm/jit/region-selection.h"
 
 namespace HPHP {
 
@@ -27,6 +28,26 @@ namespace jit {
 struct SSATmp;
 
 namespace irgen {
+
+struct RegionAndLazyUnit {
+  RegionAndLazyUnit(
+    SrcKey callerSk,
+    RegionDescPtr region
+  );
+  ~RegionAndLazyUnit() = default;
+  RegionAndLazyUnit(RegionAndLazyUnit&&) = default;
+  RegionAndLazyUnit& operator=(RegionAndLazyUnit&&) = default;
+  RegionAndLazyUnit(const RegionAndLazyUnit&) = delete;
+  RegionAndLazyUnit& operator=(const RegionAndLazyUnit&) = delete;
+
+  IRUnit* unit() const;
+  RegionDescPtr region() const { return m_region; }
+private:
+  SrcKey m_callerSk;
+  RegionDescPtr m_region;
+  mutable std::unique_ptr<IRUnit> m_unit;
+};
+
 
 struct IRGS;
 
@@ -52,7 +73,7 @@ void sideExitFromInlined(IRGS&, SSATmp* target);
 /*
  * Emit an EndCatch equivalent from an inlined function.
  */
-bool endCatchFromInlined(IRGS&, EndCatchData::CatchMode mode, SSATmp* exc);
+void endCatchFromInlined(IRGS&, EndCatchData::CatchMode mode, SSATmp* exc);
 
 /*
  * Make sure all inlined frames are written on the stack and a part of the FP
@@ -66,7 +87,12 @@ bool spillInlinedFrames(IRGS& env);
  */
 SSATmp* genCalleeFP(IRGS& env, const Func* callee);
 
+/**
+ * Stitch callee's IRUnit into caller's IRGS.
+ */
+bool stitchInlinedRegion(irgen::IRGS& irgs, SrcKey callerSk, SrcKey calleeSk,
+                         const RegionDesc& calleeRegion, IRUnit& calleeUnit);
+
 ///////////////////////////////////////////////////////////////////////////////
 
 }}}
-

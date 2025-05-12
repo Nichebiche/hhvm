@@ -11,8 +11,8 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.95"
-async-trait = "0.1.71"
-base64 = "0.21"
+async-trait = "0.1.86"
+base64 = { version = "0.21", features = ["alloc"] }
 bufsize = "1.0.8"
 bytes = { version = "1.9.0", features = ["serde"] }
 futures = { version = "0.3.30", features = ["async-await", "compat"] }
@@ -21,7 +21,7 @@ num-derive = "0.4.2"
 num-traits = { version = "0.2.18", default-features = false }
 ordered-float = { version = "3.7", features = ["serde"] }
 panic-message = "0.3"
-serde_json = { version = "1.0.132", features = ["float_roundtrip", "unbounded_depth"] }
+serde_json = { version = "1.0.140", features = ["float_roundtrip", "unbounded_depth"] }
 thiserror = "2"
 
 [dev-dependencies]

@@ -50,9 +50,18 @@ let print_ty_with_identity env ty sym_occurrence sym_definition =
     sym_occurrence
     sym_definition
 
-let ty_to_json env ?show_like_ty ty = Typing_print.to_json env ?show_like_ty ty
+let print_decl_ty_with_identity env ty sym_occurrence sym_definition =
+  Typing_print.full_decl_with_identity
+    ~verbose_fun:false
+    env
+    ty
+    sym_occurrence
+    sym_definition
 
-let json_to_locl_ty = Typing_print.json_to_locl_ty
+let ty_to_json env ?show_like_ty ty =
+  Typing_json.from_locl_ty env ?show_like_ty ty
+
+let json_to_locl_ty = Typing_json.to_locl_ty
 
 let get_self_id = Typing_env.get_self_id
 
@@ -67,20 +76,18 @@ let get_self_ty_exn env =
 
 let get_class = Typing_env.get_class
 
-let get_class_or_typedef env x =
+let get_class_or_typedef env x : class_or_typedef_result Decl_entry.t =
   match Typing_env.get_class_or_typedef env x with
-  | Decl_entry.Found (Typing_env.ClassResult cd) ->
-    Decl_entry.Found (ClassResult cd)
-  | Decl_entry.Found (Typing_env.TypedefResult td) ->
-    Decl_entry.Found (TypedefResult td)
-  | Decl_entry.DoesNotExist -> Decl_entry.DoesNotExist
-  | Decl_entry.NotYetAvailable -> Decl_entry.NotYetAvailable
+  | Found (ClassResult cd) -> Found (ClassResult cd)
+  | Found (TypedefResult td) -> Found (TypedefResult td)
+  | DoesNotExist -> DoesNotExist
+  | NotYetAvailable -> NotYetAvailable
 
 let is_in_expr_tree = Typing_env.is_in_expr_tree
 
 let inside_expr_tree = Typing_env.inside_expr_tree
 
-let outside_expr_tree = Typing_env.outside_expr_tree
+let outside_expr_tree = Typing_env.outside_expr_tree ~macro_variables:None
 
 let is_static = Typing_env.is_static
 
@@ -128,6 +135,10 @@ let strip_supportdyn env ty =
   let (sd, _, ty) = Typing_utils.strip_supportdyn env ty in
   (sd, ty)
 
+let get_underlying_function_type env ty =
+  let (_, opt_ft) = Typing_utils.get_underlying_function_type env ty in
+  opt_ft
+
 let set_static = Typing_env.set_static
 
 let set_val_kind = Typing_env.set_val_kind
@@ -172,10 +183,9 @@ let get_receiver_ids env ty =
     | Tunion tys
     | Tintersection tys ->
       List.fold tys ~init:acc ~f:(aux seen)
-    | Tgeneric (name, targs) when not (List.mem ~equal:String.equal seen name)
-      ->
+    | Tgeneric name when not (List.mem ~equal:String.equal seen name) ->
       let seen = name :: seen in
-      let upper_bounds = Typing_env.get_upper_bounds env name targs in
+      let upper_bounds = Typing_env.get_upper_bounds env name in
       Typing_set.fold (fun ty acc -> aux seen acc ty) upper_bounds acc
     | Tdynamic -> [RIdynamic]
     | Tany _ -> [RIany]
@@ -206,7 +216,7 @@ let get_label_receiver_ty env ty =
   let (env, _ty_err) = Typing_solver.close_tyvars_and_solve env in
   Typing_env.expand_type env ty_in
 
-let non_null = Typing_solver.non_null
+let intersect_with_nonnull = Typing_intersection.intersect_with_nonnull
 
 let get_concrete_supertypes =
   Typing_utils.get_concrete_supertypes ~include_case_types:false
@@ -307,24 +317,23 @@ let referenced_typeconsts env root ids =
 
 let empty ctx = Typing_env_types.empty ctx Relative_path.default ~droot:None
 
-let restore_saved_env env saved_env =
-  let module Env = Typing_env_types in
+let restore_saved_env (env : t) (saved_env : Tast.saved_env) : t =
   let ctx =
-    Provider_context.map_tcopt env.Env.decl_env.Decl_env.ctx ~f:(fun _tcopt ->
-        saved_env.Tast.tcopt)
+    Provider_context.map_tcopt env.decl_env.ctx ~f:(fun _tcopt ->
+        saved_env.tcopt)
   in
-  let decl_env = { env.Env.decl_env with Decl_env.ctx } in
+  let decl_env = { env.decl_env with ctx } in
   {
     env with
-    Env.decl_env;
-    Env.genv = { env.Env.genv with Env.tcopt = saved_env.Tast.tcopt };
-    Env.inference_env =
+    decl_env;
+    genv = { env.genv with tcopt = saved_env.tcopt };
+    inference_env =
       Typing_inference_env.simple_merge
-        env.Env.inference_env
-        saved_env.Tast.inference_env;
-    Env.tpenv = saved_env.Tast.tpenv;
-    Env.fun_tast_info = saved_env.Tast.fun_tast_info;
-    Env.checked = saved_env.Tast.checked;
+        env.inference_env
+        saved_env.inference_env;
+    tpenv = saved_env.tpenv;
+    fun_tast_info = saved_env.fun_tast_info;
+    checked = saved_env.checked;
   }
 
 module EnvFromDef = Typing_env_from_def
@@ -374,12 +383,20 @@ let gconst_env ctx cst =
   let env = EnvFromDef.gconst_env ~origin:Decl_counters.Tast ctx cst in
   restore_saved_env env cst.cst_annotation
 
+let module_env ctx md =
+  let ctx =
+    Provider_context.map_tcopt ctx ~f:(fun _tcopt -> md.md_annotation.tcopt)
+  in
+  let env = EnvFromDef.module_env ~origin:Decl_counters.Tast ctx md in
+  restore_saved_env env md.md_annotation
+
 let def_env ctx d =
   match d with
   | Fun x -> fun_env ctx x
   | Class x -> class_env ctx x
   | Typedef x -> typedef_env ctx x
   | Constant x -> gconst_env ctx x
+  | Module x -> module_env ctx x
   (* TODO T44306013 *)
   (* The following nodes are included in the TAST, but are not typechecked.
    * However, we need to return an env here so for now create an empty env using
@@ -390,8 +407,7 @@ let def_env ctx d =
   | NamespaceUse _
   | SetNamespaceEnv _
   | SetModule _
-  | FileAttributes _
-  | Module _ ->
+  | FileAttributes _ ->
     empty ctx
 
 let typing_env_as_tast_env env = env
@@ -438,6 +454,8 @@ let get_const env cls name = Typing_env.get_const env cls name
 
 let consts env cls = Typing_env.consts env cls
 
+let get_static_member = Typing_env.get_static_member
+
 let fill_in_pos_filename_if_in_current_decl =
   Typing_env.fill_in_pos_filename_if_in_current_decl
 
@@ -446,3 +464,10 @@ let is_hhi = Typing_env.is_hhi
 let get_check_status env : check_status = env.Typing_env_types.checked
 
 let get_current_decl_and_file = Typing_env.get_current_decl_and_file
+
+let derive_instantiation env =
+  Derive_type_instantiation.derive_instantiation env
+
+let add_typing_error = Typing_error_utils.add_typing_error
+
+let add_warning = Typing_warning_utils.add

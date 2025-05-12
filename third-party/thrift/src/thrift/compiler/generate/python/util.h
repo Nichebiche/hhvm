@@ -37,9 +37,9 @@ bool is_type_iobuf(std::string_view name);
 
 bool is_type_iobuf(const t_type* type);
 
-bool is_unsafe_patch_program(const t_program* prog);
+bool is_patch_program(const t_program* prog);
 
-bool type_contains_unsafe_patch(const t_type* type);
+bool type_contains_patch(const t_type* type);
 
 std::vector<std::string> get_py3_namespace(const t_program* prog);
 
@@ -100,7 +100,8 @@ std::string_view get_python_name_override(const T& node) {
       return name->get_string();
     }
   }
-  if (const auto* name = node.find_annotation_or_null("py3.name")) {
+  if (const auto* name =
+          node.find_unstructured_annotation_or_null("py3.name")) {
     return *name;
   }
   return {};
@@ -149,6 +150,10 @@ std::string get_py3_name_class_scope(
   }
   return name;
 }
+
+// can put this back into python_capi when python_capi_converter removed from
+// thrift-py3
+std::string gen_capi_module_prefix_impl(const t_program* program);
 
 } // namespace python
 } // namespace apache::thrift::compiler

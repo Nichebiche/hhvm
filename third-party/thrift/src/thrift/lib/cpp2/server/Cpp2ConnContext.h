@@ -35,6 +35,7 @@
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/PluggableFunction.h>
 #include <thrift/lib/cpp2/async/Interaction.h>
+#include <thrift/lib/cpp2/async/InterceptorFlags.h>
 #include <thrift/lib/cpp2/server/ServiceInterceptorStorage.h>
 #include <thrift/lib/cpp2/util/TypeErasedValue.h>
 #include <thrift/lib/thrift/gen-cpp2/RpcMetadata_types.h>
@@ -124,6 +125,8 @@ class Cpp2ConnContext : public apache::thrift::server::TConnectionContext {
               transport->getPeerCertificate())) {
         peerCert = std::move(osslCert);
       }
+      transportInfo_.receivedCert =
+          (transport->getPeerCertificate() != nullptr);
       transportInfo_.securityProtocol = transport->getSecurityProtocol();
       transportInfo_.cachedEkms = detail::populateCachedEkms(*transport);
 
@@ -285,6 +288,8 @@ class Cpp2ConnContext : public apache::thrift::server::TConnectionContext {
     }
     return nullptr;
   }
+
+  bool peerCertReceived() const { return transportInfo_.receivedCert; }
 
   /**
    * Get the user data field.
@@ -543,6 +548,9 @@ class Cpp2ConnContext : public apache::thrift::server::TConnectionContext {
     std::string securityProtocol;
     std::shared_ptr<X509> peerCertificate;
     std::vector<detail::EkmInfo> cachedEkms;
+    // We may not save the peer cert in this object and we may still
+    // need some signal as to whether a cert was received
+    bool receivedCert{false};
   } transportInfo_;
   const folly::AsyncTransport* transport_;
 
@@ -575,6 +583,7 @@ class Cpp2ConnContextInternalAPI {
  private:
   Cpp2ConnContext& connContext_;
 };
+class Cpp2RequestContextUnsafeAPI;
 } // namespace detail
 
 // Request-specific context
@@ -801,10 +810,25 @@ class Cpp2RequestContext : public apache::thrift::server::TConnectionContext {
     return &serviceInterceptorsStorage_.onRequest[index];
   }
 
+  const InterceptorFrameworkMetadataStorage* getInterceptorFrameworkMetadata() {
+    return &serviceInterceptorsStorage_.frameworkMetadata;
+  }
+
  protected:
   apache::thrift::server::TServerObserver::CallTimestamps timestamps_;
 
  private:
+  void initializeInterceptorFrameworkMetadata(
+      const folly::IOBuf& interceptorFrameworkMetadata) {
+    serviceInterceptorsStorage_.frameworkMetadata =
+        detail::deserializeFrameworkMetadata(interceptorFrameworkMetadata);
+  }
+
+  const InterceptorFrameworkMetadataStorage&
+  getServiceInterceptorFrameworkMetadata() {
+    return serviceInterceptorsStorage_.frameworkMetadata;
+  }
+
   Cpp2ConnContext* ctx_;
   folly::erased_unique_ptr requestData_{nullptr, nullptr};
   std::chrono::milliseconds requestTimeout_{0};
@@ -822,7 +846,34 @@ class Cpp2RequestContext : public apache::thrift::server::TConnectionContext {
       serviceInterceptorsStorage_;
   detail::RequestInternalFieldsT internalFields_;
   size_t wiredRequestBytes_{0};
+
+  friend class detail::Cpp2RequestContextUnsafeAPI;
 };
+
+namespace detail {
+class Cpp2RequestContextUnsafeAPI {
+ public:
+  explicit Cpp2RequestContextUnsafeAPI(Cpp2RequestContext& requestContext)
+      : requestContext_(requestContext) {}
+
+  void initializeInterceptorFrameworkMetadata(
+      const folly::IOBuf& interceptorFrameworkMetadata) {
+    if (!THRIFT_FLAG(enable_service_interceptor_framework_metadata)) {
+      return;
+    }
+    requestContext_.initializeInterceptorFrameworkMetadata(
+        interceptorFrameworkMetadata);
+  }
+
+  const InterceptorFrameworkMetadataStorage&
+  getServiceInterceptorFrameworkMetadata() {
+    return requestContext_.getServiceInterceptorFrameworkMetadata();
+  }
+
+ private:
+  Cpp2RequestContext& requestContext_;
+};
+} // namespace detail
 
 } // namespace apache::thrift
 

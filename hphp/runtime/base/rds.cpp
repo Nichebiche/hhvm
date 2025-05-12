@@ -23,7 +23,6 @@
 #include <vector>
 
 #include <folly/Bits.h>
-#include <folly/Hash.h>
 #include <folly/portability/SysMman.h>
 #include <folly/sorted_vector_types.h>
 #include <folly/String.h>
@@ -46,8 +45,6 @@
 #include "hphp/runtime/vm/jit/mcgen-translate.h"
 #include "hphp/runtime/vm/jit/prof-data-serialize.h"
 #include "hphp/runtime/vm/jit/vm-protect.h"
-#include "hphp/runtime/vm/treadmill.h"
-#include "hphp/runtime/vm/vm-regs.h"
 
 namespace HPHP::rds {
 
@@ -121,7 +118,7 @@ __thread bool s_settingPreAssignments{false};
 
 __thread std::atomic<bool> s_hasFullInit{false};
 
-struct IsProfile : boost::static_visitor<bool> {
+struct IsProfile {
   bool operator()(Profile) const { return true; }
   template<typename T>
   bool operator()(T) const { return false; }
@@ -454,7 +451,7 @@ Handle bindImpl(Symbol key, Mode mode, size_t sizeBytes,
   auto const handle = alloc(mode, sizeBytes, align, tyIndex, &key);
   recordRds(handle, sizeBytes, key);
 
-  if (shouldProfileAccesses() && !boost::apply_visitor(IsProfile(), key)) {
+  if (shouldProfileAccesses() && !std::visit(IsProfile(), key)) {
     // Allocate an integer in the local section to profile this
     // symbol.
     auto const profile = alloc(
@@ -477,7 +474,7 @@ Handle bindImpl(Symbol key, Mode mode, size_t sizeBytes,
         LinkTable::value_type(key, {handle, safe_cast<uint32_t>(sizeBytes)}))) {
     always_assert(0);
   }
-  if (!boost::apply_visitor(IsProfile(), key)) {
+  if (!std::visit(IsProfile(), key)) {
     s_handleTable.emplace(handle, RevLinkEntry {
       safe_cast<uint32_t>(sizeBytes), key
     });
@@ -502,7 +499,7 @@ void bindOnLinkImpl(std::atomic<Handle>& handle,
     auto const h = allocUnlocked(mode, size, align, tsi, &sym);
     recordRds(h, size, sym);
 
-    if (shouldProfileAccesses() && !boost::apply_visitor(IsProfile(), sym)) {
+    if (shouldProfileAccesses() && !std::visit(IsProfile(), sym)) {
       // Allocate an integer in the local section to profile this
       // symbol.
       auto const profile = allocUnlocked(

@@ -17,7 +17,6 @@
 
 #include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/jit/analysis.h"
-#include "hphp/runtime/vm/jit/types.h"
 #include "hphp/runtime/vm/jit/irgen.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
 #include "hphp/runtime/vm/jit/irgen-inlining.h"
@@ -141,8 +140,14 @@ void asyncFunctionReturn(IRGS& env, SSATmp* retVal, bool suspended) {
   // Call stub that will mark this AFWH as finished, unblock parents and
   // possibly take fast path to resume parent. Leave SP pointing to a single
   // uninitialized cell which will be filled by the stub.
-  gen(env, AsyncFuncRet, IRSPRelOffsetData { spAdjust }, sp(env), fp(env),
-      retVal);
+  // Always use the slow path if `FastMethodInterceptNoAsyncOpt` is set.
+  if (LIKELY(!Cfg::Eval::FastMethodInterceptNoAsyncOpt)) {
+    gen(env, AsyncFuncRet, IRSPRelOffsetData { spAdjust }, sp(env), fp(env),
+        retVal);
+  } else {
+    gen(env, AsyncFuncRetSlow, IRSPRelOffsetData { spAdjust }, sp(env), fp(env),
+        retVal);
+  }
 }
 
 void generatorReturn(IRGS& env, SSATmp* retval) {

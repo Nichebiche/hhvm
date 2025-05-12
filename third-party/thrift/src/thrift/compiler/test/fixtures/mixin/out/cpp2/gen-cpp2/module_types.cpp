@@ -72,7 +72,7 @@ Mixin1::Mixin1(apache::thrift::FragileConstructor, ::std::string field1__arg) :
 
 void Mixin1::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_field1 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field1 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -98,6 +98,7 @@ void swap([[maybe_unused]] Mixin1& a, [[maybe_unused]] Mixin1& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Mixin1::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Mixin1::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Mixin1::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -106,6 +107,7 @@ template void Mixin1::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Mixin1::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Mixin1::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Mixin1::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -174,7 +176,7 @@ Mixin2::Mixin2(apache::thrift::FragileConstructor, ::cpp2::Mixin1 m1__arg, ::std
 void Mixin2::__fbthrift_clear() {
   // clear all fields
   ::apache::thrift::clear(this->__fbthrift_field_m1);
-  this->__fbthrift_field_field2 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field2 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -217,6 +219,7 @@ void swap([[maybe_unused]] Mixin2& a, [[maybe_unused]] Mixin2& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Mixin2::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Mixin2::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Mixin2::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -225,6 +228,7 @@ template void Mixin2::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Mixin2::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Mixin2::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Mixin2::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -294,7 +298,7 @@ Mixin3Base::Mixin3Base(apache::thrift::FragileConstructor, ::std::string field3_
 
 void Mixin3Base::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_field3 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field3 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -320,6 +324,7 @@ void swap([[maybe_unused]] Mixin3Base& a, [[maybe_unused]] Mixin3Base& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Mixin3Base::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Mixin3Base::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Mixin3Base::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -328,6 +333,7 @@ template void Mixin3Base::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Mixin3Base::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Mixin3Base::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Mixin3Base::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -399,7 +405,7 @@ Foo::Foo(apache::thrift::FragileConstructor, ::std::string field4__arg, ::cpp2::
 
 void Foo::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_field4 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field4 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   ::apache::thrift::clear(this->__fbthrift_field_m2);
   ::apache::thrift::clear(this->__fbthrift_field_m3);
   __isset = {};
@@ -445,6 +451,7 @@ void swap([[maybe_unused]] Foo& a, [[maybe_unused]] Foo& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Foo::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Foo::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Foo::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -453,6 +460,7 @@ template void Foo::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Foo::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Foo::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Foo::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<

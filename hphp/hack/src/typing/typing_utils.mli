@@ -63,6 +63,12 @@ val sub_type_with_dynamic_as_bottom : sub_type_with_dynamic_as_bottom
 type is_sub_type_type =
   Typing_env_types.env -> Typing_defs.locl_ty -> Typing_defs.locl_ty -> bool
 
+type is_sub_type_opt_type =
+  Typing_env_types.env ->
+  Typing_defs.locl_ty ->
+  Typing_defs.locl_ty ->
+  bool option
+
 val is_sub_type_ref : is_sub_type_type ref
 
 val is_sub_type :
@@ -92,6 +98,14 @@ val is_sub_type_ignore_generic_params_ref : is_sub_type_type ref
 
 val is_sub_type_ignore_generic_params :
   Typing_env_types.env -> Typing_defs.locl_ty -> Typing_defs.locl_ty -> bool
+
+val is_sub_type_opt_ignore_generic_params_ref : is_sub_type_opt_type ref
+
+val is_sub_type_opt_ignore_generic_params :
+  Typing_env_types.env ->
+  Typing_defs.locl_ty ->
+  Typing_defs.locl_ty ->
+  bool option
 
 val can_sub_type_ref : is_sub_type_type ref
 
@@ -483,6 +497,20 @@ val strip_supportdyn :
   Typing_env_types.env ->
   Typing_defs.locl_ty ->
   bool * Typing_env_types.env * Typing_defs.locl_ty
+
+val get_underlying_function_type :
+  Typing_env_types.env ->
+  Typing_defs.locl_ty ->
+  Typing_env_types.env
+  * (Typing_reason.t * Typing_defs.locl_ty Typing_defs.fun_type) option
+
+val map_supportdyn :
+  Typing_env_types.env ->
+  Typing_defs.locl_ty ->
+  (Typing_env_types.env ->
+  Typing_defs.locl_ty ->
+  Typing_env_types.env * Typing_defs.locl_ty) ->
+  Typing_env_types.env * Typing_defs.locl_ty
 
 val no_upper_bound :
   include_sd_mixed:bool ->

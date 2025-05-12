@@ -526,7 +526,15 @@ fn read_member_modifiers<'b>(modifiers: impl Iterator<Item = &'b Node>) -> Modif
     };
     for modifier in modifiers {
         if let Some(vis) = modifier.as_visibility() {
-            ret.visibility = vis;
+            match (ret.visibility, vis) {
+                (aast::Visibility::Protected, aast::Visibility::Internal) => {
+                    ret.visibility = aast::Visibility::ProtectedInternal
+                }
+                (aast::Visibility::Internal, aast::Visibility::Protected) => {
+                    ret.visibility = aast::Visibility::ProtectedInternal
+                }
+                _ => ret.visibility = vis,
+            }
         }
         match modifier.token_kind() {
             Some(TokenKind::Static) => ret.is_static = true,
@@ -1185,6 +1193,7 @@ struct Attributes {
     cross_package: Option<String>,
     sort_text: Option<String>,
     dynamically_referenced: bool,
+    needs_concrete: bool,
 }
 
 impl<'o, 't> Impl<'o, 't> {
@@ -1520,8 +1529,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                 let Id(pos, name) = self.expect_name(&node)?;
                 let reason = Reason::FromWitnessDecl(WitnessDecl::Hint(pos.clone()));
                 let ty_ = if self.is_type_param_in_scope(&name) {
-                    // TODO (T69662957) must fill type args of Tgeneric
-                    Ty_::Tgeneric(name, vec![])
+                    Ty_::Tgeneric(name)
                 } else {
                     match name.as_str() {
                         "nothing" => Ty_::Tunion(vec![]),
@@ -1616,6 +1624,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
             cross_package: None,
             sort_text: None,
             dynamically_referenced: false,
+            needs_concrete: false,
         };
 
         let nodes = match node {
@@ -1707,6 +1716,9 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                             .string_literal_param
                             .as_ref()
                             .map(|(_, x)| Self::str_from_utf8(x).into_owned());
+                    }
+                    "__NeedsConcrete" => {
+                        attributes.needs_concrete = true;
                     }
                     _ => {}
                 }
@@ -2259,7 +2271,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                     .map(|targ| self.convert_tapply_to_tgeneric(targ))
                     .collect();
                 match self.tapply_should_be_tgeneric(&ty.0, &id) {
-                    Some(name) => Ty_::Tgeneric(name, converted_targs),
+                    Some(name) => Ty_::Tgeneric(name),
                     None => Ty_::Tapply(id, converted_targs),
                 }
             }
@@ -2307,16 +2319,18 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                 self.convert_tapply_to_tgeneric(tk),
                 self.convert_tapply_to_tgeneric(tv),
             ),
-            Ty_::Ttuple(TupleType {
-                required,
-                extra: TupleExtra::Textra { optional, variadic },
-            }) => {
-                let extra = TupleExtra::Textra {
-                    optional: optional
-                        .into_iter()
-                        .map(|targ| self.convert_tapply_to_tgeneric(targ))
-                        .collect(),
-                    variadic: self.convert_tapply_to_tgeneric(variadic),
+            Ty_::Ttuple(TupleType { required, extra }) => {
+                let extra = match extra {
+                    TupleExtra::Textra { optional, variadic } => TupleExtra::Textra {
+                        optional: optional
+                            .into_iter()
+                            .map(|targ| self.convert_tapply_to_tgeneric(targ))
+                            .collect(),
+                        variadic: self.convert_tapply_to_tgeneric(variadic),
+                    },
+                    TupleExtra::Tsplat(hint) => {
+                        TupleExtra::Tsplat(self.convert_tapply_to_tgeneric(hint))
+                    }
                 };
                 Ty_::Ttuple(TupleType {
                     required: required
@@ -2372,7 +2386,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
             | Ty_::Tany(_)
             | Ty_::Tclass(_, _, _)
             | Ty_::Tdynamic
-            | Ty_::Tgeneric(_, _)
+            | Ty_::Tgeneric(_)
             | Ty_::Tmixed
             | Ty_::Twildcard
             | Ty_::Tnonnull
@@ -2382,9 +2396,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
             | Ty_::Tneg(_)
             | Ty_::Tlabel(_)
             | Ty_::Tnewtype(_, _, _)
-            | Ty_::Tvar(_)
-            | Ty_::TunappliedAlias(_)
-            | Ty_::Ttuple(_) => panic!("unexpected decl type in constraint"),
+            | Ty_::Tvar(_) => panic!("unexpected decl type in constraint"),
         };
         Ty(ty.0, Box::new(ty_))
     }
@@ -2461,7 +2473,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
     // hint Haccess is a flat list, whereas decl ty Taccess is a tree.
     fn taccess_root_is_generic(ty: &Ty) -> bool {
         match ty {
-            Ty(_, box Ty_::Tgeneric(_, tys)) if tys.is_empty() => true,
+            Ty(_, box Ty_::Tgeneric(_)) => true,
             Ty(_, box Ty_::Taccess(TaccessType(t, _))) => Self::taccess_root_is_generic(t),
             _ => false,
         }
@@ -2469,7 +2481,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
 
     fn ctx_generic_for_generic_taccess_inner(ty: &Ty, cst: &str) -> String {
         let left = match ty {
-            Ty(_, box Ty_::Tgeneric(name, tys)) if tys.is_empty() => name.to_string(),
+            Ty(_, box Ty_::Tgeneric(name)) => name.to_string(),
             Ty(_, box Ty_::Taccess(TaccessType(ty, cst))) => {
                 Self::ctx_generic_for_generic_taccess_inner(ty, &cst.1)
             }
@@ -2510,7 +2522,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                     user_attributes: vec![],
                 };
                 tparams.push(tparam);
-                let cap_ty = Ty(cap_ty.0, Box::new(Ty_::Tgeneric(name, vec![])));
+                let cap_ty = Ty(cap_ty.0, Box::new(Ty_::Tgeneric(name)));
                 let ft = FunType {
                     implicit_params: FunImplicitParams {
                         capability: CapTy(cap_ty),
@@ -2595,9 +2607,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                 // If the type hint for this function parameter is a type
                 // parameter introduced in this function declaration, don't add
                 // a new type parameter.
-                Ty_::Tgeneric(type_name, _) if tparams.iter().any(|tp| &tp.name.1 == type_name) => {
-                    ty
-                }
+                Ty_::Tgeneric(type_name) if tparams.iter().any(|tp| &tp.name.1 == type_name) => ty,
                 // Otherwise, if the parameter is `G $g`, create tparam
                 // `T$g as G` and replace $g's type hint
                 _ => {
@@ -2605,7 +2615,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                     tparams.push(tp(id.clone(), vec![(ConstraintKind::ConstraintAs, ty)]));
                     Ty(
                         Reason::FromWitnessDecl(WitnessDecl::Hint(param_pos)),
-                        Box::new(Ty_::Tgeneric(id.1, Vec::new())),
+                        Box::new(Ty_::Tgeneric(id.1)),
                     )
                 }
             };
@@ -2619,7 +2629,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                 context_reason.pos().cloned().unwrap_or(Pos::NONE),
                 left_name,
             );
-            let left_ty_ = Ty_::Tgeneric(left_id.1.clone(), vec![]);
+            let left_ty_ = Ty_::Tgeneric(left_id.1.clone());
             tparams.push(tp(left_id, vec![]));
             let left = Ty(context_reason, Box::new(left_ty_));
             where_constraints.push(WhereConstraint(left, ConstraintKind::ConstraintEq, right));
@@ -2690,10 +2700,7 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
                         self.ctx_generic_for_generic_taccess(t, cst.1.as_str()),
                     );
                     tparams.push(tp(left_id.clone(), vec![]));
-                    let left = Ty(
-                        context_ty.0.clone(),
-                        Box::new(Ty_::Tgeneric(left_id.1, vec![])),
-                    );
+                    let left = Ty(context_ty.0.clone(), Box::new(Ty_::Tgeneric(left_id.1)));
                     where_constraints.push(WhereConstraint(
                         left,
                         ConstraintKind::ConstraintEq,
@@ -2724,17 +2731,17 @@ impl<'o, 't> DirectDeclSmartConstructors<'o, 't> {
             .map(|Ty(r, ty_)| {
                 let ty_ = match *ty_ {
                     Ty_::Tapply((_, name), tys) if tys.is_empty() && name.starts_with('$') => {
-                        Ty_::Tgeneric(self.ctx_generic_for_fun(&name), vec![])
+                        Ty_::Tgeneric(self.ctx_generic_for_fun(&name))
                     }
                     Ty_::Taccess(TaccessType(Ty(_, box Ty_::Tapply((_, name), tys)), cst))
                         if tys.is_empty() && name.starts_with('$') =>
                     {
                         let name = self.ctx_generic_for_dependent(&name, &cst.1);
-                        Ty_::Tgeneric(name, vec![])
+                        Ty_::Tgeneric(name)
                     }
                     Ty_::Taccess(TaccessType(t, cst)) if Self::taccess_root_is_generic(&t) => {
                         let name = self.ctx_generic_for_generic_taccess(&t, &cst.1);
-                        Ty_::Tgeneric(name, vec![])
+                        Ty_::Tgeneric(name)
                     }
                     _ => return Ty(r, ty_),
                 };
@@ -3411,12 +3418,7 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
                 let Id(pos, class_type) = class_id;
                 match class_type.rsplit('\\').next() {
                     Some(name) if self.is_type_param_in_scope(name) => {
-                        let pos = Self::merge(pos, self.get_pos(&type_arguments));
-                        let type_arguments = type_arguments
-                            .into_iter()
-                            .filter_map(|node| self.node_to_ty(node))
-                            .collect();
-                        let ty_ = Ty_::Tgeneric(name.into(), type_arguments);
+                        let ty_ = Ty_::Tgeneric(name.into());
                         self.hint_ty(pos, ty_)
                     }
                     _ => {
@@ -3490,7 +3492,7 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             .rev()
             .filter_map(|attribute| {
                 if let Node::Attribute(attr) = attribute {
-                    if self.opts.keep_user_attributes {
+                    if self.keep_user_attribute(&attr) {
                         Some(self.user_attribute_to_decl(*attr))
                     } else {
                         None
@@ -3501,9 +3503,10 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             })
             .collect();
 
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         let is_module_newtype = module_kw_opt.is_ignored_token_with_kind(TokenKind::Module);
         let vis = match keyword.token_kind() {
             Some(TokenKind::Type) => aast::TypedefVisibility::Transparent,
@@ -3700,9 +3703,10 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             })
             .collect();
 
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         let typedef = TypedefType {
             module: self.module.clone(),
             pos,
@@ -3952,10 +3956,10 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
         match header {
             Node::FunctionHeader(box header) => {
                 let is_method = false;
-                let internal = header
-                    .modifiers
-                    .iter()
-                    .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+                let internal = header.modifiers.iter().any(|m| {
+                    m.as_visibility() == Some(aast::Visibility::Internal)
+                        || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+                });
                 let ((pos, name), type_, _) =
                     match self.function_to_ty(is_method, &attributes, header, body) {
                         Some(x) => x,
@@ -4972,6 +4976,7 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             !is_constructor && attributes.support_dynamic_type,
         );
         flags.set(MethodFlags::NO_AUTO_LIKES, attributes.no_auto_likes);
+        flags.set(MethodFlags::NEEDS_CONCRETE, attributes.needs_concrete);
 
         // Parse the user attributes
         // in facts-mode all attributes are saved, otherwise only __NoAutoDynamic/__NoAutoLikes is
@@ -5057,9 +5062,10 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             Some(ty) => ty,
             None => return Node::Ignored(SK::EnumDeclaration),
         };
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         let key = id.1.clone();
         let consts = enumerators
             .into_iter()
@@ -5298,9 +5304,10 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
                 _ => {}
             }
         }
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         user_attributes.push(shallow_decl_defs::UserAttribute {
             name: (name.0.clone(), "__EnumClass".into()),
             params: vec![],
@@ -5922,6 +5929,7 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
         outer_left_paren: Self::Output,
         readonly_keyword: Self::Output,
         _function_keyword: Self::Output,
+        type_parameters: Self::Output,
         _inner_left_paren: Self::Output,
         parameter_list: Self::Output,
         _inner_right_paren: Self::Output,
@@ -5980,6 +5988,47 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             })
             .collect();
 
+        let tparams =
+            match type_parameters {
+                Node::TypeParameters(tparams) => {
+                    // Iterate over the old tparams and add `supportdyn<mixed>` upper bounds
+                    // unless there is `__NoAutoBound` attribute
+                    if self.implicit_sdt() {
+                        tparams
+                            .into_iter()
+                            .map(|mut tparam| {
+                                if !tparam.user_attributes.iter().any(|ua| {
+                            ua.name.1 == naming_special_names_rust::user_attributes::NO_AUTO_BOUND
+                        }) {
+                            let mixed = Ty(
+                                Reason::FromWitnessDecl(WitnessDecl::Hint(tparam.name.0.clone())),
+                                Box::new(Ty_::Tmixed),
+                            );
+                            let ub = Ty(
+                                Reason::FromWitnessDecl(WitnessDecl::Hint(tparam.name.0.clone())),
+                                Box::new(Ty_::Tapply(
+                                    (
+                                        tparam.name.0.clone(),
+                                        naming_special_names_rust::classes::SUPPORT_DYN.to_string(),
+                                    ),
+                                    vec![mixed],
+                                )),
+                            );
+                            tparam.constraints.push((ConstraintKind::ConstraintAs, ub));
+                            tparam
+                        } else {
+                            tparam
+                        }
+                            })
+                            .collect()
+                    } else {
+                        tparams
+                    }
+                }
+                _ => vec![],
+            };
+        let instantiated = tparams.is_empty();
+
         let ret = match self.node_to_ty(return_type) {
             Some(ty) => ty,
             None => return Node::Ignored(SK::ClosureTypeSpecifier),
@@ -6007,14 +6056,14 @@ impl<'o, 't> FlattenSmartConstructors for DirectDeclSmartConstructors<'o, 't> {
             ret
         };
         let mut fty = Ty_::Tfun(FunType {
-            tparams: vec![],
+            tparams,
             where_constraints: vec![],
             params,
             implicit_params,
             ret: pess_return_type,
             flags,
             cross_package: None,
-            instantiated: true,
+            instantiated,
         });
 
         if self.implicit_sdt() {

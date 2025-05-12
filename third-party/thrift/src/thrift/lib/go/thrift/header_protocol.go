@@ -21,6 +21,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/format"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 )
 
@@ -31,16 +32,14 @@ type headerProtocol struct {
 	protoID types.ProtocolID
 }
 
-var _ types.Protocol = (*headerProtocol)(nil)
-var _ types.RequestHeaders = (*headerProtocol)(nil)
-var _ types.ResponseHeaderGetter = (*headerProtocol)(nil)
+var _ Protocol = (*headerProtocol)(nil)
 
 // NewHeaderProtocol creates a new header protocol.
-func NewHeaderProtocol(conn net.Conn) (types.Protocol, error) {
+func NewHeaderProtocol(conn net.Conn) (Protocol, error) {
 	return newHeaderProtocol(conn, types.ProtocolIDCompact, 0, nil)
 }
 
-func newHeaderProtocol(conn net.Conn, protoID types.ProtocolID, ioTimeout time.Duration, persistentHeaders map[string]string) (types.Protocol, error) {
+func newHeaderProtocol(conn net.Conn, protoID types.ProtocolID, ioTimeout time.Duration, persistentHeaders map[string]string) (Protocol, error) {
 	p := &headerProtocol{protoID: protoID}
 	p.trans = newHeaderTransport(conn, protoID)
 	p.trans.conn.readTimeout = ioTimeout
@@ -63,9 +62,9 @@ func (p *headerProtocol) resetProtocol() error {
 	switch p.protoID {
 	case types.ProtocolIDBinary:
 		// These defaults match cpp implementation
-		p.Format = NewBinaryFormatOptions(p.trans, false, true)
+		p.Format = format.NewBinaryFormatOptions(p.trans, false, true)
 	case types.ProtocolIDCompact:
-		p.Format = NewCompactFormat(p.trans)
+		p.Format = format.NewCompactFormat(p.trans)
 	default:
 		return types.NewProtocolException(fmt.Errorf("Unknown protocol id: %d", p.protoID))
 	}
@@ -109,11 +108,11 @@ func (p *headerProtocol) ReadMessageBegin() (name string, typeId types.MessageTy
 	return p.Format.ReadMessageBegin()
 }
 
-func (p *headerProtocol) Flush() (err error) {
+func (p *headerProtocol) Flush() error {
 	return types.NewProtocolException(p.trans.Flush())
 }
 
-func (p *headerProtocol) Skip(fieldType types.Type) (err error) {
+func (p *headerProtocol) Skip(fieldType types.Type) error {
 	return types.SkipDefaultDepth(p, fieldType)
 }
 
@@ -133,12 +132,12 @@ func (p *headerProtocol) GetSeqID() uint32 {
 
 // Control underlying header transport
 
-// Deprecated: SetRequestHeader is deprecated and will eventually be private.
-func (p *headerProtocol) SetRequestHeader(key, value string) {
+// Deprecated: setRequestHeader is deprecated and will eventually be private.
+func (p *headerProtocol) setRequestHeader(key, value string) {
 	p.trans.SetRequestHeader(key, value)
 }
 
-func (p *headerProtocol) GetResponseHeaders() map[string]string {
+func (p *headerProtocol) getResponseHeaders() map[string]string {
 	return p.trans.GetResponseHeaders()
 }
 
@@ -158,6 +157,14 @@ func (p *headerProtocol) SetFlags(flags HeaderFlags) {
 
 func (p *headerProtocol) AddTransform(trans TransformID) error {
 	return p.trans.AddTransform(trans)
+}
+
+func (p *headerProtocol) DO_NOT_USE_WrapChannel() RequestChannel {
+	return NewSerialChannel(p)
+}
+
+func (p *headerProtocol) DO_NOT_USE_GetResponseHeaders() map[string]string {
+	return p.getResponseHeaders()
 }
 
 // Deprecated: HeaderProtocolSeqID is a deprecated type, temporarily introduced to ease transition to new API.

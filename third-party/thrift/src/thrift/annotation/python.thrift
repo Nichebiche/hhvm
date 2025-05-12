@@ -101,5 +101,9 @@ struct UseCAPI {
 @scope.Typedef
 struct Py3EnableCppAdapter {}
 
-@scope.Structured
+/// Allows inheritance from a struct or exception in thrift-py3.
+/// Inheritance from union is DEPRECATED!
+/// Do not add new usage of this. Prefer composition over inheritance.
+@scope.Struct
+@scope.Exception
 struct MigrationBlockingAllowInheritance {}

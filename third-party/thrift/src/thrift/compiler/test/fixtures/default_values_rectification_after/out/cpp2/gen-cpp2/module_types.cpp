@@ -76,6 +76,7 @@ void swap([[maybe_unused]] EmptyStruct& a, [[maybe_unused]] EmptyStruct& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void EmptyStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t EmptyStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t EmptyStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -84,6 +85,7 @@ template void EmptyStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t EmptyStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t EmptyStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t EmptyStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace facebook::thrift::compiler::test::fixtures::default_values_rectification
@@ -297,6 +299,7 @@ void swap([[maybe_unused]] TestStruct& a, [[maybe_unused]] TestStruct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void TestStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t TestStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t TestStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -305,6 +308,7 @@ template void TestStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t TestStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t TestStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t TestStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<

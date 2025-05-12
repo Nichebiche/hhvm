@@ -1,9 +1,0 @@
-[packages]
-
-[packages.foo]
-include_paths = ["//"]
-
-[deployments]
-
-[deployments.one]
-packages = ["foo"]

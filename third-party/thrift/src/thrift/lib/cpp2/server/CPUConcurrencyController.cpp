@@ -225,6 +225,12 @@ void CPUConcurrencyController::schedule(std::shared_ptr<const Config> config) {
   thriftServerConfig_.setMaxQps(
       qpsLimit_.getObserver(),
       apache::thrift::AttributeSource::OVERRIDE_INTERNAL);
+  thriftServerConfig_.setConcurrencyLimit(
+      concurrencyLimit_.getObserver(),
+      apache::thrift::AttributeSource::OVERRIDE_INTERNAL);
+  thriftServerConfig_.setExecutionRate(
+      executionRate_.getObserver(),
+      apache::thrift::AttributeSource::OVERRIDE_INTERNAL);
 
   this->setLimit(config, getConcurrencyUpperBoundInternal(config));
   scheduler_.addFunctionGenericNextRunTimeFunctor(
@@ -241,6 +247,8 @@ void CPUConcurrencyController::cancel() {
   scheduler_.cancelAllFunctionsAndWait();
   activeRequestsLimit_.setValue(std::nullopt);
   qpsLimit_.setValue(std::nullopt);
+  concurrencyLimit_.setValue(std::nullopt);
+  executionRate_.setValue(std::nullopt);
   dryRunLimit_ = 0;
   stableConcurrencySamples_.clear();
   stableEstimate_.exchange(-1);
@@ -265,6 +273,14 @@ uint32_t CPUConcurrencyController::getLimit(
       case Method::MAX_QPS:
         limit = thriftServerConfig_.getMaxQps().get();
         break;
+      case Method::CONCURRENCY_LIMIT:
+        // Using ServiceConfigs instead of ThriftServerConfig, because the value
+        // may come from AdaptiveConcurrencyController
+        limit = serverConfigs_.getConcurrencyLimit();
+        break;
+      case Method::EXECUTION_RATE:
+        limit = thriftServerConfig_.getExecutionRate().get();
+        break;
       default:
         DCHECK(false);
     }
@@ -288,6 +304,12 @@ void CPUConcurrencyController::setLimit(
       case Method::MAX_QPS:
         qpsLimit_.setValue(newLimit);
         break;
+      case Method::CONCURRENCY_LIMIT:
+        concurrencyLimit_.setValue(newLimit);
+        break;
+      case Method::EXECUTION_RATE:
+        executionRate_.setValue(newLimit);
+        break;
       default:
         DCHECK(false);
     }
@@ -298,6 +320,14 @@ uint32_t CPUConcurrencyController::getLimitUsage(
     const std::shared_ptr<const Config>& config) {
   using namespace std::chrono;
   switch (config->method) {
+    case Method::CONCURRENCY_LIMIT:
+      // Note: This intentionally falls through to MAX_REQUESTS. This is a
+      // stop-gap behavior while we're implementing concurrencyLimit as it's own
+      // separate limit from maxRequests. As it is written now, this preserves
+      // identical behavior to when CPUConcurrencyController used
+      // Method::MAX_REQUESTS with the
+      // --enforce_queue_concurrency_resource_pools flag enabled. In the future,
+      // Method::CONCURRENCY_LIMIT should use a better limit usage metric.
     case Method::MAX_REQUESTS:
       // Note: estimating concurrency from this is fairly lossy as it's a
       // gauge metric and we can't use techniques to measure it over a duration.
@@ -305,6 +335,13 @@ uint32_t CPUConcurrencyController::getLimitUsage(
       // and a token bucket for rate limiting.
       // TODO: We should exclude fb303 methods.
       return serverConfigs_.getActiveRequests();
+    case Method::EXECUTION_RATE:
+      // Note: This intentionally falls through to MAX_QPS. This is a stop-gap
+      // behavior while we're implementing executionRate as it's own separate
+      // limit from maxQps. As it is written now, this preserves identical
+      // behavior to when CPUConcurrencyController used Method::MAX_QPS with
+      // --thrift_server_enforces_max_qps flag disabled. In the future,
+      // Method::CONCURRENCY_LIMIT should use a better limit usage metric.
     case Method::MAX_QPS: {
       auto now = steady_clock::now();
       auto milliSince =
@@ -344,14 +381,23 @@ int64_t CPUConcurrencyController::getLoadInternal(
 
 uint32_t CPUConcurrencyController::getConcurrencyUpperBoundInternal(
     const std::shared_ptr<const Config>& config) const {
-  if (std::holds_alternative<Config::UseStaticLimit>(
+  if (!std::holds_alternative<Config::UseStaticLimit>(
           config->concurrencyUpperBound)) {
-    // Use static limit as concurrencyUpperBound
-    return config->method == Method::MAX_REQUESTS
-        ? thriftServerConfig_.getMaxRequests().get()
-        : thriftServerConfig_.getMaxQps().get();
+    return std::max(std::get<int32_t>(config->concurrencyUpperBound), 0);
   }
-  return std::max(std::get<int32_t>(config->concurrencyUpperBound), 0);
+
+  // Use static limit as concurrencyUpperBound
+  switch (config->method) {
+    case Method::MAX_REQUESTS:
+      return thriftServerConfig_.getMaxRequests().get();
+    case Method::MAX_QPS:
+      return thriftServerConfig_.getMaxQps().get();
+    case Method::CONCURRENCY_LIMIT:
+      return thriftServerConfig_.getConcurrencyLimit().get();
+    case Method::EXECUTION_RATE:
+      return thriftServerConfig_.getExecutionRate().get();
+  }
+  folly::assume_unreachable();
 }
 
 /**
@@ -380,6 +426,10 @@ std::string_view CPUConcurrencyController::Config::methodName() const {
       return "MAX_REQUESTS";
     case Method::MAX_QPS:
       return "MAX_QPS";
+    case Method::CONCURRENCY_LIMIT:
+      return "CONCURRENCY_LIMIT";
+    case Method::EXECUTION_RATE:
+      return "EXECUTION_RATE";
   }
   folly::assume_unreachable();
 }
@@ -403,6 +453,10 @@ std::string_view CPUConcurrencyController::Config::concurrencyUnit() const {
       return "maxRequests";
     case Method::MAX_QPS:
       return "maxQps";
+    case Method::CONCURRENCY_LIMIT:
+      return "concurrencyLimit";
+    case Method::EXECUTION_RATE:
+      return "executionRate";
   }
   folly::assume_unreachable();
 }

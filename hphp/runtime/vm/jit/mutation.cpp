@@ -16,7 +16,6 @@
 
 #include "hphp/runtime/vm/jit/mutation.h"
 
-#include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/cfg.h"
 #include "hphp/runtime/vm/jit/containers.h"
 #include "hphp/runtime/vm/jit/pass-tracer.h"
@@ -27,7 +26,7 @@
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 namespace {
 
@@ -59,7 +58,7 @@ bool retypeDst(IRInstruction* inst, int num) {
 //////////////////////////////////////////////////////////////////////
 
 struct RefineTmps {
-  TRACE_SET_MOD(hhir_refineTmps);
+  TRACE_SET_MOD(hhir_refineTmps)
 
   explicit RefineTmps(IRUnit& unit)
     : unit{unit}
@@ -982,7 +981,7 @@ void insertNegativeAssertTypes(IRUnit& unit, const BlockList& blocks) {
 }
 
 void refineTmps(IRUnit& unit) {
-  TRACE_SET_MOD(hhir_refineTmps);
+  TRACE_SET_MOD(hhir_refineTmps)
   PassTracer tracer{&unit, Trace::hhir_refineTmps, "refineTmps"};
   Timer timer{Timer::optimize_refineTmps, unit.logEntry().get_pointer()};
 

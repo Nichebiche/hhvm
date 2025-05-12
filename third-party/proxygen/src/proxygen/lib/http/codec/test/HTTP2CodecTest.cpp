@@ -63,13 +63,12 @@ class HTTP2CodecTest : public HTTPParallelCodecTest {
   void writeHeaders(folly::IOBufQueue& writeBuf,
                     std::unique_ptr<folly::IOBuf> headers,
                     uint32_t stream,
-                    folly::Optional<http2::PriorityUpdate> priority,
                     folly::Optional<uint8_t> padding,
                     bool endStream,
                     bool endHeaders) {
     auto headersLen = headers ? headers->computeChainDataLength() : 0;
     auto headerSize = http2::calculatePreHeaderBlockSize(
-        false, false, priority.has_value(), padding.has_value());
+        false, false, false, padding.has_value());
     auto header = writeBuf.preallocate(headerSize, 32);
     writeBuf.postallocate(headerSize);
     writeBuf.append(std::move(headers));
@@ -78,7 +77,6 @@ class HTTP2CodecTest : public HTTPParallelCodecTest {
                         writeBuf,
                         headersLen,
                         stream,
-                        priority,
                         padding,
                         endStream,
                         endHeaders);
@@ -349,13 +347,10 @@ TEST_F(HTTP2CodecTest, ExHeadersWithPriority) {
   auto req = getGetRequest();
   // Test empty path
   req.setURL("");
-  auto pri = HTTPMessage::HTTP2Priority(0, false, 7);
-  req.setHTTP2Priority(pri);
   upstreamCodec_.generateExHeader(
       output_, 3, req, HTTPCodec::ExAttributes(1, true));
 
   parse();
-  EXPECT_EQ(callbacks_.msg->getHTTP2Priority(), pri);
   EXPECT_EQ(callbacks_.streamErrors, 0);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
 }
@@ -412,7 +407,6 @@ TEST_F(HTTP2CodecTest, BadHeaders) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -428,7 +422,6 @@ TEST_F(HTTP2CodecTest, BadHeaders) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -462,7 +455,6 @@ TEST_F(HTTP2CodecTest, BadPseudoHeaders) {
   writeHeaders(output_,
                std::move(encodedHeaders),
                stream,
-               folly::none,
                http2::kNoPadding,
                true,
                true);
@@ -497,7 +489,6 @@ TEST_F(HTTP2CodecTest, BadHeaderValues) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -508,7 +499,8 @@ TEST_F(HTTP2CodecTest, BadHeaderValues) {
   EXPECT_EQ(callbacks_.headersComplete, 0);
   EXPECT_EQ(callbacks_.messageComplete, 0);
   EXPECT_EQ(callbacks_.streamErrors, 4);
-  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(), kErrorParseHeader);
+  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(),
+            kErrorHeaderContentValidation);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
 }
 
@@ -535,7 +527,6 @@ TEST_F(HTTP2CodecTest, HostAuthority) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -582,7 +573,8 @@ TEST_F(HTTP2CodecTest, HighAscii) {
   EXPECT_EQ(callbacks_.headersComplete, 0);
   EXPECT_EQ(callbacks_.messageComplete, 0);
   EXPECT_EQ(callbacks_.streamErrors, 4);
-  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(), kErrorParseHeader);
+  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(),
+            kErrorHeaderContentValidation);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
 
   HTTPMessage req5 = getGetRequest("/guacamole");
@@ -596,7 +588,8 @@ TEST_F(HTTP2CodecTest, HighAscii) {
   EXPECT_EQ(callbacks_.headersComplete, 0);
   EXPECT_EQ(callbacks_.messageComplete, 0);
   EXPECT_EQ(callbacks_.streamErrors, 1);
-  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(), kErrorParseHeader);
+  EXPECT_EQ(callbacks_.lastParseError->getProxygenError(),
+            kErrorHeaderContentValidation);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
 }
 
@@ -677,7 +670,6 @@ TEST_F(HTTP2CodecTest, BadConnect) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -713,7 +705,6 @@ TEST_F(HTTP2CodecTest, TemplateDrivenConnect) {
   writeHeaders(output_,
                std::move(encodedHeaders),
                stream,
-               folly::none /* priority */,
                http2::kNoPadding /* padding */,
                true,
                true);
@@ -869,7 +860,6 @@ TEST_F(HTTP2CodecTest, BadHeadersReply) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -885,7 +875,6 @@ TEST_F(HTTP2CodecTest, BadHeadersReply) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  true,
                  true);
@@ -949,13 +938,8 @@ TEST_F(HTTP2CodecTest, StripLwsHeaderValue) {
 
   auto encodedHeaders = headerCodec.encode(reqHeaders);
   id = upstreamCodec_.createStream();
-  writeHeaders(output_,
-               std::move(encodedHeaders),
-               id,
-               folly::none,
-               http2::kNoPadding,
-               true,
-               true);
+  writeHeaders(
+      output_, std::move(encodedHeaders), id, http2::kNoPadding, true, true);
 
   parseAndCheckExpectations();
   parsedHeaders = callbacks_.msg->extractHeaders();
@@ -1635,8 +1619,6 @@ TEST_F(HTTP2CodecTest, GoawayHandling) {
   upstreamCodec_.generateWindowUpdate(output_, 3, 100);
   upstreamCodec_.generateBody(
       output_, 3, makeBuf(10), HTTPCodec::NoPadding, false);
-  upstreamCodec_.generatePriority(
-      output_, 3, HTTPMessage::HTTP2Priority(0, true, 1));
   upstreamCodec_.generateEOM(output_, 3);
   upstreamCodec_.generateRstStream(output_, 3, ErrorCode::CANCEL);
   EXPECT_EQ(output_.chainLength(), 0);
@@ -1662,8 +1644,6 @@ TEST_F(HTTP2CodecTest, GoawayHandling) {
   parseUpstream();
 
   output_.append(makeBuf(10));
-  downstreamCodec_.generatePriority(
-      output_, 2, HTTPMessage::HTTP2Priority(0, true, 1));
   downstreamCodec_.generateEOM(output_, 2);
   downstreamCodec_.generateRstStream(output_, 2, ErrorCode::CANCEL);
 
@@ -1887,89 +1867,28 @@ TEST_F(HTTP2CodecTest, ConcurrentStreams) {
             ErrorCode::REFUSED_STREAM);
 }
 
-TEST_F(HTTP2CodecTest, BasicPriority) {
-  auto pri = HTTPMessage::HTTP2Priority(0, true, 1);
+TEST_F(HTTP2CodecTest, BasicRFC9218Priority) {
+  auto pri = HTTPPriority{7, true};
   upstreamCodec_.generatePriority(output_, 1, pri);
 
-  EXPECT_TRUE(parse());
-  EXPECT_EQ(callbacks_.priority, pri);
-  EXPECT_EQ(callbacks_.streamErrors, 0);
-  EXPECT_EQ(callbacks_.sessionErrors, 0);
-}
-
-TEST_F(HTTP2CodecTest, BadHeaderPriority) {
-  HTTPMessage req = getGetRequest();
-  req.setHTTP2Priority(HTTPMessage::HTTP2Priority(0, false, 7));
-  auto id = upstreamCodec_.createStream();
-  upstreamCodec_.generateHeader(output_, id, req, true /* eom */);
-
-  // hack ingress with cirular dep
-  EXPECT_TRUE(parse([&](IOBuf* ingress) {
-    folly::io::RWPrivateCursor c(ingress);
-    c.skip(http2::kFrameHeaderSize);
-    c.writeBE<uint32_t>(1);
-  }));
-
-  EXPECT_EQ(callbacks_.streamErrors, 1);
-  EXPECT_EQ(callbacks_.sessionErrors, 0);
-}
-
-TEST_F(HTTP2CodecTest, CircularHeaderPriority) {
-  HTTPMessage req = getGetRequest();
-  req.setHTTP2Priority(HTTPMessage::HTTP2Priority(1, false, 7));
-  auto id = upstreamCodec_.createStream();
-  upstreamCodec_.generateHeader(output_, id, req, true /* eom */);
-}
-
-TEST_F(HTTP2CodecTest, DuplicateBadHeaderPriority) {
-  // Sent an initial header with a circular dependency
-  HTTPMessage req = getGetRequest();
-  req.setHTTP2Priority(HTTPMessage::HTTP2Priority(0, false, 7));
-  auto id = upstreamCodec_.createStream();
-  upstreamCodec_.generateHeader(output_, id, req, true /* eom */);
-
-  // Hack ingress with circular dependency.
-  EXPECT_TRUE(parse([&](IOBuf* ingress) {
-    folly::io::RWPrivateCursor c(ingress);
-    c.skip(http2::kFrameHeaderSize);
-    c.writeBE<uint32_t>(1);
-  }));
-
-  EXPECT_EQ(callbacks_.streamErrors, 1);
-  EXPECT_EQ(callbacks_.sessionErrors, 0);
-
-  // On the same stream, send another request, interpreted as trailers with
-  // a pseudo header which is illegal
-  HTTPMessage nextRequest = getGetRequest();
-  upstreamCodec_.generateHeader(output_, id, nextRequest, true /* eom */);
   parse();
-  EXPECT_EQ(callbacks_.streamErrors, 2);
-  EXPECT_EQ(callbacks_.sessionErrors, 0);
-
-  callbacks_.reset();
-
-  // Now send a legit request
-  auto id2 = upstreamCodec_.createStream();
-  upstreamCodec_.generateHeader(output_, id2, nextRequest, true /* eom */);
-  parse();
-  callbacks_.expectMessage(true, 1, "/");
-  EXPECT_EQ(callbacks_.streamErrors, 0);
-  EXPECT_EQ(callbacks_.sessionErrors, 0);
+  EXPECT_EQ(callbacks_.urgency, pri.urgency);
+  EXPECT_EQ(callbacks_.incremental, pri.incremental);
 }
 
-TEST_F(HTTP2CodecTest, BadPriority) {
-  auto pri = HTTPMessage::HTTP2Priority(0, true, 1);
+TEST_F(HTTP2CodecTest, BadRFC9218Priority) {
+  auto pri = HTTPPriority{7, true};
   upstreamCodec_.generatePriority(output_, 1, pri);
 
-  // hack ingress with cirular dep
   EXPECT_TRUE(parse([&](IOBuf* ingress) {
     folly::io::RWPrivateCursor c(ingress);
-    c.skip(http2::kFrameHeaderSize);
+    c.skip(http2::kFrameHeaderSize + sizeof(uint32_t));
     c.writeBE<uint32_t>(1);
   }));
 
-  EXPECT_EQ(callbacks_.streamErrors, 1);
-  EXPECT_EQ(callbacks_.sessionErrors, 0);
+  // ill-formatted priority, so returns default priority
+  EXPECT_EQ(callbacks_.urgency, 3);
+  EXPECT_EQ(callbacks_.incremental, 1);
 }
 
 class DummyQueue : public HTTPCodec::PriorityQueue {
@@ -1984,23 +1903,6 @@ class DummyQueue : public HTTPCodec::PriorityQueue {
 
   std::vector<HTTPCodec::StreamID> nodes_;
 };
-
-TEST_F(HTTP2CodecTest, VirtualNodes) {
-  DummyQueue queue;
-  uint8_t level = 30;
-  upstreamCodec_.addPriorityNodes(queue, output_, level);
-
-  EXPECT_TRUE(parse());
-  for (int i = 0; i < level; i++) {
-    EXPECT_EQ(queue.nodes_[i], upstreamCodec_.mapPriorityToDependency(i));
-  }
-
-  // Out-of-range priorites are mapped to the lowest level of virtual nodes.
-  EXPECT_EQ(queue.nodes_[level - 1],
-            upstreamCodec_.mapPriorityToDependency(level));
-  EXPECT_EQ(queue.nodes_[level - 1],
-            upstreamCodec_.mapPriorityToDependency(level + 1));
-}
 
 TEST_F(HTTP2CodecTest, BasicPushPromise) {
   upstreamCodec_.generateSettings(output_);
@@ -2159,7 +2061,6 @@ TEST_F(HTTP2CodecTest, Normal1024Continuation) {
   string bigval(8691, '!');
   bigval.append(8691, '@');
   req.getHeaders().add("x-headr", bigval);
-  req.setHTTP2Priority(HTTPMessage::HTTP2Priority(0, false, 7));
   auto id = upstreamCodec_.createStream();
   upstreamCodec_.generateHeader(output_, id, req);
 
@@ -2351,7 +2252,6 @@ TEST_F(HTTP2CodecTest, WebsocketBadHeader) {
     writeHeaders(output_,
                  std::move(encodedHeaders),
                  stream,
-                 folly::none,
                  http2::kNoPadding,
                  false,
                  true);
@@ -2378,13 +2278,8 @@ TEST_F(HTTP2CodecTest, WebsocketDupProtocol) {
   };
   HPACKCodec headerCodec(TransportDirection::UPSTREAM);
   auto encodedHeaders = headerCodec.encode(headers);
-  writeHeaders(output_,
-               std::move(encodedHeaders),
-               1,
-               folly::none,
-               http2::kNoPadding,
-               false,
-               true);
+  writeHeaders(
+      output_, std::move(encodedHeaders), 1, http2::kNoPadding, false, true);
   parse();
   EXPECT_EQ(callbacks_.messageBegin, 1);
   EXPECT_EQ(callbacks_.headersComplete, 0);
@@ -2433,7 +2328,7 @@ TEST_F(HTTP2CodecTest, TestAllEgressFrameTypeCallbacks) {
       http2::FrameType expectedTypes[] = {
           http2::FrameType::DATA,
           http2::FrameType::HEADERS,
-          http2::FrameType::PRIORITY,
+          http2::FrameType::RFC9218_PRIORITY,
           http2::FrameType::RST_STREAM,
           http2::FrameType::SETTINGS,
           http2::FrameType::PUSH_PROMISE,
@@ -2472,8 +2367,7 @@ TEST_F(HTTP2CodecTest, TestAllEgressFrameTypeCallbacks) {
   auto id = upstreamCodec_.createStream();
   upstreamCodec_.generateHeader(output_, id, req, true, &size);
 
-  upstreamCodec_.generatePriority(
-      output_, 3, HTTPMessage::HTTP2Priority(0, true, 1));
+  upstreamCodec_.generatePriority(output_, 3, HTTPPriority{1, true});
   upstreamCodec_.generateRstStream(output_, 2, ErrorCode::ENHANCE_YOUR_CALM);
   upstreamCodec_.generateSettings(output_);
   downstreamCodec_.generatePushPromise(output_, 2, req, 1);
@@ -2548,13 +2442,8 @@ TEST_F(HTTP2CodecTest, TrailersWithPseudoHeaders) {
   std::vector<proxygen::compress::Header> trailers = {
       Header::makeHeaderForTest(headers::kMethod, post)};
   auto encodedTrailers = headerCodec.encode(trailers);
-  writeHeaders(output_,
-               std::move(encodedTrailers),
-               1,
-               folly::none,
-               http2::kNoPadding,
-               true,
-               true);
+  writeHeaders(
+      output_, std::move(encodedTrailers), 1, http2::kNoPadding, true, true);
 
   parse();
 
@@ -2749,13 +2638,8 @@ TEST_F(HTTP2CodecTest, TrailersReplyWithPseudoHeaders) {
   std::vector<proxygen::compress::Header> trailers = {
       Header::makeHeaderForTest(headers::kMethod, post)};
   auto encodedTrailers = headerCodec.encode(trailers);
-  writeHeaders(output_,
-               std::move(encodedTrailers),
-               1,
-               folly::none,
-               http2::kNoPadding,
-               true,
-               true);
+  writeHeaders(
+      output_, std::move(encodedTrailers), 1, http2::kNoPadding, true, true);
   parseUpstream();
 
   // Unfortunately, you get 2x messageBegin calls for parse error in
@@ -2946,6 +2830,43 @@ TEST_F(HTTP2CodecDoubleGoawayTest, EnableDoubleGoawayAfterClose) {
   upstreamCodec_.enableDoubleGoawayDrain();
   parseUpstream();
   EXPECT_EQ(callbacks_.goaways, 1);
+  EXPECT_EQ(callbacks_.streamErrors, 0);
+  EXPECT_EQ(callbacks_.sessionErrors, 0);
+}
+
+TEST_F(HTTP2CodecTest, SendEmptyTrailers) {
+  HTTPMessage req = getGetRequest("/guacamole");
+  req.getHeaders().add(HTTP_HEADER_USER_AGENT, "coolio");
+  auto id = upstreamCodec_.createStream();
+  upstreamCodec_.generateHeader(output_, id, req);
+
+  // Send a single trailer "Connection" "keep-alive"
+  HTTPHeaders trailers;
+  trailers.add("Connection", "keep-alive");
+  upstreamCodec_.generateTrailers(output_, id, trailers);
+
+  parse();
+
+  EXPECT_EQ(callbacks_.messageBegin, 1);
+  EXPECT_EQ(callbacks_.headersComplete, 1);
+  EXPECT_EQ(callbacks_.bodyCalls, 0);
+  EXPECT_EQ(callbacks_.trailers, 0);
+  EXPECT_EQ(callbacks_.messageComplete, 1);
+  EXPECT_EQ(callbacks_.streamErrors, 0);
+  EXPECT_EQ(callbacks_.sessionErrors, 0);
+  EXPECT_EQ(callbacks_.msg->getTrailers(), nullptr);
+}
+
+TEST_F(HTTP2CodecTest, GenerateHeadersWithEmptyRequest) {
+  HTTPMessage req;
+  req.getClientAddress(); // Force it to be a request
+  auto id = upstreamCodec_.createStream();
+  upstreamCodec_.generateHeader(output_, id, req, true /* eom */);
+
+  parse();
+  EXPECT_EQ(callbacks_.messageBegin, 1);
+  EXPECT_EQ(callbacks_.headersComplete, 1);
+  EXPECT_EQ(callbacks_.messageComplete, 1);
   EXPECT_EQ(callbacks_.streamErrors, 0);
   EXPECT_EQ(callbacks_.sessionErrors, 0);
 }

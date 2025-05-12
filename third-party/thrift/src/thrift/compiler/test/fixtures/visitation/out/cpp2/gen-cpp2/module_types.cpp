@@ -221,6 +221,7 @@ void swap(union1& a, union1& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void union1::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t union1::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t union1::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -229,6 +230,7 @@ template void union1::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t union1::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t union1::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t union1::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -373,6 +375,7 @@ void swap(union2& a, union2& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void union2::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t union2::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t union2::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -381,6 +384,7 @@ template void union2::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t union2::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t union2::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t union2::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -525,6 +529,7 @@ void swap(union3& a, union3& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void union3::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t union3::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t union3::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -533,6 +538,7 @@ template void union3::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t union3::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t union3::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t union3::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -602,7 +608,7 @@ structA::structA(apache::thrift::FragileConstructor, ::std::int32_t a__arg, ::st
 void structA::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_a = ::std::int32_t();
-  this->__fbthrift_field_b = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_b = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -638,6 +644,7 @@ void swap([[maybe_unused]] structA& a, [[maybe_unused]] structA& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void structA::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t structA::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t structA::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -646,6 +653,7 @@ template void structA::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t structA::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t structA::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t structA::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -799,6 +807,7 @@ void swap(unionA& a, unionA& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void unionA::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t unionA::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t unionA::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -807,6 +816,7 @@ template void unionA::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t unionA::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t unionA::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t unionA::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -905,6 +915,7 @@ void swap([[maybe_unused]] structB& a, [[maybe_unused]] structB& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void structB::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t structB::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t structB::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -913,6 +924,7 @@ template void structB::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t structB::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t structB::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t structB::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -1098,7 +1110,7 @@ structC::structC(apache::thrift::FragileConstructor, ::std::int32_t a__arg, ::st
 void structC::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_a = ::std::int32_t();
-  this->__fbthrift_field_b = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_b = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_c = double();
   this->__fbthrift_field_d = bool();
   this->__fbthrift_field_e = ::test_cpp2::cpp_reflection::enum1();
@@ -1418,6 +1430,7 @@ void swap([[maybe_unused]] structC& a, [[maybe_unused]] structC& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void structC::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t structC::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t structC::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1426,6 +1439,7 @@ template void structC::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t structC::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t structC::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t structC::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -1577,7 +1591,7 @@ struct1::struct1(apache::thrift::FragileConstructor, ::std::int32_t field0__arg,
 void struct1::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_field0 = ::std::int32_t();
-  this->__fbthrift_field_field1 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field1 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_field2 = ::test_cpp2::cpp_reflection::enum1();
   this->__fbthrift_field_field3 = ::test_cpp2::cpp_reflection::enum2();
   ::apache::thrift::clear(this->__fbthrift_field_field4);
@@ -1663,6 +1677,7 @@ void swap([[maybe_unused]] struct1& a, [[maybe_unused]] struct1& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct1::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct1::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct1::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1671,6 +1686,7 @@ template void struct1::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t struct1::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct1::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct1::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -1774,7 +1790,7 @@ struct2::struct2(apache::thrift::FragileConstructor, ::std::int32_t fieldA__arg,
 void struct2::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_fieldA = ::std::int32_t();
-  this->__fbthrift_field_fieldB = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_fieldB = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_fieldC = ::test_cpp2::cpp_reflection::enum1();
   this->__fbthrift_field_fieldD = ::test_cpp2::cpp_reflection::enum2();
   ::apache::thrift::clear(this->__fbthrift_field_fieldE);
@@ -1862,6 +1878,7 @@ void swap([[maybe_unused]] struct2& a, [[maybe_unused]] struct2& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct2::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct2::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct2::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -1870,6 +1887,7 @@ template void struct2::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t struct2::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct2::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct2::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2023,7 +2041,7 @@ struct3::struct3(apache::thrift::FragileConstructor, ::std::int32_t fieldA__arg,
 void struct3::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_fieldA = ::std::int32_t();
-  this->__fbthrift_field_fieldB = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_fieldB = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_fieldC = ::test_cpp2::cpp_reflection::enum1();
   this->__fbthrift_field_fieldD = ::test_cpp2::cpp_reflection::enum2();
   ::apache::thrift::clear(this->__fbthrift_field_fieldE);
@@ -2221,6 +2239,7 @@ void swap([[maybe_unused]] struct3& a, [[maybe_unused]] struct3& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct3::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct3::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct3::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2229,6 +2248,7 @@ template void struct3::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t struct3::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct3::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct3::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2368,7 +2388,7 @@ struct4::struct4(apache::thrift::FragileConstructor, ::std::int32_t field0__arg,
 void struct4::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_field0 = ::std::int32_t();
-  this->__fbthrift_field_field1 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field1 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_field2 = ::test_cpp2::cpp_reflection::enum1();
   if (this->__fbthrift_field_field3) ::apache::thrift::clear(*this->__fbthrift_field_field3);
   __isset = {};
@@ -2425,6 +2445,7 @@ void swap([[maybe_unused]] struct4& a, [[maybe_unused]] struct4& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct4::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct4::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct4::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2433,6 +2454,7 @@ template void struct4::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t struct4::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct4::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct4::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2520,7 +2542,7 @@ struct5::struct5(apache::thrift::FragileConstructor, ::std::int32_t field0__arg,
 void struct5::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_field0 = ::std::int32_t();
-  this->__fbthrift_field_field1 = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_field1 = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_field2 = ::test_cpp2::cpp_reflection::enum1();
   ::apache::thrift::clear(this->__fbthrift_field_field3);
   ::apache::thrift::clear(this->__fbthrift_field_field4);
@@ -2595,6 +2617,7 @@ void swap([[maybe_unused]] struct5& a, [[maybe_unused]] struct5& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct5::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct5::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct5::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2603,6 +2626,7 @@ template void struct5::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t struct5::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct5::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct5::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2678,7 +2702,7 @@ struct_binary::struct_binary(apache::thrift::FragileConstructor, ::std::string b
 
 void struct_binary::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_bi = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_bi = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -2704,6 +2728,7 @@ void swap([[maybe_unused]] struct_binary& a, [[maybe_unused]] struct_binary& b) 
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct_binary::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct_binary::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct_binary::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2712,6 +2737,7 @@ template void struct_binary::readNoXfer<>(apache::thrift::CompactProtocolReader*
 template uint32_t struct_binary::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct_binary::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct_binary::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -2815,6 +2841,7 @@ void swap([[maybe_unused]] dep_A_struct& a, [[maybe_unused]] dep_A_struct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void dep_A_struct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t dep_A_struct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t dep_A_struct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2823,6 +2850,7 @@ template void dep_A_struct::readNoXfer<>(apache::thrift::CompactProtocolReader*)
 template uint32_t dep_A_struct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t dep_A_struct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t dep_A_struct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -2938,6 +2966,7 @@ void swap([[maybe_unused]] dep_B_struct& a, [[maybe_unused]] dep_B_struct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void dep_B_struct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t dep_B_struct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t dep_B_struct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -2946,6 +2975,7 @@ template void dep_B_struct::readNoXfer<>(apache::thrift::CompactProtocolReader*)
 template uint32_t dep_B_struct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t dep_B_struct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t dep_B_struct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -3037,6 +3067,7 @@ void swap([[maybe_unused]] annotated& a, [[maybe_unused]] annotated& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void annotated::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t annotated::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t annotated::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3045,6 +3076,7 @@ template void annotated::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t annotated::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t annotated::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t annotated::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -3402,6 +3434,7 @@ void swap(union_with_special_names& a, union_with_special_names& b) {
   b = std::move(temp);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void union_with_special_names::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t union_with_special_names::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t union_with_special_names::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3410,6 +3443,7 @@ template void union_with_special_names::readNoXfer<>(apache::thrift::CompactProt
 template uint32_t union_with_special_names::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t union_with_special_names::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t union_with_special_names::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection
@@ -3840,6 +3874,7 @@ void swap([[maybe_unused]] struct_with_special_names& a, [[maybe_unused]] struct
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void struct_with_special_names::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t struct_with_special_names::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t struct_with_special_names::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -3848,167 +3883,7 @@ template void struct_with_special_names::readNoXfer<>(apache::thrift::CompactPro
 template uint32_t struct_with_special_names::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t struct_with_special_names::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t struct_with_special_names::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
-
-
-} // namespace test_cpp2::cpp_reflection
-
-namespace apache {
-namespace thrift {
-namespace detail {
-
-void TccStructTraits<::test_cpp2::cpp_reflection::struct_with_indirections>::translateFieldName(
-    std::string_view _fname,
-    int16_t& fid,
-    apache::thrift::protocol::TType& _ftype) noexcept {
-  using data = apache::thrift::TStructDataStorage<::test_cpp2::cpp_reflection::struct_with_indirections>;
-  static const st::translate_field_name_table table{
-      data::fields_size,
-      data::fields_names.data(),
-      data::fields_ids.data(),
-      data::fields_types.data()};
-  st::translate_field_name(_fname, fid, _ftype, table);
-}
-
-} // namespace detail
-} // namespace thrift
-} // namespace apache
-
-namespace test_cpp2::cpp_reflection {
-
-std::string_view struct_with_indirections::__fbthrift_get_field_name(::apache::thrift::FieldOrdinal ord) {
-  if (ord == ::apache::thrift::FieldOrdinal{0}) { return {}; }
-  return apache::thrift::TStructDataStorage<struct_with_indirections>::fields_names[folly::to_underlying(ord) - 1];
-}
-std::string_view struct_with_indirections::__fbthrift_get_class_name() {
-  return apache::thrift::TStructDataStorage<struct_with_indirections>::name;
-}
-
-struct_with_indirections::struct_with_indirections(const struct_with_indirections&) = default;
-struct_with_indirections& struct_with_indirections::operator=(const struct_with_indirections&) = default;
-struct_with_indirections::struct_with_indirections() :
-    __fbthrift_field_real(),
-    __fbthrift_field_fake(),
-    __fbthrift_field_number(),
-    __fbthrift_field_result() {
-}
-
-
-struct_with_indirections::~struct_with_indirections() {}
-
-struct_with_indirections::struct_with_indirections([[maybe_unused]] struct_with_indirections&& other) noexcept :
-    __fbthrift_field_real(std::move(other.__fbthrift_field_real)),
-    __fbthrift_field_fake(std::move(other.__fbthrift_field_fake)),
-    __fbthrift_field_number(std::move(other.__fbthrift_field_number)),
-    __fbthrift_field_result(std::move(other.__fbthrift_field_result)),
-    __fbthrift_field_phrase(std::move(other.__fbthrift_field_phrase)),
-    __isset(other.__isset) {
-}
-
-struct_with_indirections& struct_with_indirections::operator=([[maybe_unused]] struct_with_indirections&& other) noexcept {
-    this->__fbthrift_field_real = std::move(other.__fbthrift_field_real);
-    this->__fbthrift_field_fake = std::move(other.__fbthrift_field_fake);
-    this->__fbthrift_field_number = std::move(other.__fbthrift_field_number);
-    this->__fbthrift_field_result = std::move(other.__fbthrift_field_result);
-    this->__fbthrift_field_phrase = std::move(other.__fbthrift_field_phrase);
-    __isset = other.__isset;
-    return *this;
-}
-
-
-struct_with_indirections::struct_with_indirections(apache::thrift::FragileConstructor, ::std::int32_t real__arg, ::test_cpp2::cpp_reflection::FakeI32 fake__arg, ::test_cpp2::cpp_reflection::HasANumber number__arg, ::test_cpp2::cpp_reflection::HasAResult result__arg, ::test_cpp2::cpp_reflection::HasAPhrase phrase__arg) :
-    __fbthrift_field_real(std::move(real__arg)),
-    __fbthrift_field_fake(std::move(fake__arg)),
-    __fbthrift_field_number(std::move(number__arg)),
-    __fbthrift_field_result(std::move(result__arg)),
-    __fbthrift_field_phrase(std::move(phrase__arg)) { 
-  __isset.set(folly::index_constant<0>(), true);
-  __isset.set(folly::index_constant<1>(), true);
-  __isset.set(folly::index_constant<2>(), true);
-  __isset.set(folly::index_constant<3>(), true);
-  __isset.set(folly::index_constant<4>(), true);
-}
-
-
-void struct_with_indirections::__fbthrift_clear() {
-  // clear all fields
-  this->__fbthrift_field_real = ::std::int32_t();
-  this->__fbthrift_field_fake = ::test_cpp2::cpp_reflection::FakeI32();
-  ::apache::thrift::apply_indirection(this->__fbthrift_field_number) = 0;
-  ::apache::thrift::apply_indirection(this->__fbthrift_field_result) = 0;
-  ::apache::thrift::apply_indirection(this->__fbthrift_field_phrase) = apache::thrift::StringTraits<::folly::remove_cvref_t<::folly::invoke_result_t<::apache::thrift::detail::apply_indirection_fn, CppHasAPhrase const&>>>::fromStringLiteral("");
-  __isset = {};
-}
-
-void struct_with_indirections::__fbthrift_clear_terse_fields() {
-}
-
-bool struct_with_indirections::__fbthrift_is_empty() const {
-  return false;
-}
-
-bool struct_with_indirections::operator==([[maybe_unused]] const struct_with_indirections& rhs) const {
-  return ::apache::thrift::op::detail::StructEquality{}(*this, rhs);
-}
-
-bool struct_with_indirections::operator<([[maybe_unused]] const struct_with_indirections& rhs) const {
-  return ::apache::thrift::op::detail::StructLessThan{}(*this, rhs);
-}
-
-
-::std::int32_t struct_with_indirections::get_real() const {
-  return __fbthrift_field_real;
-}
-
-::std::int32_t& struct_with_indirections::set_real(::std::int32_t real_) {
-  real_ref() = real_;
-  return __fbthrift_field_real;
-}
-
-::test_cpp2::cpp_reflection::FakeI32 struct_with_indirections::get_fake() const {
-  return __fbthrift_field_fake;
-}
-
-::test_cpp2::cpp_reflection::FakeI32& struct_with_indirections::set_fake(::test_cpp2::cpp_reflection::FakeI32 fake_) {
-  fake_ref() = fake_;
-  return __fbthrift_field_fake;
-}
-
-::test_cpp2::cpp_reflection::HasANumber struct_with_indirections::get_number() const {
-  return __fbthrift_field_number;
-}
-
-::test_cpp2::cpp_reflection::HasANumber& struct_with_indirections::set_number(::test_cpp2::cpp_reflection::HasANumber number_) {
-  number_ref() = number_;
-  return __fbthrift_field_number;
-}
-
-::test_cpp2::cpp_reflection::HasAResult struct_with_indirections::get_result() const {
-  return __fbthrift_field_result;
-}
-
-::test_cpp2::cpp_reflection::HasAResult& struct_with_indirections::set_result(::test_cpp2::cpp_reflection::HasAResult result_) {
-  result_ref() = result_;
-  return __fbthrift_field_result;
-}
-
-void swap([[maybe_unused]] struct_with_indirections& a, [[maybe_unused]] struct_with_indirections& b) {
-  using ::std::swap;
-  swap(a.__fbthrift_field_real, b.__fbthrift_field_real);
-  swap(a.__fbthrift_field_fake, b.__fbthrift_field_fake);
-  swap(a.__fbthrift_field_number, b.__fbthrift_field_number);
-  swap(a.__fbthrift_field_result, b.__fbthrift_field_result);
-  swap(a.__fbthrift_field_phrase, b.__fbthrift_field_phrase);
-  swap(a.__isset, b.__isset);
-}
-
-template void struct_with_indirections::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
-template uint32_t struct_with_indirections::write<>(apache::thrift::BinaryProtocolWriter*) const;
-template uint32_t struct_with_indirections::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
-template uint32_t struct_with_indirections::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
-template void struct_with_indirections::readNoXfer<>(apache::thrift::CompactProtocolReader*);
-template uint32_t struct_with_indirections::write<>(apache::thrift::CompactProtocolWriter*) const;
-template uint32_t struct_with_indirections::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
-template uint32_t struct_with_indirections::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace test_cpp2::cpp_reflection

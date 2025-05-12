@@ -38,6 +38,8 @@ class InteractLocallyServiceInfoHolder : public apache::thrift::ServiceInfoHolde
 namespace apache::thrift {
 template <>
 class ServiceHandler<::thrift::shared_interactions::InteractLocally> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::thrift::shared_interactions::InteractLocally>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "InteractLocally"; }
 
@@ -101,6 +103,13 @@ class SharedInteractionIf : public apache::thrift::Tile, public apache::thrift::
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_createSharedInteraction{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::thrift::shared_interactions::InteractLocally, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4220872492017656570;
+  static constexpr ::std::string_view definitionKey = {"\x56\xd1\x04\xc3\x6f\x07\x7b\x82\x7b\x8a\x05\x38\xf1\xf1\x9b\xc8", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace thrift::shared_interactions {

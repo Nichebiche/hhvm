@@ -33,8 +33,6 @@
 #include "hphp/runtime/vm/jit/irgen-internal.h"
 #include "hphp/runtime/vm/jit/irgen-interpone.h"
 #include "hphp/runtime/vm/jit/irgen-ret.h"
-#include "hphp/runtime/vm/jit/irgen-types.h"
-#include "hphp/runtime/vm/jit/normalized-instruction.h"
 
 #include "hphp/util/configs/hhir.h"
 #include "hphp/util/configs/jit.h"
@@ -46,7 +44,7 @@ namespace {
 
 //////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 // Returns true and fills "locals" with types of the function's locals if this
 // op is an Await in "tail position" (whose results are immediately returned).
@@ -163,13 +161,18 @@ void suspendHook(IRGS& env, Hook hook) {
   );
 }
 
+template <bool lowPri>
 void implAwaitE(IRGS& env, SSATmp* child, Offset suspendOffset,
                 Offset resumeOffset) {
   assertx(curFunc(env)->isAsync());
   assertx(resumeMode(env) != ResumeMode::Async);
   // FIXME(T88328140): ifThenElse() emits unreachable code with bad state
   // assertx(spOffBCFromStackBase(env) == spOffEmpty(env));
-  assertx(child->type() <= TObj);
+  if constexpr (lowPri) {
+    assertx(!child);
+  } else {
+    assertx(child && child->type() <= TObj);
+  }
 
   // Bind address at which the execution should resume after awaiting.
   auto const func = curFunc(env);
@@ -186,9 +189,11 @@ void implAwaitE(IRGS& env, SSATmp* child, Offset suspendOffset,
     // we do the tail-call optimization, so we push the suspend hook here.
     auto const createNewAFWH = [&]{
       if (isInlining(env)) gen(env, StFrameFunc, FuncData { func }, fp(env));
-      auto const wh = gen(env, CreateAFWH, fp(env),
-                          cns(env, func->numSlotsInFrame()),
-                          resumeAddr(), suspendOff, child);
+      auto const wh = lowPri ?
+        gen(env, CreateAFWHL, fp(env), cns(env, func->numSlotsInFrame()), 
+            resumeAddr(), suspendOff) :
+        gen(env, CreateAFWH, fp(env), cns(env, func->numSlotsInFrame()), 
+            resumeAddr(), suspendOff, child);
       // Constructing a waithandle teleports locals and iterators to the heap,
       // kill them here to improve alias analysis.
       for (uint32_t i = 0; i < func->numLocals(); ++i) {
@@ -214,7 +219,6 @@ void implAwaitE(IRGS& env, SSATmp* child, Offset suspendOffset,
       auto const tailFrameId = getAsyncFrameId(curSrcKey(env));
       if (tailFrameId == kInvalidAsyncFrameId) return createNewAFWH();
       auto const type = Type::ExactObj(c_AsyncFunctionWaitHandle::classof());
-
       return cond(env,
         [&](Block* taken) {
           gen(env, CheckSurpriseFlags, taken, anyStackRegister(env));
@@ -426,7 +430,7 @@ Type awaitedTypeFromSSATmp(const SSATmp* awaitable) {
     return !extra->asyncEagerReturn()
       ? awaitedCallReturnType(extra->target.func()) : TInitCell;
   }
-  if (inst->is(CreateAFWH)) {
+  if (inst->is(CreateAFWH) || inst->is(CreateAFWHL)) {
     return awaitedCallReturnType(inst->func());
   }
   if (inst->is(DefLabel)) {
@@ -457,7 +461,7 @@ bool likelySuspended(const SSATmp* awaitable) {
       inst->extra<CallFuncEntry>()->asyncEagerReturn()) {
     return true;
   }
-  if (inst->is(CreateAFWH)) return true;
+  if (inst->is(CreateAFWH) || inst->is(CreateAFWHL)) return true;
   if (inst->is(DefLabel)) {
     auto likely = true;
     auto const dsts = inst->dsts();
@@ -483,32 +487,15 @@ void implAwaitSucceeded(IRGS& env, SSATmp* child) {
 }
 
 void implAwaitFailed(IRGS& env, SSATmp* child, Block* exit) {
-  auto const stackEmpty = spOffBCFromStackBase(env) == spOffEmpty(env) + 1;
-  if (!stackEmpty) {
-    assertx(exit);
-    assertx(curSrcKey(env).op() == Op::WHResult);
-    gen(env, Jmp, exit);
-    return;
-  }
-
-  auto const offset = findExceptionHandler(curFunc(env), bcOff(env));
-  auto const exception = gen(env, LdWHResult, TObj, child);
+  auto const ty = Type::SubObj(SystemLib::getThrowableClass());
+  auto const exc = gen(env, LdWHResult, ty, child);
   popC(env);
-  gen(env, IncRef, exception);
+  gen(env, IncRef, exc);
   decRef(env, child);
-  if (offset != kInvalidOffset) {
-    push(env, exception);
-    jmpImpl(env, offset);
-  } else {
-    // There are no more catch blocks in this function, we are at the top
-    // level throw
-    hint(env, Block::Hint::Unlikely);
-    spillInlinedFrames(env);
-    auto const spOff = spOffBCFromIRSP(env);
-    eagerVMSync(env, spOff);
-    auto const etcData = EnterTCUnwindData { spOff, true };
-    gen(env, EnterTCUnwind, etcData, exception);
-  }
+  updateMarker(env);
+
+  auto constexpr mode = EndCatchData::CatchMode::UnwindOnly;
+  emitHandleException(env, mode, exc, std::nullopt, true /* sideEntry */);
 }
 
 template<class T>
@@ -599,7 +586,7 @@ void emitAwait(IRGS& env) {
     if (resumeMode(env) == ResumeMode::Async) {
       implAwaitR(env, child, bcOff(env), nextBcOff(env));
     } else {
-      implAwaitE(env, child, bcOff(env), nextBcOff(env));
+      implAwaitE<false>(env, child, bcOff(env), nextBcOff(env));
     }
   });
 }
@@ -682,12 +669,25 @@ void emitAwaitAll(IRGS& env, LocalRange locals) {
           if (resumeMode(env) == ResumeMode::Async) {
             implAwaitR(env, wh, suspendOffset, resumeOffset);
           } else {
-            implAwaitE(env, wh, suspendOffset, resumeOffset);
+            implAwaitE<false>(env, wh, suspendOffset, resumeOffset);
           }
         }
       );
     }
   );
+}
+
+void emitAwaitLowPri(IRGS& env) {
+  assertx(resumeMode(env) == ResumeMode::None);
+  assertx(curFunc(env)->isAsyncFunction());
+  assertx(spOffBCFromStackBase(env) == spOffEmpty(env));
+
+  if (!Cfg::Eval::EnableLowPriorityAwaitables) {
+    push(env, cns(env, TInitNull));
+    return;
+  }
+
+  implAwaitE<true>(env, nullptr, bcOff(env), nextBcOff(env));
 }
 
 //////////////////////////////////////////////////////////////////////

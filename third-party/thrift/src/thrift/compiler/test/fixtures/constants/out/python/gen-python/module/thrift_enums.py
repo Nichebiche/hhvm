@@ -11,11 +11,9 @@ import apache.thrift.metadata.thrift_types as _fbthrift_metadata
 import thrift.python.types as _fbthrift_python_types
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_EmptyEnum:
-    pass
 
 
-class EmptyEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_EmptyEnum):
+class EmptyEnum(_fbthrift_python_types.Enum, int):
     @staticmethod
     def __get_thrift_name__() -> str:
         return "module.EmptyEnum"
@@ -31,20 +29,16 @@ class EmptyEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_Empt
     def _to_python(self) -> "EmptyEnum":
         return self
 
-    def _to_py3(self) -> "module.types.EmptyEnum": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.EmptyEnum(self.value)
+    def _to_py3(self) -> "EmptyEnum":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_City:
-    pass
 
 
-class City(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_City):
+class City(_fbthrift_python_types.Enum, int):
     NYC = 0
     MPK = 1
     SEA = 2
@@ -64,20 +58,16 @@ class City(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_City):
     def _to_python(self) -> "City":
         return self
 
-    def _to_py3(self) -> "module.types.City": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.City(self.value)
+    def _to_py3(self) -> "City":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_Company:
-    pass
 
 
-class Company(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_Company):
+class Company(_fbthrift_python_types.Enum, int):
     FACEBOOK = 0
     WHATSAPP = 1
     OCULUS = 2
@@ -98,10 +88,8 @@ class Company(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_Compan
     def _to_python(self) -> "Company":
         return self
 
-    def _to_py3(self) -> "module.types.Company": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.Company(self.value)
+    def _to_py3(self) -> "Company":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value

@@ -51,12 +51,12 @@ class MockServerConfigs : public apache::thrift::server::ServerConfigs {
       (),
       (const, override));
   MOCK_METHOD(
-      apache::thrift::CPUConcurrencyController&,
+      apache::thrift::CPUConcurrencyController*,
       getCPUConcurrencyController,
       (),
       (override));
   MOCK_METHOD(
-      const apache::thrift::CPUConcurrencyController&,
+      const apache::thrift::CPUConcurrencyController*,
       getCPUConcurrencyController,
       (),
       (const, override));
@@ -81,8 +81,12 @@ class MockServerConfigs : public apache::thrift::server::ServerConfigs {
   MOCK_METHOD(uint32_t, getListenerTos, (), (const, override));
   MOCK_METHOD(uint32_t, getMaxRequests, (), (const, override));
   MOCK_METHOD(void, setMaxRequests, (uint32_t), (override));
+  MOCK_METHOD(uint32_t, getConcurrencyLimit, (), (const, override));
+  MOCK_METHOD(void, setConcurrencyLimit, (uint32_t), (override));
   MOCK_METHOD(uint32_t, getMaxQps, (), (const, override));
   MOCK_METHOD(void, setMaxQps, (uint32_t), (override));
+  MOCK_METHOD(uint32_t, getExecutionRate, (), (const, override));
+  MOCK_METHOD(void, setExecutionRate, (uint32_t), (override));
   MOCK_METHOD(
       std::shared_ptr<folly::Executor>,
       getThreadManager,
@@ -109,6 +113,11 @@ class MockServerConfigs : public apache::thrift::server::ServerConfigs {
   MOCK_METHOD(bool, getUseClientTimeout, (), (const, override));
   MOCK_METHOD(
       std::chrono::milliseconds, getTaskExpireTime, (), (const, override));
+  MOCK_METHOD(
+      InterceptorMetricCallback&,
+      getInterceptorMetricCallback,
+      (),
+      (const, override));
 };
 
 } // namespace apache::thrift::server::test

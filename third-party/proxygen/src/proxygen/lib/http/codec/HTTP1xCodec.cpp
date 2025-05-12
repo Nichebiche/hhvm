@@ -311,7 +311,7 @@ void HTTP1xCodec::onParserError(const char* what) {
              parser_errno == HPE_CB_header_field ||
              parser_errno == HPE_CB_header_value ||
              parser_errno == HPE_CB_headers_complete) {
-    error.setProxygenError(kErrorParseHeader);
+    error.setProxygenError(validationError_.value_or(kErrorParseHeader));
   } else if (parser_errno == HPE_INVALID_CHUNK_SIZE ||
              parser_errno == HPE_HUGE_CHUNK_SIZE) {
     error.setProxygenError(kErrorParseBody);
@@ -789,6 +789,7 @@ size_t HTTP1xCodec::generateTrailers(IOBufQueue& writeBuf,
       appendString(writeBuf, len, value);
       appendLiteral(writeBuf, len, CRLF);
     });
+    len += generateEOM(writeBuf, txn);
   }
   return len;
 }
@@ -804,10 +805,7 @@ size_t HTTP1xCodec::generateEOM(IOBufQueue& writeBuf, StreamID txn) {
       // appending a 0\r\n only if it's not a HEAD and downstream request
       if (!lastChunkWritten_) {
         lastChunkWritten_ = true;
-        if (!(headRequest_ &&
-              transportDirection_ == TransportDirection::DOWNSTREAM)) {
-          appendLiteral(writeBuf, len, "0\r\n");
-        }
+        appendLiteral(writeBuf, len, "0\r\n");
       }
       appendLiteral(writeBuf, len, CRLF);
     }
@@ -909,8 +907,9 @@ bool HTTP1xCodec::pushHeaderNameAndValue(HTTPHeaders& hdrs) {
             folly::StringPiece(currentHeaderValue_),
             compatValidate ? CodecUtil::CtlEscapeMode::STRICT_COMPAT
                            : CodecUtil::CtlEscapeMode::STRICT)) {
+      validationError_ = kErrorHeaderContentValidation;
       LOG(ERROR) << "Invalid header name=" << headerName;
-      std::cerr << " value=" << currentHeaderValue_ << std::endl;
+      DVLOG(4) << " value=" << currentHeaderValue_;
       return false;
     }
   }

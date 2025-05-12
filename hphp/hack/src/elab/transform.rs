@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<79a21171eb755935da6fae4bd5b1706f>>
+// @generated SignedSource<<1461ddacd4604948138376e3172e5b2c>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -15,8 +15,8 @@ use std::ops::ControlFlow::Break;
 
 use oxidized::nast::*;
 
-use crate::env::Env;
 use crate::Pass;
+use crate::env::Env;
 pub trait Transform {
     #[inline(always)]
     fn transform(&mut self, env: &Env, pass: &mut (impl Pass + Clone)) {
@@ -577,11 +577,15 @@ impl Transform for ExpressionTree {
             ExpressionTree {
                 class: ref mut __binding_0,
                 runtime_expr: ref mut __binding_1,
+                free_vars: ref mut __binding_2,
             } => {
                 {
                     __binding_0.transform(env, &mut pass.clone())
                 }
-                { __binding_1.transform(env, &mut pass.clone()) }
+                {
+                    __binding_1.transform(env, &mut pass.clone())
+                }
+                { __binding_2.transform(env, &mut pass.clone()) }
             }
         }
     }
@@ -632,7 +636,8 @@ impl Transform for EtSplice {
                 extract_client_type: ref mut __binding_0,
                 contains_await: ref mut __binding_1,
                 macro_variables: ref mut __binding_2,
-                spliced_expr: ref mut __binding_3,
+                temp_lid: ref mut __binding_3,
+                spliced_expr: ref mut __binding_4,
             } => {
                 {
                     __binding_0.transform(env, &mut pass.clone())
@@ -643,7 +648,10 @@ impl Transform for EtSplice {
                 {
                     __binding_2.transform(env, &mut pass.clone())
                 }
-                { __binding_3.transform(env, &mut pass.clone()) }
+                {
+                    __binding_3.transform(env, &mut pass.clone())
+                }
+                { __binding_4.transform(env, &mut pass.clone()) }
             }
         }
     }
@@ -1114,6 +1122,7 @@ impl Transform for Efun {
                 fun: ref mut __binding_0,
                 use_: ref mut __binding_1,
                 closure_class_name: ref mut __binding_2,
+                is_expr_tree_virtual_expr: ref mut __binding_3,
             } => {
                 {
                     __binding_0.transform(env, &mut pass.clone())
@@ -1121,7 +1130,10 @@ impl Transform for Efun {
                 {
                     __binding_1.transform(env, &mut pass.clone())
                 }
-                { __binding_2.transform(env, &mut pass.clone()) }
+                {
+                    __binding_2.transform(env, &mut pass.clone())
+                }
+                { __binding_3.transform(env, &mut pass.clone()) }
             }
         }
     }
@@ -2350,11 +2362,12 @@ impl Transform for HintFun {
     fn traverse(&mut self, env: &Env, pass: &mut (impl Pass + Clone)) {
         match self {
             HintFun {
-                param_tys: ref mut __binding_1,
-                param_info: ref mut __binding_2,
-                variadic_ty: ref mut __binding_3,
-                ctxs: ref mut __binding_4,
-                return_ty: ref mut __binding_5,
+                tparams: ref mut __binding_1,
+                param_tys: ref mut __binding_2,
+                param_info: ref mut __binding_3,
+                variadic_ty: ref mut __binding_4,
+                ctxs: ref mut __binding_5,
+                return_ty: ref mut __binding_6,
                 ..
             } => {
                 {
@@ -2370,17 +2383,47 @@ impl Transform for HintFun {
                     __binding_4.transform(env, &mut pass.clone())
                 }
                 {
+                    __binding_5.transform(env, &mut pass.clone())
+                }
+                {
                     {
                         let pass = &mut pass.clone();
                         let mut in_pass = pass.clone();
-                        if let Break(..) = pass.on_fld_hint_fun_return_ty_top_down(env, __binding_5)
+                        if let Break(..) = pass.on_fld_hint_fun_return_ty_top_down(env, __binding_6)
                         {
                             return;
                         }
-                        __binding_5.transform(env, &mut pass.clone());
-                        in_pass.on_fld_hint_fun_return_ty_bottom_up(env, __binding_5);
+                        __binding_6.transform(env, &mut pass.clone());
+                        in_pass.on_fld_hint_fun_return_ty_bottom_up(env, __binding_6);
                     }
                 }
+            }
+        }
+    }
+}
+impl Transform for HintTparam {
+    fn transform(&mut self, env: &Env, pass: &mut (impl Pass + Clone)) {
+        let mut in_pass = pass.clone();
+        if let Break(..) = pass.on_ty_hint_tparam_top_down(env, self) {
+            return;
+        }
+        stack_limit::maybe_grow(|| self.traverse(env, pass));
+        in_pass.on_ty_hint_tparam_bottom_up(env, self);
+    }
+    fn traverse(&mut self, env: &Env, pass: &mut (impl Pass + Clone)) {
+        match self {
+            HintTparam {
+                name: ref mut __binding_0,
+                user_attributes: ref mut __binding_1,
+                constraints: ref mut __binding_2,
+            } => {
+                {
+                    __binding_0.transform(env, &mut pass.clone())
+                }
+                {
+                    __binding_1.transform(env, &mut pass.clone())
+                }
+                { __binding_2.transform(env, &mut pass.clone()) }
             }
         }
     }

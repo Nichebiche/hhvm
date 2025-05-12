@@ -260,13 +260,13 @@ let widen_class_for_obj_get ~is_method ~nullsafe member_name env ty =
   match deref ty with
   | (_, Tprim Tnull) ->
     if Option.is_some nullsafe then
-      ((env, None), Some ty)
+      (env, Some ty)
     else
-      ((env, None), None)
+      (env, None)
   | (r2, Tclass (((_, class_name) as class_id), _, tyl)) ->
     let default () =
       let ty = mk (r2, Tclass (class_id, nonexact, tyl)) in
-      ((env, None), Some ty)
+      (env, Some ty)
     in
     begin
       match Env.get_class env class_name with
@@ -292,12 +292,12 @@ let widen_class_for_obj_get ~is_method ~nullsafe member_name env ty =
                   this_ty = ty;
                 }
               in
-              let (env, basety) = Phase.localize ~ety_env env basety in
+              let ((env, _), basety) = Phase.localize ~ety_env env basety in
               (env, Some basety)
           )
-        | None -> ((env, None), None))
+        | None -> (env, None))
     end
-  | _ -> ((env, None), None)
+  | _ -> (env, None)
 
 (* `ty` is expected to be the type for a property or method that has been
  * accessed using the nullsafe operatore e.g. $x?->prop or $x?->foo(...).
@@ -310,39 +310,37 @@ let widen_class_for_obj_get ~is_method ~nullsafe member_name env ty =
  *)
 let rec make_nullable_member_type env ~is_method id_pos pos ty =
   if is_method then
-    let (env, ty) = Env.expand_type env ty in
-    match deref ty with
-    | (r, Tfun tf) ->
-      let (env, ty) =
-        make_nullable_member_type ~is_method:false env id_pos pos tf.ft_ret
-      in
-      (env, mk (r, Tfun { tf with ft_ret = ty }))
-    | (r, Tunion (_ :: _ as tyl)) ->
-      let (env, tyl) =
-        List.map_env env tyl ~f:(fun env ty ->
-            make_nullable_member_type ~is_method env id_pos pos ty)
-      in
-      Union.union_list env r tyl
-    | (r, Tintersection tyl) ->
-      let (env, tyl) =
-        List.map_env env tyl ~f:(fun env ty ->
-            make_nullable_member_type ~is_method env id_pos pos ty)
-      in
-      Inter.intersect_list env r tyl
-    | (r, Tnewtype (name, [tyarg], _))
-      when String.equal name SN.Classes.cSupportDyn ->
-      let (env, ty) =
-        make_nullable_member_type ~is_method env id_pos pos tyarg
-      in
-      (env, MakeType.supportdyn r ty)
-    | (_, (Tdynamic | Tany _)) -> (env, ty)
-    | (_, Tunion []) -> (env, MakeType.null (Reason.nullsafe_op pos))
-    | _ ->
-      (* Shouldn't happen *)
-      make_nullable_member_type ~is_method:false env id_pos pos ty
+    Typing_utils.map_supportdyn env ty (fun env ty ->
+        let (env, ty) = Env.expand_type env ty in
+        match deref ty with
+        | (r, Tfun tf) ->
+          let (env, ty) =
+            make_nullable_member_type ~is_method:false env id_pos pos tf.ft_ret
+          in
+          (env, mk (r, Tfun { tf with ft_ret = ty }))
+        | (r, Tunion (_ :: _ as tyl)) ->
+          let (env, tyl) =
+            List.map_env env tyl ~f:(fun env ty ->
+                make_nullable_member_type ~is_method env id_pos pos ty)
+          in
+          Union.union_list env r tyl
+        | (r, Tintersection tyl) ->
+          let (env, tyl) =
+            List.map_env env tyl ~f:(fun env ty ->
+                make_nullable_member_type ~is_method env id_pos pos ty)
+          in
+          Inter.intersect_list env r tyl
+        | (_, (Tdynamic | Tany _)) -> (env, ty)
+        | (_, Tunion []) -> (env, MakeType.null (Reason.nullsafe_op pos))
+        | _ ->
+          (* Shouldn't happen *)
+          make_nullable_member_type ~is_method:false env id_pos pos ty)
   else
     let (env, ty) =
-      Typing_solver.non_null env (Pos_or_decl.of_raw_pos id_pos) ty
+      Typing_intersection.intersect_with_nonnull
+        env
+        (Pos_or_decl.of_raw_pos id_pos)
+        ty
     in
     (env, MakeType.nullable (Reason.nullsafe_op pos) ty)
 
@@ -396,14 +394,7 @@ let rec this_appears_covariantly ~contra env ty =
     this_appears_covariantly ~contra env ty1
     || this_appears_covariantly ~contra env ty2
   | Tapply (pos_name, tyl) ->
-    let tparams =
-      match Env.get_class_or_typedef env (snd pos_name) with
-      | Decl_entry.Found (Env.TypedefResult { td_tparams; _ }) -> td_tparams
-      | Decl_entry.Found (Env.ClassResult cls) -> Cls.tparams cls
-      | Decl_entry.DoesNotExist
-      | Decl_entry.NotYetAvailable ->
-        []
-    in
+    let tparams = Env.get_class_or_typedef_tparams env (snd pos_name) in
     this_appears_covariantly_params tparams tyl
   | Tmixed
   | Twildcard
@@ -1145,7 +1136,7 @@ and obj_get_inner args env receiver_ty ((id_pos, id_str) as id) on_error :
   | (_, Tdependent (_, ty))
   | (_, Tnewtype (_, _, ty)) ->
     merge_ty_err expand_ty_err_opt @@ obj_get_inner args env ty id on_error
-  | (r, Tgeneric (name, _)) when not (SSet.mem name args.seen) ->
+  | (r, Tgeneric name) when not (SSet.mem name args.seen) ->
     let args = { args with seen = SSet.add name args.seen } in
     (match TUtils.get_concrete_supertypes ~abstract_enum:true env ety1 with
     | (env, []) ->
@@ -1185,7 +1176,10 @@ and obj_get_inner args env receiver_ty ((id_pos, id_str) as id) on_error :
       let (env, ty) = Inter.intersect_list env r tyl in
       let (env, ty) =
         if args.is_nonnull then
-          Typing_solver.non_null env (Pos_or_decl.of_raw_pos args.obj_pos) ty
+          Typing_intersection.intersect_with_nonnull
+            env
+            (Pos_or_decl.of_raw_pos args.obj_pos)
+            ty
         else
           (env, ty)
       in

@@ -70,10 +70,11 @@ from thrift.py3.types cimport (
     const_pointer_cast,
     make_const_shared,
     constant_shared_ptr,
+    {{#program:inplace_migrate?}}
+    deref_const as __deref_const,
+    {{/program:inplace_migrate?}}
 )
-{{#program:intercompatible?}}
-from thrift.py3.types import _is_python_enum, _is_python_struct
-{{/program:intercompatible?}}
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -90,24 +91,37 @@ import importlib
 import asyncio
 from folly.coro cimport bridgeCoroTaskWith
 {{/program:has_stream?}}
+{{#program:inplace_migrate?}}{{#program:needs_container_converters?}}
+cimport {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.thrift_converter as _{{#program:py3Namespaces}}{{value}}_{{/program:py3Namespaces}}{{program:name}}_thrift_converter
+{{/program:needs_container_converters?}}{{/program:inplace_migrate?}}
 {{#program:includeNamespaces}}
 {{#hasTypes?}}
 cimport {{#includeNamespace}}{{value}}.{{/includeNamespace}}types as _{{#includeNamespace}}{{value}}_{{/includeNamespace}}types
 import {{#includeNamespace}}{{value}}.{{/includeNamespace}}types as _{{#includeNamespace}}{{value}}_{{/includeNamespace}}types
+{{#program:inplace_migrate?}}{{#program:needs_container_converters?}}
+cimport {{#includeNamespace}}{{value}}.{{/includeNamespace}}thrift_converter as _{{#includeNamespace}}{{value}}_{{/includeNamespace}}thrift_converter
+{{/program:needs_container_converters?}}{{^program:needs_container_converters?}}{{#program:has_stream?}}
+cimport {{#includeNamespace}}{{value}}.{{/includeNamespace}}thrift_converter as _{{#includeNamespace}}{{value}}_{{/includeNamespace}}thrift_converter
+{{/program:has_stream?}}{{/program:needs_container_converters?}}{{/program:inplace_migrate?}}
 {{/hasTypes?}}
 {{/program:includeNamespaces}}
 
+{{^program:inplace_migrate?}}
 import {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.thrift_types as _fbthrift_python_types
 {{#program:hasEnumTypes}}
-from {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
+from {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.thrift_enums import (
 {{#program:enums}}
     {{enum:name}},
 {{/program:enums}}
+)
+{{/program:hasEnumTypes}}
+{{#program:hasUnionTypes}}
+from {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
 {{#program:filtered_structs}}{{#struct:union?}}
     __{{struct:name}}Type,
 {{/struct:union?}}{{/program:filtered_structs}}
 )
-{{/program:hasEnumTypes}}
+{{/program:hasUnionTypes}}
 
 {{#program:hasContainerTypes}}
 from {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.containers_FBTHRIFT_ONLY_DO_NOT_USE import (
@@ -116,7 +130,29 @@ from {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:nam
 {{/program:containerTypes}}
 )
 {{/program:hasContainerTypes}}
+{{/program:inplace_migrate?}}
+{{#program:inplace_migrate?}}
 
+{{#program:has_stream?}}
+cimport {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.thrift_converter as _{{#program:py3Namespaces}}{{value}}_{{/program:py3Namespaces}}{{program:name}}_thrift_converter
+{{/program:has_stream?}}
+
+import {{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.types_inplace_FBTHRIFT_ONLY_DO_NOT_USE as _fbthrift_types_inplace
+{{#program:filtered_structs}}
+{{struct:name}} = _fbthrift_types_inplace.{{struct:name}}
+{{/program:filtered_structs}}
+{{#program:enums}}
+{{enum:name}} = _fbthrift_types_inplace.{{enum:name}}
+{{/program:enums}}
+{{#program:containerTypes}}
+{{type:flat_name}} = _fbthrift_types_inplace.{{type:flat_name}}
+{{/program:containerTypes}}
+{{#program:constants}}{{#constant:value}}
+{{constant:name}} = _fbthrift_types_inplace.{{constant:name}}
+{{/constant:value}}{{/program:constants}}
+{{/program:inplace_migrate?}}
+
+{{^program:inplace_migrate?}}
 _fbthrift__module_name__ = "{{#program:py3Namespaces}}{{value}}.{{/program:py3Namespaces}}{{program:name}}.types"
 
 cdef object get_types_reflection():
@@ -127,6 +163,9 @@ cdef object get_types_reflection():
 {{#program:filtered_structs}}
 {{^struct:union?}}
 @__cython.auto_pickle(False)
+{{^struct:allow_inheritance?}}
+@__cython.final
+{{/struct:allow_inheritance?}}
 cdef class {{struct:name}}({{> types/python_struct_class}}):
     __module__ = _fbthrift__module_name__
 
@@ -229,50 +268,46 @@ cdef class {{struct:name}}({{> types/python_struct_class}}):
 
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class {{struct:name}}(thrift.py3.types.Union):
     __module__ = _fbthrift__module_name__
     Type = __{{struct:name}}Type
 
     def __init__(
         self, *{{#struct:py3_fields}},
-        {{^program:intercompatible?}}{{#field:type}}{{!
+        {{#field:type}}{{^type:struct?}}{{!
             }}{{#type:cythonTypeNoneable?}}{{!
                 }}{{> types/cython_python_type}} {{!
             }}{{/type:cythonTypeNoneable?}}{{!
-        }}{{/field:type}}{{/program:intercompatible?}}{{!
+        }}{{/type:struct?}}{{/field:type}}{{!
             }}{{field:py_name}}=None{{!
         }}{{/struct:py3_fields}}
     ):
         {{#struct:py3_fields}}
         {{#field:type}}
-        {{#program:intercompatible?}}
-        if {{field:py_name}} is not None:
-            if not isinstance({{field:py_name}}, {{> types/python_is_instance_type}}):
-                if _is_python_struct({{field:py_name}}) or _is_python_enum({{field:py_name}}):
-                    {{field:py_name}} = {{field:py_name}}._to_py3()
-                    if not isinstance({{field:py_name}}, {{> types/python_is_instance_type}}):
-                        raise TypeError(f'{{field:py_name}} is a thrift-python type that can not be converted to { {{> types/python_type}} !r}.')
-                else:
-                    raise TypeError(f'{{field:py_name}} is not a { {{> types/python_type}} !r}.')
-            {{#type:integer?}}
-            {{! inject cython int overflow checks }}
-            {{field:py_name}} = <{{> types/cython_python_type}}> {{field:py_name}}
-            {{/type:integer?}}
-        {{/program:intercompatible?}}
-        {{^program:intercompatible?}}
-        {{^type:cythonTypeNoneable?}}
         {{^type:container?}}
+        {{^type:cythonTypeNoneable?}}
+        {{^type:struct?}}
         if {{field:py_name}} is not None:
             if not isinstance({{field:py_name}}, {{> types/python_is_instance_type}}):
                 raise TypeError(f'{{field:py_name}} is not a { {{> types/python_type}} !r}.')
-            {{#type:integer?}}
+
+        {{/type:struct?}}
+        {{/type:cythonTypeNoneable?}}
+        {{#type:integer?}}
             {{! inject cython int overflow checks }}
             {{field:py_name}} = <{{> types/cython_python_type}}> {{field:py_name}}
-            {{/type:integer?}}
 
+        {{/type:integer?}}
+        {{#type:struct?}}
+        {{field:py_name}} = _ensure_py3_or_raise({{field:py_name}}, "{{field:py_name}}", {{> types/python_is_instance_type}})
+
+        {{/type:struct?}}
         {{/type:container?}}
-        {{/type:cythonTypeNoneable?}}
-        {{/program:intercompatible?}}
+        {{#type:is_container_of_struct?}}
+        {{field:py_name}} = _ensure_py3_container_or_raise({{field:py_name}}, {{type:flat_name}})
+
+        {{/type:is_container_of_struct?}}
         {{/field:type}}
         {{/struct:py3_fields}}
         self.{{> types/cpp_obj}} = __to_shared_ptr(cmove({{struct:name}}._make_instance(
@@ -396,21 +431,13 @@ cdef class {{struct:name}}(thrift.py3.types.Union):
     {{! initialize python cache}}
     cdef _initialize_py({{struct:name}} self):
         self.py_type = None
-        self.type_int = deref(self.{{> types/cpp_obj}}).getType()
+        self.type_int = int(deref(self.{{> types/cpp_obj}}).getType())
         self.py_value = None
 
 {{/struct:union?}}
     {{! Below are some things that are common to structs and unions: }}
     def __copy__({{struct:name}} self):
-        {{#struct:cpp_noncopyable?}}
-        raise TypeError("{{struct:name}} is noncopyable")
-        {{/struct:cpp_noncopyable?}}
-        {{^struct:cpp_noncopyable?}}
-        cdef shared_ptr[{{> types/current_module_cbindings}}.{{> types/c_struct }}] cpp_obj = make_shared[{{> types/current_module_cbindings}}.{{> types/c_struct }}](
-            deref(self.{{> types/cpp_obj}})
-        )
-        return {{struct:name}}._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
-        {{/struct:cpp_noncopyable?}}
+        return self{{! Thrift-py3 has immutable semantics}}
     {{#struct:cpp_noncomparable}}
 
     def __eq__({{struct:name}} self, other):
@@ -508,13 +535,15 @@ cdef class {{struct:name}}(thrift.py3.types.Union):
     {{#program:python_capi_converter?}}
     @staticmethod
     def from_python(object obj):
-        cdef shared_ptr[{{> types/current_module_cbindings}}.{{> types/c_struct }}] cpp_obj = __python_to_py3[{{> types/current_module_cbindings}}.{{> types/c_struct }}](obj)
+        cdef shared_ptr[{{> types/current_module_cbindings}}.{{> types/c_struct }}] cpp_obj = {{!
+            }}__python_to_py3[{{> types/current_module_cbindings}}.{{> types/c_struct }}, _fbthrift__NamespaceTag](obj)
         return {{struct:name}}._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
     {{/program:python_capi_converter?}}
 
     def _to_python(self):
     {{#program:python_capi_converter?}}
-        return __py3_to_python[{{> types/current_module_cbindings}}.{{> types/c_struct }}](self.{{> types/cpp_obj}})
+        return __py3_to_python[{{> types/current_module_cbindings}}.{{> types/c_struct }}, {{!
+            }}_fbthrift__NamespaceTag](self.{{> types/cpp_obj}})
     {{/program:python_capi_converter?}}
     {{^program:python_capi_converter?}}
         return thrift.python.converter.to_python_struct(
@@ -533,58 +562,14 @@ cdef class {{struct:name}}(thrift.py3.types.Union):
 
 {{/program:filtered_structs}}
 {{#program:containerTypes}}
-{{! container to cpp converter }}
-cdef {{> types/cython_cpp_type}} {{type:flat_name}}__make_instance(object items) except *:
-{{> types/make_instance }}
-
-
-{{#type:list?}}
-cdef object {{type:flat_name}}__from_cpp(const {{> types/cython_cpp_type}}& c_vec) except *:
-    cdef list py_list = []
-    cdef int idx = 0
-    {{#type:list_elem_type}}
-    for idx in range(c_vec.size()):
-        py_list.append({{> types/vector_cpp_to_python }})
-    {{/type:list_elem_type}}
-    return {{type:flat_name}}(py_list, thrift.py3.types._fbthrift_list_private_ctor)
-{{/type:list?}}
-{{#type:set?}}
-cdef object {{type:flat_name}}__from_cpp(const {{> types/cython_cpp_type}}& c_set) except *:
-    cdef list py_items = []
-    cdef __set_iter[{{> types/cython_cpp_type}}] iter = __set_iter[{{> types/cython_cpp_type}}](c_set)
-    {{#type:set_elem_type}}
-    cdef {{> types/cython_cpp_container_item_type}} citem{{> types/type_default_value}}
-    for i in range(c_set.size()):
-        iter.genNextItem(citem)
-        py_items.append({{> types/set_cpp_to_python }})
-    {{/type:set_elem_type}}
-    return {{type:flat_name}}(frozenset(py_items), thrift.py3.types._fbthrift_set_private_ctor)
-{{/type:set?}}
-{{#type:map?}}
-cdef object {{type:flat_name}}__from_cpp(const {{> types/cython_cpp_type}}& c_map) except *:
-    cdef dict py_items = {}
-    cdef __map_iter[{{> types/cython_cpp_type}}] iter = __map_iter[{{> types/cython_cpp_type}}](c_map)
-    {{#type:key_type}}
-    cdef {{> types/cython_cpp_container_item_type}} ckey{{> types/type_default_value}}
-    {{/type:key_type}}
-    {{#type:value_type}}
-    cdef {{> types/cython_cpp_container_item_type}} cval{{> types/type_default_value}}
-    {{/type:value_type}}
-    for i in range(c_map.size()):
-        iter.genNextKeyVal(ckey, cval)
-        py_items[{{#type:key_type}}{{!
-            }}{{> types/map_key_cpp_to_python}}{{!
-        }}{{/type:key_type}}] = {{#type:value_type}}{{!
-            }}{{> types/map_val_cpp_to_python }}{{!
-        }}{{/type:value_type}}
-    return {{type:flat_name}}(py_items, private_ctor_token=thrift.py3.types._fbthrift_map_private_ctor)
-{{/type:map?}}
+{{> types/container_converter_impl }}
 
 {{/program:containerTypes}}
 
 {{#program:constants}}{{#constant:value}}
 {{constant:name}} = {{> types/constant_value}}
 {{/constant:value}}{{/program:constants}}
+{{/program:inplace_migrate?}}
 {{#program:filtered_typedefs}}
 {{typedef:name}} = {{#typedef:asType}}{{> types/python_type}}{{/typedef:asType}}
 {{/program:filtered_typedefs}}
@@ -610,9 +595,15 @@ cdef class ClientBufferedStream__{{type:flat_name}}(ClientBufferedStream):
         if {{#program:stream_exceptions}}{{!
         }}result.hasException[{{> types/cython_cpp_type}}]():
             pyfuture.set_exception({{!
-            }}{{> types/cython_python_type}}._create_FBTHRIFT_ONLY_DO_NOT_USE({{!
-            }}thrift.py3.exceptions.try_make_shared_exception[{{> types/cython_cpp_type}}](result.exception()){{!
-            }}))
+            }}{{#program:inplace_migrate?}}{{#type:struct}}{{!
+                }}{{> types/python_type}}.from_python({{!
+                }}{{type:capi_converter_path}}.{{struct:name}}_from_cpp({{!
+                }}thrift.py3.exceptions.unwrap_exception[{{> types/cython_cpp_type}}](result.exception()))){{!
+            }}{{/type:struct}}{{/program:inplace_migrate?}}{{^program:inplace_migrate?}}{{!
+                }}{{> types/cython_python_type}}._create_FBTHRIFT_ONLY_DO_NOT_USE({{!
+                }}thrift.py3.exceptions.try_make_shared_exception[{{> types/cython_cpp_type}}](result.exception())){{!
+            }}{{/program:inplace_migrate?}}{{!
+            }})
         elif {{/program:stream_exceptions}}{{!
         }}result.hasException():
             pyfuture.set_exception(
@@ -673,4 +664,10 @@ cdef class ResponseAndServerStream__{{> stream/response_class_name_suffix}}(Resp
 
 {{/function:return_type}}{{/program:response_and_stream_functions}}
 {{/program:has_stream?}}
+{{#program:inplace_migrate?}}{{#program:needs_container_converters?}}
+{{#program:containerTypes}}
+{{> types/container_converter_impl }}
+
+{{/program:containerTypes}}
+{{/program:needs_container_converters?}}{{/program:inplace_migrate?}}
 {{/program:auto_migrate?}}

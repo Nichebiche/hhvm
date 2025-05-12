@@ -23,6 +23,7 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BigValueRoute.h>
 #include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
@@ -70,6 +71,11 @@ RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& facto
 const folly::dynamic& json);
 
 template facebook::memcache::MemcacheRouterInfo::RouteHandlePtr
+makeBigValueRoute<facebook::memcache::MemcacheRouterInfo>(
+RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json);
+
+template facebook::memcache::MemcacheRouterInfo::RouteHandlePtr
 makeBlackholeRoute<facebook::memcache::MemcacheRouterInfo>(
 RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
@@ -81,11 +87,6 @@ const folly::dynamic& json);
 
 template facebook::memcache::MemcacheRouterInfo::RouteHandlePtr
 makeErrorRoute<facebook::memcache::MemcacheRouterInfo>(
-RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& factory,
-const folly::dynamic& json);
-
-template facebook::memcache::MemcacheRouterInfo::RouteHandlePtr
-makeHashRoute<facebook::memcache::MemcacheRouterInfo>(
 RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
@@ -138,6 +139,12 @@ template facebook::memcache::MemcacheRouterInfo::RouteHandlePtr
 makeRandomRoute<facebook::memcache::MemcacheRouterInfo>(
 RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
+
+template facebook::memcache::MemcacheRouterInfo::RouteHandlePtr
+makeHashRoute<facebook::memcache::MemcacheRouterInfo>(
+RouteHandleFactory<facebook::memcache::MemcacheRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json,
+ProxyBase& proxy);
 
 template class ExtraRouteHandleProviderIf<facebook::memcache::MemcacheRouterInfo>;
 

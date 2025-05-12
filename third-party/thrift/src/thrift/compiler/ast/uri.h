@@ -113,6 +113,10 @@ inline constexpr auto kCppAllowLegacyDeprecatedTerseWritesRefUri =
     "facebook.com/thrift/annotation/cpp/AllowLegacyDeprecatedTerseWritesRef";
 inline constexpr auto kCppDeprecatedTerseWriteUri =
     "facebook.com/thrift/annotation/cpp/DeprecatedTerseWrite";
+inline constexpr auto kCppEnableCustomTypeOrdering =
+    "facebook.com/thrift/annotation/cpp/EnableCustomTypeOrdering";
+inline constexpr auto kCppGenerateServiceMethodDecorator =
+    "facebook.com/thrift/annotation/cpp/GenerateServiceMethodDecorator";
 
 // Java:
 inline constexpr auto kJavaMutableUri =
@@ -168,9 +172,15 @@ inline constexpr auto kHackWrapperUri =
     "facebook.com/thrift/annotation/hack/Wrapper";
 inline constexpr auto kHackModuleInternalUri =
     "facebook.com/thrift/annotation/hack/ModuleInternal";
+inline constexpr auto kHackGenerateClientMethodsWithHeaders =
+    "facebook.com/thrift/annotation/hack/GenerateClientMethodsWithHeaders";
 
 // Go:
 inline constexpr auto kGoNameUri = "facebook.com/thrift/annotation/go/Name";
 inline constexpr auto kGoTagUri = "facebook.com/thrift/annotation/go/Tag";
+inline constexpr auto kGoMinimizePaddingUri =
+    "facebook.com/thrift/annotation/go/MinimizePadding";
+inline constexpr auto kGoUseReflectCodecUri =
+    "facebook.com/thrift/annotation/go/UseReflectCodec";
 
 } // namespace apache::thrift::compiler

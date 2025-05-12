@@ -42,41 +42,28 @@ func New{{service:go_name}}ChannelClient(channel thrift.RequestChannel) *{{servi
     }
 }
 
-func New{{service:go_name}}Client(prot thrift.Protocol) *{{service:go_name}}Client {
-    return New{{service:go_name}}ChannelClient(thrift.NewSerialChannel(prot))
+func New{{service:go_name}}Client(prot thrift.DO_NOT_USE_ChannelWrapper) *{{service:go_name}}Client {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return New{{service:go_name}}ChannelClient(channel)
 }
 
 func (c *{{service:go_name}}Client) Close() error {
     return c.ch.Close()
 }
+
 {{#service:functions}}
-{{#function:go_supported?}}
+{{#function:go_client_supported?}}
+{{#if function:oneway?}}
+{{> svc/client_func_request_no_response}}
+{{#else if function:stream?}}
+{{> svc/client_func_stream}}
+{{#else}}
+{{> svc/client_func_request_response}}
+{{/if function:oneway?}}
 
-func (c *{{service:go_name}}Client) {{> svc/func_signature}} {
-    {{function:in_var_name}} := &req{{service:go_name}}{{function:go_name}}{
-        {{#function:args}}
-        {{#field:type}}
-        {{field:go_name}}: {{field:go_arg_name}},
-        {{/field:type}}
-        {{/function:args}}
-    }
-    {{#function:oneway?}}
-    return c.ch.Oneway({{function:ctx_arg_name}}, "{{function:name}}", {{function:in_var_name}})
-    {{/function:oneway?}}{{!
 
-    }}{{^function:oneway?}}
-    {{function:out_var_name}} := newResp{{service:go_name}}{{function:go_name}}()
-    {{function:err_var_name}} := c.ch.Call({{function:ctx_arg_name}}, "{{function:name}}", {{function:in_var_name}}, {{function:out_var_name}})
-    if {{function:err_var_name}} != nil {
-        return {{^function:void?}}{{#function:return_type}}{{> common/go_zero_value}}{{/function:return_type}}, {{/function:void?}}{{function:err_var_name}}
-    }{{#function:exceptions?}}{{!
-    }}{{#function:exceptions}}{{!
-    }} else if {{function:out_var_name}}.{{field:go_name}} != nil {
-        return {{^function:void?}}{{#function:return_type}}{{> common/go_zero_value}}{{/function:return_type}}, {{/function:void?}}{{function:out_var_name}}.{{field:go_name}}
-    }{{/function:exceptions}}{{!
-    }}{{/function:exceptions?}}
-    return {{^function:void?}}{{function:out_var_name}}.Get{{function:retval_field_name}}(), {{/function:void?}}nil
-    {{/function:oneway?}}
-}
-{{/function:go_supported?}}
+{{/function:go_client_supported?}}
 {{/service:functions}}

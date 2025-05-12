@@ -16,9 +16,9 @@
 #include <proxygen/lib/http/codec/HTTPSettings.h>
 #include <proxygen/lib/http/codec/compress/HeaderCodec.h>
 
-namespace folly { namespace io {
+namespace folly::io {
 class Cursor;
-}} // namespace folly::io
+} // namespace folly::io
 
 namespace proxygen {
 
@@ -106,8 +106,7 @@ class HTTPParallelCodec : public HTTPCodec {
     OPEN = 0,
     OPEN_WITH_GRACEFUL_DRAIN_ENABLED = 1,
     FIRST_GOAWAY_SENT = 2,
-    CLOSING = 3, // SPDY only
-    CLOSED = 4   // HTTP2 only
+    CLOSED = 4 // HTTP2 only
   } sessionClosing_;
 
   template <typename T, typename... Args>

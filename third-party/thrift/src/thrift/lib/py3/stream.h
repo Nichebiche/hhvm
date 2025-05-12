@@ -31,9 +31,11 @@
 #include <thrift/lib/cpp2/async/ClientBufferedStream.h>
 #include <thrift/lib/cpp2/async/ServerStream.h>
 
-#if FOLLY_HAS_COROUTINES
-
 namespace thrift::py3 {
+
+void cancelPythonIterator(PyObject*);
+
+#if FOLLY_HAS_COROUTINES
 
 template <typename T>
 class ClientBufferedStreamWrapper {
@@ -61,8 +63,6 @@ createResponseAndServerStream(
     Response response, apache::thrift::ServerStream<StreamElement> stream) {
   return {std::move(response), std::move(stream)};
 }
-
-void cancelPythonIterator(PyObject*);
 
 inline folly::Function<void()> pythonFuncToCppFunc(PyObject* func) {
   Py_INCREF(func);
@@ -105,12 +105,12 @@ apache::thrift::ServerStream<StreamElement> createAsyncIteratorFromPyIterator(
             }};
 
         while (true) {
-          auto [promise, future] =
+          auto [madePromise, future] =
               folly::makePromiseContract<std::optional<StreamElement>>(
                   executor);
           folly::via(
               executor,
-              [&genNext, iter, promise = std::move(promise)]() mutable {
+              [&genNext, iter, promise = std::move(madePromise)]() mutable {
                 genNext(iter, std::move(promise));
               });
           auto val = co_await std::move(future);
@@ -121,7 +121,6 @@ apache::thrift::ServerStream<StreamElement> createAsyncIteratorFromPyIterator(
         }
       });
 }
-} // namespace thrift::py3
 
 #else /* !FOLLY_HAS_COROUTINES */
 #error  Thrift stream type support needs C++ coroutines, which are not currently available. \
@@ -129,3 +128,5 @@ apache::thrift::ServerStream<StreamElement> createAsyncIteratorFromPyIterator(
         or consider passing the Thrift compiler the mstch_py3:no_stream option in order to \
         ignore stream type fields when generating code.
 #endif
+
+} // namespace thrift::py3

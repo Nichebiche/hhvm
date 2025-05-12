@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <folly/coro/Collect.h>
 #include <folly/coro/Sleep.h>
@@ -209,7 +209,8 @@ TEST_F(InitialThrowTest, InitialThrow) {
               "range",
               SerializedRequest(folly::IOBuf::copyBuffer(req)),
               std::make_shared<transport::THeader>(),
-              &callback);
+              &callback,
+              nullptr /* frameworkMetadata */);
           co_await responseReceived;
           if (onFirstResponseBool) {
             co_await onStreamCompleteCalled;
@@ -426,6 +427,41 @@ TYPED_TEST(MultiStreamServiceTest, UncompletedPublisherMoveAssignment) {
         co_await client.co_uncompletedPublisherMoveAssignment(
             RpcOptions().setTimeout(std::chrono::seconds{10}));
       });
+}
+
+class MultiStreamStressedServiceTest
+    : public AsyncTestSetup<
+          TestStreamMultiPublisherWithHeaderService,
+          Client<TestStreamService>> {
+ protected:
+  MultiStreamStressedServiceTest() {
+    this->numIOThreads_ = 16;
+    this->numWorkerThreads_ = 16;
+  }
+};
+
+TEST_F(MultiStreamStressedServiceTest, SubscriptionStressTest) {
+  const uint32_t kNumStreams = 1000;
+  this->connectToServer(
+      [](Client<TestStreamService>& client) -> folly::coro::Task<void> {
+        std::vector<folly::coro::Task<void>> tasks;
+        tasks.reserve(kNumStreams);
+        for (uint32_t streamCount = 0; streamCount < kNumStreams;
+             streamCount++) {
+          tasks.push_back(folly::coro::co_invoke(
+              [&client, streamCount]() -> folly::coro::Task<void> {
+                auto gen = (co_await client.co_rangePassiveSubscription())
+                               .toAsyncGenerator();
+                co_await folly::coro::co_reschedule_on_current_executor;
+                co_await folly::coro::co_awaitTry(folly::coro::timeout(
+                    gen.next(), std::chrono::milliseconds(streamCount)));
+                // To delay disconnection a little bit more
+                co_await folly::coro::co_reschedule_on_current_executor;
+              }));
+        }
+        co_await folly::coro::collectAllRange(std::move(tasks));
+      },
+      std::chrono::seconds{2} /* timeout */);
 }
 
 class StreamClientCallbackTest : public AsyncTestSetup<

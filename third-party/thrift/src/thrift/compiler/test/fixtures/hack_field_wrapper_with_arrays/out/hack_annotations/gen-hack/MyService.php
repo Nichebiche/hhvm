@@ -65,17 +65,13 @@ trait MyServiceClientBase {
    *   second(1: i64 count);
    */
   public async function second(int $count): Awaitable<bool> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = MyService_second_args::fromShape(shape(
       'count' => $count,
     ));
     await $this->asyncHandler_->genBefore(MyServiceStaticMetadata::THRIFT_SVC_NAME, "second", $args);
     $currentseqid = $this->sendImplHelper($args, "second", false, MyServiceStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(MyService_second_result::class, "second", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(MyService_second_result::class, "second", false, $currentseqid, $rpc_options))[0];
   }
 
 }

@@ -665,8 +665,8 @@ void HHVM_FUNCTION(HSL_os_ ## fun, const Object& fd, const Object& hsl_sockaddr)
   ); \
 }
 
-IMPL(connect);
-IMPL(bind);
+IMPL(connect)
+IMPL(bind)
 
 #undef IMPL
 #undef EINVAL_ON_BAD_SOCKADDR_LEN
@@ -946,7 +946,7 @@ int64_t HHVM_FUNCTION(HSL_os_fork_and_execve,
                       const Array& envp,
                       const Array& fds,
                       const Array& options) {
-  std::string cwd("");
+  std::string cwd;
   int flags = Process::FORK_AND_EXECVE_FLAG_NONE;
   int pgid = 0;
 

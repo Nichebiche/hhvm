@@ -24,7 +24,7 @@
 #include <string>
 #include <utility>
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <folly/Conv.h>
 #include <folly/Function.h>
@@ -32,7 +32,6 @@
 #include <folly/SocketAddress.h>
 #include <folly/executors/InlineExecutor.h>
 #include <folly/fibers/Baton.h>
-#include <folly/fibers/FiberManager.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
@@ -45,7 +44,6 @@
 
 #include <thrift/lib/cpp2/async/ServerSinkBridge.h>
 #include <thrift/lib/cpp2/async/StreamCallbacks.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/transport/core/TryUtil.h>
 #include <thrift/lib/cpp2/transport/rocket/Types.h>
 #include <thrift/lib/cpp2/transport/rocket/client/RocketClient.h>
@@ -106,30 +104,14 @@ makeTestResponse(
 }
 } // namespace
 
-rocket::SetupFrame RocketTestClient::makeTestSetupFrame(
+RequestSetupMetadata RocketTestClient::makeTestSetupMetadata(
     MetadataOpaqueMap<std::string, std::string> md) {
   RequestSetupMetadata meta;
   meta.opaque() = {};
   *meta.opaque() = std::move(md);
   meta.maxVersion() = kClientVersion;
-
-  auto serializedMeta = PayloadSerializer::getInstance()->packCompact(meta);
-
-  // Serialize RocketClient's major/minor version (which is separate from the
-  // rsocket protocol major/minor version) into setup metadata.
-  auto buf = folly::IOBuf::createCombined(
-      sizeof(int32_t) + serializedMeta->computeChainDataLength());
-  folly::IOBufQueue queue;
-  queue.append(std::move(buf));
-  folly::io::QueueAppender appender(&queue, /* do not grow */ 0);
-  // Serialize RocketClient's major/minor version (which is separate from the
-  // rsocket protocol major/minor version) into setup metadata.
-  appender.writeBE<uint16_t>(0); // Thrift RocketClient major version
-  appender.writeBE<uint16_t>(1); // Thrift RocketClient minor version
-  // Append serialized setup parameters to setup frame metadata
-  appender.insert(std::move(serializedMeta));
-  return rocket::SetupFrame(
-      rocket::Payload::makeFromMetadataAndData(queue.move(), {}), false);
+  meta.encodeMetadataUsingBinary() = false;
+  return meta;
 }
 
 RocketTestClient::RocketTestClient(const folly::SocketAddress& serverAddr)
@@ -276,10 +258,8 @@ void RocketTestClient::connect() {
   evb_.runInEventBaseThreadAndWait([this] {
     folly::AsyncSocket::UniquePtr socket(
         new folly::AsyncSocket(&evb_, serverAddr_));
-    client_ = RocketClient::create(
-        evb_,
-        std::move(socket),
-        std::make_unique<rocket::SetupFrame>(makeTestSetupFrame()));
+    client_ =
+        RocketClient::create(evb_, std::move(socket), makeTestSetupMetadata());
   });
 }
 

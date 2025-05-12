@@ -29,12 +29,50 @@ type refactor = Refactor of edit_data [@@ocaml.unboxed]
 
 type quickfix = Quickfix of edit_data [@@ocaml.unboxed]
 
+module Show_inline_chat_command_args : sig
+  type model =
+    | GPT4o
+    | SONNET_37
+    | CODE_31
+    | LLAMA_405B
+
+  type predefined_prompt = {
+    command: string;
+    display_prompt: string;
+    user_prompt: string;
+    description: string option;
+    rules: string option;
+    task: string option;
+    prompt_template: string option;
+    model: model option;
+    add_diagnostics: bool option;
+  }
+
+  type t = {
+    entrypoint: string;
+    predefined_prompt: predefined_prompt;
+    override_selection: Pos.absolute;
+    webview_start_line: int;
+    extras: Hh_json.json;
+  }
+
+  val to_json : t -> Hh_json.json
+end
+
+type command_args = Show_inline_chat of Show_inline_chat_command_args.t
+
+type command = {
+  title: string;
+  command_args: command_args;
+}
+
 (** Internal representation for code actions in our language server,
- * distinct from Lsp.CodeAction and from quickfixex in Quickfixes.ml
+ * distinct from Lsp.CodeAction and from quickfixes in Quickfixes.ml
  *)
 type t =
   | Refactor_action of edit_data
   | Quickfix_action of edit_data
+  | Command_action of command
 
 type find_refactor =
   entry:Provider_context.entry -> Pos.t -> Provider_context.t -> refactor list

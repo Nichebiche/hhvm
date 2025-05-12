@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/CompactProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/test/FieldInterceptorTest.h>
@@ -23,7 +23,9 @@
 namespace apache::thrift::test {
 
 template <class T>
-struct InterceptedFieldsTest : ::testing::Test {};
+struct InterceptedFieldsTest : ::testing::Test {
+  void SetUp() override { TestFieldInterceptor::count = 0; }
+};
 
 TYPED_TEST_CASE_P(InterceptedFieldsTest);
 

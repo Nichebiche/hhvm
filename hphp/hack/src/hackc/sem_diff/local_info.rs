@@ -51,7 +51,8 @@ impl LocalInfo {
             | Opcode::IterGetKey(_, local)
             | Opcode::IterGetValue(_, local)
             | Opcode::IterInit(_, local, _)
-            | Opcode::IterNext(_, local, _) => LocalInfo::Read(*local),
+            | Opcode::IterNext(_, local, _)
+            | Opcode::ReifiedInit(local) => LocalInfo::Read(*local),
 
             Opcode::PopL(local) | Opcode::SetL(local) | Opcode::UnsetL(local) => {
                 LocalInfo::Write(*local)
@@ -75,6 +76,7 @@ impl LocalInfo {
             | Opcode::ArrayUnmarkLegacy
             | Opcode::AssertRATStk(..)
             | Opcode::Await
+            | Opcode::AwaitLowPri
             | Opcode::BareThis(..)
             | Opcode::BaseC(..)
             | Opcode::BaseGC(..)
@@ -102,6 +104,7 @@ impl LocalInfo {
             | Opcode::CheckThis
             | Opcode::ClassGetC(..)
             | Opcode::ClassGetTS
+            | Opcode::ClassGetTSWithGenerics
             | Opcode::ClassHasReifiedGenerics
             | Opcode::ClassName
             | Opcode::Clone
@@ -259,6 +262,7 @@ impl LocalInfo {
             | Opcode::VerifyRetNonNullC
             | Opcode::VerifyRetTypeC
             | Opcode::VerifyRetTypeTS
+            | Opcode::VerifyTypeTS
             | Opcode::WHResult
             | Opcode::Yield
             | Opcode::YieldK => LocalInfo::None,

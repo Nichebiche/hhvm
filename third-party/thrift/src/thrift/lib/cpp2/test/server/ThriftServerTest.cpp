@@ -26,6 +26,8 @@
 #include <boost/thread.hpp>
 #include <fmt/core.h>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <fizz/backend/openssl/certificate/CertUtils.h>
 #include <fizz/client/AsyncFizzClient.h>
 #include <folly/CPortability.h>
@@ -49,8 +51,6 @@
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/test/TestSSLServer.h>
 #include <folly/observer/SimpleObservable.h>
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
 #include <folly/synchronization/test/Barrier.h>
 #include <folly/system/ThreadName.h>
 #include <folly/test/TestUtils.h>
@@ -82,6 +82,7 @@
 #include <thrift/lib/cpp2/test/gen-cpp2/DummyStatus.h>
 #include <thrift/lib/cpp2/test/gen-cpp2/TestService.h>
 #include <thrift/lib/cpp2/test/gen-cpp2/TestServiceAsyncClient.h>
+#include <thrift/lib/cpp2/test/server/ThriftServerTestUtils.h>
 #include <thrift/lib/cpp2/test/util/TestInterface.h>
 #include <thrift/lib/cpp2/test/util/TestThriftServerFactory.h>
 #include <thrift/lib/cpp2/transport/http2/common/HTTP2RoutingHandler.h>
@@ -864,13 +865,13 @@ class ResourcePoolsFlagsTest : public testing::Test,
     // enumerates the various cases and the complete text of the explanation.
     if (thriftFlag && !gFlag) {
       expectedExplanation_ =
-          "thrift flag: true, enable gflag: false, disable gflag: false";
+          "thrift flag: true, enable gflag: false, disable gflag: false, runtime actions: ";
     } else if (!thriftFlag && gFlag) {
       expectedExplanation_ =
-          "thrift flag: false, enable gflag: true, disable gflag: false";
+          "thrift flag: false, enable gflag: true, disable gflag: false, runtime actions: thriftFlagNotSet, ";
     } else if (thriftFlag && gFlag) {
       expectedExplanation_ =
-          "thrift flag: true, enable gflag: true, disable gflag: false";
+          "thrift flag: true, enable gflag: true, disable gflag: false, runtime actions: ";
     } else {
       expectedExplanation_ =
           "runtime: thriftFlagNotSet, , thrift flag: false, enable gflag: false, disable gflag: false";
@@ -1030,53 +1031,6 @@ TEST(ThriftServerDeathTest, OnStopRequestedException) {
       "onStopRequested");
 }
 
-namespace {
-enum class TransportType { Header, Rocket };
-enum class Compression { Enabled, Disabled };
-enum class ErrorType {
-  Overload,
-  AppOverload,
-  MethodOverload,
-  Client,
-  Server,
-  PreprocessorOverload,
-};
-} // namespace
-
-class HeaderOrRocketTest : public testing::Test {
- public:
-  TransportType transport = TransportType::Rocket;
-  Compression compression = Compression::Enabled;
-  auto makeStickyClient(
-      ScopedServerInterfaceThread& runner, folly::EventBase* evb) {
-    return runner.newStickyClient<TestServiceAsyncClient>(
-        evb,
-        [&](auto socket) mutable { return makeChannel(std::move(socket)); });
-  }
-  auto makeClient(ScopedServerInterfaceThread& runner, folly::EventBase* evb) {
-    return runner.newClient<apache::thrift::Client<TestService>>(
-        evb,
-        [&](auto socket) mutable { return makeChannel(std::move(socket)); });
-  }
-
-  ClientChannel::Ptr makeChannel(folly::AsyncTransport::UniquePtr socket) {
-    auto channel = [&]() -> ClientChannel::Ptr {
-      if (transport == TransportType::Header) {
-        return HeaderClientChannel::newChannel(
-            HeaderClientChannel::WithoutRocketUpgrade{}, std::move(socket));
-      } else {
-        return RocketClientChannel::newChannel(std::move(socket));
-      }
-    }();
-    if (compression == Compression::Enabled) {
-      apache::thrift::CompressionConfig compressionConfig;
-      compressionConfig.codecConfig_ref().ensure().set_zstdConfig();
-      channel->setDesiredCompressionConfig(compressionConfig);
-    }
-    return channel;
-  }
-};
-
 class OverloadTest
     : public HeaderOrRocketTest,
       public ::testing::WithParamInterface<
@@ -1175,19 +1129,18 @@ class HeaderOrRocket : public HeaderOrRocketTest,
 };
 
 TEST_P(HeaderOrRocket, OnewayClientConnectionCloseTest) {
-  static folly::Baton baton;
-
-  class OnewayTestInterface
-      : public apache::thrift::ServiceHandler<TestService> {
+  struct OnewayTestInterface : apache::thrift::ServiceHandler<TestService> {
+    folly::Baton<> baton;
     void noResponse(int64_t) override { baton.post(); }
   };
 
-  ScopedServerInterfaceThread runner(std::make_shared<OnewayTestInterface>());
+  auto handler = std::make_shared<OnewayTestInterface>();
+  ScopedServerInterfaceThread runner(handler);
   {
     auto client = makeClient(runner, nullptr);
     client->sync_noResponse(0);
   }
-  bool posted = baton.try_wait_for(1s);
+  bool posted = handler->baton.try_wait_for(1s);
   EXPECT_TRUE(posted);
 }
 
@@ -1255,12 +1208,12 @@ TEST_P(HeaderOrRocket, RequestParamsNullCheck) {
 }
 
 TEST_P(HeaderOrRocket, OnewayQueueTimeTest) {
-  static folly::Baton running, finished;
-  static folly::Baton running2;
+  struct TestInterface : apache::thrift::ServiceHandler<TestService> {
+    folly::Baton<> running, finished;
+    folly::Baton<> running2;
+    int once = 0;
 
-  class TestInterface : public apache::thrift::ServiceHandler<TestService> {
     void voidResponse() override {
-      static int once;
       EXPECT_EQ(once++, 0);
       running.post();
       finished.wait();
@@ -1268,21 +1221,22 @@ TEST_P(HeaderOrRocket, OnewayQueueTimeTest) {
     void noResponse(int64_t) override { running2.post(); }
   };
 
-  ScopedServerInterfaceThread runner(std::make_shared<TestInterface>());
+  auto handler = std::make_shared<TestInterface>();
+  ScopedServerInterfaceThread runner(handler);
   runner.getThriftServer().setQueueTimeout(100ms);
 
   auto client = makeClient(runner, nullptr);
 
   auto first = client->semifuture_voidResponse();
-  EXPECT_TRUE(running.try_wait_for(1s));
+  EXPECT_TRUE(handler->running.try_wait_for(1s));
   auto second = client->semifuture_noResponse(0);
   EXPECT_THROW(
       client->sync_voidResponse(RpcOptions{}.setTimeout(1s)),
       TApplicationException);
-  finished.post();
-  // even though 3rd request was loaded shedded, the second is oneway
-  // and should have went through
-  EXPECT_TRUE(running2.try_wait_for(1s));
+  handler->finished.post();
+  // Even though 3rd request was loaded shedded, the second is oneway
+  // and should have went through.
+  EXPECT_TRUE(handler->running2.try_wait_for(1s));
 }
 
 TEST_P(HeaderOrRocket, Priority) {
@@ -1941,8 +1895,10 @@ TEST_P(HeaderOrRocket, ResponseWriteTimeout) {
     }
 
     void uninstall() {
-      socket_->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
-          [this]() { socket_->setReadCB(wrapped_); });
+      if (!hasEOF_) {
+        socket_->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
+            [this]() { socket_->setReadCB(wrapped_); });
+      }
     }
 
     void getReadBuffer(void** bufReturn, size_t* lenReturn) override {
@@ -1980,7 +1936,10 @@ TEST_P(HeaderOrRocket, ResponseWriteTimeout) {
     void readBufferAvailable(std::unique_ptr<IOBuf> readBuf) noexcept override {
       wrapped_->readBufferAvailable(std::move(readBuf));
     }
-    void readEOF() noexcept override { wrapped_->readEOF(); }
+    void readEOF() noexcept override {
+      hasEOF_ = true;
+      wrapped_->readEOF();
+    }
     void readErr(const folly::AsyncSocketException& ex) noexcept override {
       wrapped_->readErr(ex);
     }
@@ -1990,6 +1949,7 @@ TEST_P(HeaderOrRocket, ResponseWriteTimeout) {
     folly::AsyncReader::ReadCallback* wrapped_{nullptr};
     size_t maxBytesPerLoop_;
     std::chrono::milliseconds sleepMsPerLoop_;
+    bool hasEOF_ = false;
   };
 
   folly::Baton<> requestReceivedBaton;
@@ -2000,7 +1960,7 @@ TEST_P(HeaderOrRocket, ResponseWriteTimeout) {
   // set maxResponseWriteTime to 1 second
   auto& config =
       apache::thrift::detail::getThriftServerConfig(ssit.getThriftServer());
-  config.setMaxResponseWriteTime(folly::observer::makeStaticObserver(
+  config.setMaxResponseWriteTime_Deprecated(folly::observer::makeStaticObserver(
       std::make_optional(std::chrono::milliseconds{1000})));
 
   std::unique_ptr<SlowReadCallback> readCallback;
@@ -2035,6 +1995,7 @@ TEST_P(HeaderOrRocket, ResponseWriteTimeout) {
 
   auto t2 = std::move(fut).getTry();
   EXPECT_TRUE(t2.hasException());
+  readCallback->uninstall();
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -2350,20 +2311,17 @@ TEST(ThriftServer, BadSendTest) {
 TEST(ThriftServer, ResetStateTest) {
   folly::EventBase base;
 
-  // Create a server socket and bind, don't listen.  This gets us a
-  // port to test with which is guaranteed to fail.
-  auto ssock = std::unique_ptr<
-      folly::AsyncServerSocket,
-      folly::DelayedDestruction::Destructor>(new folly::AsyncServerSocket);
-  ssock->bind(0);
-  EXPECT_FALSE(ssock->getAddresses().empty());
+  // Create an invalid address connecting to which will fail. Note that
+  // creating a server socket that binds to an address but doesn't listen
+  // won't work portably because on Linux it will cause connect to fail
+  // quickly while on macOS it will fail after a long(ish) timeout.
+  folly::SocketAddress addr("::", 0);
 
   // We do this loop a bunch of times, because the bug which caused
   // the assertion failure was a lost race, which doesn't happen
   // reliably.
   for (int i = 0; i < 1000; ++i) {
-    auto socket =
-        folly::AsyncSocket::newSocket(&base, ssock->getAddresses()[0]);
+    auto socket = folly::AsyncSocket::newSocket(&base, addr);
 
     // Create a client.
     TestServiceAsyncClient client(
@@ -3026,28 +2984,29 @@ TEST(ThriftServer, SSLPermittedAcceptsPlaintextAndSSL) {
 TEST(ThriftServer, ClientOnlyTimeouts) {
   class SendResponseInterface
       : public apache::thrift::ServiceHandler<TestService> {
-    void sync_sendResponse(
-        std::string& _return, int64_t shouldSleepMs) override {
+    void sync_sendResponse(std::string& ret, int64_t shouldSleepMs) override {
       auto header = getConnectionContext()->getHeader();
-      if (shouldSleepMs) {
+      if (shouldSleepMs != 0) {
         usleep(shouldSleepMs * 1000);
       }
-      _return = fmt::format(
+      ret = fmt::format(
           "{}:{}",
           header->getClientTimeout().count(),
           header->getClientQueueTimeout().count());
     }
   };
-  TestThriftServerFactory<SendResponseInterface> factory;
-  ScopedServerThread st(factory.create());
-
-  folly::EventBase base;
-  auto socket = folly::AsyncSocket::newSocket(&base, *st.getAddress());
-  TestServiceAsyncClient client(HeaderClientChannel::newChannel(
-      HeaderClientChannel::WithoutRocketUpgrade{}, std::move(socket)));
 
   for (bool clientOnly : {false, true}) {
     for (bool shouldTimeOut : {true, false}) {
+      TestThriftServerFactory<SendResponseInterface> factory;
+      ScopedServerThread st(factory.create());
+
+      folly::EventBase base;
+      auto socket = folly::AsyncSocket::newSocket(&base, *st.getAddress());
+      apache::thrift::Client<TestService> client(
+          HeaderClientChannel::newChannel(
+              HeaderClientChannel::WithoutRocketUpgrade{}, std::move(socket)));
+
       std::string response;
       RpcOptions rpcOpts;
       rpcOpts.setTimeout(std::chrono::milliseconds(30));
@@ -3064,17 +3023,18 @@ TEST(ThriftServer, ClientOnlyTimeouts) {
       } catch (...) {
         EXPECT_TRUE(shouldTimeOut);
       }
+
+      base.loop();
     }
   }
-  base.loop();
 }
 
 TEST(ThriftServerTest, QueueTimeHeaderTest) {
   THRIFT_OMIT_TEST_WITH_RESOURCE_POOLS(/* ThreadManager features */);
-  using namespace ::testing;
+
   // Tests that queue time metadata is returned in the THeader when
   // queueing delay on server side is greater than pre-defined threshold.
-  static constexpr std::chrono::milliseconds kDefaultQueueTimeout{100};
+  const std::chrono::milliseconds defaultQueueTimeout(666);
   class QueueTimeTestHandler
       : public apache::thrift::ServiceHandler<TestService> {
    public:
@@ -3090,9 +3050,9 @@ TEST(ThriftServerTest, QueueTimeHeaderTest) {
       &eb, RocketClientChannel::newChannel);
   // Queue a task on the runner's ThreadManager to block it from
   // executing the Thrift request.
-  auto tServer = &runner.getThriftServer();
-  tServer->setQueueTimeout(kDefaultQueueTimeout);
-  auto threadManager = tServer->getThreadManager();
+  auto server = &runner.getThriftServer();
+  server->setQueueTimeout(defaultQueueTimeout);
+  auto threadManager = server->getThreadManager();
 
   folly::Baton<> startupBaton;
   threadManager->add([&startupBaton]() {
@@ -3105,18 +3065,17 @@ TEST(ThriftServerTest, QueueTimeHeaderTest) {
   // Send the request with a high queue timeout to make sure it succeeds.
   RpcOptions options;
   options.setTimeout(std::chrono::milliseconds(1000));
+  auto start = std::chrono::steady_clock::now();
   auto [resp, header] =
       client->header_semifuture_sendResponse(options, 42).get();
+  auto finish = std::chrono::steady_clock::now();
   EXPECT_EQ(resp, "42");
-  // Check that queue time headers are set
+  // Check that queue time headers are set.
   auto queueTimeout = header->getServerQueueTimeout();
   auto queueingTime = header->getProcessDelay();
   EXPECT_TRUE(queueTimeout.hasValue() && queueingTime.hasValue());
-  EXPECT_EQ(queueTimeout.value(), kDefaultQueueTimeout);
-  EXPECT_THAT(
-      queueingTime.value(),
-      AllOf(
-          Gt(std::chrono::milliseconds(5)), Lt(std::chrono::milliseconds(50))));
+  EXPECT_EQ(queueTimeout.value(), defaultQueueTimeout);
+  EXPECT_LT(queueingTime.value(), finish - start);
 }
 
 TEST(ThriftServer, QueueTimeoutStressTest) {
@@ -3540,7 +3499,7 @@ TEST(ThriftServer, RocketOverQuic) {
 }
 
 #if FOLLY_HAS_MEMORY_RESOURCE
-class AccountingMemoryPool : public folly::detail::std_pmr::memory_resource {
+class AccountingMemoryPool : public std::pmr::memory_resource {
  public:
   size_t allocated = 0;
   size_t deallocated = 0;
@@ -3548,20 +3507,18 @@ class AccountingMemoryPool : public folly::detail::std_pmr::memory_resource {
  protected:
   void* do_allocate(std::size_t bytes, std::size_t alignment) override {
     allocated += bytes;
-    return folly::detail::std_pmr::new_delete_resource()->allocate(
-        bytes, alignment);
+    return std::pmr::new_delete_resource()->allocate(bytes, alignment);
   }
 
-  [[nodiscard]] bool do_is_equal(const folly::detail::std_pmr::memory_resource&
-                                     other) const noexcept override {
+  [[nodiscard]] bool do_is_equal(
+      const std::pmr::memory_resource& other) const noexcept override {
     return this == &other;
   }
 
   void do_deallocate(
       void* p, std::size_t bytes, std::size_t alignment) override {
     deallocated += bytes;
-    return folly::detail::std_pmr::new_delete_resource()->deallocate(
-        p, bytes, alignment);
+    return std::pmr::new_delete_resource()->deallocate(p, bytes, alignment);
   }
 };
 
@@ -3893,7 +3850,108 @@ TEST(ThriftServer, SetupThreadManager) {
       [](auto& ts) { ts.setupThreadManager(); });
 }
 
+TEST(ThriftServer, HasModule) {
+  {
+    ScopedServerInterfaceThread runner(
+        std::make_shared<apache::thrift::ServiceHandler<TestService>>(),
+        "::1",
+        0,
+        [](auto& ts) {
+          class TestModule : public apache::thrift::ServerModule {
+           public:
+            std::string getName() const override { return "TestModule"; }
+          };
+          ts.addModule(std::make_unique<TestModule>());
+        });
+
+    EXPECT_EQ(runner.getThriftServer().hasModule("TestModule"), true);
+  }
+  {
+    ScopedServerInterfaceThread runner(
+        std::make_shared<apache::thrift::ServiceHandler<TestService>>(),
+        "::1",
+        0);
+    EXPECT_EQ(runner.getThriftServer().hasModule("TestModule"), false);
+  }
+}
+
+TEST(ThriftServer, AddModuleAfterSetupThreadManager) {
+  {
+    THRIFT_FLAG_SET_MOCK(
+        init_decorated_processor_factory_only_resource_pools_checks, true);
+    ScopedServerInterfaceThread runner(
+        std::make_shared<apache::thrift::ServiceHandler<TestService>>(),
+        "::1",
+        0,
+        [](auto& ts) {
+          class TestModule : public apache::thrift::ServerModule {
+           public:
+            std::string getName() const override { return "TestModule"; }
+          };
+          ts.setupThreadManager();
+          ts.addModule(std::make_unique<TestModule>());
+        });
+
+    EXPECT_EQ(runner.getThriftServer().hasModule("TestModule"), true);
+  }
+  {
+    THRIFT_FLAG_SET_MOCK(
+        init_decorated_processor_factory_only_resource_pools_checks, false);
+    ScopedServerInterfaceThread runner(
+        std::make_shared<apache::thrift::ServiceHandler<TestService>>(),
+        "::1",
+        0,
+        [](auto& ts) {
+          class TestModule : public apache::thrift::ServerModule {
+           public:
+            std::string getName() const override { return "TestModule"; }
+          };
+          ts.setupThreadManager();
+          ts.addModule(std::make_unique<TestModule>());
+        });
+
+    EXPECT_EQ(runner.getThriftServer().hasModule("TestModule"), false);
+  }
+}
+
+TEST(ThriftServer, GetInstalledServerModulesNames) {
+  {
+    ScopedServerInterfaceThread runner(
+        std::make_shared<apache::thrift::ServiceHandler<TestService>>(),
+        "::1",
+        0,
+        [](auto& ts) {
+          class TestModule : public apache::thrift::ServerModule {
+           public:
+            std::string getName() const override { return "TestModule"; }
+          };
+          ts.addModule(std::make_unique<TestModule>());
+        });
+
+    auto moduleList = runner.getThriftServer().getInstalledServerModuleNames();
+    EXPECT_EQ(moduleList.size(), 1);
+    EXPECT_EQ(moduleList[0], "TestModule");
+  }
+  {
+    ScopedServerInterfaceThread runner(
+        std::make_shared<apache::thrift::ServiceHandler<TestService>>(),
+        "::1",
+        0);
+    auto moduleList = runner.getThriftServer().getInstalledServerModuleNames();
+    EXPECT_EQ(moduleList.size(), 0);
+  }
+}
+
 TEST(ThriftServer, GetSetMaxRequests) {
+  auto getExecutionLimitRequests = [](const ThriftServer& server) {
+    return server.resourcePoolSet()
+        .resourcePool(ResourcePoolHandle::defaultAsync())
+        .concurrencyController()
+        .value()
+        .get()
+        .getExecutionLimitRequests();
+  };
+
   for (auto target : std::array<uint32_t, 2>{1000, 0}) {
     {
       // Test set before setupThreadManager
@@ -3908,16 +3966,18 @@ TEST(ThriftServer, GetSetMaxRequests) {
       server.setupThreadManager();
       EXPECT_EQ(server.getMaxRequests(), target);
       if (server.useResourcePools()) {
-        auto concurrencyLimit =
+        auto maxRequests =
             target == 0 ? std::numeric_limits<decltype(target)>::max() : target;
-        EXPECT_EQ(
-            concurrencyLimit,
-            server.resourcePoolSet()
-                .resourcePool(ResourcePoolHandle::defaultAsync())
-                .concurrencyController()
-                .value()
-                .get()
-                .getExecutionLimitRequests());
+        EXPECT_EQ(maxRequests, getExecutionLimitRequests(server));
+
+        // Also test that setting concurrencyLimit unsyncs the resource pool
+        // from maxRequests.
+        auto concurrencyLimit = target + 1;
+        server.setConcurrencyLimit(concurrencyLimit);
+        EXPECT_EQ(concurrencyLimit, getExecutionLimitRequests(server));
+
+        server.setMaxRequests(target);
+        EXPECT_NE(maxRequests, getExecutionLimitRequests(server));
       }
     }
     {
@@ -3932,16 +3992,87 @@ TEST(ThriftServer, GetSetMaxRequests) {
       server.setMaxRequests(target);
       EXPECT_EQ(server.getMaxRequests(), target);
       if (server.useResourcePools()) {
-        auto concurrencyLimit =
+        auto maxRequests =
             target == 0 ? std::numeric_limits<decltype(target)>::max() : target;
-        EXPECT_EQ(
-            concurrencyLimit,
-            server.resourcePoolSet()
-                .resourcePool(ResourcePoolHandle::defaultAsync())
-                .concurrencyController()
-                .value()
-                .get()
-                .getExecutionLimitRequests());
+        EXPECT_EQ(maxRequests, getExecutionLimitRequests(server));
+
+        // Also test that setting concurrencyLimit unsyncs the resource pool
+        // from maxRequests.
+        auto concurrencyLimit = target + 1;
+        server.setConcurrencyLimit(concurrencyLimit);
+        EXPECT_EQ(concurrencyLimit, getExecutionLimitRequests(server));
+
+        server.setMaxRequests(target);
+        EXPECT_NE(maxRequests, getExecutionLimitRequests(server));
+      }
+    }
+  }
+}
+
+TEST(ThriftServer, GetSetMaxQps) {
+  FLAGS_thrift_use_token_bucket_concurrency_controller = true;
+
+  auto getQpsLimit = [](const ThriftServer& server) {
+    return server.resourcePoolSet()
+        .resourcePool(ResourcePoolHandle::defaultAsync())
+        .concurrencyController()
+        .value()
+        .get()
+        .getQpsLimit();
+  };
+
+  for (auto target : std::array<uint32_t, 2>{1000, 0}) {
+    {
+      // Test set before setupThreadManager
+      ThriftServer server;
+      server.setInterface(std::make_shared<TestInterface>());
+      server.setMaxQps(target);
+      EXPECT_EQ(server.getMaxQps(), target);
+      // Make the thrift server simple to create
+      server.setThreadManagerType(
+          apache::thrift::ThriftServer::ThreadManagerType::SIMPLE);
+      server.setNumCPUWorkerThreads(1);
+      server.setupThreadManager();
+      EXPECT_EQ(server.getMaxQps(), target);
+      if (server.useResourcePools()) {
+        auto maxQps =
+            target == 0 ? std::numeric_limits<decltype(target)>::max() : target;
+        EXPECT_EQ(maxQps, getQpsLimit(server));
+
+        // Also test that setting executionRate unsyncs the resource pool
+        // from maxQps.
+        auto executionRate = target + 1;
+        server.setExecutionRate(executionRate);
+        EXPECT_EQ(executionRate, getQpsLimit(server));
+
+        server.setMaxQps(target);
+        EXPECT_NE(maxQps, getQpsLimit(server));
+      }
+    }
+    {
+      // Test set after setupThreadManager
+      ThriftServer server;
+      server.setInterface(std::make_shared<TestInterface>());
+      // Make the thrift server simple to create
+      server.setThreadManagerType(
+          apache::thrift::ThriftServer::ThreadManagerType::SIMPLE);
+      server.setNumCPUWorkerThreads(1);
+      server.setupThreadManager();
+      server.setMaxQps(target);
+      EXPECT_EQ(server.getMaxQps(), target);
+      if (server.useResourcePools()) {
+        auto maxQps =
+            target == 0 ? std::numeric_limits<decltype(target)>::max() : target;
+        EXPECT_EQ(maxQps, getQpsLimit(server));
+
+        // Also test that setting executionRate unsyncs the resource pool
+        // from maxQps.
+        auto executionRate = target + 1;
+        server.setExecutionRate(executionRate);
+        EXPECT_EQ(executionRate, getQpsLimit(server));
+
+        server.setMaxQps(target);
+        EXPECT_NE(maxQps, getQpsLimit(server));
       }
     }
   }
@@ -4287,197 +4418,6 @@ TEST_P(HeaderOrRocket, StatusOnStartingAndStopping) {
   handler->stopping.post();
 }
 
-namespace {
-enum class ProcessorImplementation {
-  Containment,
-  ContainmentLegacy,
-  Inheritance
-};
-} // namespace
-
-class HeaderOrRocketCompression
-    : public HeaderOrRocketTest,
-      public ::testing::WithParamInterface<
-          std::tuple<TransportType, Compression, ProcessorImplementation>> {
- public:
-  ProcessorImplementation processorImplementation =
-      ProcessorImplementation::Containment;
-
-  void SetUp() override {
-    std::tie(transport, compression, processorImplementation) = GetParam();
-  }
-
-  std::unique_ptr<AsyncProcessorFactory> makeFactory() {
-    // processor can only check for compressed request payload on rocket
-    if (compression == Compression::Enabled &&
-        transport == TransportType::Rocket) {
-      return std::make_unique<CompressionCheckTestInterface>(
-          processorImplementation, CompressionAlgorithm::ZSTD);
-    } else {
-      return std::make_unique<CompressionCheckTestInterface>(
-          processorImplementation, CompressionAlgorithm::NONE);
-    }
-  }
-
- private:
-  // Custom processor derived from AsyncProcessor with compressed request API
-  struct ContainmentCompressionCheckProcessor : public AsyncProcessor {
-    ContainmentCompressionCheckProcessor(
-        std::unique_ptr<AsyncProcessor> underlyingProcessor,
-        CompressionAlgorithm compression)
-        : underlyingProcessor_(std::move(underlyingProcessor)),
-          compression_(compression) {}
-    void executeRequest(
-        ServerRequest&&,
-        const AsyncProcessorFactory::MethodMetadata&) override {
-      LOG(FATAL) << "executeRequest shouldn't be called in this test";
-    }
-
-    void processSerializedCompressedRequestWithMetadata(
-        ResponseChannelRequest::UniquePtr req,
-        SerializedCompressedRequest&& serializedRequest,
-        const AsyncProcessorFactory::MethodMetadata& methodMetadata,
-        protocol::PROTOCOL_TYPES prot,
-        Cpp2RequestContext* ctx,
-        folly::EventBase* eb,
-        concurrency::ThreadManager* tm) override {
-      // check that SerializedCompressedRequest has expected compression
-      EXPECT_EQ(compression_, serializedRequest.getCompressionAlgorithm());
-      underlyingProcessor_->processSerializedCompressedRequestWithMetadata(
-          std::move(req),
-          std::move(serializedRequest),
-          methodMetadata,
-          prot,
-          ctx,
-          eb,
-          tm);
-    }
-
-    void processInteraction(apache::thrift::ServerRequest&&) override {
-      LOG(FATAL)
-          << "This AsyncProcessor doesn't support Thrift interactions. "
-          << "Please implement processInteraction to support interactions.";
-    }
-
-    std::unique_ptr<AsyncProcessor> underlyingProcessor_;
-    CompressionAlgorithm compression_;
-  };
-
-  // Custom processor derived from AsyncProcessor without compressed request API
-  struct LegacyContainmentProcessor : public AsyncProcessor {
-    explicit LegacyContainmentProcessor(
-        std::unique_ptr<AsyncProcessor> underlyingProcessor)
-        : underlyingProcessor_(std::move(underlyingProcessor)) {}
-
-    void executeRequest(
-        ServerRequest&&,
-        const AsyncProcessorFactory::MethodMetadata&) override {
-      LOG(FATAL) << "executeRequest shouldn't be called in this test";
-    }
-
-    void processSerializedCompressedRequestWithMetadata(
-        ResponseChannelRequest::UniquePtr req,
-        SerializedCompressedRequest&& serializedRequest,
-        const AsyncProcessorFactory::MethodMetadata& methodMetadata,
-        protocol::PROTOCOL_TYPES prot,
-        Cpp2RequestContext* ctx,
-        folly::EventBase* eb,
-        concurrency::ThreadManager* tm) override {
-      underlyingProcessor_->processSerializedCompressedRequestWithMetadata(
-          std::move(req),
-          std::move(serializedRequest),
-          methodMetadata,
-          prot,
-          ctx,
-          eb,
-          tm);
-    }
-
-    void processInteraction(apache::thrift::ServerRequest&&) override {
-      LOG(FATAL)
-          << "This AsyncProcessor doesn't support Thrift interactions. "
-          << "Please implement processInteraction to support interactions.";
-    }
-
-    std::unique_ptr<AsyncProcessor> underlyingProcessor_;
-  };
-
-  // Custom processor derived from generated processor
-  struct InheritanceCompressionCheckProcessor
-      : public TestInterface::ProcessorType {
-    InheritanceCompressionCheckProcessor(
-        apache::thrift::ServiceHandler<TestService>* iface,
-        CompressionAlgorithm compression)
-        : TestInterface::ProcessorType(iface), compression_(compression) {}
-
-    void executeRequest(
-        ServerRequest&&,
-        const AsyncProcessorFactory::MethodMetadata&) override {
-      LOG(FATAL) << "executeRequest shouldn't be called in this test";
-    }
-
-    void processSerializedCompressedRequestWithMetadata(
-        apache::thrift::ResponseChannelRequest::UniquePtr req,
-        apache::thrift::SerializedCompressedRequest&& serializedRequest,
-        const apache::thrift::AsyncProcessorFactory::MethodMetadata& mm,
-        apache::thrift::protocol::PROTOCOL_TYPES prot,
-        apache::thrift::Cpp2RequestContext* ctx,
-        folly::EventBase* eb,
-        apache::thrift::concurrency::ThreadManager* tm) override {
-      // check that SerializedCompressedRequest has expected compression
-      EXPECT_EQ(compression_, serializedRequest.getCompressionAlgorithm());
-      TestInterface::ProcessorType::
-          processSerializedCompressedRequestWithMetadata(
-              std::move(req),
-              std::move(serializedRequest),
-              mm,
-              prot,
-              ctx,
-              eb,
-              tm);
-    }
-
-    CompressionAlgorithm compression_;
-  };
-
-  struct CompressionCheckTestInterface : public TestInterface {
-    CompressionCheckTestInterface(
-        ProcessorImplementation processorImplementation,
-        CompressionAlgorithm compression)
-        : processorImplementation_(processorImplementation),
-          compression_(compression) {}
-    std::unique_ptr<apache::thrift::AsyncProcessor> getProcessor() override {
-      switch (processorImplementation_) {
-        case ProcessorImplementation::Containment:
-          return std::make_unique<ContainmentCompressionCheckProcessor>(
-              std::make_unique<TestInterface::ProcessorType>(this),
-              compression_);
-        case ProcessorImplementation::ContainmentLegacy:
-          return std::make_unique<LegacyContainmentProcessor>(
-              std::make_unique<TestInterface::ProcessorType>(this));
-        case ProcessorImplementation::Inheritance:
-          return std::make_unique<InheritanceCompressionCheckProcessor>(
-              this, compression_);
-      }
-    }
-
-    CreateMethodMetadataResult createMethodMetadata() override {
-      // We want to return WildcardMethodMetadataMap here because default
-      // implementation will return MethodMetadataMap and requests will be
-      // routed to executeRequest rather than to
-      // processSerializedCompressedRequestWithMetadata. This test relies on
-      // routing requests to processSerializedCompressedRequestWithMetadata.
-      WildcardMethodMetadataMap wildcardMap;
-      wildcardMap.wildcardMetadata = std::make_shared<WildcardMethodMetadata>();
-      wildcardMap.knownMethods = {};
-      return wildcardMap;
-    }
-
-    ProcessorImplementation processorImplementation_;
-    CompressionAlgorithm compression_;
-  };
-};
-
 TEST(ThriftServerTest, getResourcePoolServerDbgInfo) {
   // Arrange integration test setup
   auto handler = std::make_shared<TestInterface>();
@@ -4566,6 +4506,213 @@ TEST(ThriftServerTest, getResourcePoolServerDbgInfo) {
   EXPECT_EQ(5, executorDbgInfo.threadsCount().value());
 }
 
+namespace {
+enum class ProcessorImplementation {
+  Containment,
+  ContainmentLegacy,
+  Inheritance
+};
+} // namespace
+
+class HeaderOrRocketCompression
+    : public HeaderOrRocketTest,
+      public ::testing::WithParamInterface<
+          std::tuple<TransportType, Compression, ProcessorImplementation>> {
+ public:
+  ProcessorImplementation processorImplementation =
+      ProcessorImplementation::Containment;
+
+  std::unique_ptr<AsyncProcessorFactory> makeFactory() {
+    // processor can only check for compressed request payload on rocket
+    if (compression == Compression::Enabled &&
+        transport == TransportType::Rocket) {
+      return std::make_unique<CompressionCheckTestInterface>(
+          processorImplementation, CompressionAlgorithm::ZSTD);
+    } else if (
+        compression == Compression::Custom &&
+        transport == TransportType::Rocket) {
+      return std::make_unique<CompressionCheckTestInterface>(
+          processorImplementation, CompressionAlgorithm::CUSTOM);
+    } else {
+      return std::make_unique<CompressionCheckTestInterface>(
+          processorImplementation, CompressionAlgorithm::NONE);
+    }
+  }
+
+ private:
+  // Custom processor derived from AsyncProcessor with compressed request API
+  struct ContainmentCompressionCheckProcessor : public AsyncProcessor {
+    ContainmentCompressionCheckProcessor(
+        std::unique_ptr<AsyncProcessor> underlyingProcessor,
+        CompressionAlgorithm compression)
+        : underlyingProcessor_(std::move(underlyingProcessor)),
+          compression_(compression) {}
+    void executeRequest(
+        ServerRequest&&,
+        const AsyncProcessorFactory::MethodMetadata&) override {
+      LOG(FATAL) << "executeRequest shouldn't be called in this test";
+    }
+
+    void processSerializedCompressedRequestWithMetadata(
+        ResponseChannelRequest::UniquePtr req,
+        SerializedCompressedRequest&& serializedRequest,
+        const AsyncProcessorFactory::MethodMetadata& methodMetadata,
+        protocol::PROTOCOL_TYPES prot,
+        Cpp2RequestContext* ctx,
+        folly::EventBase* eb,
+        concurrency::ThreadManager* tm) override {
+      // check that SerializedCompressedRequest has expected compression
+      if (compression_ == CompressionAlgorithm::CUSTOM) {
+        // custom compression setup failure will fallback to zlib
+        EXPECT_EQ(
+            CompressionAlgorithm::ZLIB,
+            serializedRequest.getCompressionAlgorithm());
+      } else {
+        EXPECT_EQ(compression_, serializedRequest.getCompressionAlgorithm());
+      }
+
+      underlyingProcessor_->processSerializedCompressedRequestWithMetadata(
+          std::move(req),
+          std::move(serializedRequest),
+          methodMetadata,
+          prot,
+          ctx,
+          eb,
+          tm);
+    }
+
+    void processInteraction(apache::thrift::ServerRequest&&) override {
+      LOG(FATAL)
+          << "This AsyncProcessor doesn't support Thrift interactions. "
+          << "Please implement processInteraction to support interactions.";
+    }
+
+    std::unique_ptr<AsyncProcessor> underlyingProcessor_;
+    CompressionAlgorithm compression_;
+  };
+
+  // Custom processor derived from AsyncProcessor without compressed request API
+  struct LegacyContainmentProcessor : public AsyncProcessor {
+    explicit LegacyContainmentProcessor(
+        std::unique_ptr<AsyncProcessor> underlyingProcessor)
+        : underlyingProcessor_(std::move(underlyingProcessor)) {}
+
+    void executeRequest(
+        ServerRequest&&,
+        const AsyncProcessorFactory::MethodMetadata&) override {
+      LOG(FATAL) << "executeRequest shouldn't be called in this test";
+    }
+
+    void processSerializedCompressedRequestWithMetadata(
+        ResponseChannelRequest::UniquePtr req,
+        SerializedCompressedRequest&& serializedRequest,
+        const AsyncProcessorFactory::MethodMetadata& methodMetadata,
+        protocol::PROTOCOL_TYPES prot,
+        Cpp2RequestContext* ctx,
+        folly::EventBase* eb,
+        concurrency::ThreadManager* tm) override {
+      underlyingProcessor_->processSerializedCompressedRequestWithMetadata(
+          std::move(req),
+          std::move(serializedRequest),
+          methodMetadata,
+          prot,
+          ctx,
+          eb,
+          tm);
+    }
+
+    void processInteraction(apache::thrift::ServerRequest&&) override {
+      LOG(FATAL)
+          << "This AsyncProcessor doesn't support Thrift interactions. "
+          << "Please implement processInteraction to support interactions.";
+    }
+
+    std::unique_ptr<AsyncProcessor> underlyingProcessor_;
+  };
+
+  // Custom processor derived from generated processor
+  struct InheritanceCompressionCheckProcessor
+      : public TestInterface::ProcessorType {
+    InheritanceCompressionCheckProcessor(
+        apache::thrift::ServiceHandler<TestService>* iface,
+        CompressionAlgorithm compression)
+        : TestInterface::ProcessorType(iface), compression_(compression) {}
+
+    void executeRequest(
+        ServerRequest&&,
+        const AsyncProcessorFactory::MethodMetadata&) override {
+      LOG(FATAL) << "executeRequest shouldn't be called in this test";
+    }
+
+    void processSerializedCompressedRequestWithMetadata(
+        apache::thrift::ResponseChannelRequest::UniquePtr req,
+        apache::thrift::SerializedCompressedRequest&& serializedRequest,
+        const apache::thrift::AsyncProcessorFactory::MethodMetadata& mm,
+        apache::thrift::protocol::PROTOCOL_TYPES prot,
+        apache::thrift::Cpp2RequestContext* ctx,
+        folly::EventBase* eb,
+        apache::thrift::concurrency::ThreadManager* tm) override {
+      // check that SerializedCompressedRequest has expected compression
+      if (compression_ == CompressionAlgorithm::CUSTOM) {
+        // custom compression setup failure will fallback to zlib
+        EXPECT_EQ(
+            CompressionAlgorithm::ZLIB,
+            serializedRequest.getCompressionAlgorithm());
+      } else {
+        EXPECT_EQ(compression_, serializedRequest.getCompressionAlgorithm());
+      }
+      TestInterface::ProcessorType::
+          processSerializedCompressedRequestWithMetadata(
+              std::move(req),
+              std::move(serializedRequest),
+              mm,
+              prot,
+              ctx,
+              eb,
+              tm);
+    }
+
+    CompressionAlgorithm compression_;
+  };
+
+  struct CompressionCheckTestInterface : public TestInterface {
+    CompressionCheckTestInterface(
+        ProcessorImplementation processorImplementation,
+        CompressionAlgorithm compression)
+        : processorImplementation_(processorImplementation),
+          compression_(compression) {}
+    std::unique_ptr<apache::thrift::AsyncProcessor> getProcessor() override {
+      switch (processorImplementation_) {
+        case ProcessorImplementation::Containment:
+          return std::make_unique<ContainmentCompressionCheckProcessor>(
+              std::make_unique<TestInterface::ProcessorType>(this),
+              compression_);
+        case ProcessorImplementation::ContainmentLegacy:
+          return std::make_unique<LegacyContainmentProcessor>(
+              std::make_unique<TestInterface::ProcessorType>(this));
+        case ProcessorImplementation::Inheritance:
+          return std::make_unique<InheritanceCompressionCheckProcessor>(
+              this, compression_);
+      }
+    }
+
+    CreateMethodMetadataResult createMethodMetadata() override {
+      // We want to return WildcardMethodMetadataMap here because default
+      // implementation will return MethodMetadataMap and requests will be
+      // routed to executeRequest rather than to
+      // processSerializedCompressedRequestWithMetadata. This test relies on
+      // routing requests to processSerializedCompressedRequestWithMetadata.
+      WildcardMethodMetadataMap wildcardMap;
+      wildcardMap.wildcardMetadata = std::make_shared<WildcardMethodMetadata>();
+      wildcardMap.knownMethods = {};
+      return wildcardMap;
+    }
+
+    ProcessorImplementation processorImplementation_;
+    CompressionAlgorithm compression_;
+  };
+};
+
 TEST_P(HeaderOrRocketCompression, ClientCompressionTest) {
   THRIFT_OMIT_TEST_WITH_RESOURCE_POOLS(
       /* Test mock does not implement executeRequest */);
@@ -4583,7 +4730,8 @@ INSTANTIATE_TEST_CASE_P(
     HeaderOrRocketCompression,
     ::testing::Combine(
         testing::Values(TransportType::Header, TransportType::Rocket),
-        testing::Values(Compression::Enabled, Compression::Disabled),
+        testing::Values(
+            Compression::Enabled, Compression::Disabled, Compression::Custom),
         testing::Values(
             ProcessorImplementation::Containment,
             ProcessorImplementation::ContainmentLegacy,

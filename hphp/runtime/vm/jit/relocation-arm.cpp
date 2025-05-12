@@ -18,13 +18,9 @@
 
 #include "hphp/runtime/vm/jit/abi-arm.h"
 #include "hphp/runtime/vm/jit/align-arm.h"
-#include "hphp/runtime/vm/jit/asm-info.h"
 #include "hphp/runtime/vm/jit/cg-meta.h"
 #include "hphp/runtime/vm/jit/containers.h"
-#include "hphp/runtime/vm/jit/fixup.h"
-#include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/service-requests.h"
-#include "hphp/runtime/vm/jit/smashable-instr.h"
 #include "hphp/runtime/vm/jit/smashable-instr-arm.h"
 
 #include "hphp/vixl/a64/macro-assembler-a64.h"
@@ -35,7 +31,7 @@ using namespace vixl;
 
 namespace {
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -261,7 +257,7 @@ bool writePCRelative(Instruction* instr, Instruction* target,
 InstrSet findLiterals(Instruction* start, Instruction* end) {
   InstrSet literals;
   for (auto instr = start; instr < end; instr = instr->NextInstruction()) {
-    if (literals.count(instr)) continue;
+    if (literals.contains(instr)) continue;
 
     auto addLiteral = [&] (Instruction* lit) {
       if (lit >= start && lit < end) {
@@ -350,8 +346,8 @@ bool optimizeFarJcc(Env& env, TCA srcAddr, TCA destAddr,
   auto const srcAddrActual = env.srcBlock.toDestAddress(srcAddr);
   auto const src = Instruction::Cast(srcAddrActual);
 
-  if (env.meta.smashableLocations.count(srcAddr)) return false;
-  if (env.far.count(src)) return false;
+  if (env.meta.smashableLocations.contains(srcAddr)) return false;
+  if (env.far.contains(src)) return false;
   if (env.end < srcAddr + kFarJccLen) return false;
 
   auto const target = farJccTarget(srcAddrActual);
@@ -461,9 +457,9 @@ bool optimizeFarJmp(Env& env, TCA srcAddr, TCA destAddr,
   auto const srcAddrActual = env.srcBlock.toDestAddress(srcAddr);
   auto const src = Instruction::Cast(srcAddrActual);
 
-  if (env.meta.smashableLocations.count(srcAddr)) return false;
-  if (env.meta.veneerAddrs.count(srcAddr)) return false;
-  if (env.far.count(src)) return false;
+  if (env.meta.smashableLocations.contains(srcAddr)) return false;
+  if (env.meta.veneerAddrs.contains(srcAddr)) return false;
+  if (env.far.contains(src)) return false;
   if (env.end < srcAddr + kFarJmpLen) return false;
 
   auto target = farJmpTarget(srcAddrActual);
@@ -757,7 +753,7 @@ bool relocateImmediate(Env& env, TCA srcAddr, TCA destAddr,
   // Don't turn non address immediates into PC relative instructions.  PC
   // relative instructions are considered to be addresses by other parts of
   // the relocator.
-  if (!env.meta.addressImmediates.count(srcAddr)) return false;
+  if (!env.meta.addressImmediates.contains(srcAddr)) return false;
 
   uint64_t target;
   uint32_t rd;
@@ -994,13 +990,13 @@ size_t relocateImpl(Env& env) {
 
       // If we just copied the Ldr of a mcprep instruction.  Flag internal refs
       // to get updated so its immediate can reflect its new location.
-      if (env.meta.addressImmediates.count(reinterpret_cast<TCA>(
+      if (env.meta.addressImmediates.contains(reinterpret_cast<TCA>(
               ~reinterpret_cast<uintptr_t>(srcAddr)))) {
         assertx(possiblySmashableMovq(srcPtr));
         env.updateInternalRefs = true;
       }
       // Address immediates may be internal references that need updating.
-      if (env.meta.addressImmediates.count(srcAddr)) {
+      if (env.meta.addressImmediates.contains(srcAddr)) {
         auto updateInternalRefsCheck = [&](uintptr_t addr) {
           if (env.start <= reinterpret_cast<TCA>(addr) &&
               reinterpret_cast<TCA>(addr) < env.end) {
@@ -1191,7 +1187,7 @@ size_t relocateImpl(Env& env) {
               auto adjusted =
                 env.rel.adjustedAddressAfter(reinterpret_cast<TCA>(target));
               if (adjusted) {
-                if (env.meta.addressImmediates.count(srcAddr)) {
+                if (env.meta.addressImmediates.contains(srcAddr)) {
                   patchTarget32(addr, adjusted);
                 } else {
                   FTRACE(3,
@@ -1203,7 +1199,7 @@ size_t relocateImpl(Env& env) {
             } else {
               auto const target = *reinterpret_cast<uintptr_t*>(addr);
               auto const adjusted = [&] () -> uintptr_t {
-                if (env.meta.addressImmediates.count(
+                if (env.meta.addressImmediates.contains(
                       reinterpret_cast<TCA>(
                         ~reinterpret_cast<uintptr_t>(srcAddr)))) {
                   auto munge = [] (TCA addr) {
@@ -1400,7 +1396,7 @@ void adjustInstructions(RelocationInfo& rel,
 
   // Adjust the instructions
   for (auto instr = start; instr < end; instr = instr->NextInstruction()) {
-    if (!literals.count(instr)) {
+    if (!literals.contains(instr)) {
       adjustInstruction(rel, instr, end, live);
     }
   }

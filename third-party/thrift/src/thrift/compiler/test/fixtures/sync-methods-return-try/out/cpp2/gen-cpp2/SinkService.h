@@ -37,6 +37,8 @@ class SinkServiceServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::SinkService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::SinkService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "SinkService"; }
 
@@ -113,6 +115,13 @@ class ServiceHandler<::cpp2::SinkService> : public apache::thrift::ServerInterfa
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_methodBothThrow{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::SinkService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 781496598431143912;
+  static constexpr ::std::string_view definitionKey = {"\x57\xdc\x49\x69\x51\xd9\x6d\xa9\x08\xbf\xc9\x68\x02\xfb\xb7\x96", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

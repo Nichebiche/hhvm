@@ -20,13 +20,10 @@
 
 #include "hphp/runtime/vm/jit/abi-x64.h"
 #include "hphp/runtime/vm/jit/align-x64.h"
-#include "hphp/runtime/vm/jit/block.h"
 #include "hphp/runtime/vm/jit/code-gen-helpers.h"
 #include "hphp/runtime/vm/jit/print.h"
-#include "hphp/runtime/vm/jit/prof-data.h"
 #include "hphp/runtime/vm/jit/service-requests.h"
 #include "hphp/runtime/vm/jit/smashable-instr-x64.h"
-#include "hphp/runtime/vm/jit/target-cache.h"
 #include "hphp/runtime/vm/jit/timer.h"
 #include "hphp/runtime/vm/jit/vasm.h"
 #include "hphp/runtime/vm/jit/vasm-block-counters.h"
@@ -37,15 +34,13 @@
 #include "hphp/runtime/vm/jit/vasm-prof.h"
 #include "hphp/runtime/vm/jit/vasm-unit.h"
 #include "hphp/runtime/vm/jit/vasm-util.h"
-#include "hphp/runtime/vm/jit/vasm-visit.h"
 
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/configs/jit.h"
 
-#include <algorithm>
 #include <tuple>
 
-TRACE_SET_MOD(vasm);
+TRACE_SET_MOD(vasm)
 
 namespace HPHP::jit {
 ///////////////////////////////////////////////////////////////////////////////
@@ -721,7 +716,13 @@ void Vgen<X64Asm>::emit(const call& i) {
 
 template<class X64Asm>
 void Vgen<X64Asm>::emit(const calls& i) {
-  emitSmashableCall(a.code(), env.meta, i.target);
+  auto addr = emitSmashableCall(a.code(), env.meta, i.target);
+  (void)addr;
+#ifdef __roar__
+  // Track the native call so we can register them with ROAR after the code is
+  // relocated into its final place in the code cache.
+  env.meta.nativeCalls[addr] = i.target;
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////

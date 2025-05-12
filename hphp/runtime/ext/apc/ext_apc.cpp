@@ -21,7 +21,6 @@
 #include <memory>
 #include <set>
 #include <vector>
-#include <stdexcept>
 #include <type_traits>
 
 #include <folly/portability/SysTime.h>
@@ -36,14 +35,11 @@
 #include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/array-iterator.h"
 #include "hphp/runtime/base/builtin-functions.h"
-#include "hphp/runtime/base/comparisons.h"
 #include "hphp/runtime/base/config.h"
-#include "hphp/runtime/base/execution-context.h"
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/program-functions.h"
 #include "hphp/runtime/base/tv-uncounted.h"
 #include "hphp/runtime/base/variable-serializer.h"
-#include "hphp/runtime/ext/fb/ext_fb.h"
 #include "hphp/runtime/server/cli-server.h"
 #include "hphp/runtime/server/upload.h"
 
@@ -85,7 +81,7 @@ void initialize_apc() {
 
 const StaticString s_internal_preload("__apc_internal_preload");
 
-typedef ConcurrentTableSharedStore::DumpMode DumpMode;
+using DumpMode = ConcurrentTableSharedStore::DumpMode;
 
 void apcExtension::moduleLoad(const IniSetting::Map& ini, Hdf config) {
   Config::Bind(Enable, ini, config, "Server.APC.EnableApc", true);

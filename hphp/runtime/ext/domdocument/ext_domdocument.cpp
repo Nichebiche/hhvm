@@ -17,8 +17,6 @@
 
 #include "hphp/runtime/ext/domdocument/ext_domdocument.h"
 
-#include <map>
-
 #include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/file.h"
 #include "hphp/runtime/base/file-util.h"
@@ -29,10 +27,9 @@
 #include "hphp/runtime/ext/std/ext_std_file.h"
 #include "hphp/runtime/ext/std/ext_std_function.h"
 #include "hphp/runtime/ext/string/ext_string.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/native.h"
+#include "hphp/runtime/vm/vm-regs.h"
 #include "hphp/system/systemlib.h"
-#include "hphp/util/functional.h"
 #include "hphp/util/hash-set.h"
 #include "hphp/util/string-vsnprintf.h"
 
@@ -3218,13 +3215,13 @@ static void dom_document_version_write(const Object& obj,
   }                                                                     \
 /**/
 
-DOCPROP_READ_WRITE(stricterror,        strict_error_checking );
-DOCPROP_READ_WRITE(formatoutput,       format_output         );
-DOCPROP_READ_WRITE(validateonparse,    validate_on_parse     );
-DOCPROP_READ_WRITE(resolveexternals,   resolve_externals     );
-DOCPROP_READ_WRITE(preservewhitespace, preserve_whitespace   );
-DOCPROP_READ_WRITE(recover,            recover               );
-DOCPROP_READ_WRITE(substituteentities, substitue_entities    );
+DOCPROP_READ_WRITE(stricterror,        strict_error_checking )
+DOCPROP_READ_WRITE(formatoutput,       format_output         )
+DOCPROP_READ_WRITE(validateonparse,    validate_on_parse     )
+DOCPROP_READ_WRITE(resolveexternals,   resolve_externals     )
+DOCPROP_READ_WRITE(preservewhitespace, preserve_whitespace   )
+DOCPROP_READ_WRITE(recover,            recover               )
+DOCPROP_READ_WRITE(substituteentities, substitue_entities    )
 
 static Variant dom_document_document_uri_read(const Object& obj) {
   CHECK_DOC(docp);
@@ -3706,7 +3703,7 @@ Variant HHVM_METHOD(DOMDocument, saveHTMLFile,
 
   /* encoding handled by property on doc */
   format = data->doc()->m_formatoutput;
-  bytes = htmlSaveFileFormat(file.data(), docp, nullptr, format);
+  bytes = htmlSaveFileFormat(file.data(), docp, "UTF-8", format);
   if (bytes == -1) {
     return false;
   }

@@ -24,84 +24,12 @@
 
 namespace whisker::dsl {
 
-std::size_t array_like::size() const {
-  return whisker::detail::variant_match(
-      which_, [](const auto& arr) -> std::size_t { return arr->size(); });
-}
-
-object::ptr array_like::at(std::size_t index) const {
-  return whisker::detail::variant_match(
-      which_,
-      [&](const native_object::array_like::ptr& arr) -> object::ptr {
-        return arr->at(index);
-      },
-      [&](const managed_ptr<array>& arr) -> object::ptr {
-        return manage_derived_ref(arr, (*arr)[index]);
-      });
-}
-
-/* static */ std::optional<array_like> array_like::try_from(
-    const object::ptr& o) {
-  if (o->is_array()) {
-    return array_like(manage_derived_ref(o, o->as_array()));
-  }
-  if (o->is_native_object()) {
-    if (native_object::array_like::ptr arr =
-            o->as_native_object()->as_array_like()) {
-      return array_like(std::move(arr));
-    }
-  }
-  return std::nullopt;
-}
-
-object::ptr map_like::lookup_property(std::string_view identifier) const {
-  return whisker::detail::variant_match(
-      which_,
-      [&](const native_object::map_like::ptr& m) -> object::ptr {
-        return m->lookup_property(identifier);
-      },
-      [&](const managed_ptr<map>& m) -> object::ptr {
-        if (auto it = m->find(identifier); it != m->end()) {
-          return manage_as_static(it->second);
-        }
-        return nullptr;
-      });
-}
-
-std::optional<std::set<std::string>> map_like::keys() const {
-  using result = std::optional<std::set<std::string>>;
-  return whisker::detail::variant_match(
-      which_,
-      [&](const native_object::map_like::ptr& m) -> result {
-        return m->keys();
-      },
-      [&](const managed_ptr<map>& m) -> result {
-        std::set<std::string> keys;
-        for (const auto& [key, _] : *m) {
-          keys.insert(key);
-        }
-        return keys;
-      });
-}
-
-/* static */ std::optional<map_like> map_like::try_from(const object::ptr& o) {
-  if (o->is_map()) {
-    return map_like(manage_derived_ref(o, o->as_map()));
-  }
-  if (o->is_native_object()) {
-    if (native_object::map_like::ptr m = o->as_native_object()->as_map_like()) {
-      return map_like(std::move(m));
-    }
-  }
-  return std::nullopt;
-}
-
-object::ptr function::context::named_argument(
+std::optional<object> function::context::named_argument(
     std::string_view name, named_argument_presence presence) const {
   auto arg = raw().named_arguments().find(name);
   if (arg == raw().named_arguments().end()) {
     if (presence == named_argument_presence::optional) {
-      return nullptr;
+      return std::nullopt;
     }
     throw make_error("Missing named argument '{}'.", name);
   }
@@ -134,7 +62,7 @@ void function::context::declare_named_arguments(
   }
 }
 
-object::ptr function::invoke(raw_context raw) {
+object function::invoke(raw_context raw) {
   return this->invoke(context{std::move(raw)});
 }
 

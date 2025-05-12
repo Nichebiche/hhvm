@@ -25,8 +25,6 @@ libmcroutercore_a_SOURCES = \
   AsyncWriter.cpp \
   AsyncWriter.h \
   AsyncWriterEntry.h \
-  CallbackPool-inl.h \
-  CallbackPool.h \
   CarbonRouterClient.cpp \
   CarbonRouterClient-inl.h \
   CarbonRouterClient.h \
@@ -73,8 +71,6 @@ libmcroutercore_a_SOURCES = \
   lib/invalidation/McInvalidationKvPairs.cpp \
   lib/invalidation/McInvalidationDefs.h \
   lib/network/McThriftContext.h \
-  Observable-inl.h \
-  Observable.h \
   options-template.h \
   options.cpp \
   options.h \
@@ -153,7 +149,6 @@ libmcroutercore_a_SOURCES = \
   routes/McBucketRoute.h \
   routes/DistributionRoute-inl.h \
   routes/DistributionRoute.h \
-  routes/McRefillRoute.h \
   routes/McExtraRouteHandleProvider-inl.h \
   routes/McExtraRouteHandleProvider.h \
   routes/McImportResolver.cpp \
@@ -220,8 +215,6 @@ libmcroutercore_a_SOURCES = \
   RouterRegistry-impl.h \
   RoutingPrefix.cpp \
   RoutingPrefix.h \
-  RuntimeVarsData.cpp \
-  RuntimeVarsData.h \
   ServiceInfo.cpp \
   ServiceInfo-inl.h \
   ServiceInfo.h \

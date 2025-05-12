@@ -31,6 +31,8 @@ class DefaultPayloadSerializerStrategy final
  public:
   DefaultPayloadSerializerStrategy() : PayloadSerializerStrategy(*this) {}
 
+  bool supportsChecksum() { return false; }
+
   template <class T>
   folly::Try<T> unpackAsCompressed(
       rocket::Payload&& payload, bool decodeMetadataUsingBinary) {
@@ -45,8 +47,14 @@ class DefaultPayloadSerializerStrategy final
     return folly::makeTryWith([&]() {
       T t = unpackImpl<T>(std::move(payload), decodeMetadataUsingBinary);
       if (auto compression = t.metadata.compression()) {
-        t.payload = CompressionManager().uncompressBuffer(
-            std::move(t.payload), *compression);
+        const auto compressionAlgorithm = *compression;
+        // Custom compression is supported in
+        // CustomCompressionPayloadSerializerStrategy
+        if (compressionAlgorithm != CompressionAlgorithm::NONE &&
+            compressionAlgorithm != CompressionAlgorithm::CUSTOM) {
+          t.payload =
+              uncompressBuffer(std::move(t.payload), compressionAlgorithm);
+        }
       }
       return t;
     });
@@ -119,6 +127,20 @@ class DefaultPayloadSerializerStrategy final
         std::forward<PayloadType>(payload).fds,
         encodeMetadataUsingBinary,
         transport);
+  }
+
+  std::unique_ptr<folly::IOBuf> compressBuffer(
+      std::unique_ptr<folly::IOBuf>&& buffer,
+      CompressionAlgorithm compressionAlgorithm) {
+    return CompressionManager().compressBuffer(
+        std::move(buffer), compressionAlgorithm);
+  }
+
+  std::unique_ptr<folly::IOBuf> uncompressBuffer(
+      std::unique_ptr<folly::IOBuf>&& buffer,
+      CompressionAlgorithm compressionAlgorithm) {
+    return CompressionManager().uncompressBuffer(
+        std::move(buffer), compressionAlgorithm);
   }
 
  private:

@@ -1550,7 +1550,7 @@ TEST_F(HTTPDownstreamSessionTest, ServerStatusHeaderOnError) {
   EXPECT_CALL(callbacks, onHeadersComplete(1, _))
       .WillOnce(Invoke([](HTTPCodec::StreamID,
                           std::shared_ptr<HTTPMessage> msg) {
-        EXPECT_EQ(msg->getHeaders().getSingleOrEmpty("Server-Status"), "16");
+        EXPECT_EQ(msg->getHeaders().getSingleOrEmpty("Server-Status"), "27");
       }));
 
   auto req = getGetRequest("/");                 // construct basic get req
@@ -1563,7 +1563,7 @@ TEST_F(HTTPDownstreamSessionTest, ServerStatusHeaderOnError) {
   eventBase_.loopOnce();
   eventBase_.loopOnce();
   parseOutput(*clientCodec_); // client parses resp with server-status set to
-                              // kErrorParseHeader (16)
+                              // kErrorHeaderContentValidation (27)
   expectDetachSession();
 }
 
@@ -1580,7 +1580,7 @@ TEST_F(HTTP2DownstreamSessionTest, ServerStatusHeaderOnError) {
   EXPECT_CALL(callbacks, onHeadersComplete(1, _))
       .WillOnce(Invoke([](HTTPCodec::StreamID,
                           std::shared_ptr<HTTPMessage> msg) {
-        EXPECT_EQ(msg->getHeaders().getSingleOrEmpty("Server-Status"), "16");
+        EXPECT_EQ(msg->getHeaders().getSingleOrEmpty("Server-Status"), "27");
       }));
 
   auto req = getGetRequest("/");
@@ -1682,8 +1682,6 @@ TEST_F(HTTP2DownstreamSessionTest, ExheaderFromServer) {
 
   // Create a dummy request and a dummy response messages
   auto pub = getGetRequest("/sub/fyi");
-  // set up the priority for fun
-  pub.setHTTP2Priority(std::make_tuple(0, false, 7));
 
   InSequence handlerSequence;
   auto cHandler = addSimpleStrictHandler();
@@ -3592,9 +3590,6 @@ TEST_F(HTTP2DownstreamSessionTest, ServerPush) {
     pushTxn->sendHeaders(req);
     EXPECT_EQ(httpSession_->getNumOutgoingStreams(), outgoingStreams);
     // Generate a push response
-    auto pri = handler->txn_->getPriority();
-    res.setHTTP2Priority(
-        std::make_tuple(pri.streamDependency, pri.exclusive, pri.weight));
     pushTxn->sendHeaders(res);
     EXPECT_EQ(httpSession_->getNumOutgoingStreams(), outgoingStreams + 1);
     pushTxn->sendBody(makeBuf(200));
@@ -3765,196 +3760,7 @@ TEST_F(HTTP2DownstreamSessionTest, ServerPushAfterWriteTimeout) {
   EXPECT_EQ(httpSession_->getNumOutgoingStreams(), 0);
 }
 
-TEST_F(HTTP2DownstreamSessionTest, TestPriorityWeightsTinyRatio) {
-  // Create a transaction with egress and a ratio small enough that
-  // ratio*4096 < 1.
-  //
-  //     root
-  //     /  \                                                 level 1
-  //   256   1 (no egress)
-  //        / \                                               level 2
-  //      256  1  <-- has ratio (1/257)^2
-  InSequence enforceOrder;
-  auto req1 = getGetRequest();
-  auto req2 = getGetRequest();
-  req1.setHTTP2Priority(HTTPMessage::HTTP2Priority{0, false, 255});
-  req2.setHTTP2Priority(HTTPMessage::HTTP2Priority{0, false, 0});
-
-  sendRequest(req1);
-  auto id2 = sendRequest(req2);
-  req1.setHTTP2Priority(HTTPMessage::HTTP2Priority{id2, false, 255});
-  req2.setHTTP2Priority(HTTPMessage::HTTP2Priority{id2, false, 0});
-  sendRequest(req1);
-  sendRequest(req2);
-
-  auto handler1 = addSimpleStrictHandler();
-  handler1->expectHeaders();
-  handler1->expectEOM([&] { handler1->sendReplyWithBody(200, 4 * 1024); });
-  auto handler2 = addSimpleStrictHandler();
-  handler2->expectHeaders();
-  handler2->expectEOM();
-  auto handler3 = addSimpleStrictHandler();
-  handler3->expectHeaders();
-  handler3->expectEOM([&] { handler3->sendReplyWithBody(200, 15); });
-  auto handler4 = addSimpleStrictHandler();
-  handler4->expectHeaders();
-  handler4->expectEOM([&] { handler4->sendReplyWithBody(200, 1); });
-
-  handler1->expectDetachTransaction();
-  handler3->expectDetachTransaction();
-  handler4->expectDetachTransaction(
-      [&handler2] { handler2->txn_->sendAbort(); });
-  handler2->expectDetachTransaction();
-  flushRequestsAndLoop();
-  httpSession_->closeWhenIdle();
-  expectDetachSession();
-  eventBase_.loop();
-  httpSession_->timeoutExpired();
-}
-
-TEST_F(HTTP2DownstreamSessionTest, TestPriorityDependentTransactions) {
-  // Create a dependent transaction to test the priority blocked by dependency.
-  // ratio*4096 < 1.
-  //
-  //     root
-  //      \                                                 level 1
-  //      16
-  //       \                                                level 2
-  //       16
-  InSequence enforceOrder;
-  auto req1 = getGetRequest();
-  req1.setHTTP2Priority(HTTPMessage::HTTP2Priority{0, false, 15});
-  auto id1 = sendRequest(req1);
-
-  auto req2 = getGetRequest();
-  req2.setHTTP2Priority(HTTPMessage::HTTP2Priority{id1, false, 15});
-  sendRequest(req2);
-
-  auto handler1 = addSimpleStrictHandler();
-  handler1->expectHeaders();
-  handler1->expectEOM([&] { handler1->sendReplyWithBody(200, 1024); });
-  auto handler2 = addSimpleStrictHandler();
-  handler2->expectHeaders();
-  handler2->expectEOM([&] { handler2->sendReplyWithBody(200, 1024); });
-
-  handler1->expectDetachTransaction();
-  handler2->expectDetachTransaction([&] { handler2->txn_->sendAbort(); });
-  flushRequestsAndLoop();
-  httpSession_->closeWhenIdle();
-  expectDetachSession();
-  eventBase_.loop();
-  httpSession_->timeoutExpired();
-}
-
-TEST_F(HTTP2DownstreamSessionTest, TestDisablePriorities) {
-  // turn off HTTP2 priorities
-  httpSession_->setHTTP2PrioritiesEnabled(false);
-
-  InSequence enforceOrder;
-  HTTPMessage req1 = getGetRequest();
-  req1.setHTTP2Priority(HTTPMessage::HTTP2Priority{0, false, 0});
-  sendRequest(req1);
-
-  HTTPMessage req2 = getGetRequest();
-  req2.setHTTP2Priority(HTTPMessage::HTTP2Priority{0, false, 255});
-  sendRequest(req2);
-
-  auto handler1 = addSimpleStrictHandler();
-  handler1->expectHeaders();
-  handler1->expectEOM([&] { handler1->sendReplyWithBody(200, 4 * 1024); });
-
-  auto handler2 = addSimpleStrictHandler();
-  handler2->expectHeaders();
-  handler2->expectEOM([&] { handler2->sendReplyWithBody(200, 4 * 1024); });
-
-  // expecting handler 1 to finish first irrespective of
-  // request 2 having higher weight
-  handler1->expectDetachTransaction();
-  handler2->expectDetachTransaction();
-
-  flushRequestsAndLoop();
-  httpSession_->closeWhenIdle();
-  expectDetachSession();
-  eventBase_.loop();
-  httpSession_->timeoutExpired();
-}
-
-TEST_F(HTTP2DownstreamSessionTest, TestPriorityWeights) {
-  // virtual priority node with pri=4
-  auto priGroupID = clientCodec_->createStream();
-  clientCodec_->generatePriority(
-      requests_, priGroupID, HTTPMessage::HTTP2Priority(0, false, 3));
-  // Both txn's are at equal pri=16
-  auto id1 = sendRequest();
-  auto id2 = sendRequest();
-
-  auto handler1 = addSimpleStrictHandler();
-
-  handler1->expectHeaders();
-  handler1->expectEOM([&] {
-    handler1->sendHeaders(200, 12 * 1024);
-    handler1->txn_->sendBody(makeBuf(4 * 1024));
-  });
-  auto handler2 = addSimpleStrictHandler();
-  handler2->expectHeaders();
-  handler2->expectEOM([&] {
-    handler2->sendHeaders(200, 12 * 1024);
-    handler2->txn_->sendBody(makeBuf(4 * 1024));
-  });
-
-  // twice- once to send and once to receive
-  flushRequestsAndLoopN(2);
-  EXPECT_CALL(callbacks_, onSettings(_));
-  EXPECT_CALL(callbacks_, onMessageBegin(id1, _));
-  EXPECT_CALL(callbacks_, onHeadersComplete(id1, _));
-  EXPECT_CALL(callbacks_, onMessageBegin(id2, _));
-  EXPECT_CALL(callbacks_, onHeadersComplete(id2, _));
-  EXPECT_CALL(callbacks_, onBody(id1, _, _)).WillOnce(ExpectBodyLen(4 * 1024));
-  EXPECT_CALL(callbacks_, onBody(id2, _, _)).WillOnce(ExpectBodyLen(4 * 1024));
-  parseOutput(*clientCodec_);
-
-  // update handler2 to be in the pri-group (which has lower weight)
-  clientCodec_->generatePriority(
-      requests_, id2, HTTPMessage::HTTP2Priority(priGroupID, false, 15));
-
-  eventBase_.runInLoop([&] {
-    handler1->txn_->sendBody(makeBuf(4 * 1024));
-    handler2->txn_->sendBody(makeBuf(4 * 1024));
-  });
-  flushRequestsAndLoopN(2);
-
-  EXPECT_CALL(callbacks_, onBody(id1, _, _)).WillOnce(ExpectBodyLen(4 * 1024));
-  EXPECT_CALL(callbacks_, onBody(id2, _, _))
-      .WillOnce(ExpectBodyLen(1 * 1024))
-      .WillOnce(ExpectBodyLen(3 * 1024));
-  parseOutput(*clientCodec_);
-
-  // update vnode weight to match txn1 weight
-  clientCodec_->generatePriority(
-      requests_, priGroupID, HTTPMessage::HTTP2Priority(0, false, 15));
-  eventBase_.runInLoop([&] {
-    handler1->txn_->sendBody(makeBuf(4 * 1024));
-    handler1->txn_->sendEOM();
-    handler2->txn_->sendBody(makeBuf(4 * 1024));
-    handler2->txn_->sendEOM();
-  });
-  handler1->expectDetachTransaction();
-  handler2->expectDetachTransaction();
-  flushRequestsAndLoopN(2);
-
-  // expect 32/32
-  EXPECT_CALL(callbacks_, onBody(id1, _, _)).WillOnce(ExpectBodyLen(4 * 1024));
-  EXPECT_CALL(callbacks_, onMessageComplete(id1, _));
-  EXPECT_CALL(callbacks_, onBody(id2, _, _)).WillOnce(ExpectBodyLen(4 * 1024));
-  EXPECT_CALL(callbacks_, onMessageComplete(id2, _));
-  parseOutput(*clientCodec_);
-
-  httpSession_->closeWhenIdle();
-  expectDetachSession();
-  this->eventBase_.loop();
-  httpSession_->timeoutExpired();
-}
-
+#if 0
 TEST_F(HTTP2DownstreamSessionTest, TestPriorityFCBlocked) {
   // Send two requests that are not stream f/c blocked but are conn f/c blocked
   // Send a third request with higher priority, ensure it is not blocked by
@@ -3962,8 +3768,6 @@ TEST_F(HTTP2DownstreamSessionTest, TestPriorityFCBlocked) {
 
   // virtual priority node
   auto priGroupID = clientCodec_->createStream();
-  clientCodec_->generatePriority(
-      requests_, priGroupID, HTTPMessage::HTTP2Priority(0, false, 3));
   auto req = getGetRequest();
   req.setHTTP2Priority(HTTPMessage::HTTP2Priority{priGroupID, false, 255});
   auto id1 = sendRequest(req);
@@ -4022,6 +3826,7 @@ TEST_F(HTTP2DownstreamSessionTest, TestPriorityFCBlocked) {
   this->eventBase_.loop();
   httpSession_->timeoutExpired();
 }
+#endif
 
 TEST_F(HTTP2DownstreamSessionTest, TestHeadersRateLimitExceeded) {
   httpSession_->setRateLimitParams(
@@ -4049,18 +3854,17 @@ TEST_F(HTTP2DownstreamSessionTest, TestHeadersRateLimitExceeded) {
 }
 
 TEST_F(HTTP2DownstreamSessionTest, TestControlMsgRateLimitExceeded) {
-  auto streamid = clientCodec_->createStream();
+  clientCodec_->createStream();
 
   httpSession_->setRateLimitParams(
       RateLimiter::Type::MISC_CONTROL_MSGS, 100, std::chrono::seconds(0));
 
-  // Send 97 PRIORITY, 1 SETTINGS, and 3 PING frames. This should exceed the
+  // Send 97 PING, 1 SETTINGS, and 3 PING frames. This should exceed the
   // limit of 10, causing us to drop the connection.
   for (uint32_t i = 0;
        i < ControlMessageRateLimiter::kMaxEventsPerIntervalLowerBound - 3;
        i++) {
-    clientCodec_->generatePriority(
-        requests_, streamid, HTTPMessage::HTTP2Priority(0, false, 3));
+    clientCodec_->generatePingRequest(requests_);
   }
 
   clientCodec_->generateSettings(requests_);
@@ -4088,8 +3892,7 @@ TEST_F(HTTP2DownstreamSessionTest, TestControlMsgResetRateLimitTouched) {
   for (uint32_t i = 0;
        i < ControlMessageRateLimiter::kMaxEventsPerIntervalLowerBound - 3;
        i++) {
-    clientCodec_->generatePriority(
-        requests_, streamid, HTTPMessage::HTTP2Priority(0, false, 3));
+    clientCodec_->generatePriority(requests_, streamid, HTTPPriority{3, false});
   }
 
   clientCodec_->generateSettings(requests_);
@@ -4106,8 +3909,7 @@ TEST_F(HTTP2DownstreamSessionTest, TestControlMsgResetRateLimitTouched) {
   // Send 10 control frames. This is just within the rate limits that we have
   // set.
   for (int i = 0; i < 5; i++) {
-    clientCodec_->generatePriority(
-        requests_, streamid, HTTPMessage::HTTP2Priority(0, false, 3));
+    clientCodec_->generatePriority(requests_, streamid, HTTPPriority{3, false});
   }
 
   clientCodec_->generateSettings(requests_);
@@ -4946,4 +4748,132 @@ TEST_F(HTTP2DownstreamSessionTest, Observer_PreWrite) {
   flushRequestsAndLoop(true, milliseconds(0));
 
   expectDetachSession();
+}
+
+TEST_F(HTTPDownstreamSessionTest, InvariantViolation) {
+  folly::DelayedDestruction::DestructorGuard g(httpSession_);
+
+  auto handler = addSimpleStrictHandler();
+  auto& txn = handler->txn_;
+  // attempting to egress body first => invariantViolation
+  handler->expectHeaders([&]() { handler->sendBody(100); });
+
+  EXPECT_CALL(*handler, _onInvariantViolation(_)).WillOnce([&]() {
+    // invariantViolation callback can send headers if allowed
+    CHECK(txn->canSendHeaders());
+    txn->sendHeaders(getResponse(500, 0));
+  });
+
+  sendRequest(getGetRequest(), /*eom=*/true);
+
+  // this should detach transaction since invariantViolation triggers abort
+  EXPECT_CALL(*handler, _detachTransaction);
+  flushRequestsAndLoopN(1);
+  evbLoopNonBlockN(1);
+
+  EXPECT_CALL(callbacks_, onHeadersComplete(_, _)).WillOnce([](auto, auto msg) {
+    EXPECT_EQ(msg->getStatusCode(), 500);
+  });
+
+  parseOutput(*clientCodec_);
+  gracefulShutdown();
+}
+
+TEST_F(HTTP2DownstreamSessionTest, InvariantViolation) {
+  auto handler = addSimpleStrictHandler();
+  auto& txn = handler->txn_;
+  // attempting to egress body first => invariantViolation
+  handler->expectHeaders([&]() { handler->sendBody(100); });
+
+  EXPECT_CALL(*handler, _onInvariantViolation(_)).WillOnce([&]() {
+    // invariantViolation callback can send headers if allowed
+    CHECK(txn->canSendHeaders());
+    txn->sendHeaders(getResponse(500, 0));
+    txn->sendEOM();
+  });
+
+  sendRequest(getGetRequest(), /*eom=*/true);
+
+  // this should detach transaction since invariantViolation triggers abort
+  EXPECT_CALL(*handler, _detachTransaction);
+  flushRequestsAndLoopN(1);
+  evbLoopNonBlockN(2);
+
+  EXPECT_CALL(callbacks_, onHeadersComplete(_, _)).WillOnce([](auto, auto msg) {
+    EXPECT_EQ(msg->getStatusCode(), 500);
+  });
+  EXPECT_CALL(callbacks_, onAbort(_, ErrorCode::NO_ERROR));
+
+  parseOutput(*clientCodec_);
+  gracefulShutdown();
+}
+
+TEST_F(HTTP2DownstreamSessionTest, EnableServerEarlyResponse) {
+  httpSession_->enableServerEarlyResponse();
+
+  // send only headers of large post request
+  HTTPMessage req = getPostRequest(/*contentLength=*/1'000'000);
+  sendRequest(req, /*eom=*/false);
+
+  // send full response upon post headers
+  auto handler = addSimpleStrictHandler();
+  handler->expectHeaders([&](std::shared_ptr<HTTPMessage> msg) {
+    EXPECT_EQ(msg->getMethod(), HTTPMethod::POST);
+    handler->txn_->sendHeaders(getResponse(200));
+    handler->txn_->sendEOM();
+  });
+
+  // early resp should abort & detach txn
+  handler->expectDetachTransaction();
+  expectDetachSession();
+  flushRequestsAndLoop();
+
+  // expect RST_STREAM/NO_ERROR
+  NiceMock<MockHTTPCodecCallback> callbacks;
+  clientCodec_->setCallback(&callbacks);
+  EXPECT_CALL(callbacks, onHeadersComplete(_, _));
+  EXPECT_CALL(callbacks, onMessageComplete(_, _));
+  EXPECT_CALL(callbacks, onAbort(_, ErrorCode::NO_ERROR));
+
+  eventBase_.loopOnce();
+  httpSession_->closeWhenIdle();
+  eventBase_.loop();
+  parseOutput(*clientCodec_);
+  httpSession_->timeoutExpired();
+}
+TEST_F(HTTP2DownstreamSessionTest, IdleSessionDoubleGoawayReadTimeout) {
+  // Enable double GOAWAY drain
+  auto connMan =
+      wangle::ConnectionManager::makeUnique(&eventBase_, milliseconds(125));
+  connMan->addConnection(httpSession_);
+  httpSession_->enableDoubleGoawayDrain();
+
+  // Set up the controller to return a graceful shutdown timeout of 100ms
+  EXPECT_CALL(mockController_, getGracefulShutdownTimeout())
+      .WillRepeatedly(Return(std::chrono::milliseconds(100)));
+
+  // Simulate a read timeout on an idle session
+  httpSession_->timeoutExpired();
+
+  // Expect the first GOAWAY to be sent immediately
+  {
+    EXPECT_CALL(
+        callbacks_,
+        onGoaway(std::numeric_limits<int32_t>::max(), ErrorCode::NO_ERROR, _));
+    eventBase_.loopOnce();
+    parseOutput(*clientCodec_);
+  }
+  // Expect the second GOAWAY to be sent 100ms later
+  eventBase_.runAfterDelay(
+      [&] {
+        EXPECT_CALL(callbacks_, onGoaway(0, ErrorCode::NO_ERROR, _));
+        parseOutput(*clientCodec_);
+      },
+      200);
+
+  // Expect the session to close 100ms later
+  expectDetachSession();
+
+  // Run the event loop
+  eventBase_.loop();
 }

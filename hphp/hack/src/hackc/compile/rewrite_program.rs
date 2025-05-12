@@ -17,9 +17,9 @@ use oxidized::ast;
 use oxidized::ast::Def;
 use oxidized::ast::Expr;
 use oxidized::ast::Expr_;
+use oxidized::ast::Fun_;
 use oxidized::ast::FunDef;
 use oxidized::ast::FunKind;
-use oxidized::ast::Fun_;
 use oxidized::ast::FuncBody;
 use oxidized::ast::Id;
 use oxidized::ast::Pos;
@@ -56,7 +56,7 @@ fn debugger_eval_should_modify(tast: &[ast::Def]) -> Result<bool> {
     if tast.len() != 2 {
         Ok(false)
     } else {
-        Ok(tast[1].as_stmt().map_or(false, |x| x.1.is_expr()))
+        Ok(tast[1].as_stmt().is_some_and(|x| x.1.is_expr()))
     }
 }
 

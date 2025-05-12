@@ -17,11 +17,7 @@
 #include "hphp/runtime/vm/jit/relocation.h"
 
 #include "hphp/runtime/vm/jit/align-x64.h"
-#include "hphp/runtime/vm/jit/asm-info.h"
 #include "hphp/runtime/vm/jit/cg-meta.h"
-#include "hphp/runtime/vm/jit/containers.h"
-#include "hphp/runtime/vm/jit/fixup.h"
-#include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/smashable-instr.h"
 
 #include "hphp/util/configs/jit.h"
@@ -30,7 +26,7 @@ namespace HPHP::jit::x64 {
 
 namespace {
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -156,7 +152,7 @@ size_t relocateImpl(RelocationInfo& rel,
           assertx(success);
         } else {
           if (!preserveAlignment && d2.isBranch()) {
-            if (wideJmps.count(src)) {
+            if (wideJmps.contains(src)) {
               if (d2.size() < kJmpLen) {
                 d2.widenBranch();
                 internalRefsNeedUpdating = true;
@@ -171,12 +167,12 @@ size_t relocateImpl(RelocationInfo& rel,
         }
       }
       if (di.hasImmediate()) {
-        if (fixups.addressImmediates.count(src)) {
+        if (fixups.addressImmediates.contains(src)) {
           if (size_t(di.immediate() - (uint64_t)start) < range) {
             hasInternalRefs = internalRefsNeedUpdating = true;
           }
         } else {
-          if (fixups.addressImmediates.count((TCA)~uintptr_t(src))) {
+          if (fixups.addressImmediates.contains((TCA)~uintptr_t(src))) {
             // Handle weird, encoded offset, used by LdSmashable
             always_assert(di.immediate() == ((uintptr_t(src) << 1) | 1));
             bool DEBUG_ONLY success =

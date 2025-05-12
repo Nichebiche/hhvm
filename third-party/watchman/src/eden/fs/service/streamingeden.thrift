@@ -6,9 +6,25 @@
  */
 
 include "eden/fs/service/eden.thrift"
+include "thrift/annotation/thrift.thrift"
 namespace cpp2 facebook.eden
 namespace java.swift com.facebook.eden.thrift.streaming
 namespace py3 eden.fs.service
+
+/**
+ * To support testing of the EdenFS client library, we need to be able to
+ * mock the EdenFS Thrift APIs. This is done by defining a mock service,
+ * using `mockall::mock!`, that implements the EdenFS Thrift APIs.
+ *
+ * The mock definitions will require updates whenever the EdenFS Thrift API
+ * changes. Not all changes will require an update, only those that either:
+ *   1. Add/Rename a new method to the interface
+ *   2. Change the parameters or return type of a method
+ *   3. Introduce a breaking Thrift API changes (e.g. rename a method)
+ *
+ * For reference, the EdenFS client library mocks are defined here:
+ *   https://www.internalfb.com/code/fbsource/fbcode/eden/fs/cli_rs/edenfs-client/src/client/mock_service.rs
+ */
 
 enum FsEventType {
   UNKNOWN = 0,
@@ -42,7 +58,7 @@ struct FsEvent {
    *
    * Positive is success, and, depending on the operation, may contain a nonzero result.
    *
-   * If a FUSE request returns an inode which the kernel will reference, this field contains that inode numebr, so it can be correlated with future FUSE requests to that inode.
+   * If a FUSE request returns an inode which the kernel will reference, this field contains that inode number, so it can be correlated with future FUSE requests to that inode.
    * field is set. This field can be used to link the lookup/create/mknod
    * request to future FUSE requests on that inode.
    *
@@ -113,9 +129,10 @@ service StreamingEdenService extends eden.EdenService {
   /**
    * subscribeStreamTemporary is deprecated. Please use streamJournalChanged.
    */
+  @thrift.DeprecatedUnvalidatedAnnotations{items = {"deprecated": "1"}}
   stream<eden.JournalPosition> subscribeStreamTemporary(
     1: eden.PathString mountPoint,
-  ) (deprecated);
+  );
 
   /**
    *

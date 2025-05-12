@@ -26,6 +26,46 @@
 
 using namespace apache::thrift::util;
 
+extern "C" FOLLY_KEEP uint8_t
+check_thrift_read_varint_u8_cursor(folly::io::Cursor* cur) {
+  return apache::thrift::util::readVarint<uint8_t>(*cur);
+}
+
+extern "C" FOLLY_KEEP uint16_t
+check_thrift_read_varint_u16_cursor(folly::io::Cursor* cur) {
+  return apache::thrift::util::readVarint<uint16_t>(*cur);
+}
+
+extern "C" FOLLY_KEEP uint32_t
+check_thrift_read_varint_u32_cursor(folly::io::Cursor* cur) {
+  return apache::thrift::util::readVarint<uint32_t>(*cur);
+}
+
+extern "C" FOLLY_KEEP uint64_t
+check_thrift_read_varint_u64_cursor(folly::io::Cursor* cur) {
+  return apache::thrift::util::readVarint<uint64_t>(*cur);
+}
+
+extern "C" FOLLY_KEEP size_t
+check_thrift_read_varint_u8_unrolled(uint8_t& val, const uint8_t* ptr) {
+  return apache::thrift::util::detail::readVarintMediumSlowUnrolled(val, ptr);
+}
+
+extern "C" FOLLY_KEEP size_t
+check_thrift_read_varint_u16_unrolled(uint16_t& val, const uint8_t* ptr) {
+  return apache::thrift::util::detail::readVarintMediumSlowUnrolled(val, ptr);
+}
+
+extern "C" FOLLY_KEEP size_t
+check_thrift_read_varint_u32_unrolled(uint32_t& val, const uint8_t* ptr) {
+  return apache::thrift::util::detail::readVarintMediumSlowUnrolled(val, ptr);
+}
+
+extern "C" FOLLY_KEEP size_t
+check_thrift_read_varint_u64_unrolled(uint64_t& val, const uint8_t* ptr) {
+  return apache::thrift::util::detail::readVarintMediumSlowUnrolled(val, ptr);
+}
+
 extern "C" FOLLY_KEEP uint8_t check_thrift_write_varint_u8_cursor(
     folly::io::QueueAppender* cur, uint8_t val) {
   return writeVarint(*cur, val);
@@ -67,8 +107,8 @@ extern "C" FOLLY_KEEP uint8_t check_thrift_write_varint_u64_cursor_unrolled(
 }
 
 FOLLY_CREATE_QUAL_INVOKER_SUITE(write_unrolled, writeVarintUnrolled);
-#ifdef __BMI2__
-FOLLY_CREATE_QUAL_INVOKER_SUITE(write_bmi2, writeVarintBMI2);
+#if THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER
+FOLLY_CREATE_QUAL_INVOKER_SUITE(write_branch_free, writeVarintBranchFree);
 #endif
 
 template <typename Case, typename Fn>
@@ -92,13 +132,14 @@ void bench_write(size_t iters, Fn fn, Case) {
 #define BM_WRITE_LOOP(kind) \
   BENCHMARK_NAMED_PARAM(bench_write, kind##_unrolled, write_unrolled, kind())
 
-#ifdef __BMI2__
-#define BM_REL_WRITE_BMI2(kind) \
-  BENCHMARK_RELATIVE_NAMED_PARAM(bench_write, kind##_bmi2, write_bmi2, kind())
+#if THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER
+#define BM_REL_WRITE_BRANCH_FREE(kind) \
+  BENCHMARK_RELATIVE_NAMED_PARAM(      \
+      bench_write, kind##_branch_free, write_branch_free, kind())
 
 #define BM_WRITE(kind) \
   BM_WRITE_LOOP(kind)  \
-  BM_REL_WRITE_BMI2(kind)
+  BM_REL_WRITE_BRANCH_FREE(kind)
 #else
 #define BM_WRITE(kind) BM_WRITE_LOOP(kind)
 #endif
@@ -132,6 +173,10 @@ BM_WRITE(u64_8b)
 BM_WRITE(u64_9b)
 BM_WRITE(u64_10b)
 
+BM_WRITE(exponential_1b)
+BM_WRITE(exponential_2b)
+BM_WRITE(exponential_3b)
+
 template <typename Case>
 void bench_read(size_t iters, Case) {
   folly::IOBufQueue iobufQueue(folly::IOBufQueue::cacheChainLength());
@@ -141,8 +186,8 @@ void bench_read(size_t iters, Case) {
     auto ints = Case::gen();
     c.ensure(ints.size() * 10);
     for (auto v : ints) {
-#ifdef __BMI2__
-      writeVarintBMI2(c, v);
+#if THRIFT_UTIL_VARINTUTILS_BRANCH_FREE_ENCODER
+      writeVarintBranchFree(c, v);
 #else
       writeVarintUnrolled(c, v);
 #endif
@@ -188,6 +233,10 @@ BENCHMARK_NAMED_PARAM(bench_read, u64_7b, u64_7b())
 BENCHMARK_NAMED_PARAM(bench_read, u64_8b, u64_8b())
 BENCHMARK_NAMED_PARAM(bench_read, u64_9b, u64_9b())
 BENCHMARK_NAMED_PARAM(bench_read, u64_10b, u64_10b())
+
+BENCHMARK_NAMED_PARAM(bench_read, exponential_1b, exponential_1b())
+BENCHMARK_NAMED_PARAM(bench_read, exponential_2b, exponential_2b())
+BENCHMARK_NAMED_PARAM(bench_read, exponential_3b, exponential_3b())
 
 int main(int argc, char** argv) {
   folly::Init init(&argc, &argv, true);

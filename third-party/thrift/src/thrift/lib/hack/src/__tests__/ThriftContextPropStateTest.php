@@ -1,5 +1,20 @@
 <?hh
-// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 <<Oncalls('thrift')>>
 final class ThriftContextPropStateTest extends WWWTest {
@@ -40,7 +55,6 @@ final class ThriftContextPropStateTest extends WWWTest {
 
   public function testUserIdsNullable(): void {
     $tcps = ThriftContextPropState::get();
-    expect($tcps->getUserIds())->toBeNull();
 
     // 0 is different from null
     $tcps->setUserIds(ContextProp\UserIds::withDefaultValues());
@@ -277,6 +291,51 @@ final class ThriftContextPropStateTest extends WWWTest {
     expect($tcps->getUserIds()?->fb_user_id)->toEqual(123);
   }
 
+  public async function testUpdatedWithExplicitIGUserId(
+  )[defaults]: Awaitable<void> {
+    MockJustKnobs::setBool('meta_cp/www:enable_user_id_ctx_prop', true);
+    $tfm = ThriftFrameworkMetadata::withDefaultValues();
+    $tfm->baggage = ContextProp\Baggage::withDefaultValues();
+    $tfm->baggage->user_ids = ContextProp\UserIds::fromShape(
+      shape('fb_user_id' => 456, 'ig_user_id' => null),
+    );
+
+    $buf = new TMemoryBuffer();
+    $prot = new TCompactProtocolAccelerated($buf);
+    $tfm->write($prot);
+    $s = $buf->getBuffer();
+    $e = Base64::encode($s);
+
+    ThriftContextPropState::initFromString($e);
+    ThriftContextPropState::updateIGUserId(1, "test");
+
+    $tcps = ThriftContextPropState::get();
+    expect($tcps->getUserIds()?->fb_user_id)->toEqual(456);
+    expect($tcps->getUserIds()?->ig_user_id)->toEqual(1);
+  }
+
+  public async function testUpdatedWithExplicitIGUserIdNoOverwrite(
+  )[defaults]: Awaitable<void> {
+    MockJustKnobs::setBool('meta_cp/www:enable_user_id_ctx_prop', true);
+    $tfm = ThriftFrameworkMetadata::withDefaultValues();
+    $tfm->baggage = ContextProp\Baggage::withDefaultValues();
+    $tfm->baggage->user_ids = ContextProp\UserIds::fromShape(
+      shape('fb_user_id' => null, 'ig_user_id' => 123),
+    );
+
+    $buf = new TMemoryBuffer();
+    $prot = new TCompactProtocolAccelerated($buf);
+    $tfm->write($prot);
+    $s = $buf->getBuffer();
+    $e = Base64::encode($s);
+
+    ThriftContextPropState::initFromString($e);
+    ThriftContextPropState::updateIGUserId(456, "test");
+
+    $tcps = ThriftContextPropState::get();
+    expect($tcps->getUserIds()?->ig_user_id)->toEqual(123);
+  }
+
   public function testGen()[defaults]: void {
     ThriftContextPropState::initFromString(null);
     $tcps = ThriftContextPropState::get();
@@ -437,6 +496,43 @@ final class ThriftContextPropStateTest extends WWWTest {
     $tcps->clearBaggageFlags1ByName(ContextProp\BaggageFlags1::NOT_ALLOWED);
     expect($tcps->isBaggageFlags1Set(ContextProp\BaggageFlags1::NOT_ALLOWED))
       ->toBeFalse();
+  }
+
+  public function testBaggageRootProductId(): void {
+    $tcps_with_empty_baggage = ThriftContextPropState::get();
+    $tcps_with_empty_baggage->clear();
+    expect($tcps_with_empty_baggage->getBaggage())->toBeNull();
+    expect(readonly $tcps_with_empty_baggage->getRootProductId())->toBeNull();
+
+    $tcps = ThriftContextPropState::get();
+    expect(readonly $tcps->getRootProductId())->toBeNull();
+
+    $root_product_id = $tcps->setRootProductId(789);
+    expect(readonly $tcps->getRootProductId())->toEqual(789);
+    expect($root_product_id)->toEqual(789);
+
+    // Test overrding existing value should not be allowed
+    $root_product_id = $tcps->setRootProductId(100);
+    expect(readonly $tcps->getRootProductId())->toEqual(789);
+    expect($root_product_id)->toEqual(789);
+  }
+
+  public function testDisableIngestingExperimentIds(): void {
+    // Arrange
+    $tfm = ThriftFrameworkMetadata::withDefaultValues();
+    $tfm->experiment_ids = vec[1, 2, 3];
+    $buf = new TMemoryBuffer();
+    $prot = new TCompactProtocolAccelerated($buf);
+    $tfm->write($prot);
+    $s = $buf->getBuffer();
+    $e = Base64::encode($s);
+
+    // Act
+    ThriftContextPropState::initFromString($e, true);
+
+    // Assert
+    $tcps = ThriftContextPropState::get();
+    expect($tcps->getExperimentIds())->toBeEmpty();
   }
 
 }

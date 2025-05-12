@@ -1,5 +1,20 @@
 <?hh
-// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 module privacylib;
 
 <<Oncalls('www_privacy_frameworks')>>
@@ -304,13 +319,15 @@ final class ThriftPolicyEnforcerTest extends WWWTest {
     expect($mock)->toBeCalledWithInAnyOrder(
       vec[vec[
         ThriftServiceMethodNameAssetXID::get('fake_service', 'fake_method'),
+        'fake_service',
       ]],
     );
   }
 
   public async function testThriftClientMethodNameNotFiltered(
   ): Awaitable<void> {
-    $mock = self::mockFunction(ThriftServiceMethodNamePrivacyLib::get<>);
+    $mock = self::mockFunction(ThriftServiceMethodNamePrivacyLib::get<>)
+      ->assertCanPassthroughAndBlockMocks();
     self::mockClassStaticMethodUNSAFE(
       PolicyEnforcer::class,
       'shouldExecuteModule',
@@ -323,7 +340,6 @@ final class ThriftPolicyEnforcerTest extends WWWTest {
       PrivacyLibEcho\PrivacyLibEchoServiceAsyncClient::factory(),
       "sr_config_1",
     )->gen();
-
     await (
       new TClientPoliciedAsyncHandler(
         'sr_config_1',
@@ -334,9 +350,16 @@ final class ThriftPolicyEnforcerTest extends WWWTest {
     )->genBefore('PrivacyLibEchoService', 'echo');
 
     expect($mock)->toBeCalledWithInAnyOrder(
-      vec[vec[
-        ThriftServiceMethodNameAssetXID::get('PrivacyLibEchoService', 'echo'),
-      ]],
+      vec[
+        vec[
+          ThriftServiceMethodNameAssetXID::get('PrivacyLibEchoService', 'echo'),
+          'sr_config_1',
+        ],
+        vec[
+          ThriftServiceMethodNameAssetXID::get('PrivacyLibEchoService', 'echo'),
+          'sr_config_1',
+        ],
+      ],
     );
   }
 

@@ -72,17 +72,13 @@ internal trait FB303ServiceClientBase {
    *   renamed_rpc(1: i32 int_parameter);
    */
   public async function renamed_rpc(int $renamed_parameter): Awaitable<\test\fixtures\basic\MyRenamedStruct> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \test\fixtures\basic\FB303Service_renamed_rpc_args::fromShape(shape(
       'int_parameter' => $int_parameter,
     ));
     await $this->asyncHandler_->genBefore(FB303ServiceStaticMetadata::THRIFT_SVC_NAME, "renamed_rpc", $args);
     $currentseqid = $this->sendImplHelper($args, "renamed_rpc", false, FB303ServiceStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\test\fixtures\basic\FB303Service_renamed_rpc_result::class, "simple_rpc", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\test\fixtures\basic\FB303Service_renamed_rpc_result::class, "simple_rpc", false, $currentseqid, $rpc_options))[0];
   }
 
 }

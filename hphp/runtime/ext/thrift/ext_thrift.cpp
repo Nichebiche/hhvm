@@ -325,9 +325,9 @@ static struct ThriftExtension final : Extension {
     HHVM_FE(thrift_protocol_read_binary);
     HHVM_FE(thrift_protocol_read_binary_struct);
     HHVM_FE(thrift_protocol_set_compact_version);
-    HHVM_FE(thrift_protocol_write_compact);
     HHVM_FE(thrift_protocol_write_compact2);
     HHVM_FE(thrift_protocol_write_compact_struct);
+    HHVM_FE(thrift_protocol_write_compact_struct_to_string);
     HHVM_FE(thrift_protocol_read_compact);
     HHVM_FE(thrift_protocol_read_compact_struct);
     HHVM_FE(thrift_protocol_read_compact_struct_from_string);

@@ -14,12 +14,47 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
+#include <folly/Format.h>
 #include <thrift/lib/cpp/ContextStack.h>
+#include <thrift/lib/cpp2/async/InterceptorFlags.h>
 #include <thrift/lib/cpp2/test/util/TrackingTProcessorEventHandler.h>
 
-namespace apache::thrift::test {
+namespace apache::thrift {
+
+namespace detail {
+
+THRIFT_PLUGGABLE_FUNC_SET(
+    InterceptorFrameworkMetadataStorage,
+    initializeInterceptorFrameworkMetadataStorage) {
+  std::string value = "test";
+  InterceptorFrameworkMetadataStorage storage;
+  storage.emplace<std::string>(value);
+  return storage;
+}
+
+THRIFT_PLUGGABLE_FUNC_SET(
+    void,
+    postProcessFrameworkMetadata,
+    InterceptorFrameworkMetadataStorage& storage,
+    const RpcOptions&) {
+  storage.emplace<std::string>(
+      folly::sformat("{}_postprocessed", storage.value<std::string>()));
+}
+
+THRIFT_PLUGGABLE_FUNC_SET(
+    std::unique_ptr<folly::IOBuf>,
+    serializeFrameworkMetadata,
+    InterceptorFrameworkMetadataStorage&& storage) {
+  EXPECT_TRUE(storage.has_value());
+  EXPECT_TRUE(storage.holds_alternative<std::string>());
+  return folly::IOBuf::fromString(std::move(storage.value<std::string>()));
+}
+
+} // namespace detail
+
+namespace test {
 
 using EventHandlerList = std::vector<std::shared_ptr<TProcessorEventHandler>>;
 
@@ -63,12 +98,9 @@ TEST(ContextStack, LegacyEventHandlersInvoked) {
   EXPECT_EQ(handler2->getHistory(), kExpected);
 
   // TrackingTProcessorEventHandler::getServiceContext returns `this`
-  EXPECT_EQ(
-      detail::ContextStackInternals::contextAt(*contextStack, 0),
-      handler1.get());
-  EXPECT_EQ(
-      detail::ContextStackInternals::contextAt(*contextStack, 1),
-      handler2.get());
+  auto unsafeAPI = detail::ContextStackUnsafeAPI(*contextStack);
+  EXPECT_EQ(unsafeAPI.contextAt(0), handler1.get());
+  EXPECT_EQ(unsafeAPI.contextAt(1), handler2.get());
 }
 
 TEST(ContextStack, ClientHeaders) {
@@ -77,21 +109,21 @@ TEST(ContextStack, ClientHeaders) {
     using Base = TrackingTProcessorEventHandler;
 
     void* getServiceContext(
-        const char* serviceName,
-        const char* methodName,
+        std::string_view serviceName,
+        std::string_view methodName,
         apache::thrift::TConnectionContext* connectionContext) override {
       Base::getServiceContext(serviceName, methodName, connectionContext);
       return connectionContext;
     }
 
-    void preRead(void* ctx, const char* functionName) override {
+    void preRead(void* ctx, std::string_view functionName) override {
       auto* connectionContext =
           static_cast<apache::thrift::TConnectionContext*>(ctx);
       connectionContext->setHeader("preRead", "1");
       Base::preRead(ctx, functionName);
     }
 
-    void preWrite(void* ctx, const char* functionName) override {
+    void preWrite(void* ctx, std::string_view functionName) override {
       auto* connectionContext =
           static_cast<apache::thrift::TConnectionContext*>(ctx);
       connectionContext->setHeader("preWrite", "1");
@@ -135,4 +167,26 @@ TEST(ContextStack, ClientHeaders) {
   }
 }
 
-} // namespace apache::thrift::test
+TEST(ContextStack, FrameworkMetadataInitialized) {
+  THRIFT_FLAG_SET_MOCK(enable_client_interceptor_framework_metadata, true);
+  auto handler1 = std::make_shared<TrackingTProcessorEventHandler>();
+  auto handler2 = std::make_shared<TrackingTProcessorEventHandler>();
+  auto handlers =
+      std::make_shared<EventHandlerList>(EventHandlerList{handler1, handler2});
+
+  auto contextStack = ContextStack::create(
+      handlers, "Service", "Service.method", nullptr /* connectionContext */);
+  ASSERT_NE(contextStack, nullptr);
+
+  std::unique_ptr<folly::IOBuf> metadataBuf =
+      detail::ContextStackUnsafeAPI(*contextStack)
+          .getInterceptorFrameworkMetadata(RpcOptions());
+  EXPECT_TRUE(metadataBuf != nullptr);
+
+  std::string metadataStr = metadataBuf->toString();
+  EXPECT_EQ(metadataStr, "test_postprocessed");
+}
+
+} // namespace test
+
+} // namespace apache::thrift

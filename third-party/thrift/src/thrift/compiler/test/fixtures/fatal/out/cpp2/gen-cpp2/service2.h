@@ -39,6 +39,8 @@ class service2ServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::test_cpp2::cpp_reflection::service2> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::test_cpp2::cpp_reflection::service2>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "service2"; }
 
@@ -114,6 +116,13 @@ class ServiceHandler<::test_cpp2::cpp_reflection::service2> : public apache::thr
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_methodF{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::test_cpp2::cpp_reflection::service2, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 8811943787698819311;
+  static constexpr ::std::string_view definitionKey = {"\x0d\x22\xf7\xc7\x45\xba\xbe\x70\x33\x18\x66\x7d\xc5\xd3\x4b\x67", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace test_cpp2::cpp_reflection {

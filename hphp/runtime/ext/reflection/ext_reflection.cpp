@@ -27,7 +27,6 @@
 #include "hphp/runtime/base/type-variant.h"
 #include "hphp/runtime/base/unit-cache.h"
 #include "hphp/runtime/base/vanilla-dict.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/jit/translator-runtime.h"
 #include "hphp/runtime/vm/native-data.h"
 #include "hphp/runtime/vm/native-prop-handler.h"
@@ -38,7 +37,6 @@
 #include "hphp/runtime/ext/collections/ext_collections-set.h"
 #include "hphp/runtime/ext/core/ext_core_closure.h"
 #include "hphp/runtime/ext/std/ext_std_misc.h"
-#include "hphp/runtime/ext/string/ext_string.h"
 #include "hphp/runtime/ext/extension-registry.h"
 
 #include "hphp/system/systemlib.h"
@@ -166,7 +164,7 @@ Variant default_arg_from_php_code(const Func::ParamInfo& fpi,
 
   try {
     return g_context->getEvaledArg(
-      fpi.phpCode,
+      fpi.phpCode.ptr(func->unit()),
       // We use cls() instead of implCls() because we want the namespace and
       // class context for which the closure is scoped, not that of the
       // Closure subclass (which, among other things, is always globally
@@ -644,14 +642,7 @@ String HHVM_FUNCTION(type_structure_classname,
 
 [[noreturn]]
 void Reflection::ThrowReflectionExceptionObject(const Variant& message) {
-  auto cls = ReflectionException::classof();
-  Object inst { cls };
-  tvDecRefGen(
-    g_context->invokeFunc(cls->getCtor(),
-                          make_vec_array(message),
-                          inst.get())
-  );
-  throw_object(inst);
+  throw_object(ReflectionException::classof(), make_vec_array(message));
 }
 
 namespace {
@@ -749,6 +740,22 @@ static int64_t HHVM_METHOD(ReflectionFunctionAbstract, getNumberOfParameters) {
   return func->numParams();
 }
 
+static Array HHVM_METHOD(
+  ReflectionFunctionAbstract, getParamTypeVarNames
+) {
+  auto const func = ReflectionFuncHandle::GetFuncFor(this_);
+  Array ret = Array::CreateKeyset();
+  for (auto const& param : func->params()) {
+    for (auto const& tc : param.typeConstraints.range()) {
+      if (tc.isTypeVar()) {
+        ret.append(make_tv<KindOfPersistentString>(tc.typeName()));
+      }
+    }
+  }
+
+  return ret;
+}
+
 ALWAYS_INLINE
 static Array get_function_param_info(const Func* func) {
   const Func::ParamInfoVec& params = func->params();
@@ -770,8 +777,9 @@ static Array get_function_param_info(const Func* func) {
       : staticEmptyString();
 
     param.set(s_type, make_tv<KindOfPersistentString>(type));
-    const StringData* typeHint = fpi.userType
-      ? fpi.userType
+    auto userType = fpi.userType.ptr(func->unit());
+    const StringData* typeHint = userType
+      ? userType
       : staticEmptyString();
     param.set(s_type_hint, make_tv<KindOfPersistentString>(typeHint));
 
@@ -798,10 +806,10 @@ static Array get_function_param_info(const Func* func) {
       param.set(s_type_hint_nullable, make_tv<KindOfBoolean>(false));
     }
 
-    if (fpi.phpCode) {
+    if (auto phpCode = fpi.phpCode.ptr(func->unit())) {
       Variant v = default_arg_from_php_code(fpi, func, i);
       param.set(s_default, v);
-      param.set(s_defaultText, make_tv<KindOfPersistentString>(fpi.phpCode));
+      param.set(s_defaultText, make_tv<KindOfPersistentString>(phpCode));
     }
 
     if (func->isInOut(i)) {
@@ -1596,19 +1604,19 @@ void addClassConstantNames(const Class* cls,
   const Class::Const* consts = cls->constants();
   bool has_constants_from_included_enums = false;
   for (size_t i = 0; i < numConsts; i++) {
-    if (!consts[i].isAbstractAndUninit() && 
+    if (!consts[i].isAbstractAndUninit() &&
         consts[i].kind() == ConstModifiers::Kind::Value) {
-      if (consts[i].cls == cls) { 
+      if (consts[i].cls == cls) {
         st->add(const_cast<StringData*>(consts[i].name.get()));
       } else if (cls->hasIncludedEnums()
                  && cls->allIncludedEnums().contains(consts[i].cls->name())) {
-        has_constants_from_included_enums = true;   
+        has_constants_from_included_enums = true;
       }
     }
   }
-  if (has_constants_from_included_enums && 
+  if (has_constants_from_included_enums &&
       Cfg::Eval::ReflectionMissConstantFromIncludedEnumsNotice) {
-    raise_notice(Strings::REFLECTION_MISS_CONSTANTS_FROM_INCLUDED_ENUMS, 
+    raise_notice(Strings::REFLECTION_MISS_CONSTANTS_FROM_INCLUDED_ENUMS,
                  cls->name()->data());
   }
 
@@ -2345,6 +2353,7 @@ struct ReflectionExtension final : Extension {
     HHVM_ME(ReflectionFunctionAbstract, getCoeffects);
     HHVM_ME(ReflectionFunctionAbstract, getModule);
     HHVM_ME(ReflectionFunctionAbstract, returnsReadonly);
+    HHVM_ME(ReflectionFunctionAbstract, getParamTypeVarNames);
 
     HHVM_ME(ReflectionMethod, __init);
     HHVM_ME(ReflectionMethod, isFinal);

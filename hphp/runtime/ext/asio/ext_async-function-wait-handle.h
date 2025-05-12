@@ -91,6 +91,7 @@ struct c_AsyncFunctionWaitHandle final :
       return offsetof(Node, m_blockable);
     }
 
+    template <bool lowPri>
     void setChild(c_WaitableWaitHandle* child);
     c_WaitableWaitHandle* getChild() const;
     bool isFirstUnfinishedChild() const;
@@ -122,6 +123,8 @@ struct c_AsyncFunctionWaitHandle final :
   static constexpr ptrdiff_t tailFramesOff() {
     return offsetof(c_AsyncFunctionWaitHandle, m_tailFrameIds);
   }
+
+  template <bool lowPri>
   static c_AsyncFunctionWaitHandle* Create(
     const ActRec* origFp,
     size_t numSlots,
@@ -129,6 +132,7 @@ struct c_AsyncFunctionWaitHandle final :
     Offset suspendOffset,
     c_WaitableWaitHandle* child
   ); // nothrow
+
   static void PrepareChild(const ActRec* fp, c_WaitableWaitHandle* child);
   void onUnblocked();
   void resume();
@@ -138,7 +142,7 @@ struct c_AsyncFunctionWaitHandle final :
   void failCpp();
   String getName();
   c_WaitableWaitHandle* getChild();
-  void exitContext(context_idx_t ctx_idx);
+  void exitContext(ContextIndex contextIdx);
   bool isRunning() { return getState() == STATE_RUNNING; }
   String getFilename();
   Offset getNextExecutionOffset();
@@ -154,8 +158,10 @@ struct c_AsyncFunctionWaitHandle final :
 
   bool isFastResumable() const {
     assertx(getState() == STATE_READY);
-    return (resumable()->resumeAddr() &&
-            m_children[0].getChild()->isSucceeded());
+    if (auto const child = m_children[0].getChild()) {
+      return resumable()->resumeAddr() && child->isSucceeded();
+    }
+    return false;
   }
 
   // Access to merged tail frames. We optimize hard for writing these tail
@@ -168,6 +174,8 @@ struct c_AsyncFunctionWaitHandle final :
 
  private:
   void setState(uint8_t state) { setKindState(Kind::AsyncFunction, state); }
+
+  template <bool lowPri>
   void initialize(c_WaitableWaitHandle* child);
   void prepareChild(c_WaitableWaitHandle* child);
 

@@ -92,17 +92,13 @@ trait SomeServiceClientBase {
    *   bounce_map(1: included.SomeMap m);
    */
   public async function bounce_map(Map<int, string> $m): Awaitable<Map<int, string>> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \apache\thrift\fixtures\types\SomeService_bounce_map_args::fromShape(shape(
       'm' => $m,
     ));
     await $this->asyncHandler_->genBefore(SomeServiceStaticMetadata::THRIFT_SVC_NAME, "bounce_map", $args);
     $currentseqid = $this->sendImplHelper($args, "bounce_map", false, SomeServiceStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\apache\thrift\fixtures\types\SomeService_bounce_map_result::class, "bounce_map", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\apache\thrift\fixtures\types\SomeService_bounce_map_result::class, "bounce_map", false, $currentseqid, $rpc_options))[0];
   }
 
   /**
@@ -111,17 +107,13 @@ trait SomeServiceClientBase {
    *   binary_keyed_map(1: list<i64> r);
    */
   public async function binary_keyed_map(KeyedContainer<int, int> $r): Awaitable<Map<string, int>> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \apache\thrift\fixtures\types\SomeService_binary_keyed_map_args::fromShape(shape(
       'r' => new Vector($r),
     ));
     await $this->asyncHandler_->genBefore(SomeServiceStaticMetadata::THRIFT_SVC_NAME, "binary_keyed_map", $args);
     $currentseqid = $this->sendImplHelper($args, "binary_keyed_map", false, SomeServiceStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\apache\thrift\fixtures\types\SomeService_binary_keyed_map_result::class, "binary_keyed_map", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\apache\thrift\fixtures\types\SomeService_binary_keyed_map_result::class, "binary_keyed_map", false, $currentseqid, $rpc_options))[0];
   }
 
 }

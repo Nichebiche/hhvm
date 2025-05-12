@@ -17,6 +17,10 @@ type ce_visibility =
   | Vprotected of string
   (* When we construct `Vinternal`, we are guaranteed to be inside a module *)
   | Vinternal of string
+  | Vprotected_internal of {
+      class_id: string;
+      module_: string;
+    }
 [@@deriving eq, ord, show]
 
 type cross_package_decl = string option [@@deriving eq, ord]
@@ -164,47 +168,6 @@ type enforcement =
   | Enforced  (** The consumer enforces the type at runtime *)
 [@@deriving eq, show, ord]
 
-type type_tag =
-  | BoolTag
-  | IntTag
-  | StringTag
-  | ArraykeyTag
-  | FloatTag
-  | NumTag
-  | ResourceTag
-  | NullTag
-  | ClassTag of Ast_defs.id_
-[@@deriving eq, ord, hash, show { with_path = false }]
-
-type shape_field_predicate = {
-  (* T196048813 *)
-  (* sfp_optional: bool; *)
-  sfp_predicate: type_predicate;
-}
-
-and shape_predicate = {
-  (* T196048813 *)
-  (* sp_allows_unknown_fields: bool; *)
-  sp_fields: shape_field_predicate TShapeMap.t;
-}
-
-(* TODO optional and variadic components T201398626 T201398652 *)
-and tuple_predicate = { tp_required: type_predicate list }
-
-(** Represents the predicate of a type switch, i.e. in the expression
-      ```
-      if ($x is Bool) { ... } else { ... }
-      ```
-
-    The predicate would be `is Bool`
-  *)
-and type_predicate_ =
-  | IsTag of type_tag
-  | IsTupleOf of tuple_predicate
-  | IsShapeOf of shape_predicate
-
-and type_predicate = Reason.t * type_predicate_ [@@deriving eq, ord, hash, show]
-
 (** Because Tfun is currently used as both a decl and locl ty, without this,
   the HH\Contexts\defaults alias must be stored in shared memory for a
   decl Tfun record. We can eliminate this if the majority of usages end up
@@ -246,9 +209,45 @@ type 'ty fun_type = {
 (** = Reason.t * 'phase ty_ *)
 type 'phase ty = ('phase Reason.t_[@transform.opaque]) * 'phase ty_
 
-and decl_ty = decl_phase ty
+and type_tag =
+  | BoolTag
+  | IntTag
+  | StringTag
+  | ArraykeyTag
+  | FloatTag
+  | NumTag
+  | ResourceTag
+  | NullTag
+  | ClassTag of Ast_defs.id_ * locl_phase ty list
 
-and locl_ty = locl_phase ty
+and shape_field_predicate = {
+  (* T196048813 *)
+  (* sfp_optional: bool; *)
+  sfp_predicate: type_predicate;
+}
+
+and shape_predicate = {
+  (* T196048813 *)
+  (* sp_allows_unknown_fields: bool; *)
+  sp_fields: shape_field_predicate TShapeMap.t;
+}
+
+(* TODO optional and variadic components T201398626 T201398652 *)
+and tuple_predicate = { tp_required: type_predicate list }
+
+(** Represents the predicate of a type switch, i.e. in the expression
+      ```
+      if ($x is Bool) { ... } else { ... }
+      ```
+
+    The predicate would be `is Bool`
+  *)
+and type_predicate_ =
+  | IsTag of type_tag
+  | IsTupleOf of tuple_predicate
+  | IsShapeOf of shape_predicate
+
+and type_predicate = (Reason.t[@transform.opaque]) * type_predicate_
 
 (** A shape may specify whether or not fields are required. For example, consider
  * this typedef:
@@ -268,9 +267,9 @@ and 'phase shape_field_type = {
 and _ ty_ =
   (*========== Following Types Exist Only in the Declared Phase ==========*)
   | Tthis : decl_phase ty_  (** The late static bound type of a class *)
-  | Tapply : (pos_id[@transform.opaque]) * decl_ty list -> decl_phase ty_
+  | Tapply : (pos_id[@transform.opaque]) * decl_phase ty list -> decl_phase ty_
       (** Either an object type or a type alias, ty list are the arguments *)
-  | Trefinement : decl_ty * decl_phase class_refinement -> decl_phase ty_
+  | Trefinement : decl_phase ty * decl_phase class_refinement -> decl_phase ty_
       (** 'With' refinements of the form `_ with { type T as int; type TC = C; }`. *)
   | Tmixed : decl_phase ty_
       (** "Any" is the type of a variable with a missing annotation, and "mixed" is
@@ -306,7 +305,7 @@ and _ ty_ =
         *   placeholder in refinement e.g. $x as Vector<_>
         *   placeholder for higher-kinded formal type parameter e.g. foo<T1<_>>(T1<int> $_)
         *)
-  | Tlike : decl_ty -> decl_phase ty_
+  | Tlike : decl_phase ty -> decl_phase ty_
   (*========== Following Types Exist in Both Phases ==========*)
   | Tany : (TanySentinel.t[@transform.opaque]) -> 'phase ty_
   | Tnonnull : 'phase ty_
@@ -331,12 +330,11 @@ and _ ty_ =
   | Ttuple : 'phase tuple_type -> 'phase ty_
       (** A wrapper around tuple_type, which contains information about tuple elements *)
   | Tshape : 'phase shape_type -> 'phase ty_
-  | Tgeneric : string * 'phase ty list -> 'phase ty_
+  | Tgeneric : string -> 'phase ty_
       (** The type of a generic parameter. The constraints on a generic parameter
        * are accessed through the lenv.tpenv component of the environment, which
        * is set up when checking the body of a function or method. See uses of
-       * Typing_phase.add_generic_parameters_and_constraints. The list denotes
-       * type arguments.
+       * Typing_phase.add_generic_parameters_and_constraints.
        *)
   | Tunion : 'phase ty list -> 'phase ty_ [@transform.explicit]
       (** Union type.
@@ -383,18 +381,11 @@ and _ ty_ =
 
         The second parameter is the list of type arguments to the type.
        *)
-  | Tunapplied_alias : string -> locl_phase ty_
-      (** This represents a type alias that lacks necessary type arguments. Given
-           type Foo<T1,T2> = ...
-         Tunappliedalias "Foo" stands for usages of plain Foo, without supplying
-         further type arguments. In particular, Tunappliedalias always stands for
-         a higher-kinded type. It is never used for an alias like
-           type Foo2 = ...
-         that simply doesn't require type arguments. *)
-  | Tdependent : (dependent_type[@transform.opaque]) * locl_ty -> locl_phase ty_
-      (** see dependent_type *)
+  | Tdependent :
+      (dependent_type[@transform.opaque]) * locl_phase ty
+      -> locl_phase ty_  (** see dependent_type *)
   | Tclass :
-      (pos_id[@transform.opaque]) * exact * locl_ty list
+      (pos_id[@transform.opaque]) * exact * locl_phase ty list
       -> locl_phase ty_
       (** An instance of a class or interface, ty list are the arguments
        * If exact=Exact, then this represents instances of *exactly* this class
@@ -465,7 +456,13 @@ and 'phase tuple_extra =
   | Tsplat of 'phase ty
 [@@deriving hash, transform]
 
+type decl_ty = decl_phase ty [@@deriving hash]
+
+type locl_ty = locl_phase ty [@@deriving hash]
+
 val equal_decl_ty : decl_ty -> decl_ty -> bool
+
+val equal_type_predicate : type_predicate -> type_predicate -> bool
 
 val ty_compare : ?normalize_lists:bool -> 'ph ty -> 'ph ty -> int
 
@@ -555,6 +552,8 @@ module Pp : sig
   val show_decl_ty : decl_ty -> string
 
   val show_locl_ty : locl_ty -> string
+
+  val show_type_predicate_ : type_predicate_ -> string
 end
 
 include module type of Pp
@@ -791,3 +790,6 @@ module Locl_subst : sig
       (src:Typing_reason.t -> dest:Typing_reason.t -> Typing_reason.t) ->
     locl_phase ty fun_type
 end
+
+(** Find the first element of a [locl_ty] satisfying the predicate [p] *)
+val find_locl_ty : locl_ty -> p:(locl_ty -> bool) -> locl_ty option

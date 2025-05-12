@@ -17,7 +17,7 @@
 #include "mcrouter/ProxyDestination.h"
 #include "mcrouter/ProxyDestinationMap.h"
 #include "mcrouter/config.h"
-#include "mcrouter/lib/WeightedCh3HashFunc.h"
+#include "mcrouter/lib/WeightedCh3RvHashFunc.h"
 #include "mcrouter/lib/fbi/cpp/ParsingUtil.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
 #include "mcrouter/lib/network/AccessPoint.h"
@@ -34,7 +34,6 @@
 #include "mcrouter/routes/FailoverRoute.h"
 #include "mcrouter/routes/HashRouteFactory.h"
 #include "mcrouter/routes/McBucketRoute.h"
-#include "mcrouter/routes/McRefillRoute.h"
 #include "mcrouter/routes/PoolRouteUtils.h"
 #include "mcrouter/routes/RateLimitRoute.h"
 #include "mcrouter/routes/RateLimiter.h"
@@ -52,7 +51,8 @@ extern template MemcacheRouterInfo::RouteHandlePtr
 createHashRoute<MemcacheRouterInfo>(
     const folly::dynamic& json,
     std::vector<MemcacheRouterInfo::RouteHandlePtr> rh,
-    size_t threadId);
+    size_t threadId,
+    ProxyBase& proxy);
 
 extern template MemcacheRouterInfo::RouteHandlePtr
 makeAllFastestRoute<MemcacheRouterInfo>(
@@ -133,7 +133,8 @@ std::shared_ptr<typename RouterInfo::RouteHandleIf>
 McRouteHandleProvider<RouterInfo>::wrapAxonLogRoute(
     RouteHandlePtr route,
     ProxyBase& proxy,
-    const folly::dynamic& json) {
+    const folly::dynamic& json,
+    RouteHandleFactory<RouteHandleIf>& factory) {
   bool needAxonlog = false;
   if (auto* jNeedAxonlog = json.get_ptr("axonlog")) {
     needAxonlog = parseBool(*jNeedAxonlog, "axonlog");
@@ -143,7 +144,7 @@ McRouteHandleProvider<RouterInfo>::wrapAxonLogRoute(
     checkLogic(
         it != routeMapForWrapper_.end(),
         "AxonLogRoute is not implemented for this router");
-    return it->second(std::move(route), proxy, json);
+    return it->second(std::move(route), proxy, json, factory);
   }
   return route;
 }
@@ -557,7 +558,7 @@ McRouteHandleProvider<RouterInfo>::createSRRoute(
     route = createAsynclogRoute(std::move(route), asynclogName.toString());
   }
 
-  route = wrapAxonLogRoute(std::move(route), proxy_, json);
+  route = wrapAxonLogRoute(std::move(route), proxy_, json, factory);
 
   if (json.count("shadows")) {
     route = std::move(makeShadowRoutes(
@@ -574,13 +575,38 @@ McRouteHandleProvider<RouterInfo>::createSRRoute(
       checkLogic(
           jRefillFromTier != nullptr,
           "SRroute: 'refill_from_tier' property is missing");
-      folly::dynamic refillJson = json;
+      folly::dynamic refillJson = folly::dynamic::object;
       refillJson["service_name"] = *jRefillFromTier;
       refillJson["type"] = "SRRoute";
-
-      route = makeMcRefillRouteUsePrimaryAndRefill<RouterInfo>(
-          route, factoryFunc(factory, refillJson, proxy_));
+      refillJson["asynclog"] = false;
+      if (auto jsplits = json.get_ptr("shard_splits")) {
+        refillJson["shard_splits"] = *jsplits;
+      }
+      if (auto jsalt = json.get_ptr("salt")) {
+        refillJson["salt"] = *jsalt;
+      }
+      auto it = routeMapForWrapper_.find("McRefillRouteWrapper");
+      checkLogic(
+          it != routeMapForWrapper_.end(),
+          "McRefillRoute is not implemented for this router");
+      route = it->second(route, proxy_, refillJson, factory);
     }
+  }
+
+  if (auto* jEnableTrafficRv = json.get_ptr("weights_rv")) {
+    folly::dynamic jHashRoute =
+        folly::dynamic::object("hash_func", WeightedCh3RvHashFunc::type())(
+            "weights_rv", jEnableTrafficRv->asString());
+    if (auto* jNeedBucketization = json.get_ptr("bucketize")) {
+      if (parseBool(*jNeedBucketization, "bucketize")) {
+        jHashRoute["bucketize"] = true;
+      }
+    }
+    route = createHashRoute<RouterInfo>(
+        std::move(jHashRoute),
+        {route, makeNullRoute(factory, folly::dynamic::object())},
+        factory.getThreadId(),
+        proxy_);
   }
 
   route = bucketize(std::move(route), json);
@@ -693,7 +719,10 @@ McRouteHandleProvider<RouterInfo>::makePoolRoute(
     jhashWithWeights["name"] = poolJson.name;
 
     auto route = createHashRoute<RouterInfo>(
-        jhashWithWeights, std::move(destinations), factory.getThreadId());
+        jhashWithWeights,
+        std::move(destinations),
+        factory.getThreadId(),
+        proxy_);
     auto poolRoute = route;
 
     bool distributionRouteEnabled = false;
@@ -731,7 +760,7 @@ McRouteHandleProvider<RouterInfo>::makePoolRoute(
     }
     if (json.isObject()) {
       // Wrap AxonLogRoute if configured
-      route = wrapAxonLogRoute(std::move(route), proxy_, json);
+      route = wrapAxonLogRoute(std::move(route), proxy_, json, factory);
       route = bucketize(std::move(route), json);
 
       if (auto jPoolId = json.get_ptr("pool_id")) {
@@ -844,9 +873,12 @@ McRouteHandleProvider<RouterInfo>::buildCheckedRouteMapForWrapper() {
     checkedRouteMapForWrapper.emplace(
         it.first,
         [factoryFunc = std::move(it.second), rhName = it.first](
-            RouteHandlePtr rh, ProxyBase& proxy, const folly::dynamic& json) {
+            RouteHandlePtr rh,
+            ProxyBase& proxy,
+            const folly::dynamic& json,
+            RouteHandleFactory<RouteHandleIf>& factory) {
           try {
-            auto ret = factoryFunc(std::move(rh), proxy, json);
+            auto ret = factoryFunc(std::move(rh), proxy, json, factory);
             checkLogic(ret != nullptr, "make{} returned nullptr", rhName);
             return ret;
           } catch (const std::exception& e) {

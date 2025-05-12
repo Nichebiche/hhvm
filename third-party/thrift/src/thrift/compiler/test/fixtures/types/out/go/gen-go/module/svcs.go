@@ -9,6 +9,7 @@ package module
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     included "included"
@@ -20,8 +21,9 @@ var _ = included.GoUnusedProtection__
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type SomeService interface {
@@ -30,8 +32,9 @@ type SomeService interface {
 }
 
 type SomeServiceClientInterface interface {
-    thrift.ClientInterface
-    SomeService
+    io.Closer
+    BounceMap(ctx context.Context, m included.SomeMap) (included.SomeMap, error)
+    BinaryKeyedMap(ctx context.Context, r []int64) (map[*TBinary]int64, error)
 }
 
 type SomeServiceClient struct {
@@ -46,8 +49,12 @@ func NewSomeServiceChannelClient(channel thrift.RequestChannel) *SomeServiceClie
     }
 }
 
-func NewSomeServiceClient(prot thrift.Protocol) *SomeServiceClient {
-    return NewSomeServiceChannelClient(thrift.NewSerialChannel(prot))
+func NewSomeServiceClient(prot thrift.DO_NOT_USE_ChannelWrapper) *SomeServiceClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewSomeServiceChannelClient(channel)
 }
 
 func (c *SomeServiceClient) Close() error {
@@ -55,34 +62,34 @@ func (c *SomeServiceClient) Close() error {
 }
 
 func (c *SomeServiceClient) BounceMap(ctx context.Context, m included.SomeMap) (included.SomeMap, error) {
-    in := &reqSomeServiceBounceMap{
+    fbthriftReq := &reqSomeServiceBounceMap{
         M: m,
     }
-    out := newRespSomeServiceBounceMap()
-    err := c.ch.Call(ctx, "bounce_map", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespSomeServiceBounceMap()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "bounce_map", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *SomeServiceClient) BinaryKeyedMap(ctx context.Context, r []int64) (map[*TBinary]int64, error) {
-    in := &reqSomeServiceBinaryKeyedMap{
+    fbthriftReq := &reqSomeServiceBinaryKeyedMap{
         R: r,
     }
-    out := newRespSomeServiceBinaryKeyedMap()
-    err := c.ch.Call(ctx, "binary_keyed_map", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespSomeServiceBinaryKeyedMap()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "binary_keyed_map", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
 type SomeServiceProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            SomeService
+    handler              SomeService
 }
 
 func NewSomeServiceProcessor(handler SomeService) *SomeServiceProcessor {
@@ -134,16 +141,16 @@ type procFuncSomeServiceBounceMap struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncSomeServiceBounceMap)(nil)
 
-func (p *procFuncSomeServiceBounceMap) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncSomeServiceBounceMap) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqSomeServiceBounceMap()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncSomeServiceBounceMap) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncSomeServiceBounceMap) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -151,16 +158,16 @@ func (p *procFuncSomeServiceBounceMap) Write(seqId int32, result thrift.Writable
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("bounce_map", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("bounce_map", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -186,16 +193,16 @@ type procFuncSomeServiceBinaryKeyedMap struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncSomeServiceBinaryKeyedMap)(nil)
 
-func (p *procFuncSomeServiceBinaryKeyedMap) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncSomeServiceBinaryKeyedMap) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqSomeServiceBinaryKeyedMap()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncSomeServiceBinaryKeyedMap) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncSomeServiceBinaryKeyedMap) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -203,16 +210,16 @@ func (p *procFuncSomeServiceBinaryKeyedMap) Write(seqId int32, result thrift.Wri
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("binary_keyed_map", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("binary_keyed_map", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

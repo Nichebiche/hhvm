@@ -18,9 +18,12 @@
 
 namespace apache::thrift::compiler {
 
-const std::string t_node::kEmptyString;
+const std::string& t_node::emptyString() {
+  static const std::string empty;
+  return empty;
+}
 
-const std::string* t_node::find_annotation_or_null(
+const std::string* t_node::find_unstructured_annotation_or_null(
     const std::vector<std::string_view>& names) const {
   for (std::string_view name : names) {
     auto itr = annotations_.find(name);

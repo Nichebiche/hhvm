@@ -16,13 +16,10 @@
 #include "hphp/runtime/base/memory-manager-defs.h"
 #include "hphp/runtime/base/heap-scan.h"
 #include "hphp/runtime/base/request-info.h"
-#include "hphp/runtime/base/heap-graph.h"
-#include "hphp/runtime/base/vanilla-dict-defs.h"
 #include "hphp/runtime/base/weakref-data.h"
 #include "hphp/runtime/vm/vm-regs.h"
 #include "hphp/util/alloc.h"
 #include "hphp/util/configs/gc.h"
-#include "hphp/util/cycles.h"
 #include "hphp/util/ptr-map.h"
 #include "hphp/util/rds-local.h"
 #include "hphp/util/struct-log.h"
@@ -31,17 +28,15 @@
 #include "hphp/util/type-scan.h"
 
 #include <algorithm>
-#include <boost/dynamic_bitset.hpp>
 #include <folly/portability/Unistd.h>
 #include <folly/Range.h>
-#include <iterator>
 #include <vector>
 
 namespace HPHP {
-TRACE_SET_MOD(gc);
+TRACE_SET_MOD(gc)
 
 RDS_LOCAL_NO_CHECK(RequestLocalGCData, rl_gcdata);
-IMPLEMENT_RDS_LOCAL_HOTVALUE(bool, t_eager_gc);
+IMPLEMENT_RDS_LOCAL_HOTVALUE(bool, t_eager_gc)
 
 namespace {
 

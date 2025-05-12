@@ -55,6 +55,14 @@
 
 namespace apache::thrift {
 
+struct CursorWriteOpts {
+  size_t minGrowth = (1 << 14) - 16;
+  size_t maxGrowth = (1 << 14) - 16;
+  bool padBuffer = false;
+  size_t padSize = 128;
+  ExternalBufferSharing sharing = ExternalBufferSharing::SHARE_EXTERNAL_BUFFER;
+};
+
 /**
  * Manages the lifetime of a Thrift object being used with cursor
  * de/serialization.
@@ -85,12 +93,21 @@ class CursorSerializationWrapper {
       : serializedData_(std::move(serialized)) {}
 
   ~CursorSerializationWrapper() {
-    DCHECK(std::holds_alternative<std::monostate>(protocol_))
-        << "Destroying wrapper with active read or write";
+    DCHECK(!isActive()) << "Destroying wrapper with active read or write";
   }
-  CursorSerializationWrapper(CursorSerializationWrapper&&) = default;
-  // Not worth manually implementing this to keep the DCHECK.
-  CursorSerializationWrapper& operator=(CursorSerializationWrapper&&) = default;
+  // Moving wrapper during reads/writes will throw.
+  CursorSerializationWrapper(CursorSerializationWrapper&& other) noexcept(
+      false) {
+    other.checkInactive("Moving wrapper during reads/writes not supported");
+    serializedData_ = std::move(other.serializedData_);
+  }
+  CursorSerializationWrapper& operator=(
+      CursorSerializationWrapper&& other) noexcept(false) {
+    checkInactive("Moving wrapper during reads/writes not supported");
+    other.checkInactive("Moving wrapper during reads/writes not supported");
+    serializedData_ = std::move(other.serializedData_);
+    return *this;
+  }
 
   /**
    * Object write path (traditional Thrift serialization)
@@ -98,7 +115,8 @@ class CursorSerializationWrapper {
    */
   /* implicit */ CursorSerializationWrapper(
       const T& t, ExternalBufferSharing sharing = COPY_EXTERNAL_BUFFER) {
-    t.write(writer(sharing));
+    CursorWriteOpts opts{.sharing = sharing};
+    t.write(writer(opts));
     serializedData_ = queue_.move();
     done();
   }
@@ -152,13 +170,30 @@ class CursorSerializationWrapper {
   }
 
   /** Cursor write path */
-  StructuredCursorWriter<Tag> beginWrite() {
+  StructuredCursorWriter<Tag> beginWriteWithOpts(const CursorWriteOpts& opts) {
     serializedData_.reset(); // Prevent concurrent read from seeing wrong data.
-    return StructuredCursorWriter<Tag>(writer());
+    return StructuredCursorWriter<Tag>(writer(opts));
   }
+
+  StructuredCursorWriter<Tag> beginWrite() {
+    return beginWriteWithOpts(CursorWriteOpts{});
+  }
+
   void endWrite(StructuredCursorWriter<Tag>&& writer) {
     writer.finalize();
     serializedData_ = queue_.move();
+    done();
+  }
+
+  /**
+   * Allows writing to be aborted. This is useful when you have an error
+   * condition and you want to avoid writing to the buffer. Prevents
+   * CursorSerializationWrapper dtor from throwing if the write was not
+   * completed.
+   */
+  void abandonWrite(StructuredCursorWriter<Tag>&& writer) {
+    writer.abandon();
+    queue_.reset();
     done();
   }
 
@@ -174,25 +209,34 @@ class CursorSerializationWrapper {
 
  private:
   ProtocolReader* reader() {
-    checkInactive();
+    checkInactive("Concurrent reads/writes not supported");
     auto& reader = protocol_.template emplace<ProtocolReader>();
     folly::io::Cursor cursor(serializedData_.get());
     reader.setInput(cursor);
     return &reader;
   }
-  ProtocolWriter* writer(
-      ExternalBufferSharing sharing = SHARE_EXTERNAL_BUFFER) {
-    checkInactive();
-    auto& writer = protocol_.template emplace<ProtocolWriter>(sharing);
-    writer.setOutput(&queue_);
+
+  ProtocolWriter* writer(const CursorWriteOpts& opts) {
+    checkInactive("Concurrent reads/writes not supported");
+    auto& writer = protocol_.template emplace<ProtocolWriter>(opts.sharing);
+    if (opts.padBuffer) {
+      queue_.preallocate(opts.minGrowth, opts.minGrowth);
+      queue_.trimStart(opts.padSize);
+    }
+    writer.setOutput(
+        folly::io::QueueAppender{&queue_, opts.minGrowth, opts.maxGrowth});
+
     return &writer;
   }
+
   void done() { protocol_.template emplace<std::monostate>(); }
 
-  void checkInactive() const {
-    if (!std::holds_alternative<std::monostate>(protocol_)) {
-      folly::throw_exception<std::runtime_error>(
-          "Concurrent reads/writes not supported");
+  bool isActive() const {
+    return !std::holds_alternative<std::monostate>(protocol_);
+  }
+  void checkInactive(const char* message) const {
+    if (isActive()) {
+      folly::throw_exception<std::runtime_error>(message);
     }
   }
   void checkHasData() const {
@@ -510,7 +554,7 @@ class StructuredCursorReader : detail::BaseCursorReader<ProtocolReader> {
   // Last field id the caller tried to read.
   FieldId fieldId_{0};
   // Contains last field id read from the buffer.
-  typename ProtocolReader::StructReadState readState_;
+  typename ProtocolReader::StructReadState readState_{};
 
   template <typename T>
   T copy(const T& in) {
@@ -951,6 +995,13 @@ class StructuredCursorWriter : detail::BaseCursorWriter {
     state_ = State::Active;
   }
 
+  template <typename CTag>
+  void abandonWrite(ContainerCursorWriter<CTag>&& child) {
+    checkState(State::Child);
+    child.abandon();
+    state_ = State::Abandoned;
+  }
+
   /** structured types
    *
    * Note: none of this writer's other methods may be called between
@@ -972,10 +1023,34 @@ class StructuredCursorWriter : detail::BaseCursorWriter {
     state_ = State::Active;
   }
 
+  template <typename CTag>
+  void abandonWrite(StructuredCursorWriter<CTag>&& child) {
+    checkState(State::Child);
+    child.abandon();
+    state_ = State::Abandoned;
+  }
+
   template <typename Ident, enable_for<type::structured_c, Ident> = 0>
   void write(const native_type<Ident>& value) {
     writeField<Ident>(
         [&] { op::encode<type_tag<Ident>>(*protocol_, value); }, value);
+  }
+
+  /** This is a niche API to support writing the fields of a struct temporally
+   * out of order in cases where both fields need to be written using CurSe, the
+   * computation of the second field that produces its serialized value must
+   * happen before the computation of the first field can proceed, and
+   * reordering the fields in the struct is not feasible. In other cases,
+   * migrating one of the fields to change the order in the struct or performing
+   * the computation in field order is preferable due to the added cost and
+   * complexity of using this API. */
+  template <typename Ident, enable_for<type::structured_c, Ident> = 0>
+  void writeSerialized(
+      CursorSerializationWrapper<native_type<Ident>>&& cursorValue) {
+    beforeWriteField<Ident>();
+    // Will fail if the cursor value is not finalized
+    protocol_->writeRaw(cursorValue.serializedData());
+    afterWriteField();
   }
 
  private:
@@ -986,7 +1061,7 @@ class StructuredCursorWriter : detail::BaseCursorWriter {
 
   void finalize() {
     checkState(State::Active);
-    visitSkippedFields<FieldId{std::numeric_limits<int16_t>::max()}>();
+    visitSkippedFields<FieldAfterLast<T>>();
     protocol_->writeFieldStop();
     protocol_->writeStructEnd();
     state_ = State::Done;
@@ -1039,7 +1114,7 @@ class StructuredCursorWriter : detail::BaseCursorWriter {
   }
 
   template <FieldId MaxFieldId>
-  void visitSkippedFields() {
+  FOLLY_ALWAYS_INLINE void visitSkippedFields() {
     if constexpr (is_thrift_union_v<T>) {
       return;
     }
@@ -1049,6 +1124,11 @@ class StructuredCursorWriter : detail::BaseCursorWriter {
       return;
     }
 
+    visitSkippedFieldsSlowPath<MaxFieldId>();
+  }
+
+  template <FieldId MaxFieldId>
+  void visitSkippedFieldsSlowPath() {
     // Slow path: iterate fields between fieldId_ and MaxFieldId.
     const auto& fieldWriters = detail::DefaultValueWriter<Tag>::fields;
     for (auto itr = std::lower_bound(

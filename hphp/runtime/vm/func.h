@@ -19,6 +19,7 @@
 #include "hphp/runtime/base/atomic-countable.h"
 #include "hphp/runtime/base/attr.h"
 #include "hphp/runtime/base/datatype.h"
+#include "hphp/runtime/base/low-string-ptr-or-id.h"
 #include "hphp/runtime/base/rds.h"
 #include "hphp/runtime/base/tracing.h"
 #include "hphp/runtime/base/type-string.h"
@@ -134,12 +135,19 @@ struct Func final {
   struct ParamInfo {
     enum class Flags {
       InOut,      // Is this an `inout' parameter?
+      OutOnly,    // Is this an <<__OutOnly>> parameter? Implies InOut.
       Readonly,   // Is this a `readonly` parameter?
       Variadic,   // Is this a `...' parameter?
-      NativeArg,  // Does this use a NativeArg?
-      AsVariant,  // Native function takes as const Variant&
-      AsTypedValue, // Native function takes as TypedValue
       Optional,   // Marked as `optional` in an abstract method
+    };
+
+    enum class BuiltinAbi : uint8_t {
+      Value,            // HPHP::Value, non-floating point
+      FPValue,          // HPHP::Value, floating point (might need a SIMD reg)
+      ValueByRef,       // reference to HPHP::Value
+      TypedValue,       // HPHP::TypedValue
+      TypedValueByRef,  // reference to HPHP::TypedValue (equivalent to Variant)
+      InOutByRef,       // reference to HPHP::Value or HPHP::TypedValue (inout)
     };
 
     ParamInfo();
@@ -148,27 +156,26 @@ struct Func final {
     bool hasScalarDefaultValue() const;
     bool hasTrivialDefaultValue() const;
     bool isInOut() const;
+    bool isOutOnly() const;
     bool isReadonly() const;
     bool isVariadic() const;
-    bool isNativeArg() const;
-    bool isTakenAsVariant() const;
-    bool isTakenAsTypedValue() const;
     bool isOptional() const;
     void setFlag(Flags flag);
-    MaybeDataType builtinType() const;
 
     template<class SerDe> void serde(SerDe& sd);
 
     // Flags as defined by the Flags enum.
     uint8_t flags{0};
+    // If this is a builtin, how to pass the value to the C++ impl.
+    BuiltinAbi builtinAbi;
     // DV initializer funclet offset.
     Offset funcletOff{kInvalidOffset};
     // Set to Uninit if there is no DV, or if there's a nonscalar DV.
     TypedValue defaultValue;
     // Eval-able PHP code.
-    LowStringPtr phpCode{nullptr};
+    LowStringPtrOrId phpCode;
     // User-annotated type.
-    LowStringPtr userType{nullptr};
+    LowStringPtrOrId userType;
     // offset of dvi funclet from cti section base.
     Offset ctiFunclet{kInvalidOffset};
     TypeIntersectionConstraint typeConstraints;
@@ -376,7 +383,7 @@ public:
    * In repo mode, we flatten traits into the classes they're used in, so we
    * need this to track the original file for backtraces and errors.
    */
-  const StringData* originalFilename() const;
+  const StringData* originalUnit() const;
 
   /*
    * The original filename if it is defined, the unit's filename otherwise.
@@ -1390,11 +1397,11 @@ private:
 
     uint16_t m_sn;
 
-    LowStringPtr m_retUserType;
+    LowStringPtrOrId m_retUserType;
     UserAttributeMap m_userAttributes;
     // The link can be bound for const Func.
     mutable rds::Link<bool, rds::Mode::Normal> m_funcHasDebuggerIntr;
-    LowStringPtr m_originalFilename;
+    LowStringPtr m_originalUnit;
     TypeIntersectionConstraint m_retTypeConstraints;
     RepoAuthType m_repoReturnType;
     RepoAuthType m_repoAwaitedReturnType;

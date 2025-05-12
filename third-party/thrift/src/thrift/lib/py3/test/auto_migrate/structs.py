@@ -16,6 +16,7 @@
 
 import copy
 import math
+import types
 import unittest
 
 from testing.dependency.types import IncludedStruct
@@ -28,11 +29,13 @@ from testing.types import (
     hard,
     Integers,
     Kind,
+    mixed,
     Nested1,
     Nested2,
     Nested3,
     NonCopyable,
     numerical,
+    OptionalFile,
     Optionals,
     PrivateCppRefField,
     Reserved,
@@ -46,7 +49,7 @@ from thrift.lib.py3.test.auto_migrate.auto_migrate_util import (
     is_auto_migrated,
 )
 from thrift.py3.common import Protocol
-from thrift.py3.serializer import deserialize
+from thrift.py3.serializer import deserialize, serialize
 from thrift.py3.types import Struct
 
 
@@ -71,6 +74,11 @@ class StructTests(unittest.TestCase):
         # pyre-fixme[6]: Expected `HasIsSet[Variable[thrift.py3.types._T]]` for 1st
         #  param but got `File`.
         self.assertFalse(Struct.isset(file).type)
+
+    def test_property(self) -> None:
+        r = Runtime(property="foo", int_list_val=[2, 3, 4])
+        self.assertEqual(r.property, "foo")
+        self.assertEqual(r.int_list_val, [2, 3, 4])
 
     def test_isset_repr(self) -> None:
         serialized = b'{"name":"/dev/null","type":8}'
@@ -112,6 +120,18 @@ class StructTests(unittest.TestCase):
         self.assertEqual(x.val_list, dif_list)
         dif_int = copy.copy(x.an_int)
         self.assertEqual(x.an_int, dif_int)
+        self.assertIs(x, copy.copy(x))
+
+        cpp_noncopyable = NonCopyable(num=123)
+        self.assertIs(cpp_noncopyable, copy.copy(cpp_noncopyable))
+        self.assertIs(cpp_noncopyable, copy.deepcopy(cpp_noncopyable))
+
+    @brokenInAutoMigrate()
+    def test_noncopyable(self) -> None:
+        x = NonCopyable(num=123)
+        # when thrift-py3 decoupled from cpp2, call operator will work
+        with self.assertRaises(TypeError):
+            x(num=1234)
 
     def test_hashability(self) -> None:
         hash(easy())
@@ -262,22 +282,11 @@ class StructTests(unittest.TestCase):
         self.assertEqual(hard.__module__, expected)
         self.assertEqual(hard().__class__.__module__, expected)
 
-    @brokenInAutoMigrate()
-    def test_noncopyable(self) -> None:
-        x = NonCopyable(num=123)
-        with self.assertRaises(TypeError):
-            x(num=1234)
-        with self.assertRaises(TypeError):
-            copy.copy(x)
-        with self.assertRaises(TypeError):
-            copy.deepcopy(x)
-
     def test_init_with_invalid_field(self) -> None:
         with self.assertRaises(TypeError):
             # pyre-ignore[28]: intentionally used a wrong field name "val_lists" for test
             easy(val=1, an_int=Integers(small=300), name="foo", val_lists=[1, 2, 3, 4])
 
-    @brokenInAutoMigrate()
     def test_iterate(self) -> None:
         x = Reserved(
             from_="hello",
@@ -288,6 +297,12 @@ class StructTests(unittest.TestCase):
             inst="foo",
             changes="bar",
         )
+
+        def auto_migrate_mangle(name: str) -> str:
+            return f"_Reserved{name}" if is_auto_migrated() else name
+
+        mangled_str_name = auto_migrate_mangle("__mangled_str")
+        mangled_int_name = auto_migrate_mangle("__mangled_int")
         self.assertEqual(
             list(x),
             [
@@ -298,8 +313,8 @@ class StructTests(unittest.TestCase):
                 ("move", "Qh4xe1"),
                 ("inst", "foo"),
                 ("changes", "bar"),
-                ("__mangled_str", ""),
-                ("__mangled_int", 0),
+                (mangled_str_name, ""),
+                (mangled_int_name, 0),
             ],
         )
         self.assertEqual(
@@ -312,14 +327,16 @@ class StructTests(unittest.TestCase):
                 "move",
                 "inst",
                 "changes",
-                "__mangled_str",
-                "__mangled_int",
+                mangled_str_name,
+                mangled_int_name,
             ],
         )
 
-    @brokenInAutoMigrate()
     def test_dir(self) -> None:
-        expected = ["__iter__", "an_int", "name", "val", "val_list"]
+        if not is_auto_migrated():
+            expected = ["__iter__", "an_int", "name", "val", "val_list"]
+        else:
+            expected = ["__iter__", "an_int", "name", "py3_hidden", "val", "val_list"]
         self.assertEqual(expected, dir(easy()))
         self.assertEqual(expected, dir(easy))
         self.assertEqual(["__iter__"], dir(Struct))
@@ -494,3 +511,170 @@ class NumericalConversionsTests(unittest.TestCase):
         self.assertFalse(issubclass(int, Nested1))
         self.assertFalse(issubclass(Struct, Nested1))
         self.assertFalse(issubclass(Nested1, Nested2))
+
+    def test_subclass_not_allow_inheritance(self) -> None:
+        thrift_python_err = r"Inheritance from generated thrift struct .+ is deprecated. Please use composition."
+        cython_err = (
+            r"type '.+' is not an acceptable base type"
+            if not hasattr(File, "_FBTHRIFT__PYTHON_CLASS")
+            else r"Inheritance of thrift-generated .+ from TestSubclass is deprecated."
+        )
+        err_regex = thrift_python_err if is_auto_migrated() else cython_err
+        with self.assertRaisesRegex(TypeError, err_regex):
+            types.new_class("TestSubclass", bases=(File,))
+
+    def test_subclass_allow_inheritance(self) -> None:
+        c = TestSubclass(name="bob")
+        self.assertIsInstance(c, OptionalFile)
+        self.assertIsInstance(c, Struct)
+        self.assertIsInstance(OptionalFile(), Struct)
+        self.assertEqual(c.name, "bob")
+
+    def test_subclass_allow_inheritance_ancestor(self) -> None:
+        c = TestSubSubclass(name="bob")
+        self.assertIsInstance(c, TestSubclass)
+        self.assertIsInstance(c, OptionalFile)
+        self.assertIsInstance(c, Struct)
+        self.assertEqual(c.name, "bob")
+
+    def test_defaulted_optional_field(self) -> None:
+        def assert_mixed(m: mixed) -> None:
+            if is_auto_migrated():
+                self.assertIsNone(m.opt_field)
+                self.assertIsNone(m.opt_float)
+                self.assertIsNone(m.opt_int)
+                self.assertIsNone(m.opt_enum)
+            else:
+                self.assertEqual(m.opt_field, "optional")
+                self.assertEqual(m.opt_float, 1.0)
+                self.assertEqual(m.opt_int, 1)
+                self.assertEqual(m.opt_enum, Color.red)
+
+        def assert_isset(m: mixed) -> None:
+            # pyre-fixme[6]: the pyre typing for this is broken in thrift-py3
+            isset = Struct.isset(m)
+
+            for fld_name, _ in mixed:
+                if not fld_name.startswith("opt_") or "ref" in fld_name:
+                    continue
+
+                self.assertFalse(getattr(isset, fld_name), fld_name)
+
+        # constructor
+        m = mixed()
+        assert_mixed(m)
+        assert_isset(m)
+
+        # call operator
+        m = m(some_field_="don't care")
+        assert_mixed(m)
+        assert_isset(m)
+
+        # serialization round-trip
+        m = deserialize(mixed, serialize(m))
+        assert_mixed(m)
+        assert_isset(m)
+
+        ### Now with explicit `None` set
+        # in py3, even setting the field explicitly to None:
+        #   - the field value is still the default (non-None)
+        #   - the issset value is still False
+        #  This is deeply regrettable.
+        m = mixed(opt_field=None)
+        assert_mixed(m)
+        assert_isset(m)
+
+        m = m(opt_field=None)
+        assert_mixed(m)
+        assert_isset(m)
+
+        m = deserialize(mixed, serialize(m))
+        assert_mixed(m)
+        assert_isset(m)
+
+        # basic sanity check for normal set behavior
+        non_opt = mixed(opt_field="foo", opt_float=2.0, opt_int=3, opt_enum=Color.blue)
+        self.assertEqual(non_opt.opt_field, "foo")
+        self.assertEqual(non_opt.opt_float, 2.0)
+        self.assertEqual(non_opt.opt_int, 3)
+        self.assertEqual(non_opt.opt_enum, Color.blue)
+        # pyre-fixme[6]: the pyre typing for this is broken in thrift-py3
+        non_opt_isset = Struct.isset(non_opt)
+        for field, field_value in non_opt:
+            if not field.startswith("opt_"):
+                continue
+            self.assertEqual(
+                getattr(non_opt_isset, field, False), field_value is not None, field
+            )
+
+    def roundtrip(self, x: numerical) -> numerical:
+        return deserialize(numerical, serialize(x))
+
+    def test_permissive_init_int_with_enum(self) -> None:
+        n = numerical(int_val=Kind.LINK)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.int_val), int)
+            self.assertEqual(n.int_val, Kind.LINK.value)
+
+        assert_strict(n)
+
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_permissive_init_float_with_enum(self) -> None:
+        n = numerical(float_val=Kind.LINK)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.float_val), float)
+            self.assertEqual(n.float_val, Kind.LINK.value)
+
+        assert_strict(n)
+
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_permissive_init_float_with_bool(self) -> None:
+        n = numerical(float_val=True)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.float_val), float)
+            self.assertEqual(n.float_val, float(True))
+
+        assert_strict(n)
+
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_permissive_init_float_with_int(self) -> None:
+        n = numerical(float_val=888)
+
+        def assert_strict(n: numerical) -> None:
+            self.assertIs(type(n.float_val), float)
+            self.assertEqual(n.float_val, 888.0)
+
+        assert_strict(n)
+
+        rt = self.roundtrip(n)
+        assert_strict(rt)
+
+    def test_bad_kwarg(self) -> None:
+        if is_auto_migrated():
+            with self.assertRaises(TypeError):
+                # pyre-ignore[28]: simulating customer clowntown
+                numerical(float_val=1.0, bad_kwarg=None, int_val=2)
+        else:
+            # pyre-ignore[28]: simulating customer clowntown
+            n = numerical(float_val=1.0, bad_kwarg=None, int_val=2)
+            # thrift-py3 ignores
+            self.assertIsInstance(n, numerical)
+            self.assertEqual(n.float_val, 1.0)
+            self.assertEqual(n.int_val, 2)
+
+
+class TestSubclass(OptionalFile):
+    pass
+
+
+class TestSubSubclass(TestSubclass):
+    pass

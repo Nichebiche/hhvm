@@ -15,6 +15,8 @@ type tparam_info = Typing_kinding_defs.kind
 
 type t [@@deriving hash]
 
+val bindings : t -> (tparam_name * tparam_info) list
+
 val empty : t
 
 val mem : tparam_name -> t -> bool
@@ -43,11 +45,9 @@ val merge_env :
     'env * (Pos_or_decl.t * tparam_info) option) ->
   'env * t
 
-val get_lower_bounds :
-  t -> tparam_name -> Typing_defs.locl_ty list -> tparam_bounds
+val get_lower_bounds : t -> tparam_name -> tparam_bounds
 
-val get_upper_bounds :
-  t -> tparam_name -> Typing_defs.locl_ty list -> tparam_bounds
+val get_upper_bounds : t -> tparam_name -> tparam_bounds
 
 (** value > 0, indicates higher-kinded type parameter *)
 val get_arity : t -> tparam_name -> int
@@ -63,6 +63,8 @@ val get_require_dynamic : t -> tparam_name -> bool
 val get_tparam_names : t -> tparam_name list
 
 val get_tparams : t -> (Pos_or_decl.t * tparam_info) SMap.t
+
+val get_rank : t -> tparam_name -> int
 
 val is_consistent : t -> bool
 

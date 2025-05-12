@@ -28,6 +28,7 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BigValueRoute.h>
 #include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
@@ -83,6 +84,11 @@ RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory
 const folly::dynamic& json);
 
 extern template hellogoodbye::HelloGoodbyeRouterInfo::RouteHandlePtr
+makeBigValueRoute<hellogoodbye::HelloGoodbyeRouterInfo>(
+RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json);
+
+extern template hellogoodbye::HelloGoodbyeRouterInfo::RouteHandlePtr
 makeBlackholeRoute<hellogoodbye::HelloGoodbyeRouterInfo>(
 RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
@@ -94,11 +100,6 @@ const folly::dynamic& json);
 
 extern template hellogoodbye::HelloGoodbyeRouterInfo::RouteHandlePtr
 makeErrorRoute<hellogoodbye::HelloGoodbyeRouterInfo>(
-RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory,
-const folly::dynamic& json);
-
-extern template hellogoodbye::HelloGoodbyeRouterInfo::RouteHandlePtr
-makeHashRoute<hellogoodbye::HelloGoodbyeRouterInfo>(
 RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
@@ -152,6 +153,12 @@ makeRandomRoute<hellogoodbye::HelloGoodbyeRouterInfo>(
 RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
+template hellogoodbye::HelloGoodbyeRouterInfo::RouteHandlePtr
+makeHashRoute<hellogoodbye::HelloGoodbyeRouterInfo>(
+RouteHandleFactory<hellogoodbye::HelloGoodbyeRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json,
+ProxyBase& proxy);
+
 extern template class ExtraRouteHandleProviderIf<hellogoodbye::HelloGoodbyeRouterInfo>;
 
 } // namespace mcrouter
@@ -170,14 +177,10 @@ HelloGoodbyeRouterInfo::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<HelloGoodbyeRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<HelloGoodbyeRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<HelloGoodbyeRouterInfo>},
+      {"BigValueRoute", &makeBigValueRoute<HelloGoodbyeRouterInfo>},
       {"BlackholeRoute", &makeBlackholeRoute<HelloGoodbyeRouterInfo>},
       {"DevNullRoute", &makeDevNullRoute<HelloGoodbyeRouterInfo>},
       {"ErrorRoute", &makeErrorRoute<HelloGoodbyeRouterInfo>},
-      {"HashRoute",
-       [](RouteHandleFactory<RouteHandleIf>& factory,
-          const folly::dynamic& json) {
-         return makeHashRoute<HelloGoodbyeRouterInfo>(factory, json);
-       }},
       {"HostIdRoute", &makeHostIdRoute<HelloGoodbyeRouterInfo>},
       {"LatencyInjectionRoute",
        &makeLatencyInjectionRoute<HelloGoodbyeRouterInfo>},
@@ -199,8 +202,11 @@ HelloGoodbyeRouterInfo::buildRouteMap() {
 
 /* static */ HelloGoodbyeRouterInfo::RouteHandleFactoryMapWithProxy
 HelloGoodbyeRouterInfo::buildRouteMapWithProxy() {
-  return RouteHandleFactoryMapWithProxy();
-}
+  RouteHandleFactoryMapWithProxy map {
+      {"HashRoute", &makeHashRoute<HelloGoodbyeRouterInfo>},
+  };
+  return map;
+  }
 
 /* static */ HelloGoodbyeRouterInfo::RouteHandleFactoryMapForWrapper
 HelloGoodbyeRouterInfo::buildRouteMapForWrapper() {

@@ -34,7 +34,7 @@ struct c_SleepWaitHandle final :
     SystemLib::ClassLoader<"HH\\SleepWaitHandle"> {
   using SystemLib::ClassLoader<"HH\\SleepWaitHandle">::classof;
   using SystemLib::ClassLoader<"HH\\SleepWaitHandle">::className;
-  WAITHANDLE_DTOR(SleepWaitHandle);
+  WAITHANDLE_DTOR(SleepWaitHandle)
 
   explicit c_SleepWaitHandle()
     : c_WaitableWaitHandle(classof(), HeaderKind::WaitHandle,
@@ -45,8 +45,8 @@ struct c_SleepWaitHandle final :
   bool cancel(const Object& exception);
   bool process();
   String getName();
-  void exitContext(context_idx_t ctx_idx);
-  AsioSession::TimePoint getWakeTime() const { return m_waketime; };
+  void exitContext(ContextIndex contextIdx);
+  AsioSession::TimePoint getWakeTime() const { return m_waketime; }
   void registerToContext();
   void unregisterFromContext();
 

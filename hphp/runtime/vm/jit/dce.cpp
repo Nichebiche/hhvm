@@ -20,15 +20,12 @@
 #include <folly/MapUtil.h>
 
 #include "hphp/util/configs/hhir.h"
-#include "hphp/util/low-ptr.h"
 #include "hphp/util/match.h"
 #include "hphp/util/trace.h"
 
-#include "hphp/runtime/vm/runtime.h"
 #include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/cfg.h"
 #include "hphp/runtime/vm/jit/check.h"
-#include "hphp/runtime/vm/jit/id-set.h"
 #include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/mutation.h"
@@ -38,11 +35,10 @@
 #include "hphp/runtime/vm/jit/simple-propagation.h"
 #include "hphp/runtime/vm/jit/state-vector.h"
 #include "hphp/runtime/vm/jit/timer.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(hhir_dce);
+TRACE_SET_MOD(hhir_dce)
 
 bool canDCE(const IRInstruction& inst) {
   switch (inst.op()) {
@@ -174,6 +170,7 @@ bool canDCE(const IRInstruction& inst) {
   case LdClsMethod:
   case LdSubClsCns:
   case LdIfaceMethod:
+  case LdClosureArg:
   case LdPropAddr:
   case LdObjClass:
   case LdObjInvoke:
@@ -217,6 +214,7 @@ bool canDCE(const IRInstruction& inst) {
   case LdClosureCls:
   case LdClosureThis:
   case CreateSSWH:
+  case CreateFSWH:
   case LdContActRec:
   case LdContArValue:
   case LdContArKey:
@@ -522,6 +520,7 @@ bool canDCE(const IRInstruction& inst) {
   case VerifyParamFailHard:
   case VerifyReifiedLocalType:
   case VerifyReifiedReturnType:
+  case VerifyType:
   case VerifyRet:
   case VerifyRetCallable:
   case VerifyRetCls:
@@ -573,6 +572,7 @@ bool canDCE(const IRInstruction& inst) {
   case CreateAGen:
   case CreateCCWH:
   case CreateAFWH:
+  case CreateAFWHL:
   case CreateAGWH:
   case AFWHPrepareChild:
   case StArResumeAddr:
@@ -676,7 +676,7 @@ bool canDCE(const IRInstruction& inst) {
   case LdVectorSize:
   case BeginCatch:
   case EndCatch:
-  case EnterTCUnwind:
+  case StUnwinderExn:
   case UnwindCheckSideExit:
   case DbgTrashStk:
   case DbgTrashFrame:
@@ -693,7 +693,6 @@ bool canDCE(const IRInstruction& inst) {
   case ThrowLateInitPropError:
   case ThrowMissingArg:
   case ThrowMissingThis:
-  case ThrowParameterWrongType:
   case ThrowInOutMismatch:
   case ThrowReadonlyMismatch:
   case ThrowCannotModifyReadonlyCollection:
@@ -757,6 +756,7 @@ bool canDCE(const IRInstruction& inst) {
   case LdCoeffectFunParamNaive:
   case DeserializeLazyProp:
   case GetClsRGProp:
+  case ReifiedInit:
     return false;
 
   case IsTypeStruct:
@@ -856,7 +856,7 @@ void removeDeadInstructions(IRUnit& unit,
           auto dstIdx = 0;
           auto const numDsts = front.numDsts();
           for (auto i = 0; i < numDsts; ++i) {
-            if (!defLabelLive.count(std::make_pair(&front, i))) {
+            if (!defLabelLive.contains(std::make_pair(&front, i))) {
               FTRACE(1, "Removing dead DefLabel dst {}: {}\n",
                      i, front.toString());
               front.deleteDst(dstIdx);
@@ -883,7 +883,7 @@ void removeDeadInstructions(IRUnit& unit,
             for (auto i = 0; i < numSrcs; ++i) {
               auto& defLabel = block->taken()->front();
               assertx(defLabel.is(DefLabel));
-              if (!defLabelLive.count(std::make_pair(&defLabel, i))) {
+              if (!defLabelLive.contains(std::make_pair(&defLabel, i))) {
                 FTRACE(1, "Removing dead Jmp src {}: {}\n",
                        i, back.toString());
                 back.deleteSrc(srcIdx);
@@ -1385,6 +1385,9 @@ void fullDCE(IRUnit& unit) {
       IRInstruction* srcInst = src->inst();
       auto const srcCanonical = canonical(src);
       auto const srcCanonicalInst = srcCanonical->inst();
+      FTRACE(4, "Processing inst {}; srcCanonical {}; srcCanonicalInst {};\n",
+        inst->toString(), srcCanonical->toString(), srcCanonicalInst->toString()
+      );
       if (srcInst->op() == DefConst) return;
 
       // Use the Canonical source for accounting
@@ -1440,7 +1443,7 @@ void fullDCE(IRUnit& unit) {
       // For a DefLabel operand, look "through" each corresponding Jmp
       // and process the source as if we were processing that Jmp.
       assertx(defLabelIdx < inst->numDsts());
-      assertx(defLabelLive.count(std::make_pair(inst, defLabelIdx)));
+      assertx(defLabelLive.contains(std::make_pair(inst, defLabelIdx)));
       inst->block()->forEachPred(
         [&, inst = inst, defLabelIdx = defLabelIdx] (Block* pred) {
           auto& jmp = pred->back();
@@ -1466,6 +1469,9 @@ void fullDCE(IRUnit& unit) {
     auto& info = pair.second;
     auto const trackedUses =
       info.decs.size() + info.aux.size() + info.stores.size() + info.passthroughs.size();
+    FTRACE(5, "Instr {}; uses = {} trackedUses = {}\n", 
+      pair.first->toString(), uses[pair.first->dst()], trackedUses
+    );
     if (uses[pair.first->dst()] != trackedUses) continue;
     killInstrAdjustRC(state, unit, pair.first, info.decs);
     for (auto inst : info.aux) killInstrAdjustRC(state, unit, inst, info.decs);

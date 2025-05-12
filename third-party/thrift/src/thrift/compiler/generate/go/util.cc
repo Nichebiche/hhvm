@@ -17,6 +17,7 @@
 #include <cctype>
 #include <boost/algorithm/string.hpp>
 #include <fmt/core.h>
+#include <thrift/compiler/ast/t_type.h>
 #include <thrift/compiler/generate/go/util.h>
 
 namespace apache::thrift::compiler::go {
@@ -238,7 +239,7 @@ void codegen_data::compute_thrift_metadata_types() {
 
   for (auto const& service : current_program_->services()) {
     for (const auto& func : service->functions()) {
-      if (!is_func_go_supported(&func)) {
+      if (!is_func_go_server_supported(&func)) {
         continue; // Skip unsupported functions
       }
 
@@ -398,14 +399,11 @@ std::string munge_ident(const std::string& ident, bool exported, bool compat) {
          next_underscore_pos > word_len);
 
     if (is_initialism) {
-      // Compat: legacy generator does not change whole-string
-      // initialisms to uppercase.
       // Compat: legacy generator does not change initialisms
       // at the beginning of the string to uppercase.
       // Compat: legacy generator does not change initialisms
       // to uppercase if it hits a substring bug.
-      if (!(compat && word_len == ident.size()) && !(compat && is_first_word) &&
-          !(compat && is_legacy_substr_bug)) {
+      if (!(compat && is_first_word) && !(compat && is_legacy_substr_bug)) {
         boost::algorithm::to_upper(word);
       }
     }
@@ -495,9 +493,12 @@ std::string snakecase(const std::string& name) {
   return snake.str();
 }
 
-bool is_func_go_supported(const t_function* func) {
-  return !func->sink_or_stream() && !func->return_type()->is_service() &&
-      !func->interaction();
+bool is_func_go_client_supported(const t_function* func) {
+  return !func->sink_or_stream() && !func->interaction();
+}
+
+bool is_func_go_server_supported(const t_function* func) {
+  return !func->sink_or_stream() && !func->interaction();
 }
 
 bool is_go_reserved_word(const std::string& value) {
@@ -509,7 +510,7 @@ bool is_type_go_struct(const t_type* type) {
   //   * Thrift struct    - represented by Go struct pointer
   //   * Thrift union     - represented by Go struct pointer
   //   * Thrift exception - represented by Go struct pointer
-  return type->is_struct() || type->is_union() || type->is_exception();
+  return type->is_struct_or_union() || type->is_exception();
 }
 
 bool is_type_go_nilable(const t_type* type) {
@@ -548,18 +549,16 @@ bool is_type_go_comparable(
     return false;
   }
 
-  if (real_type->is_struct()) {
-    auto as_struct = dynamic_cast<const t_struct*>(real_type);
-    if (as_struct != nullptr) {
-      for (auto member : as_struct->get_members()) {
-        auto member_type = member->type().get_type();
-        auto member_name = member_type->get_full_name();
-        // Insert 0 if member_name is not yet in the map.
-        auto emplace_pair = visited_type_names.emplace(member_name, 0);
-        emplace_pair.first->second += 1;
-        if (!is_type_go_comparable(member_type, visited_type_names)) {
-          return false;
-        }
+  if (real_type->is_struct_or_union()) {
+    const auto* as_struct = dynamic_cast<const t_structured*>(real_type);
+    for (auto member : as_struct->get_members()) {
+      auto member_type = member->type().get_type();
+      auto member_name = member_type->get_full_name();
+      // Insert 0 if member_name is not yet in the map.
+      auto emplace_pair = visited_type_names.emplace(member_name, 0);
+      emplace_pair.first->second += 1;
+      if (!is_type_go_comparable(member_type, visited_type_names)) {
+        return false;
       }
     }
   }
@@ -609,7 +608,8 @@ std::vector<t_struct*> get_service_req_resp_structs(const t_service* service) {
   std::vector<t_struct*> req_resp_structs;
   auto svcGoName = go::munge_ident(service->name());
   for (auto func : service->get_functions()) {
-    if (!go::is_func_go_supported(func)) {
+    if (!go::is_func_go_client_supported(func) &&
+        !go::is_func_go_server_supported(func)) {
       continue;
     }
 
@@ -660,6 +660,59 @@ const std::string* get_go_tag_annotation(const t_named* node) {
                  .get_string());
   }
   return nullptr;
+}
+
+int get_field_size(const t_field* field, bool is_inside_union) {
+  // Assume 64-bit architecture
+  auto real_type = field->type()->get_true_type();
+  auto type_value = real_type->get_type_value();
+  auto qualifier = field->qualifier();
+  if ((qualifier == t_field_qualifier::optional || is_inside_union) &&
+      !is_type_go_nilable(real_type)) {
+    return 8; // pointer
+  }
+  switch (type_value) {
+    case t_type::type::t_bool:
+      return 1;
+    case t_type::type::t_byte:
+      return 1;
+    case t_type::type::t_i16:
+      return 2;
+    case t_type::type::t_i32:
+      return 4;
+    case t_type::type::t_i64:
+      return 8;
+    case t_type::type::t_float:
+      return 4;
+    case t_type::type::t_double:
+      return 8;
+    case t_type::type::t_enum:
+      return 4; // Backed by int32
+    case t_type::type::t_string:
+      return 16; // Golang: unsafe.Sizeof("")
+    case t_type::type::t_binary:
+      return 24; // Golang: unsafe.Sizeof([]byte{})
+    case t_type::type::t_list:
+      return 24; // Golang: unsafe.Sizeof([]int{})
+    case t_type::type::t_set:
+      return 24; // Golang: unsafe.Sizeof([]int{})
+    case t_type::type::t_map:
+      return 8; // Golang: unsafe.Sizeof(map[string]string{})
+    case t_type::type::t_structured:
+      return 8; // pointer
+    default:
+      return 0;
+  }
+}
+
+void optimize_fields_layout(std::vector<t_field*>& fields, bool is_union) {
+  std::stable_sort(
+      fields.begin(),
+      fields.end(),
+      [is_union](const auto* lhs, const auto* rhs) {
+        // Sort by field size, descending
+        return get_field_size(lhs, is_union) > get_field_size(rhs, is_union);
+      });
 }
 
 } // namespace apache::thrift::compiler::go

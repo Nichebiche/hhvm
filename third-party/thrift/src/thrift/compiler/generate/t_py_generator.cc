@@ -43,10 +43,11 @@ namespace apache::thrift::compiler {
 namespace {
 
 const std::string* get_py_adapter(const t_type* type) {
-  if (!type->get_true_type()->is_struct()) {
+  if (!type->get_true_type()->is_struct_or_union()) {
     return nullptr;
   }
-  return t_typedef::get_first_annotation_or_null(type, {"py.adapter"});
+  return t_typedef::get_first_unstructured_annotation_or_null(
+      type, {"py.adapter"});
 }
 
 void mark_file_executable(const std::filesystem::path& path) {
@@ -62,7 +63,7 @@ string prefix_temporary(const string& name) {
 }
 
 bool is_hidden(const t_field& field) {
-  return field.find_structured_annotation_or_null(kPythonPyDeprecatedHiddenUri);
+  return field.has_structured_annotation(kPythonPyDeprecatedHiddenUri);
 }
 } // namespace
 
@@ -272,6 +273,10 @@ class t_py_generator : public t_concat_generator {
       const t_structured* tstruct, const t_field* tfield);
   std::string render_field_default_value(const t_field* tfield);
   std::string type_name(const t_type* ttype);
+  std::string service_name(const t_service* service) {
+    return get_real_py_module(service->program()) + "." +
+        rename_reserved_keywords(service->get_name());
+  }
   std::string function_signature(
       const t_function* tfunction, std::string prefix = "");
   std::string function_signature_if(
@@ -397,18 +402,18 @@ void t_py_generator::generate_json_field(
   string name = prefix_thrift + rename_reserved_keywords(tfield->get_name()) +
       suffix_thrift;
 
-  if (type->is_struct() || type->is_exception()) {
+  if (type->is_struct_or_union() || type->is_exception()) {
     generate_json_struct(out, (t_struct*)type, name, prefix_json);
   } else if (type->is_container()) {
     generate_json_container(out, (t_container*)type, name, prefix_json);
   } else if (type->is_enum()) {
     generate_json_enum(out, (t_enum*)type, name, prefix_json);
   } else if (type->is_primitive_type()) {
-    string conversion_function = "";
+    string conversion_function;
     t_primitive_type::t_primitive tbase =
         ((t_primitive_type*)type)->primitive_type();
-    string number_limit = "";
-    string number_negative_limit = "";
+    string number_limit;
+    string number_negative_limit;
     switch (tbase) {
       case t_primitive_type::TYPE_VOID:
       case t_primitive_type::TYPE_STRING:
@@ -593,7 +598,7 @@ void t_py_generator::generate_json_collection_element(
   } else if (type->is_set()) {
     to_parse = elem;
     to_act_on = tmp("_set");
-  } else if (type->is_struct()) {
+  } else if (type->is_struct_or_union()) {
     to_parse = elem;
     to_act_on = tmp("_struct");
   }
@@ -620,9 +625,9 @@ void t_py_generator::generate_json_map_key(
   } else if (type->is_primitive_type()) {
     t_primitive_type::t_primitive tbase =
         ((t_primitive_type*)type)->primitive_type();
-    string conversion_function = "";
-    string number_limit = "";
-    string number_negative_limit = "";
+    string conversion_function;
+    string number_limit;
+    string number_negative_limit;
     bool generate_assignment = true;
     switch (tbase) {
       case t_primitive_type::TYPE_STRING:
@@ -862,7 +867,7 @@ string t_py_generator::rename_reserved_keywords(const string& value) {
  */
 string t_py_generator::render_includes() {
   const vector<t_program*>& includes = program_->get_includes_for_codegen();
-  string result = "";
+  string result;
   for (size_t i = 0; i < includes.size(); ++i) {
     result += "import " + get_real_py_module(includes[i]) + ".ttypes\n";
   }
@@ -1039,7 +1044,7 @@ void t_py_generator::generate_typedef(const t_typedef* ttypedef) {
   if (const auto* adapter = get_py_adapter(type)) {
     f_types_ << varname << " = " << *adapter << ".Type" << endl;
   } else if (
-      type->is_typedef() || type->is_enum() || type->is_struct() ||
+      type->is_typedef() || type->is_enum() || type->is_struct_or_union() ||
       type->is_exception()) {
     f_types_ << varname << " = " << type_name(type) << endl;
   } else {
@@ -1068,38 +1073,46 @@ void t_py_generator::generate_typedef(const t_typedef* ttypedef) {
  * @param tenum The enumeration
  */
 void t_py_generator::generate_enum(const t_enum* tenum) {
-  std::ostringstream to_string_mapping, from_string_mapping;
+  std::ostringstream names_list, values_list;
 
-  f_types_ << "class " << rename_reserved_keywords(tenum->get_name()) << ":"
-           << endl;
+  string name = rename_reserved_keywords(tenum->get_name());
+
+  f_types_ << "class " << name << ":" << endl;
 
   indent_up();
   generate_python_docstring(f_types_, tenum);
 
-  to_string_mapping << indent() << "_VALUES_TO_NAMES = {" << endl;
-  from_string_mapping << indent() << "_NAMES_TO_VALUES = {" << endl;
+  // Make Pylint not blow up on access of enum members
+  f_types_ << indent()
+           << "def __getattr__(self, name): raise AttributeError(name)" << endl;
+
+  names_list << "(" << endl;
+  values_list << "(" << endl;
 
   vector<t_enum_value*> constants = tenum->get_enum_values();
   vector<t_enum_value*>::iterator c_iter;
   for (c_iter = constants.begin(); c_iter != constants.end(); ++c_iter) {
     int32_t value = (*c_iter)->get_value();
 
-    f_types_ << indent() << rename_reserved_keywords((*c_iter)->get_name())
-             << " = " << value << endl;
-
-    // Dictionaries to/from string names of enums
-    to_string_mapping << indent() << indent() << value << ": \""
-                      << (*c_iter)->get_name() << "\"," << endl;
-    from_string_mapping << indent() << indent() << '"' << (*c_iter)->get_name()
-                        << "\": " << value << ',' << endl;
+    // Build up lists of values and names to avoid large dict literals
+    names_list << indent(2) << "\"" << (*c_iter)->get_name() << "\"," << endl;
+    values_list << indent(2) << value << "," << endl;
   }
-  to_string_mapping << indent() << "}" << endl;
-  from_string_mapping << indent() << "}" << endl;
+  names_list << ")";
+  values_list << indent() << ")";
+
+  f_types_ << endl;
+  f_types_ << indent() << "_NAMES_TO_VALUES = dict(zip(" << names_list.str()
+           << "," << endl
+           << values_list.str() << "))" << endl;
+  f_types_ << indent() << "_VALUES_TO_NAMES = {}" << endl;
 
   indent_down();
   f_types_ << endl;
-  f_types_ << to_string_mapping.str() << endl
-           << from_string_mapping.str() << endl;
+  f_types_ << "for k, v in " << name << "._NAMES_TO_VALUES.items():" << endl
+           << indent(2) << "setattr(" << name << ", k, v)" << endl
+           << indent(2) << name << "._VALUES_TO_NAMES[v] = k" << endl
+           << endl;
 }
 
 /**
@@ -1136,7 +1149,7 @@ string t_py_generator::render_string(const string& value) {
 
   std::ostringstream out;
   // If string contains multiple lines, then wrap it in triple quotes """
-  std::string wrap(escaped.find("\n") == std::string::npos ? "\"" : R"(""")");
+  std::string wrap(escaped.find('\n') == std::string::npos ? "\"" : R"(""")");
   out << wrap << escaped << wrap;
   return out.str();
 }
@@ -1184,7 +1197,7 @@ string t_py_generator::render_const_value(
     }
   } else if (type->is_enum()) {
     indent(out) << value->get_integer();
-  } else if (type->is_struct() || type->is_exception()) {
+  } else if (type->is_struct_or_union() || type->is_exception()) {
     out << rename_reserved_keywords(type_name(type)) << "(**{" << endl;
     indent_up();
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
@@ -1692,7 +1705,7 @@ void t_py_generator::generate_py_annotations(
 
   indent(out) << rename_reserved_keywords(tstruct->get_name())
               << ".thrift_struct_annotations = {" << endl;
-  generate_py_annotation_dict(out, tstruct->annotations());
+  generate_py_annotation_dict(out, tstruct->unstructured_annotations());
   indent(out) << "}" << endl;
 
   indent(out) << rename_reserved_keywords(tstruct->get_name())
@@ -1702,11 +1715,11 @@ void t_py_generator::generate_py_annotations(
   for (m_iter = sorted_members.begin(); m_iter != sorted_members.end();
        ++m_iter) {
     const t_field* field = *m_iter;
-    if (field->annotations().empty()) {
+    if (field->unstructured_annotations().empty()) {
       continue;
     }
     indent(out) << field->get_key() << ": {" << endl;
-    generate_py_annotation_dict(out, field->annotations());
+    generate_py_annotation_dict(out, field->unstructured_annotations());
     indent(out) << "}," << endl;
   }
   indent_down();
@@ -2312,10 +2325,10 @@ void t_py_generator::generate_py_converter_helpers(
 void t_py_generator::generate_service_interface(
     const t_service* tservice, bool with_context) {
   string iface_prefix = with_context ? "Context" : "";
-  string extends = "";
-  string extends_if = "";
+  string extends;
+  string extends_if;
   if (tservice->get_extends() != nullptr) {
-    extends = type_name(tservice->get_extends());
+    extends = service_name(tservice->get_extends());
     extends_if = "(" + extends + "." + iface_prefix + "Iface)";
   }
 
@@ -2323,9 +2336,10 @@ void t_py_generator::generate_service_interface(
              << endl;
   indent_up();
   generate_python_docstring(f_service_, tservice);
-  if (!tservice->annotations().empty()) {
+  if (!tservice->unstructured_annotations().empty()) {
     f_service_ << indent() << "annotations = {" << endl;
-    generate_py_annotation_dict(f_service_, tservice->annotations());
+    generate_py_annotation_dict(
+        f_service_, tservice->unstructured_annotations());
     f_service_ << indent() << "}" << endl << endl;
   }
   std::string service_priority = get_priority(tservice);
@@ -2378,10 +2392,10 @@ void t_py_generator::generate_service_interface(
  * @param tservice The service to generate a server for.
  */
 void t_py_generator::generate_service_client(const t_service* tservice) {
-  string extends = "";
-  string extends_client = "";
+  string extends;
+  string extends_client;
   if (tservice->get_extends() != nullptr) {
-    extends = type_name(tservice->get_extends());
+    extends = service_name(tservice->get_extends());
     extends_client = extends + ".Client, ";
   }
 
@@ -2924,10 +2938,10 @@ void t_py_generator::generate_service_server(
   // Generate the dispatch methods
   const auto& functions = get_functions(tservice);
 
-  string extends = "";
-  string extends_processor = "";
+  string extends;
+  string extends_processor;
   if (tservice->get_extends() != nullptr) {
-    extends = type_name(tservice->get_extends());
+    extends = service_name(tservice->get_extends());
     extends_processor = extends + "." + class_prefix + "Processor, ";
   }
 
@@ -3076,7 +3090,7 @@ void t_py_generator::generate_process_function(
     string handler =
         "self._handler." + rename_reserved_keywords(tfunction->get_name());
 
-    string args_list = "";
+    string args_list;
     bool first = true;
     if (with_context) {
       args_list += "handler_ctx";
@@ -3233,7 +3247,7 @@ void t_py_generator::generate_deserialize_field(
 
   string name = prefix + rename_reserved_keywords(tfield->get_name());
 
-  if (type->is_struct() || type->is_exception()) {
+  if (type->is_struct_or_union() || type->is_exception()) {
     generate_deserialize_struct(out, (t_struct*)type, name);
   } else if (type->is_container()) {
     generate_deserialize_container(out, type, name);
@@ -3459,7 +3473,7 @@ void t_py_generator::generate_serialize_field(
     indent(out) << name << " = " << *adapter << ".to_thrift(" << real_name
                 << ")" << endl;
   }
-  if (type->is_struct() || type->is_exception()) {
+  if (type->is_struct_or_union() || type->is_exception()) {
     generate_serialize_struct(out, (t_struct*)type, name);
   } else if (type->is_container()) {
     generate_serialize_container(out, type, name);
@@ -3762,7 +3776,7 @@ string t_py_generator::function_signature_if(
  * Renders a field list
  */
 string t_py_generator::argument_list(const t_paramlist& tparamlist) {
-  string result = "";
+  string result;
 
   const vector<t_field*>& fields = tparamlist.get_members();
   vector<t_field*>::const_iterator f_iter;
@@ -3781,10 +3795,6 @@ string t_py_generator::argument_list(const t_paramlist& tparamlist) {
 
 string t_py_generator::type_name(const t_type* ttype) {
   const t_program* program = ttype->program();
-  if (ttype->is_service()) {
-    return get_real_py_module(program) + "." +
-        rename_reserved_keywords(ttype->get_name());
-  }
   if (program != nullptr && program != program_ &&
       !program_->includes().empty()) {
     return get_real_py_module(program) + ".ttypes." +
@@ -3825,7 +3835,7 @@ string t_py_generator::type_to_enum(const t_type* type) {
     }
   } else if (type->is_enum()) {
     return "TType.I32";
-  } else if (type->is_struct() || type->is_exception()) {
+  } else if (type->is_struct_or_union() || type->is_exception()) {
     return "TType.STRUCT";
   } else if (type->is_map()) {
     return "TType.MAP";
@@ -3854,7 +3864,7 @@ string t_py_generator::type_to_spec_args(const t_type* ttype) {
     return "None";
   } else if (ttype->is_enum()) {
     return type_name(ttype);
-  } else if (ttype->is_struct()) {
+  } else if (ttype->is_struct_or_union()) {
     string ret = "[" + type_name(ttype) + ", " + type_name(ttype) +
         ".thrift_spec, " + (((t_struct*)ttype)->is_union() ? "True" : "False");
     if (adapter) {
@@ -3895,7 +3905,7 @@ std::string t_py_generator::get_priority(
           .get_enum_value()
           ->name();
     }
-    return obj->get_annotation("priority", &def);
+    return obj->get_unstructured_annotation("priority", &def);
   }
   return def;
 }

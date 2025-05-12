@@ -52,27 +52,29 @@ class ThriftEnumWrapper(int):
 all_structs = []
 UTF8STRINGS = bool(0) or sys.version_info.major >= 3
 
-__all__ = ['UTF8STRINGS', 'RefType', 'EnumUnderlyingType', 'Name', 'Type', 'Ref', 'Lazy', 'DisableLazyChecksum', 'Adapter', 'PackIsset', 'MinimizePadding', 'ScopedEnumAsUnionType', 'FieldInterceptor', 'UseOpEncode', 'EnumType', 'Frozen2Exclude', 'Frozen2RequiresCompleteContainerParams', 'ProcessInEbThreadUnsafe', 'RuntimeAnnotation', 'UseCursorSerialization', 'GenerateDeprecatedHeaderClientMethods', 'AllowLegacyNonOptionalRef', 'DeprecatedTerseWrite', 'AllowLegacyDeprecatedTerseWritesRef']
+__all__ = ['UTF8STRINGS', 'RefType', 'EnumUnderlyingType', 'Name', 'Type', 'Ref', 'Lazy', 'DisableLazyChecksum', 'Adapter', 'PackIsset', 'MinimizePadding', 'ScopedEnumAsUnionType', 'FieldInterceptor', 'UseOpEncode', 'EnumType', 'Frozen2Exclude', 'Frozen2RequiresCompleteContainerParams', 'ProcessInEbThreadUnsafe', 'RuntimeAnnotation', 'UseCursorSerialization', 'GenerateDeprecatedHeaderClientMethods', 'AllowLegacyNonOptionalRef', 'DeprecatedTerseWrite', 'AllowLegacyDeprecatedTerseWritesRef', 'EnableCustomTypeOrdering', 'GenerateServiceMethodDecorator']
 
 class RefType:
   r"""
   Optional, defaults to Unique
   """
-  Unique = 0
-  Shared = 1
-  SharedMutable = 2
+  def __getattr__(self, name): raise AttributeError(name)
 
-  _VALUES_TO_NAMES = {
-    0: "Unique",
-    1: "Shared",
-    2: "SharedMutable",
-  }
+  _NAMES_TO_VALUES = dict(zip((
+    "Unique",
+    "Shared",
+    "SharedMutable",
+),
+(
+    0,
+    1,
+    2,
+  )))
+  _VALUES_TO_NAMES = {}
 
-  _NAMES_TO_VALUES = {
-    "Unique": 0,
-    "Shared": 1,
-    "SharedMutable": 2,
-  }
+for k, v in RefType._NAMES_TO_VALUES.items():
+    setattr(RefType, k, v)
+    RefType._VALUES_TO_NAMES[v] = k
 
 class EnumUnderlyingType:
   r"""
@@ -80,27 +82,27 @@ class EnumUnderlyingType:
   underlying type for signed 32 bit integer.
   64-bit is not supported to avoid truncation since enums are sent as 32-bit integers over the wire.
   """
-  I8 = 0
-  U8 = 1
-  I16 = 2
-  U16 = 3
-  U32 = 4
+  def __getattr__(self, name): raise AttributeError(name)
 
-  _VALUES_TO_NAMES = {
-    0: "I8",
-    1: "U8",
-    2: "I16",
-    3: "U16",
-    4: "U32",
-  }
+  _NAMES_TO_VALUES = dict(zip((
+    "I8",
+    "U8",
+    "I16",
+    "U16",
+    "U32",
+),
+(
+    0,
+    1,
+    2,
+    3,
+    4,
+  )))
+  _VALUES_TO_NAMES = {}
 
-  _NAMES_TO_VALUES = {
-    "I8": 0,
-    "U8": 1,
-    "I16": 2,
-    "U16": 3,
-    "U32": 4,
-  }
+for k, v in EnumUnderlyingType._NAMES_TO_VALUES.items():
+    setattr(EnumUnderlyingType, k, v)
+    EnumUnderlyingType._VALUES_TO_NAMES[v] = k
 
 class Name:
   r"""
@@ -2658,6 +2660,212 @@ class AllowLegacyDeprecatedTerseWritesRef:
   def _to_py_deprecated(self):
     return self
 
+class EnableCustomTypeOrdering:
+  r"""
+  If there are custom types in thrift structure (e.g., `std::unordered_map` field),
+  We won't define `operator<` automatically (unless URI exists, but that's about
+  to change). Note that `operator<` is always declared.
+  This annotation ensures the `operator<` is always defined. For types that
+  don't have `operator<`, such as `std::unordered_map`, we will convert it to
+  a sorted `std::vector<pair<K*, V*>>` to do the comparison.
+  """
+
+  thrift_spec = None
+  thrift_field_annotations = None
+  thrift_struct_annotations = None
+  @staticmethod
+  def isUnion():
+    return False
+
+  def read(self, iprot):
+    if (isinstance(iprot, TBinaryProtocol.TBinaryProtocolAccelerated) or (isinstance(iprot, THeaderProtocol.THeaderProtocolAccelerate) and iprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_BINARY_PROTOCOL)) and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastproto is not None:
+      fastproto.decode(self, iprot.trans, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=0)
+      return
+    if (isinstance(iprot, TCompactProtocol.TCompactProtocolAccelerated) or (isinstance(iprot, THeaderProtocol.THeaderProtocolAccelerate) and iprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_COMPACT_PROTOCOL)) and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastproto is not None:
+      fastproto.decode(self, iprot.trans, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=2)
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if (isinstance(oprot, TBinaryProtocol.TBinaryProtocolAccelerated) or (isinstance(oprot, THeaderProtocol.THeaderProtocolAccelerate) and oprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_BINARY_PROTOCOL)) and self.thrift_spec is not None and fastproto is not None:
+      oprot.trans.write(fastproto.encode(self, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=0))
+      return
+    if (isinstance(oprot, TCompactProtocol.TCompactProtocolAccelerated) or (isinstance(oprot, THeaderProtocol.THeaderProtocolAccelerate) and oprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_COMPACT_PROTOCOL)) and self.thrift_spec is not None and fastproto is not None:
+      oprot.trans.write(fastproto.encode(self, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=2))
+      return
+    oprot.writeStructBegin('EnableCustomTypeOrdering')
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def readFromJson(self, json, is_text=True, **kwargs):
+    kwargs_copy = dict(kwargs)
+    relax_enum_validation = bool(kwargs_copy.pop('relax_enum_validation', False))
+    set_cls = kwargs_copy.pop('custom_set_cls', set)
+    dict_cls = kwargs_copy.pop('custom_dict_cls', dict)
+    wrap_enum_constants = kwargs_copy.pop('wrap_enum_constants', False)
+    if wrap_enum_constants and relax_enum_validation:
+        raise ValueError(
+            'wrap_enum_constants cannot be used together with relax_enum_validation'
+        )
+    if kwargs_copy:
+        extra_kwargs = ', '.join(kwargs_copy.keys())
+        raise ValueError(
+            'Unexpected keyword arguments: ' + extra_kwargs
+        )
+    json_obj = json
+    if is_text:
+      json_obj = loads(json)
+
+  def __repr__(self):
+    L = []
+    padding = ' ' * 4
+    return "%s(%s)" % (self.__class__.__name__, "\n" + ",\n".join(L) if L else '')
+
+  def __eq__(self, other):
+    if not isinstance(other, self.__class__):
+      return False
+
+    return self.__dict__ == other.__dict__ 
+
+  def __ne__(self, other):
+    return not (self == other)
+
+  def __dir__(self):
+    return (
+    )
+
+  __hash__ = object.__hash__
+
+  def _to_python(self):
+    import importlib
+    import thrift.python.converter
+    python_types = importlib.import_module("facebook.thrift.annotation.cpp.thrift_types")
+    return thrift.python.converter.to_python_struct(python_types.EnableCustomTypeOrdering, self)
+
+  def _to_mutable_python(self):
+    import importlib
+    import thrift.python.mutable_converter
+    python_mutable_types = importlib.import_module("facebook.thrift.annotation.cpp.thrift_mutable_types")
+    return thrift.python.mutable_converter.to_mutable_python_struct_or_union(python_mutable_types.EnableCustomTypeOrdering, self)
+
+  def _to_py3(self):
+    import importlib
+    import thrift.py3.converter
+    py3_types = importlib.import_module("facebook.thrift.annotation.cpp.types")
+    return thrift.py3.converter.to_py3_struct(py3_types.EnableCustomTypeOrdering, self)
+
+  def _to_py_deprecated(self):
+    return self
+
+class GenerateServiceMethodDecorator:
+  r"""
+  When applied to a service, this annotation will cause the thrift compiler
+  to generate the method decorator interface for the class.
+  """
+
+  thrift_spec = None
+  thrift_field_annotations = None
+  thrift_struct_annotations = None
+  @staticmethod
+  def isUnion():
+    return False
+
+  def read(self, iprot):
+    if (isinstance(iprot, TBinaryProtocol.TBinaryProtocolAccelerated) or (isinstance(iprot, THeaderProtocol.THeaderProtocolAccelerate) and iprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_BINARY_PROTOCOL)) and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastproto is not None:
+      fastproto.decode(self, iprot.trans, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=0)
+      return
+    if (isinstance(iprot, TCompactProtocol.TCompactProtocolAccelerated) or (isinstance(iprot, THeaderProtocol.THeaderProtocolAccelerate) and iprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_COMPACT_PROTOCOL)) and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastproto is not None:
+      fastproto.decode(self, iprot.trans, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=2)
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if (isinstance(oprot, TBinaryProtocol.TBinaryProtocolAccelerated) or (isinstance(oprot, THeaderProtocol.THeaderProtocolAccelerate) and oprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_BINARY_PROTOCOL)) and self.thrift_spec is not None and fastproto is not None:
+      oprot.trans.write(fastproto.encode(self, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=0))
+      return
+    if (isinstance(oprot, TCompactProtocol.TCompactProtocolAccelerated) or (isinstance(oprot, THeaderProtocol.THeaderProtocolAccelerate) and oprot.get_protocol_id() == THeaderProtocol.THeaderProtocol.T_COMPACT_PROTOCOL)) and self.thrift_spec is not None and fastproto is not None:
+      oprot.trans.write(fastproto.encode(self, [self.__class__, self.thrift_spec, False], utf8strings=UTF8STRINGS, protoid=2))
+      return
+    oprot.writeStructBegin('GenerateServiceMethodDecorator')
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def readFromJson(self, json, is_text=True, **kwargs):
+    kwargs_copy = dict(kwargs)
+    relax_enum_validation = bool(kwargs_copy.pop('relax_enum_validation', False))
+    set_cls = kwargs_copy.pop('custom_set_cls', set)
+    dict_cls = kwargs_copy.pop('custom_dict_cls', dict)
+    wrap_enum_constants = kwargs_copy.pop('wrap_enum_constants', False)
+    if wrap_enum_constants and relax_enum_validation:
+        raise ValueError(
+            'wrap_enum_constants cannot be used together with relax_enum_validation'
+        )
+    if kwargs_copy:
+        extra_kwargs = ', '.join(kwargs_copy.keys())
+        raise ValueError(
+            'Unexpected keyword arguments: ' + extra_kwargs
+        )
+    json_obj = json
+    if is_text:
+      json_obj = loads(json)
+
+  def __repr__(self):
+    L = []
+    padding = ' ' * 4
+    return "%s(%s)" % (self.__class__.__name__, "\n" + ",\n".join(L) if L else '')
+
+  def __eq__(self, other):
+    if not isinstance(other, self.__class__):
+      return False
+
+    return self.__dict__ == other.__dict__ 
+
+  def __ne__(self, other):
+    return not (self == other)
+
+  def __dir__(self):
+    return (
+    )
+
+  __hash__ = object.__hash__
+
+  def _to_python(self):
+    import importlib
+    import thrift.python.converter
+    python_types = importlib.import_module("facebook.thrift.annotation.cpp.thrift_types")
+    return thrift.python.converter.to_python_struct(python_types.GenerateServiceMethodDecorator, self)
+
+  def _to_mutable_python(self):
+    import importlib
+    import thrift.python.mutable_converter
+    python_mutable_types = importlib.import_module("facebook.thrift.annotation.cpp.thrift_mutable_types")
+    return thrift.python.mutable_converter.to_mutable_python_struct_or_union(python_mutable_types.GenerateServiceMethodDecorator, self)
+
+  def _to_py3(self):
+    import importlib
+    import thrift.py3.converter
+    py3_types = importlib.import_module("facebook.thrift.annotation.cpp.types")
+    return thrift.py3.converter.to_py3_struct(py3_types.GenerateServiceMethodDecorator, self)
+
+  def _to_py_deprecated(self):
+    return self
+
 all_structs.append(Name)
 Name.thrift_spec = tuple(__EXPAND_THRIFT_SPEC((
   (1, TType.STRING, 'value', True, None, 2, ), # 1
@@ -2967,6 +3175,24 @@ AllowLegacyDeprecatedTerseWritesRef.thrift_spec = tuple(__EXPAND_THRIFT_SPEC((
 AllowLegacyDeprecatedTerseWritesRef.thrift_struct_annotations = {
 }
 AllowLegacyDeprecatedTerseWritesRef.thrift_field_annotations = {
+}
+
+all_structs.append(EnableCustomTypeOrdering)
+EnableCustomTypeOrdering.thrift_spec = tuple(__EXPAND_THRIFT_SPEC((
+)))
+
+EnableCustomTypeOrdering.thrift_struct_annotations = {
+}
+EnableCustomTypeOrdering.thrift_field_annotations = {
+}
+
+all_structs.append(GenerateServiceMethodDecorator)
+GenerateServiceMethodDecorator.thrift_spec = tuple(__EXPAND_THRIFT_SPEC((
+)))
+
+GenerateServiceMethodDecorator.thrift_struct_annotations = {
+}
+GenerateServiceMethodDecorator.thrift_field_annotations = {
 }
 
 fix_spec(all_structs)

@@ -21,6 +21,10 @@ impl ToOxidized for CeVisibility {
             CeVisibility::Private(v) => O::Vprivate(v.to_oxidized()),
             CeVisibility::Protected(v) => O::Vprotected(v.to_oxidized()),
             CeVisibility::Internal(v) => O::Vinternal(v.to_oxidized()),
+            CeVisibility::ProtectedInternal(ty, m) => O::VprotectedInternal {
+                class_id: ty.to_oxidized(),
+                module__: m.to_oxidized(),
+            },
         }
     }
 }
@@ -95,8 +99,8 @@ fn oxidize_shape_field_name<P: Pos>(
     name: TshapeFieldName,
     field_name_pos: ShapeFieldNamePos<P>,
 ) -> o::typing_defs::TshapeFieldName {
-    use o::typing_defs::TshapeFieldName as O;
     use ShapeFieldNamePos as SfnPos;
+    use o::typing_defs::TshapeFieldName as O;
     match (name, field_name_pos) {
         (TshapeFieldName::TSFregexGroup(x), SfnPos::Simple(p)) => {
             O::TSFregexGroup(o::typing_defs::PosString(p.to_oxidized(), x.to_oxidized()))
@@ -162,9 +166,7 @@ impl<R: Reason> ToOxidized for Ty_<R> {
                     fields: shape_fields,
                 })
             }
-            Ty_::Tgeneric(box (name, tyl)) => {
-                typing_defs::Ty_::Tgeneric(name.to_oxidized(), tyl.to_oxidized())
-            }
+            Ty_::Tgeneric(name) => typing_defs::Ty_::Tgeneric(name.to_oxidized()),
             Ty_::Tunion(x) => typing_defs::Ty_::Tunion(x.to_oxidized()),
             Ty_::Tintersection(x) => typing_defs::Ty_::Tintersection(x.to_oxidized()),
             Ty_::TvecOrDict(box (tk, tv)) => {

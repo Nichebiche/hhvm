@@ -27,6 +27,13 @@ namespace apache::thrift::compiler {
 struct deprecated_annotation_value {
   source_range src_range;
   std::string value;
+
+  enum class origin {
+    unknown,
+    lowered_unstructured,
+    lowered_cpp_type,
+    unstructured,
+  } from;
 };
 
 using deprecated_annotation_map =
@@ -45,24 +52,28 @@ class t_node {
   void set_src_range(const source_range& r) { range_ = r; }
 
   // Returns the map of deprecated annotations associated with this node.
-  const deprecated_annotation_map& annotations() const { return annotations_; }
+  const deprecated_annotation_map& unstructured_annotations() const {
+    return annotations_;
+  }
 
   // Returns true if there exists an annotation with the given name.
-  bool has_annotation(const std::vector<std::string_view>& names) const {
-    return find_annotation_or_null(names) != nullptr;
+  bool has_unstructured_annotation(
+      const std::vector<std::string_view>& names) const {
+    return find_unstructured_annotation_or_null(names) != nullptr;
   }
-  bool has_annotation(const char* name) const {
-    return has_annotation({std::string_view(name)});
+  bool has_unstructured_annotation(const char* name) const {
+    return has_unstructured_annotation({std::string_view(name)});
   }
 
   // Returns the pointer to the value of the first annotation found with the
   // given name.
   //
   // If not found returns nullptr.
-  const std::string* find_annotation_or_null(
+  const std::string* find_unstructured_annotation_or_null(
       const std::vector<std::string_view>& names) const;
-  const std::string* find_annotation_or_null(const char* name) const {
-    return find_annotation_or_null({std::string_view(name)});
+  const std::string* find_unstructured_annotation_or_null(
+      const char* name) const {
+    return find_unstructured_annotation_or_null({std::string_view(name)});
   }
 
   // Returns the value of an annotation with the given name.
@@ -71,45 +82,48 @@ class t_node {
   template <
       typename T = std::vector<std::string_view>,
       typename D = const std::string*>
-  decltype(auto) get_annotation(
+  decltype(auto) get_unstructured_annotation(
       const T& names, D&& default_value = nullptr) const {
-    return annotation_or(
-        find_annotation_or_null(names), std::forward<D>(default_value));
+    return unstructured_annotation_or(
+        find_unstructured_annotation_or_null(names),
+        std::forward<D>(default_value));
   }
 
   void reset_annotations(deprecated_annotation_map annotations) {
     annotations_ = std::move(annotations);
   }
 
-  void set_annotation(
+  void set_unstructured_annotation(
       const std::string& key,
       const std::string& value = {},
-      const source_range& range = {}) {
-    annotations_[key] = {range, value};
+      const source_range& range = {},
+      deprecated_annotation_value::origin origin = {}) {
+    annotations_[key] = {range, value, origin};
   }
 
  protected:
   // t_node is abstract.
   t_node() = default;
 
-  static const std::string kEmptyString;
+  static const std::string& emptyString();
 
   template <typename D>
-  static std::string annotation_or(const std::string* val, D&& def) {
+  static std::string unstructured_annotation_or(
+      const std::string* val, D&& def) {
     if (val != nullptr) {
       return *val;
     }
     return std::forward<D>(def);
   }
 
-  static const std::string& annotation_or(
+  static const std::string& unstructured_annotation_or(
       const std::string* val, const std::string* def) {
-    return val ? *val : (def ? *def : kEmptyString);
+    return val ? *val : (def ? *def : emptyString());
   }
 
-  static const std::string& annotation_or(
+  static const std::string& unstructured_annotation_or(
       const std::string* val, std::string* def) {
-    return val ? *val : (def ? *def : kEmptyString);
+    return val ? *val : (def ? *def : emptyString());
   }
 
  private:

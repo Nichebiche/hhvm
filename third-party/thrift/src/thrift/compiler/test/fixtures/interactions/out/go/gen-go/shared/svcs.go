@@ -9,6 +9,7 @@ package shared
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,16 +19,16 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type InteractLocally interface {
 }
 
 type InteractLocallyClientInterface interface {
-    thrift.ClientInterface
-    InteractLocally
+    io.Closer
 }
 
 type InteractLocallyClient struct {
@@ -42,8 +43,12 @@ func NewInteractLocallyChannelClient(channel thrift.RequestChannel) *InteractLoc
     }
 }
 
-func NewInteractLocallyClient(prot thrift.Protocol) *InteractLocallyClient {
-    return NewInteractLocallyChannelClient(thrift.NewSerialChannel(prot))
+func NewInteractLocallyClient(prot thrift.DO_NOT_USE_ChannelWrapper) *InteractLocallyClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewInteractLocallyChannelClient(channel)
 }
 
 func (c *InteractLocallyClient) Close() error {
@@ -54,7 +59,7 @@ func (c *InteractLocallyClient) Close() error {
 type InteractLocallyProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            InteractLocally
+    handler              InteractLocally
 }
 
 func NewInteractLocallyProcessor(handler InteractLocally) *InteractLocallyProcessor {

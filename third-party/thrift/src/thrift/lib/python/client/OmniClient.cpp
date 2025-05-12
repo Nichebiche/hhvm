@@ -99,8 +99,8 @@ folly::Try<folly::IOBuf> decode_stream_exception(folly::exception_wrapper ew) {
         auto& payload = err.encoded;
         DCHECK_EQ(payload.metadata.payloadMetadata().has_value(), true);
         DCHECK_EQ(
-            payload.metadata.payloadMetadata()->getType(),
-            PayloadMetadata::Type::exceptionMetadata);
+            folly::to_underlying(payload.metadata.payloadMetadata()->getType()),
+            folly::to_underlying(PayloadMetadata::Type::exceptionMetadata));
         auto& exceptionMetadataBase =
             payload.metadata.payloadMetadata()->get_exceptionMetadata();
         if (auto exceptionMetadataRef = exceptionMetadataBase.metadata()) {
@@ -429,7 +429,9 @@ void OmniClient::sendImpl(
           std::move(serializedRequest),
           std::move(header),
           createSinkClientCallback(toRequestClientCallbackPtr(
-              std::move(callback), std::move(callbackContext))));
+              std::move(callback), std::move(callbackContext))),
+          // TODO(ezou) does not support framework metadata yet, perhaps never
+          nullptr);
       break;
     case RpcKind::SINGLE_REQUEST_NO_RESPONSE:
       callbackContext.oneWay = true;
@@ -439,7 +441,8 @@ void OmniClient::sendImpl(
           std::move(serializedRequest),
           std::move(header),
           toRequestClientCallbackPtr(
-              std::move(callback), std::move(callbackContext)));
+              std::move(callback), std::move(callbackContext)),
+          nullptr);
       break;
     case RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE:
       channel_->sendRequestAsync<RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE>(
@@ -448,7 +451,8 @@ void OmniClient::sendImpl(
           std::move(serializedRequest),
           std::move(header),
           toRequestClientCallbackPtr(
-              std::move(callback), std::move(callbackContext)));
+              std::move(callback), std::move(callbackContext)),
+          nullptr);
       break;
     case RpcKind::SINGLE_REQUEST_STREAMING_RESPONSE:
       BufferOptions bufferOptions = rpcOptions.getBufferOptions();
@@ -460,7 +464,8 @@ void OmniClient::sendImpl(
           createStreamClientCallback(
               toRequestClientCallbackPtr(
                   std::move(callback), std::move(callbackContext)),
-              bufferOptions));
+              bufferOptions),
+          nullptr);
       break;
   }
 }

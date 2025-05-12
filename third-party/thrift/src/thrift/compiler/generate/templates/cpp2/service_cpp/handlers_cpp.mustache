@@ -15,6 +15,7 @@
   limitations under the License.
 
 }}
+{{#import "types/schema_association" as schema_association}}
 std::unique_ptr<apache::thrift::AsyncProcessor> {{> service_common/service_class_name}}::getProcessor() {
   return std::make_unique<{{service:qualified_name}}AsyncProcessor>(this);
 }
@@ -29,14 +30,18 @@ std::optional<apache::thrift::schema::DefinitionsSchema> {{> service_common/serv
 {{#program}}
 {{#program:has_schema?}}
   std::optional<apache::thrift::schema::DefinitionsSchema> ret = schema::DefinitionsSchema{};
-  ret->schema = ::apache::thrift::SchemaRegistry::mergeSchemas(::{{service:qualified_namespace}}::{{program:name}}_constants::{{program:schema_name}}_includes());
-  ret->definitions = { {"{{service:definition_key}}", {{service:definition_key_length}}} };
+  ret->schema = ::apache::thrift::schema::detail::mergeSchemas(::{{service:qualified_namespace}}::{{program:name}}_constants::{{program:schema_name}}_includes());
+  ret->definitions = { {"{{service:self.definition_key.buffer}}", {{service:self.definition_key.length}}} };
   return ret;
 {{/program:has_schema?}}
 {{^program:has_schema?}}
   return {};
 {{/program:has_schema?}}
 {{/program}}
+}
+
+std::vector<folly::not_null<const apache::thrift::schema::ServiceNode*>> {{> service_common/service_class_name}}::getServiceSchemaNodes() {
+  return {&apache::thrift::SchemaRegistry::get().getNode<{{service:qualified_name}}>()};
 }
 #endif
 {{/service:has_service_schema}}
@@ -81,3 +86,7 @@ void {{service:cpp_name}}AsyncProcessor::executeRequest(apache::thrift::ServerRe
 {{> service_cpp/interaction_constructor_map}}
 {{/service:interactions?}}
 } // namespace {{service:qualified_namespace}}
+
+namespace apache::thrift::detail {
+{{#partial schema_association.definition node=service:self}}
+}

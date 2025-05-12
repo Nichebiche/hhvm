@@ -315,8 +315,7 @@ let empty_expand_env =
     visibility_behavior = default_visibility_behaviour;
     make_internal_opaque = true;
     substs = SMap.empty;
-    this_ty =
-      mk (Reason.none, Tgeneric (Naming_special_names.Typehints.this, []));
+    this_ty = mk (Reason.none, Tgeneric Naming_special_names.Typehints.this);
     on_error = None;
     wildcard_action = Wildcard_fresh_tyvar;
     ish_weakening = false;
@@ -395,9 +394,8 @@ let is_any t =
   | _ -> false
 
 let is_generic_equal_to n t =
-  (* TODO(T69551141) handle type arguments *)
   match get_node t with
-  | Tgeneric (n', _tyargs) when String.equal n n' -> true
+  | Tgeneric n' when String.equal n n' -> true
   | _ -> false
 
 let is_prim p t =
@@ -452,7 +450,6 @@ let is_union_or_inter_type (ty : locl_ty) =
   | Tdependent _
   | Tgeneric _
   | Tclass _
-  | Tunapplied_alias _
   | Tvec_or_dict _
   | Tlabel _
   | Taccess _
@@ -480,8 +477,15 @@ let this = Local_id.make_scoped "$this"
  * codebase. *)
 let make_tany () = Tany TanySentinel.value
 
-let arity_min ft : int =
-  let a = List.count ~f:(fun fp -> not (get_fp_is_optional fp)) ft.ft_params in
+(* Number of required parameters. Does not include optional, variadic, or
+ * type-splat parameters
+ *)
+let arity_required ft : int =
+  let a =
+    List.count
+      ~f:(fun fp -> (not (get_fp_is_optional fp)) && not (get_fp_splat fp))
+      ft.ft_params
+  in
   if get_ft_variadic ft then
     a - 1
   else
@@ -542,7 +546,7 @@ let rec is_denotable ty =
     is_denotable ft_ret
     && List.for_all ft_params ~f:(fun { fp_type; _ } -> is_denotable fp_type)
   | Toption ty -> is_denotable ty
-  | Tgeneric (nm, _) ->
+  | Tgeneric nm ->
     not
       (DependentKind.is_generic_dep_ty nm
       || String.is_substring ~substring:"#" nm)
@@ -553,8 +557,7 @@ let rec is_denotable ty =
   | Tany _
   | Tvar _
   | Tdependent _
-  | Tlabel _
-  | Tunapplied_alias _ ->
+  | Tlabel _ ->
     false
 
 and tuple_extra_is_denotable e =
@@ -648,7 +651,8 @@ let get_ce_const ce = ClassElt.is_const ce.ce_flags
 
 let get_ce_lateinit ce = ClassElt.has_lateinit ce.ce_flags
 
-let get_ce_readonly_prop ce = ClassElt.is_readonly_prop ce.ce_flags
+let get_ce_readonly_prop_or_needs_concrete ce =
+  ClassElt.is_readonly_prop_or_needs_concrete ce.ce_flags
 
 let get_ce_dynamicallycallable ce = ClassElt.is_dynamicallycallable ce.ce_flags
 
@@ -679,31 +683,24 @@ let class_elt_is_private_not_lsb (elt : class_elt) : bool =
   | Vprivate _ -> not (get_ce_lsb elt)
   | Vprotected _
   | Vpublic
-  | Vinternal _ ->
+  | Vinternal _
+  | Vprotected_internal _ ->
     false
 
 let class_elt_is_private_or_protected_not_lsb elt =
   match elt.ce_visibility with
   | Vprivate _
   | Vprotected _
+  | Vprotected_internal _
     when get_ce_lsb elt ->
     false
   | Vprivate _
-  | Vprotected _ ->
+  | Vprotected _
+  | Vprotected_internal _ ->
     true
   | Vpublic
   | Vinternal _ ->
     false
-
-(** Tunapplied_alias is a locl phase constructor that always stands for a higher-kinded type.
-  We use this function in cases where Tunapplied_alias appears in a context where we expect
-  a fully applied type, rather than a type constructor. Seeing Tunapplied_alias in such a context
-  always indicates a kinding error, which means that during localization, we should have
-  created Terr rather than Tunapplied_alias. Hence, this is an *internal* error, because
-  something went wrong during localization. Kind mismatches in code are reported to users
-  elsewhere. *)
-let error_Tunapplied_alias_in_illegal_context () =
-  failwith "Found Tunapplied_alias in a context where it must not occur"
 
 let is_typeconst_type_abstract tc =
   match tc.ttc_kind with

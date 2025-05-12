@@ -32,15 +32,25 @@ namespace apache::thrift {
 class ContextStack;
 
 namespace detail {
-class ContextStackInternals {
+/**
+ * Internal API for use within thrift library - users should not use this
+ * directly.
+ */
+class ContextStackUnsafeAPI {
  public:
-  static void*& contextAt(ContextStack&, size_t index);
+  explicit ContextStackUnsafeAPI(ContextStack&);
+  void*& contextAt(size_t index) const;
+  std::unique_ptr<folly::IOBuf> getInterceptorFrameworkMetadata(
+      const RpcOptions& rpcOptions);
+
+ private:
+  ContextStack& contextStack_;
 };
 } // namespace detail
 
 class ContextStack {
   friend class EventHandlerBase;
-  friend class detail::ContextStackInternals;
+  friend class detail::ContextStackUnsafeAPI;
 
  public:
   using UniquePtr =
@@ -98,6 +108,21 @@ class ContextStack {
   void handlerErrorWrapped(const folly::exception_wrapper& ew);
   void userExceptionWrapped(bool declared, const folly::exception_wrapper& ew);
 
+  void onStreamSubscribe();
+  void onStreamNext();
+  void onStreamCredit(uint32_t credits);
+  void onStreamPauseReceive();
+  void onStreamResumeReceive();
+  void handleStreamErrorWrapped(const folly::exception_wrapper& ew);
+  void onStreamFinally(details::STREAM_ENDING_TYPES endReason);
+
+  void onSinkSubscribe();
+  void onSinkNext();
+  void onSinkCancel();
+  void onSinkCredit(uint32_t credits);
+  void onSinkFinally(details::SINK_ENDING_TYPES endReason);
+  void handleSinkError(const folly::exception_wrapper& ew);
+
   void resetClientRequestContextHeader();
 
   const std::shared_ptr<std::vector<std::shared_ptr<ClientInterceptorBase>>>&
@@ -107,7 +132,8 @@ class ContextStack {
 
   [[nodiscard]] folly::Try<void> processClientInterceptorsOnRequest(
       ClientInterceptorOnRequestArguments arguments,
-      apache::thrift::transport::THeader* headers) noexcept;
+      apache::thrift::transport::THeader* headers,
+      RpcOptions& options) noexcept;
   [[nodiscard]] folly::Try<void> processClientInterceptorsOnResponse(
       const apache::thrift::transport::THeader* headers) noexcept;
 
@@ -123,6 +149,7 @@ class ContextStack {
   // "{method_name}", without the service name prefix
   const char* const methodNameUnprefixed_;
   void** serviceContexts_;
+  InterceptorFrameworkMetadataStorage clientInterceptorFrameworkMetadata_;
   // While the server-side has a Cpp2RequestContext, the client-side "fakes" it
   // with an embedded version. We can't make it nullptr because this is the API
   // used to read/write headers. The root cause of this limitation is that the
@@ -162,6 +189,9 @@ class ContextStack {
 
   detail::ClientInterceptorOnRequestStorage*
   getStorageForClientInterceptorOnRequestByIndex(std::size_t index);
+
+  std::unique_ptr<folly::IOBuf> getInterceptorFrameworkMetadata(
+      const RpcOptions& rpcOptions);
 };
 
 } // namespace apache::thrift

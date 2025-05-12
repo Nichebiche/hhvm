@@ -420,6 +420,7 @@ pub enum Hhbc {
     Await(ValueId, LocId),
     #[has_operands(none)]
     AwaitAll(Box<[LocalId]>, LocId),
+    AwaitLowPri(LocId),
     #[has_operands(none)]
     BareThis(BareThisOp, LocId),
     BitAnd([ValueId; 2], LocId),
@@ -445,6 +446,7 @@ pub enum Hhbc {
     CheckThis(LocId),
     ClassGetC(ValueId, ClassGetCMode, LocId),
     ClassGetTS(ValueId, LocId),
+    ClassGetTSWithGenerics(ValueId, LocId),
     ClassHasReifiedGenerics(ValueId, LocId),
     ClassName(ValueId, LocId),
     Clone(ValueId, LocId),
@@ -531,6 +533,7 @@ pub enum Hhbc {
     Print(ValueId, LocId),
     RaiseClassStringConversionNotice(LocId),
     RecordReifiedGeneric(ValueId, LocId),
+    ReifiedInit([ValueId; 2], LocalId, LocId),
     ResolveClass(ClassName, LocId),
     ResolveClsMethod(ValueId, MethodName, LocId),
     ResolveClsMethodD(ClassName, MethodName, LocId),
@@ -566,6 +569,7 @@ pub enum Hhbc {
     VerifyParamTypeTS(ValueId, LocalId, LocId),
     VerifyRetTypeC(ValueId, LocId),
     VerifyRetTypeTS([ValueId; 2], LocId),
+    VerifyTypeTS([ValueId; 2], LocId),
     WHResult(ValueId, LocId),
     Yield(ValueId, LocId),
     YieldK([ValueId; 2], LocId),
@@ -709,7 +713,7 @@ impl MemberOp {
         };
 
         let base_key_is_element_access = self.intermediate_ops.first().map_or_else(
-            || self.final_op.key().map_or(true, |k| k.is_element_access()),
+            || self.final_op.key().is_none_or(|k| k.is_element_access()),
             |dim| dim.key.is_element_access(),
         );
 

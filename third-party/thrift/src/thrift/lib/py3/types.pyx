@@ -25,6 +25,7 @@ from folly.cast cimport down_cast_ptr
 from folly.iobuf import IOBuf
 from types import MappingProxyType
 
+from folly cimport cFollyIsDebug
 from thrift.python.exceptions cimport GeneratedError as _fbthrift_python_GeneratedError
 from thrift.py3.serializer import deserialize, serialize
 from thrift.python.types cimport (
@@ -75,9 +76,23 @@ cdef list_lt(object first, object second):
     return len(first) < len(second)
 
 
-@cython.internal
-@cython.auto_pickle(False)
-cdef class StructMeta(type):
+class StructMeta(type):
+    def __new__(cls, name, bases, classdict):
+        # enforce no inheritance, for in-place migrated structs
+        for base in bases:
+            if (
+                base is Struct or
+                hasattr(base, '_fbthrift_allow_inheritance_DO_NOT_USE')
+                or not hasattr(base, '_FBTHRIFT__PYTHON_CLASS')
+            ):
+                continue
+            raise TypeError(
+                f"Inheritance of thrift-generated {base.__name__} from {name}"
+                " is deprecated. Please use composition."
+            )
+
+        return type.__new__(cls, name, bases, classdict)
+
     """
     We set helper functions here since they can't possibly confict with field names
     """
@@ -85,6 +100,8 @@ cdef class StructMeta(type):
     def isset(struct):
         if isinstance(struct, (_fbthrift_python_Struct, _fbthrift_python_GeneratedError, _fbthrift_python_Union)):
             return _IsSet(type(struct).__name__, _fbthrift_python_isset(struct))
+        if hasattr(struct.__class__, "_FBTHRIFT__PYTHON_CLASS"):
+            return _IsSet(type(struct).__name__, struct._fbthrift__isset())
         elif isinstance(struct, Struct):
             return (<Struct>struct)._fbthrift_isset()
         elif isinstance(struct, GeneratedError):
@@ -214,7 +231,14 @@ cdef class Struct:
     def __iter__(self):
         for i in range(self._fbthrift_get_struct_size()):
             name = self._fbthrift_get_field_name_by_index(i)
-            yield name, getattr(self, name)
+            try:
+                yield name, getattr(self, name)
+            except AttributeError:
+                if name.startswith("__"):
+                    mangled = f"_{self.__class__.__name__}{name}"
+                    yield name, getattr(self, mangled)
+                else:
+                    raise
 
     def __dir__(self):
         return dir(type(self))
@@ -267,6 +291,17 @@ cdef class Struct:
 SetMetaClass(<PyTypeObject*> Struct, <PyTypeObject*> StructMeta)
 
 
+# used by Union.fromValue to avoid matching a python `float` (64-bit) to
+# a thrift `float` (32-bit), when doing so would cause precision loss
+def _fbthrift__is_float32(double f64):
+    cdef float f32 = f64
+    return f32 == f64
+
+# use to replicate thrift-py3 rounding of `float` (32-bit) fields
+def _fbthrift__round_float32(double f64):
+    return <float> f64
+
+
 cdef class Union(Struct):
     """
     Base class for all thrift Unions
@@ -300,9 +335,20 @@ cdef class Union(Struct):
         return self.type
 
 
-@cython.internal
-@cython.auto_pickle(False)
-cdef class UnionMeta(type):
+class UnionMeta(type):
+    def __new__(cls, name, bases, classdict):
+        # enforce no inheritance, for in-place migrated exceptions
+        for base in bases:
+            if base is Union or not hasattr(base, '_FBTHRIFT__PYTHON_CLASS'):
+                continue
+            raise TypeError(
+                f"Inheritance of thrift-generated {base.__name__} from {name}"
+                " is deprecated. Please use composition."
+            )
+
+        return type.__new__(cls, name, bases, classdict)
+
+
     def __dir__(cls):
         return [
             cls._fbthrift_get_field_name_by_index(i)
@@ -630,7 +676,15 @@ cdef class Map(Container):
             return 'i{}'
         # print in sorted order for backward compatibility
         if self._child_cls._FBTHRIFT_USE_SORTED_REPR:
-            key_val = sorted(self.items(), key=lambda x: x[0])
+            try:
+                key_val = sorted(self.items(), key=lambda x: x[0])
+            except TypeError as e:  # e.g., BadEnum
+                if cFollyIsDebug:
+                    warnings.warn(
+                        f"thrift.py3.types.Map: Failed to sort map keys: {e}",
+                        RuntimeWarning,
+                    )
+                key_val = self.items()
         else:
             key_val = self.items()
         return f'i{{{", ".join(map(lambda i: f"{repr(i[0])}: {repr(i[1])}", key_val))}}}'
@@ -690,6 +744,23 @@ cdef class StructFieldsSetter:
     cdef void set_field(self, const char* name, object val) except *:
         pass
 
+# thrift-py3 drops kwargs with None value but thrift-python does not.
+# This function emulates the thrift-py3 behavior for in-place migrate
+def _fbthrift__filter_kwargs(kwargs, tuple field_names):
+    cdef list bad_kwargs = []
+    for key, val in kwargs.items():
+        if val is None and key not in field_names:
+            bad_kwargs.append(key)
+
+    for bad_key in bad_kwargs:
+        warnings.warn(
+            f"Discarding unexpected kwarg set to None: {bad_key}",
+            RuntimeWarning,
+        )
+        kwargs.pop(bad_key)
+
+    return kwargs
+
 
 cdef translate_cpp_enum_to_python(object EnumClass, int value):
     try:
@@ -698,11 +769,28 @@ cdef translate_cpp_enum_to_python(object EnumClass, int value):
         return BadEnum(EnumClass, value)
 
 
-def _is_python_struct(obj):
-    return isinstance(obj, _fbthrift_python_StructOrUnion)
+cdef _is_python_structured(obj):
+    return isinstance(obj, (_fbthrift_python_StructOrUnion, _fbthrift_python_GeneratedError))
 
-def _is_python_enum(obj):
-    return (
-        isinstance(obj, _fbthrift_python_Enum) and
-        obj.__class__.__module__.endswith(".thrift_enums")
-    )
+
+cpdef _from_python_or_raise(thrift_value, str field_name, py3_type):
+    if _is_python_structured(thrift_value):
+        thrift_value = thrift_value._to_py3()
+        if not isinstance(thrift_value, py3_type):
+            raise TypeError(
+                f"{field_name} is a thrift-python value of type {type(thrift_value) !r} "
+                f"that can not be converted to {py3_type !r}."
+            )
+        return thrift_value
+    else:
+        raise TypeError(f'{field_name} is not a {py3_type !r}.')
+
+cpdef _ensure_py3_or_raise(thrift_value, str field_name, py3_type):
+    if thrift_value is None or isinstance(thrift_value, py3_type):
+        return thrift_value
+    return _from_python_or_raise(thrift_value, field_name, py3_type)
+
+cpdef _ensure_py3_container_or_raise(thrift_value, py3_container_type):
+    if thrift_value is None or isinstance(thrift_value, py3_container_type):
+        return thrift_value
+    return py3_container_type.from_python(thrift_value)

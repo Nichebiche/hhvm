@@ -16,13 +16,9 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cassert>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include <thrift/compiler/ast/t_structured.h>
 #include <thrift/compiler/ast/t_type.h>
@@ -43,8 +39,8 @@ class t_struct : public t_structured {
   // TODO(afuller): Remove everything below this comment. It is only provided
   // for backwards compatibility.
  public:
+  bool is_struct_or_union() const override { return !is_exception(); }
   bool is_struct() const override { return !is_exception(); }
-  type get_type_value() const override { return type::t_structured; }
 
   using t_structured::clone_DO_NOT_USE;
 

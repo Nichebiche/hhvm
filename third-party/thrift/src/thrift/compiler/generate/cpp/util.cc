@@ -52,7 +52,7 @@ std::string_view value_or_empty(const std::string* value) {
 } // namespace
 
 bool is_custom_type(const t_type& type) {
-  return t_typedef::get_first_annotation_or_null(
+  return t_typedef::get_first_unstructured_annotation_or_null(
              &type,
              {
                  "cpp.template",
@@ -75,7 +75,7 @@ bool container_supports_incomplete_params(const t_type& type) {
     return false;
   }
 
-  if (t_typedef::get_first_annotation_or_null(
+  if (t_typedef::get_first_unstructured_annotation_or_null(
           &type,
           {
               "cpp.container_supports_incomplete_params",
@@ -106,7 +106,7 @@ bool container_supports_incomplete_params(const t_type& type) {
     return types;
   }();
   {
-    auto cpp_template = t_typedef::get_first_annotation_or_null(
+    auto cpp_template = t_typedef::get_first_unstructured_annotation_or_null(
         &type,
         {
             "cpp.template",
@@ -117,7 +117,7 @@ bool container_supports_incomplete_params(const t_type& type) {
     }
   }
   {
-    auto cpp_type = t_typedef::get_first_annotation_or_null(
+    auto cpp_type = t_typedef::get_first_unstructured_annotation_or_null(
         &type,
         {
             "cpp.type",
@@ -154,7 +154,7 @@ gen_dependency_graph(
     auto& deps = edges[obj];
 
     std::function<void(const t_type*, bool)> add_dependency =
-        [&](const t_type* type, bool include_structs) {
+        [&](const t_type* type, bool include_structured_types) {
           if (auto typedf = dynamic_cast<t_typedef const*>(type)) {
             // Resolve unnamed typedefs
             if (typedf->typedef_kind() != t_typedef::kind::defined) {
@@ -165,25 +165,29 @@ gen_dependency_graph(
           if (auto map = dynamic_cast<t_map const*>(type)) {
             add_dependency(
                 map->get_key_type(),
-                include_structs && !container_supports_incomplete_params(*map));
+                include_structured_types &&
+                    !container_supports_incomplete_params(*map));
             return add_dependency(
                 map->get_val_type(),
-                include_structs && !container_supports_incomplete_params(*map));
+                include_structured_types &&
+                    !container_supports_incomplete_params(*map));
           } else if (auto set = dynamic_cast<t_set const*>(type)) {
             return add_dependency(
                 set->get_elem_type(),
-                include_structs && !container_supports_incomplete_params(*set));
+                include_structured_types &&
+                    !container_supports_incomplete_params(*set));
           } else if (auto list = dynamic_cast<t_list const*>(type)) {
             return add_dependency(
                 list->get_elem_type(),
-                include_structs &&
+                include_structured_types &&
                     !container_supports_incomplete_params(*list));
           } else if (auto typedf = dynamic_cast<t_typedef const*>(type)) {
             // Transitively depend on true type if necessary, since typedefs
             // generally don't depend on their underlying types.
-            add_dependency(typedf->get_true_type(), include_structs);
-          } else if (!(dynamic_cast<t_struct const*>(type) &&
-                       (include_structs || has_dependent_adapter(*type)))) {
+            add_dependency(typedf->get_true_type(), include_structured_types);
+          } else if (!(dynamic_cast<t_structured const*>(type) &&
+                       (include_structured_types ||
+                        has_dependent_adapter(*type)))) {
             return;
           }
 
@@ -202,7 +206,7 @@ gen_dependency_graph(
       // specified.
       const auto* type = &*typedf->type();
       add_dependency(type, has_dependent_adapter(*typedf));
-    } else if (auto* strct = dynamic_cast<t_struct const*>(obj)) {
+    } else if (auto* strct = dynamic_cast<t_structured const*>(obj)) {
       // The adjacency list of a struct is the structs and typedefs named in its
       // fields.
       for (const auto& field : strct->fields()) {
@@ -228,11 +232,17 @@ gen_dependency_graph(
 
 namespace {
 
+bool enable_custom_type_ordering(const t_structured& s) {
+  return s.program() != nullptr &&
+      s.program()->inherit_annotation_or_null(s, kCppEnableCustomTypeOrdering);
+}
+
 struct is_orderable_walk_context {
-  std::unordered_set<t_type const*> pending_back_propagation;
-  std::unordered_set<t_type const*> seen;
+  const bool enableCustomTypeOrderingIfStructureHasUri;
+  std::unordered_set<t_type const*> pending_back_propagation = {};
+  std::unordered_set<t_type const*> seen = {};
   std::unordered_map<t_type const*, std::unordered_set<t_type const*>>
-      inv_graph;
+      inv_graph = {};
 };
 
 bool is_orderable_walk(
@@ -240,9 +250,9 @@ bool is_orderable_walk(
     t_type const& type,
     t_type const* prev,
     is_orderable_walk_context& context,
-    bool enabledReflection) {
+    bool forceCustomTypeOrderable) {
   const bool has_disqualifying_annotation =
-      is_custom_type(type) && !enabledReflection;
+      is_custom_type(type) && !forceCustomTypeOrderable;
   auto memo_it = memo.find(&type);
   if (memo_it != memo.end()) {
     return memo_it->second;
@@ -272,21 +282,22 @@ bool is_orderable_walk(
     auto const& real = [&]() -> auto&& { return *type.get_true_type(); };
     auto const& next = *(dynamic_cast<t_typedef const&>(type).get_type());
     return result = is_orderable_walk(
-                        memo, next, &type, context, enabledReflection) &&
+                        memo, next, &type, context, forceCustomTypeOrderable) &&
         (!(real().is_set() || real().is_map()) ||
          !has_disqualifying_annotation);
-  } else if (type.is_struct() || type.is_exception()) {
-    const auto& as_struct = static_cast<t_struct const&>(type);
+  } else if (const auto* as_struct = dynamic_cast<const t_structured*>(&type)) {
     return result = std::all_of(
-               as_struct.fields().begin(),
-               as_struct.fields().end(),
+               as_struct->fields().begin(),
+               as_struct->fields().end(),
                [&](const auto& f) {
                  return is_orderable_walk(
                      memo,
                      f.type().deref(),
                      &type,
                      context,
-                     !as_struct.uri().empty());
+                     enable_custom_type_ordering(*as_struct) ||
+                         (context.enableCustomTypeOrderingIfStructureHasUri &&
+                          !as_struct->uri().empty()));
                });
   } else if (type.is_list()) {
     return result = is_orderable_walk(
@@ -294,7 +305,7 @@ bool is_orderable_walk(
                *(dynamic_cast<t_list const&>(type).get_elem_type()),
                &type,
                context,
-               enabledReflection);
+               forceCustomTypeOrderable);
   } else if (type.is_set()) {
     return result = !has_disqualifying_annotation &&
         is_orderable_walk(
@@ -302,7 +313,7 @@ bool is_orderable_walk(
                *(dynamic_cast<t_set const&>(type).get_elem_type()),
                &type,
                context,
-               enabledReflection);
+               forceCustomTypeOrderable);
   } else if (type.is_map()) {
     return result = !has_disqualifying_annotation &&
         is_orderable_walk(
@@ -310,13 +321,13 @@ bool is_orderable_walk(
                *(dynamic_cast<t_map const&>(type).get_key_type()),
                &type,
                context,
-               enabledReflection) &&
+               forceCustomTypeOrderable) &&
         is_orderable_walk(
                memo,
                *(dynamic_cast<t_map const&>(type).get_val_type()),
                &type,
                context,
-               enabledReflection);
+               forceCustomTypeOrderable);
   }
   return false;
 }
@@ -344,20 +355,24 @@ void is_orderable_back_propagate(
 } // namespace
 
 bool is_orderable(
-    std::unordered_map<t_type const*, bool>& memo, t_type const& type) {
+    std::unordered_map<t_type const*, bool>& memo,
+    t_type const& type,
+    bool enableCustomTypeOrderingIfStructureHasUri) {
   // Thrift struct could self-reference, so have to perform a two-stage walk:
   // first all self-references are speculated, then negative classification is
   // back-propagated through the traversed dependencies.
-  is_orderable_walk_context context;
+  is_orderable_walk_context context{enableCustomTypeOrderingIfStructureHasUri};
   is_orderable_walk(memo, type, nullptr, context, false);
   is_orderable_back_propagate(memo, context);
   auto it = memo.find(&type);
   return it == memo.end() || it->second;
 }
 
-bool is_orderable(t_type const& type) {
+bool is_orderable(
+    t_type const& type, bool enableCustomTypeOrderingIfStructureHasUri) {
+  // Thrift struct could self-reference, so have to perform a two-stage walk:
   std::unordered_map<t_type const*, bool> memo;
-  return is_orderable(memo, type);
+  return is_orderable(memo, type, enableCustomTypeOrderingIfStructureHasUri);
 }
 
 std::string_view get_type(const t_type* type) {
@@ -423,17 +438,13 @@ bool is_eligible_for_constexpr::operator()(const t_type* type) {
       return it->second ? eligible::yes : eligible::no;
     }
     bool result = false;
-    if (t->has_annotation("cpp.indirection")) {
-      // Custom types may not have constexpr constructors.
-      result = false;
-    } else if (
-        t->is_any_int() || t->is_floating_point() || t->is_bool() ||
+    if (t->is_any_int() || t->is_floating_point() || t->is_bool() ||
         t->is_enum()) {
       result = true;
     } else if (t->is_union() || t->is_exception()) {
       // Union and exception constructors are not defaulted.
       result = false;
-    } else if (t->has_annotation(
+    } else if (t->has_unstructured_annotation(
                    {"cpp.virtual", "cpp2.virtual", "cpp.allocator"})) {
       result = false;
     } else {
@@ -446,7 +457,7 @@ bool is_eligible_for_constexpr::operator()(const t_type* type) {
   if (result != eligible::unknown) {
     return result == eligible::yes;
   }
-  if (const auto* s = dynamic_cast<const t_struct*>(type)) {
+  if (const auto* s = dynamic_cast<const t_structured*>(type)) {
     result = eligible::yes;
     for_each_transitive_field(s, [&](const t_field* field) {
       result = check(field->get_type());
@@ -456,7 +467,7 @@ bool is_eligible_for_constexpr::operator()(const t_type* type) {
         result = eligible::no;
         return false;
       } else if (result == eligible::unknown) {
-        if (!field->get_type()->is_struct()) {
+        if (!field->get_type()->is_struct_or_union()) {
           return false;
         }
         // Structs are eligible if all their fields are.
@@ -470,17 +481,17 @@ bool is_eligible_for_constexpr::operator()(const t_type* type) {
 }
 
 bool is_stack_arguments(
-    std::map<std::string, std::string> const& options,
+    std::map<std::string, std::string, std::less<>> const& options,
     t_function const& function) {
-  if (function.has_annotation("cpp.stack_arguments")) {
-    return function.get_annotation("cpp.stack_arguments") != "0";
+  if (function.has_unstructured_annotation("cpp.stack_arguments")) {
+    return function.get_unstructured_annotation("cpp.stack_arguments") != "0";
   }
   return options.count("stack_arguments");
 }
 
 bool is_mixin(const t_field& field) {
-  return field.has_annotation("cpp.mixin") ||
-      field.find_structured_annotation_or_null(kMixinUri) != nullptr;
+  return field.has_unstructured_annotation("cpp.mixin") ||
+      field.has_structured_annotation(kMixinUri);
 }
 
 bool has_ref_annotation(const t_field& field) {
@@ -503,9 +514,9 @@ static void get_mixins_and_members_impl(
     std::vector<mixin_member>& out) {
   for (const auto& member : strct.fields()) {
     if (is_mixin(member)) {
-      assert(member.type()->get_true_type()->is_struct());
+      assert(member.type()->get_true_type()->is_struct_or_union());
       auto mixin_struct =
-          static_cast<const t_struct*>(member.type()->get_true_type());
+          static_cast<const t_structured*>(member.type()->get_true_type());
       const auto& mixin =
           top_level_mixin != nullptr ? *top_level_mixin : member;
 
@@ -526,78 +537,49 @@ std::vector<mixin_member> get_mixins_and_members(const t_structured& strct) {
   return ret;
 }
 
-namespace {
-struct get_gen_type_class_options {
-  bool gen_indirection = false;
-  bool gen_indirection_inner_ = false;
-};
-
-std::string get_gen_type_class_(
-    t_type const& type_, get_gen_type_class_options opts) {
+std::string get_gen_type_class(t_type const& type) {
   std::string const ns = "::apache::thrift::";
   std::string const tc = ns + "type_class::";
 
-  auto const& type = *type_.get_true_type();
+  auto const& ttype = *type.get_true_type();
 
-  bool const ind = type.has_annotation("cpp.indirection");
-  if (ind && opts.gen_indirection && !opts.gen_indirection_inner_) {
-    opts.gen_indirection_inner_ = true;
-    auto const inner = get_gen_type_class_(type_, opts);
-    auto const tag = ns + "detail::indirection_tag";
-    auto const fun = ns + "detail::apply_indirection_fn";
-    return tag + "<" + inner + ", " + fun + ">";
-  }
-  opts.gen_indirection_inner_ = false;
-
-  if (type.is_void()) {
+  if (ttype.is_void()) {
     return tc + "nothing";
-  } else if (type.is_bool() || type.is_byte() || type.is_any_int()) {
+  } else if (ttype.is_bool() || ttype.is_byte() || ttype.is_any_int()) {
     return tc + "integral";
-  } else if (type.is_floating_point()) {
+  } else if (ttype.is_floating_point()) {
     return tc + "floating_point";
-  } else if (type.is_enum()) {
+  } else if (ttype.is_enum()) {
     return tc + "enumeration";
-  } else if (type.is_string()) {
+  } else if (ttype.is_string()) {
     return tc + "string";
-  } else if (type.is_binary()) {
+  } else if (ttype.is_binary()) {
     return tc + "binary";
-  } else if (type.is_list()) {
-    auto& list = dynamic_cast<t_list const&>(type);
+  } else if (ttype.is_list()) {
+    auto& list = dynamic_cast<t_list const&>(ttype);
     auto& elem = *list.get_elem_type();
-    auto elem_tc = get_gen_type_class_(elem, opts);
+    auto elem_tc = get_gen_type_class(elem);
     return tc + "list<" + elem_tc + ">";
-  } else if (type.is_set()) {
-    auto& set = dynamic_cast<t_set const&>(type);
+  } else if (ttype.is_set()) {
+    auto& set = dynamic_cast<t_set const&>(ttype);
     auto& elem = *set.get_elem_type();
-    auto elem_tc = get_gen_type_class_(elem, opts);
+    auto elem_tc = get_gen_type_class(elem);
     return tc + "set<" + elem_tc + ">";
-  } else if (type.is_map()) {
-    auto& map = dynamic_cast<t_map const&>(type);
+  } else if (ttype.is_map()) {
+    auto& map = dynamic_cast<t_map const&>(ttype);
     auto& key = *map.get_key_type();
     auto& val = *map.get_val_type();
-    auto key_tc = get_gen_type_class_(key, opts);
-    auto val_tc = get_gen_type_class_(val, opts);
+    auto key_tc = get_gen_type_class(key);
+    auto val_tc = get_gen_type_class(val);
     return tc + "map<" + key_tc + ", " + val_tc + ">";
-  } else if (type.is_union()) {
+  } else if (ttype.is_union()) {
     return tc + "variant";
-  } else if (type.is_struct() || type.is_exception()) {
+  } else if (ttype.is_struct_or_union() || ttype.is_exception()) {
     return tc + "structure";
   } else {
-    throw std::runtime_error("unknown type class for: " + type.get_full_name());
+    throw std::runtime_error(
+        "unknown type class for: " + ttype.get_full_name());
   }
-}
-
-} // namespace
-
-std::string get_gen_type_class(t_type const& type) {
-  get_gen_type_class_options opts;
-  return get_gen_type_class_(type, opts);
-}
-
-std::string get_gen_type_class_with_indirection(t_type const& type) {
-  get_gen_type_class_options opts;
-  opts.gen_indirection = true;
-  return get_gen_type_class_(type, opts);
 }
 
 std::string sha256_hex(std::string const& in) {
@@ -622,7 +604,8 @@ bool deprecated_terse_writes(const t_field* field) {
   // (e.g. i32/i64, empty strings/list/map)
   auto t = field->get_type()->get_true_type();
   return field->get_req() == t_field::e_req::opt_in_req_out &&
-      (cpp2::is_unique_ref(field) || (!t->is_struct() && !t->is_exception()));
+      (cpp2::is_unique_ref(field) ||
+       (!t->is_struct_or_union() && !t->is_exception()));
 }
 
 t_field_id get_internal_injected_field_id(t_field_id id) {
@@ -640,7 +623,7 @@ const t_const* get_transitive_annotation_of_adapter_or_null(
   for (const auto& annotation : node.structured_annotations()) {
     const t_type& annotation_type = *annotation.type();
     if (is_transitive_annotation(annotation_type)) {
-      if (annotation_type.find_structured_annotation_or_null(kCppAdapterUri)) {
+      if (annotation_type.has_structured_annotation(kCppAdapterUri)) {
         return &annotation;
       }
     }

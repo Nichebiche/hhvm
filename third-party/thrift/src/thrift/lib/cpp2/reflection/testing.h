@@ -15,7 +15,7 @@
  */
 
 #pragma once
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <thrift/lib/cpp2/debug_thrift_data_difference/debug.h>
 
@@ -67,3 +67,15 @@ template <class Tag, class T>
 
 #define ASSERT_THRIFT_TAG_EQ(tag, a, b) \
   ASSERT_PRED_FORMAT3(::apache::thrift::thriftEqualHelperTag, tag, a, b)
+
+#define CO_EXPECT_THRIFT_EQ(a, b) \
+  CO_EXPECT_PRED_FORMAT2(::apache::thrift::thriftEqualHelper, a, b)
+
+#define CO_ASSERT_THRIFT_EQ(a, b) \
+  CO_ASSERT_PRED_FORMAT2(::apache::thrift::thriftEqualHelper, a, b)
+
+#define CO_EXPECT_THRIFT_TAG_EQ(tag, a, b) \
+  CO_EXPECT_PRED_FORMAT3(::apache::thrift::thriftEqualHelperTag, tag, a, b)
+
+#define CO_ASSERT_THRIFT_TAG_EQ(tag, a, b) \
+  CO_ASSERT_PRED_FORMAT3(::apache::thrift::thriftEqualHelperTag, tag, a, b)

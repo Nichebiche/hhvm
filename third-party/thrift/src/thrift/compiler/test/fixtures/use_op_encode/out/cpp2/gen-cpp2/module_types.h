@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct def_field;
 struct opt_field;
@@ -36,11 +34,9 @@ APACHE_THRIFT_DEFINE_ACCESSOR(req_field);
 APACHE_THRIFT_DEFINE_ACCESSOR(terse_field);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace facebook::thrift::compiler::test {
@@ -78,38 +74,22 @@ class MyStruct final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 4;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2,3,4};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::def_field,
     ::apache::thrift::ident::opt_field,
     ::apache::thrift::ident::req_field,
     ::apache::thrift::ident::terse_field
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2,3,4};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 4;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -160,225 +140,177 @@ class MyStruct final  {
   bool operator<(const MyStruct&) const;
 
   /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> def_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> def_field_ref() const& {
     return {this->__fbthrift_field_def_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> def_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_def_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> def_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> def_field_ref() & {
     return {this->__fbthrift_field_def_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> def_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_def_field), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> def_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_def_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> def_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> def_field() const& {
     return {this->__fbthrift_field_def_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> def_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_def_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> def_field() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> def_field() & {
     return {this->__fbthrift_field_def_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "def_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> def_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_def_field), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> def_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_def_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> opt_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> opt_field_ref() const& {
     return {this->__fbthrift_field_opt_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> opt_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_opt_field), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> opt_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> opt_field_ref() & {
     return {this->__fbthrift_field_opt_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> opt_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_opt_field), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> opt_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_opt_field), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> opt_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> opt_field() const& {
     return {this->__fbthrift_field_opt_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> opt_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_opt_field), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> opt_field() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> opt_field() & {
     return {this->__fbthrift_field_opt_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "opt_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> opt_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_opt_field), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> opt_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_opt_field), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> req_field_ref() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_req_field};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> req_field_ref() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_req_field};
   }
 
   /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> req_field_ref() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_req_field)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> req_field_ref() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_req_field};
   }
 
   /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> req_field_ref() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_req_field};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> req_field_ref() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_req_field)};
   }
 
   /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> req_field_ref() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_req_field)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> req_field() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_req_field};
   }
 
   /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> req_field() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_req_field};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> req_field() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_req_field};
   }
 
   /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> req_field() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_req_field)};
-  }
-
-  /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> req_field() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_req_field};
-  }
-
-  /** Glean { "field": "req_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> req_field() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_req_field)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> req_field() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_req_field)};
   }
 
   /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<const T&> terse_field_ref() const& {
-    return ::apache::thrift::terse_field_ref<const T&>{this->__fbthrift_field_terse_field};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::terse_field_ref<const fbthrift_T&> terse_field_ref() const& {
+    return ::apache::thrift::terse_field_ref<const fbthrift_T&>{this->__fbthrift_field_terse_field};
   }
 
   /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<const T&&> terse_field_ref() const&& {
-    return ::apache::thrift::terse_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_terse_field)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::terse_field_ref<fbthrift_T&> terse_field_ref() & {
+    return ::apache::thrift::terse_field_ref<fbthrift_T&>{this->__fbthrift_field_terse_field};
   }
 
   /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<T&> terse_field_ref() & {
-    return ::apache::thrift::terse_field_ref<T&>{this->__fbthrift_field_terse_field};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::terse_field_ref<fbthrift_T&&> terse_field_ref() && {
+    return ::apache::thrift::terse_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_terse_field)};
   }
 
   /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<T&&> terse_field_ref() && {
-    return ::apache::thrift::terse_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_terse_field)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::terse_field_ref<const fbthrift_T&> terse_field() const& {
+    return ::apache::thrift::terse_field_ref<const fbthrift_T&>{this->__fbthrift_field_terse_field};
   }
 
   /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<const T&> terse_field() const& {
-    return ::apache::thrift::terse_field_ref<const T&>{this->__fbthrift_field_terse_field};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::terse_field_ref<fbthrift_T&> terse_field() & {
+    return ::apache::thrift::terse_field_ref<fbthrift_T&>{this->__fbthrift_field_terse_field};
   }
 
   /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<const T&&> terse_field() const&& {
-    return ::apache::thrift::terse_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_terse_field)};
-  }
-
-  /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<T&> terse_field() & {
-    return ::apache::thrift::terse_field_ref<T&>{this->__fbthrift_field_terse_field};
-  }
-
-  /** Glean { "field": "terse_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::terse_field_ref<T&&> terse_field() && {
-    return ::apache::thrift::terse_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_terse_field)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::terse_field_ref<fbthrift_T&&> terse_field() && {
+    return ::apache::thrift::terse_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_terse_field)};
   }
 
   /** Glean { "field": "def_field" } */
-  [[deprecated("Use `FOO.def_field().value();` instead of `FOO.get_def_field();`")]]
+  [[deprecated("Use `FOO.def_field().value()` instead of `FOO.get_def_field()`")]]
   ::std::int32_t get_def_field() const;
 
   /** Glean { "field": "def_field" } */
-  [[deprecated("Use `FOO.def_field() = BAR;` instead of `FOO.set_def_field(BAR);`")]]
+  [[deprecated("Use `FOO.def_field() = BAR` instead of `FOO.set_def_field(BAR)`")]]
   ::std::int32_t& set_def_field(::std::int32_t def_field_);
 
   /** Glean { "field": "opt_field" } */
-  [[deprecated("Use `FOO.opt_field().value();` instead of `FOO.get_opt_field();`")]]
+  [[deprecated("Use `FOO.opt_field().value()` instead of `FOO.get_opt_field()`")]]
   const ::std::int32_t* get_opt_field() const&;
 
   /** Glean { "field": "opt_field" } */
-  [[deprecated("Use `FOO.opt_field().value();` instead of `FOO.get_opt_field();`")]]
+  [[deprecated("Use `FOO.opt_field().value()` instead of `FOO.get_opt_field()`")]]
   ::std::int32_t* get_opt_field() &;
 
   ::std::int32_t* get_opt_field() && = delete;
 
   /** Glean { "field": "opt_field" } */
-  [[deprecated("Use `FOO.opt_field() = BAR;` instead of `FOO.set_opt_field(BAR);`")]]
+  [[deprecated("Use `FOO.opt_field() = BAR` instead of `FOO.set_opt_field(BAR)`")]]
   ::std::int32_t& set_opt_field(::std::int32_t opt_field_);
 
   /** Glean { "field": "req_field" } */
-  [[deprecated("Use `FOO.req_field().value();` instead of `FOO.get_req_field();`")]]
+  [[deprecated("Use `FOO.req_field().value()` instead of `FOO.get_req_field()`")]]
   ::std::int32_t get_req_field() const;
 
   /** Glean { "field": "req_field" } */
-  [[deprecated("Use `FOO.req_field() = BAR;` instead of `FOO.set_req_field(BAR);`")]]
+  [[deprecated("Use `FOO.req_field() = BAR` instead of `FOO.set_req_field(BAR)`")]]
   ::std::int32_t& set_req_field(::std::int32_t req_field_);
 
   template <class Protocol_>
@@ -407,3 +339,11 @@ unsigned long MyStruct::read(Protocol_* iprot) {
 
 
 } // namespace facebook::thrift::compiler::test
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::facebook::thrift::compiler::test::MyStruct, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 2162972314762179418;
+  static constexpr ::std::string_view definitionKey = {"\x88\x7d\xb7\xa6\x28\x05\xc5\x37\x1f\x55\x22\xb6\x1e\x96\x08\x2f", 16};
+};
+} // namespace apache::thrift::detail

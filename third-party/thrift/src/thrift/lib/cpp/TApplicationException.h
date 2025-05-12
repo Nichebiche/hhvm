@@ -21,8 +21,7 @@
 #include <thrift/lib/cpp/Thrift.h>
 #include <thrift/lib/cpp/protocol/TProtocol.h>
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 namespace protocol {
 class TProtocol;
@@ -57,7 +56,7 @@ class FOLLY_EXPORT TApplicationException : public TException {
     CHECKSUM_MISMATCH = 14,
     INTERRUPTION = 15,
     TENANT_QUOTA_EXCEEDED = 16,
-    TENANT_BLOCKLISTED = 17,
+    // TENANT_BLOCKLISTED = 17, // DEPRECATED
   };
 
   TApplicationException() : type_(UNKNOWN) {}
@@ -139,8 +138,6 @@ class FOLLY_EXPORT TApplicationException : public TException {
           return "TApplicationException: interruption";
         case TENANT_QUOTA_EXCEEDED:
           return "TApplicationException: Tenant quota exceeded";
-        case TENANT_BLOCKLISTED:
-          return "TApplicationException: Tenant blocklisted";
         default:
           return "TApplicationException: (Invalid exception type)";
       }
@@ -343,21 +340,6 @@ struct FOLLY_EXPORT AppQuotaExceededException : TApplicationException {
   const std::string tenantId_;
 };
 
-/*
- * @AppTenantBlocklistedError
- * An error Thrift application can return from preprocess callback.
- * Indicates the tenant is not permitted to make a request. The request is
- * rejected before processing starts.
- */
-struct FOLLY_EXPORT AppTenantBlocklistedException : TApplicationException {
-  explicit AppTenantBlocklistedException(const std::string& blockedTenantId)
-      : TApplicationException(
-            fmt::format("Tenant {} enforced", blockedTenantId)),
-        blockedTenantId(blockedTenantId) {}
-  const std::string blockedTenantId;
-};
-
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 #endif // #ifndef _THRIFT_TAPPLICATIONEXCEPTION_H_

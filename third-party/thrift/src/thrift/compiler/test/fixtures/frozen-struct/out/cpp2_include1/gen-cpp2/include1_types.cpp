@@ -78,7 +78,7 @@ IncludedA::IncludedA(apache::thrift::FragileConstructor, ::std::int32_t i32Field
 void IncludedA::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_i32Field = ::std::int32_t();
-  this->__fbthrift_field_strField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_strField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -114,6 +114,7 @@ void swap([[maybe_unused]] IncludedA& a, [[maybe_unused]] IncludedA& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void IncludedA::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t IncludedA::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t IncludedA::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -122,6 +123,7 @@ template void IncludedA::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t IncludedA::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t IncludedA::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t IncludedA::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace some::ns

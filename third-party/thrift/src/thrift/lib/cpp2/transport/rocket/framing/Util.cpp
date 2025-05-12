@@ -17,7 +17,6 @@
 #include <thrift/lib/cpp2/transport/rocket/framing/Util.h>
 
 #include <cstdint>
-#include <exception>
 #include <string>
 
 #include <folly/Conv.h>
@@ -45,6 +44,11 @@ size_t readFrameOrMetadataSize(folly::io::Cursor& cursor) {
 
 // Rsocket frame is 24-bits (3 bytes)
 size_t readFrameOrMetadataSize(std::array<uint8_t, 3> bytes) {
+  return (static_cast<size_t>(bytes[0]) << 16) |
+      (static_cast<size_t>(bytes[1]) << 8) | static_cast<size_t>(bytes[2]);
+}
+
+size_t readFrameOrMetadataSize(const uint8_t* bytes) {
   return (static_cast<size_t>(bytes[0]) << 16) |
       (static_cast<size_t>(bytes[1]) << 8) | static_cast<size_t>(bytes[2]);
 }

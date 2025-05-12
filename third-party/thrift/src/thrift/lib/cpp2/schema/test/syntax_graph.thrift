@@ -45,12 +45,21 @@ struct TestStructuredAnnotation {
 typedef list<TestStruct> ListOfTestStruct
 typedef ListOfTestStruct TypedefToListOfTestStruct
 
+typedef TestStructuredAnnotation TypedefToTestStructuredAnnotation
+
 @TestStructuredAnnotation{field1 = 3}
 union TestUnion {
   1: TestStruct s;
   2: TestEnum e;
 }
 
+@thrift.Uri{value = ""}
+@scope.Definition
+struct TestStructuredAnnotationWithoutUri {
+  1: i64 field1;
+}
+
+@TestStructuredAnnotationWithoutUri{field1 = 3}
 exception TestException {
   1: binary blob;
 }
@@ -58,10 +67,11 @@ exception TestException {
 const TestStruct testConst = TestStruct{field1 = 2, field2 = VALUE_1};
 
 interaction TestInteraction {
-  i32 foo(1: TestRecursiveStruct input);
+  i32 foo(1: TestRecursiveStruct input) throws (1: TestException ex);
 }
 
 service TestService {
+  @TypedefToTestStructuredAnnotation{field1 = 3}
   TestStruct foo(1: i32 input);
   TestInteraction createInteraction();
   i32, stream<i32> createStream();

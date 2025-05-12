@@ -46,10 +46,11 @@ struct RpcTransportStats {
       0}; // size of meta data (uncompressed) and data (possibly compressed)
   uint32_t responseSerializedSizeBytes{0};
   uint32_t responseWireSizeBytes{0};
+  uint32_t responseMetadataAndPayloadSizeBytes{0};
 
   // I/O latencies
-  std::chrono::nanoseconds requestLatency{0};
-  std::chrono::nanoseconds responseLatency{0};
+  std::chrono::nanoseconds requestWriteLatency{0};
+  std::chrono::nanoseconds responseRoundTripLatency{0};
 };
 
 class ClientReceiveState {

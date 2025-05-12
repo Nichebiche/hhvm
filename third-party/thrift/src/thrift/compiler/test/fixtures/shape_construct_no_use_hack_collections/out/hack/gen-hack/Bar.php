@@ -81,10 +81,6 @@ trait BarClientBase {
    *       5: i64 e);
    */
   public async function baz(dict<int, bool> $a, KeyedContainer<int, KeyedContainer<int, dict<string, bool>>> $b, int $c, ?Foo $d, int $e): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Bar_baz_args::fromShape(shape(
       'a' => $a,
@@ -97,7 +93,7 @@ trait BarClientBase {
     ));
     await $this->asyncHandler_->genBefore(BarStaticMetadata::THRIFT_SVC_NAME, "baz", $args);
     $currentseqid = $this->sendImplHelper($args, "baz", false, BarStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Bar_baz_result::class, "baz", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Bar_baz_result::class, "baz", false, $currentseqid, $rpc_options))[0];
   }
 
   /**
@@ -110,10 +106,6 @@ trait BarClientBase {
    *       5: i64 e);
    */
   public async function baz__LEGACY_ARRAYS(dict<int, bool> $a, KeyedContainer<int, KeyedContainer<int, dict<string, bool>>> $b, int $c, ?Foo $d, int $e): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Bar_baz_args::fromShape(shape(
       'a' => $a,
@@ -126,7 +118,7 @@ trait BarClientBase {
     ));
     await $this->asyncHandler_->genBefore(BarStaticMetadata::THRIFT_SVC_NAME, "baz", $args);
     $currentseqid = $this->sendImplHelper($args, "baz", false, BarStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Bar_baz_result::class, "baz", false, $currentseqid, $rpc_options, shape('read_options' => \THRIFT_MARK_LEGACY_ARRAYS));
+    return (await $this->genAwaitResponse(Bar_baz_result::class, "baz", false, $currentseqid, $rpc_options, shape('read_options' => \THRIFT_MARK_LEGACY_ARRAYS)))[0];
   }
 
 }

@@ -10,7 +10,6 @@
 
 #include <proxygen/lib/http/codec/HTTPCodec.h>
 #include <proxygen/lib/http/webtransport/WebTransport.h>
-#include <quic/api/QuicCallbacks.h>
 
 namespace proxygen {
 
@@ -33,7 +32,8 @@ class WebTransportImpl : public WebTransport {
     virtual folly::Expected<FCState, WebTransport::ErrorCode>
     sendWebTransportStreamData(HTTPCodec::StreamID /*id*/,
                                std::unique_ptr<folly::IOBuf> /*data*/,
-                               bool /*eof*/) = 0;
+                               bool /*eof*/,
+                               ByteEventCallback* /* byteEventCallback */) = 0;
 
     virtual folly::Expected<folly::Unit, WebTransport::ErrorCode>
     notifyPendingWriteOnStream(HTTPCodec::StreamID,
@@ -62,8 +62,9 @@ class WebTransportImpl : public WebTransport {
         resumeWebTransportIngress(HTTPCodec::StreamID /*id*/) = 0;
 
     virtual folly::Expected<folly::Unit, WebTransport::ErrorCode>
-        stopReadingWebTransportIngress(HTTPCodec::StreamID /*id*/,
-                                       uint32_t /*errorCode*/) = 0;
+        stopReadingWebTransportIngress(
+            HTTPCodec::StreamID /*id*/,
+            folly::Optional<uint32_t> /*errorCode*/) = 0;
     virtual folly::Expected<folly::Unit, WebTransport::ErrorCode> sendDatagram(
         std::unique_ptr<folly::IOBuf> /*datagram*/) = 0;
 
@@ -122,12 +123,15 @@ class WebTransportImpl : public WebTransport {
     return it->second.stopSending(error);
   }
   folly::Expected<FCState, ErrorCode> writeStreamData(
-      uint64_t id, std::unique_ptr<folly::IOBuf> data, bool fin) override {
+      uint64_t id,
+      std::unique_ptr<folly::IOBuf> data,
+      bool fin,
+      ByteEventCallback* deliveryCallback) override {
     auto it = wtEgressStreams_.find(id);
     if (it == wtEgressStreams_.end()) {
       return folly::makeUnexpected(WebTransport::ErrorCode::INVALID_STREAM_ID);
     }
-    return it->second.writeStreamData(std::move(data), fin);
+    return it->second.writeStreamData(std::move(data), fin, deliveryCallback);
   }
   folly::Expected<folly::Unit, WebTransport::ErrorCode> resetStream(
       uint64_t id, uint32_t error) override {
@@ -189,7 +193,9 @@ class WebTransportImpl : public WebTransport {
     }
 
     folly::Expected<FCState, WebTransport::ErrorCode> writeStreamData(
-        std::unique_ptr<folly::IOBuf> data, bool fin) override;
+        std::unique_ptr<folly::IOBuf> data,
+        bool fin,
+        ByteEventCallback* deliveryCallback) override;
 
     folly::Expected<folly::Unit, WebTransport::ErrorCode> resetStream(
         uint32_t errorCode) override {
@@ -267,13 +273,15 @@ class WebTransportImpl : public WebTransport {
   folly::Expected<WebTransport::FCState, WebTransport::ErrorCode>
   sendWebTransportStreamData(HTTPCodec::StreamID id,
                              std::unique_ptr<folly::IOBuf> data,
-                             bool eof);
+                             bool eof,
+                             ByteEventCallback* deliveryCallback);
 
   folly::Expected<folly::Unit, WebTransport::ErrorCode> resetWebTransportEgress(
       HTTPCodec::StreamID id, uint32_t errorCode);
 
   folly::Expected<folly::Unit, WebTransport::ErrorCode>
-  stopReadingWebTransportIngress(HTTPCodec::StreamID id, uint32_t errorCode);
+  stopReadingWebTransportIngress(HTTPCodec::StreamID id,
+                                 folly::Optional<uint32_t> errorCode);
 
   folly::Expected<WebTransport::BidiStreamHandle, WebTransport::ErrorCode>
   newWebTransportBidiStream();

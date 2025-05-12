@@ -133,6 +133,22 @@ This allows the result of any unioning function from this module to be flattened
 with options being "pushed out" of the union (e.g. we return ?(A|B) instead of (A | ?B)
 or (A | null | B), and similarly with like types). *)
 let make_union env r tyl reason_nullable_opt reason_dyn_opt =
+  let rec is_dynamic_or_intersection_with_dynamic ty =
+    Typing_defs.is_dynamic ty
+    ||
+    match get_node ty with
+    | Tintersection tyl ->
+      List.exists tyl ~f:is_dynamic_or_intersection_with_dynamic
+    | _ -> false
+  in
+  (* dynamic | (T & dynamic) = dynamic *)
+  let tyl =
+    match reason_dyn_opt with
+    | Some _ ->
+      List.filter tyl ~f:(fun ty ->
+          not @@ is_dynamic_or_intersection_with_dynamic ty)
+    | None -> tyl
+  in
   let ty =
     match tyl with
     | [ty] -> ty
@@ -277,12 +293,13 @@ and simplify_non_subtype_union ~approx_cancel_neg env ty1 ty2 r =
       if List.is_empty tyl1 then
         (env, Some (mk (r, Tclass ((p, id1), e, tyl1))))
       else
-        let (env, tyl) = union_class ~approx_cancel_neg env id1 tyl1 tyl2 in
+        let (env, tyl) =
+          union_class_or_newtype ~approx_cancel_neg env id1 tyl1 tyl2
+        in
         (env, Some (mk (r, Tclass ((p, id1), e, tyl))))
-    | ((_, Tgeneric (name1, [])), (_, Tgeneric (name2, [])))
-      when String.equal name1 name2 ->
-      (* TODO(T69551141) handle type arguments above and below properly *)
-      (env, Some (mk (r, Tgeneric (name1, []))))
+    | ((_, Tgeneric name1), (_, Tgeneric name2)) when String.equal name1 name2
+      ->
+      (env, Some (mk (r, Tgeneric name1)))
     | ((_, Tvec_or_dict (tk1, tv1)), (_, Tvec_or_dict (tk2, tv2))) ->
       let (env, tk) = union ~approx_cancel_neg env tk1 tk2 in
       let (env, tv) = union ~approx_cancel_neg env tv1 tv2 in
@@ -309,7 +326,9 @@ and simplify_non_subtype_union ~approx_cancel_neg env ty1 ty2 r =
       if List.is_empty tyl1 then
         (env, Some ty1)
       else
-        let (env, tyl) = union_newtype ~approx_cancel_neg env id1 tyl1 tyl2 in
+        let (env, tyl) =
+          union_class_or_newtype ~approx_cancel_neg env id1 tyl1 tyl2
+        in
         let (env, tcstr) = union ~approx_cancel_neg env tcstr1 tcstr2 in
         (env, Some (mk (r, Tnewtype (id1, tyl, tcstr))))
     | ((_, Tclass_ptr ty1), (_, Tclass_ptr ty2)) ->
@@ -369,14 +388,16 @@ and simplify_non_subtype_union ~approx_cancel_neg env ty1 ty2 r =
     | ((_, Tfun ft1), (_, Tfun ft2)) ->
       let (env, ft) = union_funs ~approx_cancel_neg env ft1 ft2 in
       (env, Some (mk (r, Tfun ft)))
-    | ((_, Tunapplied_alias _), _) ->
-      Typing_defs.error_Tunapplied_alias_in_illegal_context ()
-    | ((_, Tneg (_, IsTag (ClassTag c1))), (_, Tclass ((_, c2), Exact, [])))
-    | ((_, Tclass ((_, c2), Exact, [])), (_, Tneg (_, IsTag (ClassTag c1))))
+    | ( (_, Tneg (_, IsTag (ClassTag (c1, [])))),
+        (_, Tclass ((_, c2), Exact, [])) )
+    | ( (_, Tclass ((_, c2), Exact, [])),
+        (_, Tneg (_, IsTag (ClassTag (c1, [])))) )
       when String.equal c1 c2 ->
       (env, Some (MakeType.mixed r))
-    | ((_, Tneg (_, IsTag (ClassTag c1))), (_, Tclass ((_, c2), Nonexact _, [])))
-    | ((_, Tclass ((_, c2), Nonexact _, [])), (_, Tneg (_, IsTag (ClassTag c1))))
+    | ( (_, Tneg (_, IsTag (ClassTag (c1, [])))),
+        (_, Tclass ((_, c2), Nonexact _, [])) )
+    | ( (_, Tclass ((_, c2), Nonexact _, [])),
+        (_, Tneg (_, IsTag (ClassTag (c1, [])))) )
       when Utils.is_sub_class_refl env c1 c2 ->
       (* This union is mixed iff for all objects o,
          o not in complement (union tyl. c1<tyl>) implies o in c2,
@@ -386,10 +407,10 @@ and simplify_non_subtype_union ~approx_cancel_neg env ty1 ty2 r =
          c2 has no type parameters.
       *)
       (env, Some (MakeType.mixed r))
-    | ( (_, Tneg (_, IsTag (ClassTag c1))),
+    | ( (_, Tneg (_, IsTag (ClassTag (c1, [])))),
         (_, Tclass ((_, c2), Nonexact _, _ :: _)) )
     | ( (_, Tclass ((_, c2), Nonexact _, _ :: _)),
-        (_, Tneg (_, IsTag (ClassTag c1))) )
+        (_, Tneg (_, IsTag (ClassTag (c1, [])))) )
       when approx_cancel_neg && Utils.is_sub_class_refl env c1 c2 ->
       (* Unlike the case where c2 has no parameters, here we can get a situation
          where c1 is a sub-class of c2, but they don't union to mixed. For example,
@@ -397,8 +418,10 @@ and simplify_non_subtype_union ~approx_cancel_neg env ty1 ty2 r =
          we can still approximate up to mixed when it would be both sound and convenient,
          as controlled by the approx_cancel_neg flag. *)
       (env, Some (MakeType.mixed r))
-    | ((_, Tneg (_, IsTag (ClassTag c1))), (_, Tclass ((_, c2), Exact, _ :: _)))
-    | ((_, Tclass ((_, c2), Exact, _ :: _)), (_, Tneg (_, IsTag (ClassTag c1))))
+    | ( (_, Tneg (_, IsTag (ClassTag (c1, [])))),
+        (_, Tclass ((_, c2), Exact, _ :: _)) )
+    | ( (_, Tclass ((_, c2), Exact, _ :: _)),
+        (_, Tneg (_, IsTag (ClassTag (c1, [])))) )
       when approx_cancel_neg && String.equal c1 c2 ->
       (env, Some (MakeType.mixed r))
     | ((_, Tneg (_, IsTag NumTag)), (_, Tprim Aast.Tarraykey))
@@ -551,12 +574,8 @@ and try_special_union_of_intersection ~approx_cancel_neg env tyl1 tyl2 r :
         None )
   in
   let is_intersection env ty =
-    let (_env, ty) = Env.expand_type env ty in
-    match get_node ty with
-    | Tnewtype (n, [ty], _)
-      when String.equal n Naming_special_names.Classes.cSupportDyn ->
-      Utils.is_tintersection env ty
-    | _ -> Utils.is_tintersection env ty
+    let (_, env, ty) = Typing_utils.strip_supportdyn env ty in
+    Utils.is_tintersection env ty
   in
   let (inter_tyl1, not_inter_tyl1) =
     List.partition_tf tyl1 ~f:(is_intersection env)
@@ -629,24 +648,8 @@ and union_funs ~approx_cancel_neg env fty1 fty2 =
   else
     raise Dont_simplify
 
-and union_class ~approx_cancel_neg env name tyl1 tyl2 =
-  let tparams =
-    match Env.get_class env name with
-    | Decl_entry.DoesNotExist
-    | Decl_entry.NotYetAvailable ->
-      []
-    | Decl_entry.Found c -> Cls.tparams c
-  in
-  union_tylists_w_variances ~approx_cancel_neg env tparams tyl1 tyl2
-
-and union_newtype ~approx_cancel_neg env typename tyl1 tyl2 =
-  let tparams =
-    match Env.get_typedef env typename with
-    | Decl_entry.DoesNotExist
-    | Decl_entry.NotYetAvailable ->
-      []
-    | Decl_entry.Found t -> t.td_tparams
-  in
+and union_class_or_newtype ~approx_cancel_neg env name tyl1 tyl2 =
+  let tparams = Env.get_class_or_typedef_tparams env name in
   union_tylists_w_variances ~approx_cancel_neg env tparams tyl1 tyl2
 
 and union_tylists_w_variances ~approx_cancel_neg env tparams tyl1 tyl2 =

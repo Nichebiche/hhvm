@@ -1,5 +1,20 @@
 <?hh
-// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 final class ThriftLazyAny implements JsonSerializable {
   const type TAnyData = (mixed, ThriftTypeStructAdapter);
@@ -188,6 +203,8 @@ final class ThriftLazyAny implements JsonSerializable {
         return ($this->getStringToSerializer())($protocol_union->getx_custom());
       case apache_thrift_type_rep_ProtocolUnionEnum::id:
         return ($this->getIdToSerializer())($protocol_union->getx_id());
+      case apache_thrift_type_rep_ProtocolUnionEnum::compressed:
+        invariant_violation("ProtocolUnion.compressed is not supported yet.");
       case apache_thrift_type_rep_ProtocolUnionEnum::_EMPTY_:
         invariant_violation("No protocol provided for Lazy serialization");
     }
@@ -234,7 +251,7 @@ final class ThriftLazyAny implements JsonSerializable {
           Shapes::at($ts, 'classname'),
           IThriftStruct::class,
         );
-        return $thrift_cls::withDefaultValues();
+        return HH\classname_to_class($thrift_cls) |> $$::withDefaultValues();
       case TypeStructureKind::OF_ENUM:
         return 0;
       case TypeStructureKind::OF_DICT:

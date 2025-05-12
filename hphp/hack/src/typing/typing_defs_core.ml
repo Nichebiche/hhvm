@@ -18,6 +18,10 @@ type ce_visibility =
   | Vprotected of string
   (* When we construct `Vinternal`, we are guaranteed to be inside a module *)
   | Vinternal of string
+  | Vprotected_internal of {
+      class_id: string;
+      module_: string;
+    }
 [@@deriving eq, ord, show]
 
 type cross_package_decl = string option
@@ -232,7 +236,12 @@ type 'ty fun_type = {
 }
 [@@deriving eq, hash, show { with_path = false }, map]
 
-type type_tag =
+(* This is to avoid a compile error with ppx_hash "Unbound value _hash_fold_phase". *)
+let _hash_fold_phase hsv _ = hsv
+
+type 'phase ty = ('phase Reason.t_[@transform.opaque]) * 'phase ty_
+
+and type_tag =
   | BoolTag
   | IntTag
   | StringTag
@@ -241,10 +250,9 @@ type type_tag =
   | NumTag
   | ResourceTag
   | NullTag
-  | ClassTag of Ast_defs.id_
-[@@deriving eq, ord, hash, show { with_path = false }]
+  | ClassTag of Ast_defs.id_ * locl_phase ty list
 
-type shape_field_predicate = {
+and shape_field_predicate = {
   (* T196048813 *)
   (* sfp_optional: bool; *)
   sfp_predicate: type_predicate;
@@ -265,22 +273,7 @@ and type_predicate_ =
   | IsShapeOf of shape_predicate
 
 and type_predicate =
-  (Reason.t
-  [@hash.ignore]
-  [@equal (fun _ _ -> true)]
-  [@compare (fun _ _ -> 0)]
-  [@printer (fun _ _ -> ())])
-  * type_predicate_
-[@@deriving eq, ord, hash, show { with_path = false }]
-
-(* This is to avoid a compile error with ppx_hash "Unbound value _hash_fold_phase". *)
-let _hash_fold_phase hsv _ = hsv
-
-type 'phase ty = ('phase Reason.t_[@transform.opaque]) * 'phase ty_
-
-and decl_ty = decl_phase ty
-
-and locl_ty = locl_phase ty
+  (Reason.t[@hash.ignore] [@transform.opaque]) * type_predicate_
 
 (** A shape may specify whether or not fields are required. For example, consider
  * this typedef:
@@ -300,9 +293,9 @@ and 'phase shape_field_type = {
 and _ ty_ =
   (*========== Following Types Exist Only in the Declared Phase ==========*)
   | Tthis : decl_phase ty_  (** The late static bound type of a class *)
-  | Tapply : (pos_id[@transform.opaque]) * decl_ty list -> decl_phase ty_
+  | Tapply : (pos_id[@transform.opaque]) * decl_phase ty list -> decl_phase ty_
       (** Either an object type or a type alias, ty list are the arguments *)
-  | Trefinement : decl_ty * decl_phase class_refinement -> decl_phase ty_
+  | Trefinement : decl_phase ty * decl_phase class_refinement -> decl_phase ty_
       (** 'With' refinements of the form `_ with { type T as int; type TC = C; }`. *)
   | Tmixed : decl_phase ty_
       (** "Any" is the type of a variable with a missing annotation, and "mixed" is
@@ -338,7 +331,7 @@ and _ ty_ =
         *   placeholder in refinement e.g. $x as Vector<_>
         *   placeholder for higher-kinded formal type parameter e.g. foo<T1<_>>(T1<int> $_)
         *)
-  | Tlike : decl_ty -> decl_phase ty_
+  | Tlike : decl_phase ty -> decl_phase ty_
   (*========== Following Types Exist in Both Phases ==========*)
   | Tany : (TanySentinel.t[@transform.opaque]) -> 'phase ty_
   | Tnonnull : 'phase ty_
@@ -363,12 +356,11 @@ and _ ty_ =
   | Ttuple : 'phase tuple_type -> 'phase ty_
       (** A wrapper around tuple_type, which contains information about tuple elements *)
   | Tshape : 'phase shape_type -> 'phase ty_
-  | Tgeneric : string * 'phase ty list -> 'phase ty_
+  | Tgeneric : string -> 'phase ty_
       (** The type of a generic parameter. The constraints on a generic parameter
        * are accessed through the lenv.tpenv component of the environment, which
        * is set up when checking the body of a function or method. See uses of
-       * Typing_phase.add_generic_parameters_and_constraints. The list denotes
-       * type arguments.
+       * Typing_phase.add_generic_parameters_and_constraints.
        *)
   | Tunion : 'phase ty list -> 'phase ty_ [@transform.explicit]
       (** Union type.
@@ -415,18 +407,11 @@ and _ ty_ =
 
         The second parameter is the list of type arguments to the type.
        *)
-  | Tunapplied_alias : string -> locl_phase ty_
-      (** This represents a type alias that lacks necessary type arguments. Given
-           type Foo<T1,T2> = ...
-         Tunappliedalias "Foo" stands for usages of plain Foo, without supplying
-         further type arguments. In particular, Tunappliedalias always stands for
-         a higher-kinded type. It is never used for an alias like
-           type Foo2 = ...
-         that simply doesn't require type arguments. *)
-  | Tdependent : (dependent_type[@transform.opaque]) * locl_ty -> locl_phase ty_
-      (** see dependent_type *)
+  | Tdependent :
+      (dependent_type[@transform.opaque]) * locl_phase ty
+      -> locl_phase ty_  (** see dependent_type *)
   | Tclass :
-      (pos_id[@transform.opaque]) * exact * locl_ty list
+      (pos_id[@transform.opaque]) * exact * locl_phase ty list
       -> locl_phase ty_
       (** An instance of a class or interface, ty list are the arguments
        * If exact=Exact, then this represents instances of *exactly* this class
@@ -497,6 +482,10 @@ and 'phase tuple_extra =
     }
   | Tsplat of 'phase ty
 [@@deriving hash, transform]
+
+type decl_ty = decl_phase ty [@@deriving hash]
+
+type locl_ty = locl_phase ty [@@deriving hash]
 
 let nonexact = Nonexact { cr_consts = SMap.empty }
 
@@ -621,14 +610,8 @@ module Pp = struct
       Format.fprintf fmt ",@ ";
       pp_class_refinement fmt a1;
       Format.fprintf fmt "@,))@]"
-    | Tgeneric (a0, a1) ->
-      Format.fprintf fmt "(@[<2>Tgeneric (@,";
-      Format.fprintf fmt "%S" a0;
-      Format.fprintf fmt ",@ ";
-      pp_list pp_ty fmt a1;
-      Format.fprintf fmt "@,)@])"
-    | Tunapplied_alias a0 ->
-      Format.fprintf fmt "(@[<2>Tunappliedalias@ ";
+    | Tgeneric a0 ->
+      Format.fprintf fmt "(@[<2>Tgeneric@ ";
       Format.fprintf fmt "%S" a0;
       Format.fprintf fmt "@])"
     | Taccess a0 ->
@@ -835,6 +818,61 @@ module Pp = struct
 
     Format.fprintf fmt "@ }@]"
 
+  and pp_type_predicate_ fmt predicate_ =
+    match predicate_ with
+    | IsTag tag ->
+      Format.fprintf fmt "(@[<2>IsTag@ ";
+      pp_type_tag fmt tag;
+      Format.fprintf fmt "@])"
+    | IsTupleOf tuple_predicate ->
+      Format.fprintf fmt "(@[<2>IsTupleOf@ ";
+      pp_tuple_predicate fmt tuple_predicate;
+      Format.fprintf fmt "@])"
+    | IsShapeOf shape_predicate ->
+      Format.fprintf fmt "(@[<2>IsShapeOf@ ";
+      pp_shape_predicate fmt shape_predicate;
+      Format.fprintf fmt "@])"
+
+  and pp_tuple_predicate fmt { tp_required } =
+    Format.fprintf fmt "@[<2>{ ";
+    Format.fprintf fmt "@[%s =@ " "tp_required";
+    pp_list pp_type_predicate fmt tp_required;
+    Format.fprintf fmt "@]";
+    Format.fprintf fmt "@ }@]"
+
+  and pp_shape_predicate fmt { sp_fields } =
+    Format.fprintf fmt "@[<2>{ ";
+    Format.fprintf fmt "@[%s =@ " "sp_fields";
+    TShapeMap.pp pp_shape_field_predicate fmt sp_fields;
+    Format.fprintf fmt "@]";
+    Format.fprintf fmt "@ }@]"
+
+  and pp_shape_field_predicate fmt { sfp_predicate } =
+    Format.fprintf fmt "@[<2>{ ";
+    Format.fprintf fmt "@[%s =@ " "sfp_predicate";
+    pp_type_predicate fmt sfp_predicate;
+    Format.fprintf fmt "@]";
+    Format.fprintf fmt "@ }@]"
+
+  and pp_type_tag fmt tag =
+    match tag with
+    | BoolTag -> Format.pp_print_string fmt "BoolTag"
+    | IntTag -> Format.pp_print_string fmt "IntTag"
+    | StringTag -> Format.pp_print_string fmt "StringTag"
+    | ArraykeyTag -> Format.pp_print_string fmt "ArraykeyTag"
+    | FloatTag -> Format.pp_print_string fmt "FloatTag"
+    | NumTag -> Format.pp_print_string fmt "NumTag"
+    | ResourceTag -> Format.pp_print_string fmt "ResourceTag"
+    | NullTag -> Format.pp_print_string fmt "NullTag"
+    | ClassTag (id, args) ->
+      Format.fprintf fmt "(@[<2>ClassTag (@,";
+      Format.pp_print_string fmt id;
+      Format.fprintf fmt ",@ ";
+      pp_list pp_ty fmt args;
+      Format.fprintf fmt "@,))@]"
+
+  and pp_type_predicate fmt predicate = pp_type_predicate_ fmt (snd predicate)
+
   let pp_decl_ty : Format.formatter -> decl_ty -> unit =
    (fun fmt ty -> pp_ty fmt ty)
 
@@ -846,6 +884,9 @@ module Pp = struct
   let show_decl_ty x = show_ty x
 
   let show_locl_ty x = show_ty x
+
+  let show_type_predicate_ predicate_ =
+    Format.asprintf "%a" pp_type_predicate_ predicate_
 end
 
 include Pp
@@ -890,7 +931,6 @@ let ty_con_ordinal_ : type a. a ty_ -> int = function
   | Tvec_or_dict _ -> 25
   | Tclass_ptr _ -> 26
   (* only locl constructors *)
-  | Tunapplied_alias _ -> 200
   | Tnewtype _ -> 201
   | Tdependent _ -> 202
   | Tclass _ -> 204
@@ -901,6 +941,24 @@ let same_type_origin (orig1 : type_origin) orig2 =
   match orig1 with
   | Missing_origin -> false
   | _ -> equal_type_origin orig1 orig2
+
+let type_predicate__con_ordinal type_predicate_ =
+  match type_predicate_ with
+  | IsTag _ -> 0
+  | IsTupleOf _ -> 1
+  | IsShapeOf _ -> 2
+
+let type_tag_con_ordinal type_tag =
+  match type_tag with
+  | BoolTag -> 0
+  | IntTag -> 1
+  | StringTag -> 2
+  | ArraykeyTag -> 3
+  | FloatTag -> 4
+  | NumTag -> 5
+  | ResourceTag -> 6
+  | NullTag -> 7
+  | ClassTag _ -> 8
 
 (* Compare two types syntactically, ignoring reason information and other
  * small differences that do not affect type inference behaviour. This
@@ -947,11 +1005,7 @@ let rec ty__compare : type a. ?normalize_lists:bool -> a ty_ -> a ty_ -> int =
     | (Tintersection tyl1, Tintersection tyl2) ->
       tyl_compare ~sort:normalize_lists ~normalize_lists tyl1 tyl2
     | (Ttuple t1, Ttuple t2) -> tuple_type_compare t1 t2
-    | (Tgeneric (n1, args1), Tgeneric (n2, args2)) -> begin
-      match String.compare n1 n2 with
-      | 0 -> tyl_compare ~sort:false ~normalize_lists args1 args2
-      | n -> n
-    end
+    | (Tgeneric n1, Tgeneric n2) -> String.compare n1 n2
     | (Tnewtype (id, tyl, cstr1), Tnewtype (id2, tyl2, cstr2)) -> begin
       match String.compare id id2 with
       | 0 ->
@@ -977,7 +1031,6 @@ let rec ty__compare : type a. ?normalize_lists:bool -> a ty_ -> a ty_ -> int =
     end
     | (Tshape s1, Tshape s2) -> shape_type_compare s1 s2
     | (Tvar v1, Tvar v2) -> Tvid.compare v1 v2
-    | (Tunapplied_alias n1, Tunapplied_alias n2) -> String.compare n1 n2
     | (Taccess (ty1, id1), Taccess (ty2, id2)) -> begin
       match ty_compare ty1 ty2 with
       | 0 -> String.compare (snd id1) (snd id2)
@@ -990,9 +1043,8 @@ let rec ty__compare : type a. ?normalize_lists:bool -> a ty_ -> a ty_ -> int =
     | (Tclass_ptr ty1, Tclass_ptr ty2) -> ty_compare ty1 ty2
     | ( ( Tprim _ | Toption _ | Tvec_or_dict _ | Tfun _ | Tintersection _
         | Tunion _ | Ttuple _ | Tgeneric _ | Tnewtype _ | Tdependent _
-        | Tclass _ | Tshape _ | Tvar _ | Tunapplied_alias _ | Tnonnull
-        | Tdynamic | Taccess _ | Tany _ | Tneg _ | Trefinement _ | Tlabel _
-        | Tclass_ptr _ ),
+        | Tclass _ | Tshape _ | Tvar _ | Tnonnull | Tdynamic | Taccess _
+        | Tany _ | Tneg _ | Trefinement _ | Tlabel _ | Tclass_ptr _ ),
         _ ) ->
       ty_con_ordinal_ ty_1 - ty_con_ordinal_ ty_2
   and shape_field_type_compare :
@@ -1217,6 +1269,41 @@ let rec ty__compare : type a. ?normalize_lists:bool -> a ty_ -> a ty_ -> int =
   in
   ty__compare ty_1 ty_2
 
+and compare_type_predicate (_, p1) (_, p2) =
+  match (p1, p2) with
+  | (IsTag tag1, IsTag tag2) -> compare_type_tag tag1 tag2
+  | (IsTupleOf tp1, IsTupleOf tp2) -> compare_tuple_predicate tp1 tp2
+  | (IsShapeOf sp1, IsShapeOf sp2) -> compare_shape_predicate sp1 sp2
+  | _ -> type_predicate__con_ordinal p1 - type_predicate__con_ordinal p2
+
+and compare_type_tag tag1 tag2 =
+  match (tag1, tag2) with
+  | (BoolTag, BoolTag)
+  | (IntTag, IntTag)
+  | (StringTag, StringTag)
+  | (ArraykeyTag, ArraykeyTag)
+  | (FloatTag, FloatTag)
+  | (NumTag, NumTag)
+  | (ResourceTag, ResourceTag)
+  | (NullTag, NullTag) ->
+    0
+  | (ClassTag (id1, args1), ClassTag (id2, args2)) -> begin
+    match String.compare id1 id2 with
+    | 0 -> tyl_compare ~sort:false args1 args2
+    | n -> n
+  end
+  | _ -> type_tag_con_ordinal tag1 - type_tag_con_ordinal tag2
+
+and compare_tuple_predicate tp1 tp2 =
+  List.compare compare_type_predicate tp1.tp_required tp2.tp_required
+
+and compare_shape_predicate sp1 sp2 =
+  TShapeMap.compare compare_shape_field_predicate sp1.sp_fields sp2.sp_fields
+
+and compare_shape_field_predicate { sfp_predicate = p1 } { sfp_predicate = p2 }
+    =
+  compare_type_predicate p1 p2
+
 and ty_compare : type a. ?normalize_lists:bool -> a ty -> a ty -> int =
  fun ?(normalize_lists = false) ty1 ty2 ->
   ty__compare ~normalize_lists (get_node ty1) (get_node ty2)
@@ -1435,6 +1522,7 @@ let string_of_visibility : ce_visibility -> string = function
   | Vprivate _ -> "private"
   | Vprotected _ -> "protected"
   | Vinternal _ -> "internal"
+  | Vprotected_internal _ -> "protected internal"
 
 (* Dedicated functions with more easily discoverable names *)
 let compare_locl_ty : ?normalize_lists:bool -> locl_ty -> locl_ty -> int =
@@ -1616,12 +1704,14 @@ let equal_internal_type ty1 ty2 =
     constraint_ty_equal ~normalize_lists:true ty1 ty2
   | (_, (LoclType _ | ConstraintType _)) -> false
 
+let equal_type_predicate p1 p2 = Int.equal 0 (compare_type_predicate p1 p2)
+
 module Locl_subst = struct
   type t = locl_ty SMap.t
 
   let rec apply_ty (ty : locl_ty) ~subst ~combine_reasons =
     match deref ty with
-    | (reason_src, Tgeneric (nm, _)) ->
+    | (reason_src, Tgeneric nm) ->
       (match SMap.find_opt nm subst with
       | Some ty_subst ->
         map_reason ty_subst ~f:(fun reason_dest ->
@@ -1663,9 +1753,8 @@ module Locl_subst = struct
             ( id,
               apply_exact exact ~subst ~combine_reasons,
               List.map tys ~f:(apply_ty ~subst ~combine_reasons) ) )
-    | ( _,
-        ( Tvar _ | Tunapplied_alias _ | Tany _ | Tnonnull | Tdynamic | Tprim _
-        | Tlabel _ | Tneg _ ) ) ->
+    | (_, (Tvar _ | Tany _ | Tnonnull | Tdynamic | Tprim _ | Tlabel _ | Tneg _))
+      ->
       ty
 
   and apply_tuple { t_required; t_extra } ~subst ~combine_reasons =
@@ -1774,3 +1863,175 @@ module Locl_subst = struct
     else
       apply_ty ty ~subst ~combine_reasons
 end
+
+module Find_locl = struct
+  let rec find_ty (ty : locl_ty) ~p =
+    if p ty then
+      Some ty
+    else begin
+      match get_node ty with
+      | Toption ty
+      | Tclass_ptr ty
+      | Taccess (ty, _)
+      | Tdependent (_, ty) ->
+        find_ty ty ~p
+      | Tunion tys
+      | Tintersection tys ->
+        find_first_ty tys ~p
+      | Tvec_or_dict (ty_k, ty_v) -> begin
+        match find_ty ty_k ~p with
+        | None -> find_ty ty_v ~p
+        | res -> res
+      end
+      | Tclass (_, exact, ty_args) -> begin
+        match find_exact exact ~p with
+        | None -> find_first_ty ty_args ~p
+        | res -> res
+      end
+      | Tnewtype (_, ty_args, ty_bound) -> begin
+        match find_first_ty ty_args ~p with
+        | None -> find_ty ty_bound ~p
+        | res -> res
+      end
+      | Ttuple tuple_ty -> find_tuple tuple_ty ~p
+      | Tfun fun_ty -> find_fun fun_ty ~p
+      | Tshape shape_ty -> find_shape shape_ty ~p
+      | Tgeneric _
+      | Tvar _
+      | Tany _
+      | Tnonnull
+      | Tdynamic
+      | Tprim _
+      | Tlabel _
+      | Tneg _ ->
+        None
+    end
+
+  and find_first_ty tys ~p =
+    match tys with
+    | [] -> None
+    | ty :: _ when p ty -> Some ty
+    | _ :: tys -> find_first_ty tys ~p
+
+  and find_tuple { t_required; t_extra } ~p =
+    match find_first_ty t_required ~p with
+    | None -> begin
+      match t_extra with
+      | Tsplat ty -> find_ty ty ~p
+      | Textra { t_optional; t_variadic } -> begin
+        match find_first_ty t_optional ~p with
+        | None -> find_ty t_variadic ~p
+        | res -> res
+      end
+    end
+    | res -> res
+
+  and find_fun
+      {
+        ft_tparams;
+        ft_where_constraints;
+        ft_params;
+        ft_implicit_params;
+        ft_ret;
+        _;
+      }
+      ~p =
+    match find_first_tparam ft_tparams ~p with
+    | None -> begin
+      match find_first_fun_param ft_params ~p with
+      | None -> begin
+        match find_implicit_params ft_implicit_params ~p with
+        | None -> begin
+          match find_first_where_constraint ft_where_constraints ~p with
+          | None -> find_ty ft_ret ~p
+          | res -> res
+        end
+        | res -> res
+      end
+      | res -> res
+    end
+    | res -> res
+
+  and find_first_tparam tparams ~p =
+    match tparams with
+    | [] -> None
+    | tparam :: tparams -> begin
+      match find_tparam tparam ~p with
+      | None -> find_first_tparam tparams ~p
+      | res -> res
+    end
+
+  and find_tparam { tp_constraints; _ } ~p =
+    find_first_constraint tp_constraints ~p
+
+  and find_first_constraint cstrs ~p =
+    match cstrs with
+    | [] -> None
+    | (_, ty) :: _ when p ty -> Some ty
+    | _ :: cstrs -> find_first_constraint cstrs ~p
+
+  and find_first_fun_param fun_params ~p =
+    match fun_params with
+    | [] -> None
+    | { fp_type; _ } :: _ when p fp_type -> Some fp_type
+    | _ :: cstrs -> find_first_fun_param cstrs ~p
+
+  and find_implicit_params { capability } ~p =
+    match capability with
+    | CapDefaults _ -> None
+    | CapTy ty -> find_ty ty ~p
+
+  and find_first_where_constraint cstrs ~p =
+    match cstrs with
+    | [] -> None
+    | cstr :: cstrs -> begin
+      match find_where_constraint cstr ~p with
+      | None -> find_first_where_constraint cstrs ~p
+      | res -> res
+    end
+
+  and find_where_constraint (ty1, _, ty2) ~p =
+    match find_ty ty1 ~p with
+    | None -> find_ty ty2 ~p
+    | res -> res
+
+  and find_shape { s_unknown_value; s_fields; _ } ~p =
+    match find_ty s_unknown_value ~p with
+    | None -> find_first_shape_field (TShapeMap.bindings s_fields) ~p
+    | res -> res
+
+  and find_first_shape_field fields ~p =
+    match fields with
+    | [] -> None
+    | (_, { sft_ty; _ }) :: fields -> begin
+      match find_ty sft_ty ~p with
+      | None -> find_first_shape_field fields ~p
+      | res -> res
+    end
+
+  and find_exact exact ~p =
+    match exact with
+    | Exact -> None
+    | Nonexact { cr_consts } ->
+      find_first_refined_const (SMap.bindings cr_consts) ~p
+
+  and find_first_refined_const cr_consts ~p =
+    match cr_consts with
+    | [] -> None
+    | (_, next) :: rest -> begin
+      match find_refined_const next ~p with
+      | None -> find_first_refined_const rest ~p
+      | res -> res
+    end
+
+  and find_refined_const { rc_bound; _ } ~p =
+    match rc_bound with
+    | TRexact ty -> find_ty ty ~p
+    | TRloose { tr_lower; tr_upper } -> begin
+      match find_first_ty tr_lower ~p with
+      | None -> find_first_ty tr_upper ~p
+      | res -> res
+    end
+end
+
+let find_locl_ty locl_ty ~p = Find_locl.find_ty locl_ty ~p

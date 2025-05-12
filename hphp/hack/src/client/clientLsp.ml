@@ -1153,7 +1153,9 @@ let ide_diagnostics_to_lsp_diagnostics
   let ide_diagnostic_to_lsp_diagnostics
       (diagnostic : ClientIdeMessage.diagnostic) :
       Lsp.PublishDiagnostics.diagnostic list =
-    let diagnostic_error = diagnostic.ClientIdeMessage.diagnostic_error in
+    let ClientIdeMessage.{ diagnostic_error; diagnostic_hash; _ } =
+      diagnostic
+    in
     let {
       User_error.severity;
       code;
@@ -1162,7 +1164,6 @@ let ide_diagnostics_to_lsp_diagnostics
       explanation = _;
       custom_msgs;
       is_fixmed = _;
-      flags = _;
       quickfixes = _;
       function_pos = _;
     } =
@@ -1184,6 +1185,14 @@ let ide_diagnostics_to_lsp_diagnostics
           },
           message ) =
       first_message
+    in
+    let data =
+      Some
+        Hh_json.(
+          JSON_Object
+            [
+              ("lineAgnosticHash", string_ (Printf.sprintf "%x" diagnostic_hash));
+            ])
     in
     let relatedInformation =
       additional_messages
@@ -1212,6 +1221,7 @@ let ide_diagnostics_to_lsp_diagnostics
         message;
         relatedInformation;
         relatedLocations = relatedInformation (* legacy FB extension *);
+        data;
       }
     in
     let additional_diagnostics =
@@ -2205,24 +2215,7 @@ let do_rageFB (state : state) : RageFB.result Lwt.t =
   Lwt.return [{ RageFB.title = None; data }]
 
 let do_hover_common (infos : HoverService.hover_info list) : Hover.result =
-  let contents =
-    infos
-    |> List.map ~f:(fun hoverInfo ->
-           (* Hack server uses None to indicate absence of a result. *)
-           (* We're also catching the non-result "" just in case...               *)
-           match hoverInfo with
-           | { HoverService.snippet = ""; _ } -> []
-           | { HoverService.snippet; addendum; _ } ->
-             let addendum = List.map ~f:(fun s -> MarkedString s) addendum in
-             let addendum =
-               if List.is_empty addendum then
-                 addendum
-               else
-                 MarkedString "---" :: addendum
-             in
-             MarkedCode ("hack", snippet) :: addendum)
-    |> List.concat
-  in
+  let contents = HoverService.as_marked_string_list infos in
   (* We pull the position from the SymbolOccurrence.t record, so I would be
      surprised if there were any different ones in here. Just take the first
      non-None one. *)
@@ -2614,19 +2607,25 @@ let rec hack_symbol_tree_to_lsp
   let open SymbolDefinition in
   let hack_to_lsp_kind = function
     | SymbolDefinition.Function -> SymbolInformation.Function
-    | SymbolDefinition.Class -> SymbolInformation.Class
-    | SymbolDefinition.Method -> SymbolInformation.Method
-    | SymbolDefinition.Property -> SymbolInformation.Property
-    | SymbolDefinition.ClassConst -> SymbolInformation.Constant
+    | SymbolDefinition.(Classish { classish_kind = Class; _ }) ->
+      SymbolInformation.Class
+    | SymbolDefinition.Member { member_kind; _ } ->
+      (match member_kind with
+      | SymbolDefinition.Method -> SymbolInformation.Method
+      | SymbolDefinition.Property -> SymbolInformation.Property
+      | SymbolDefinition.ClassConst -> SymbolInformation.Constant
+      | SymbolDefinition.TypeConst ->
+        SymbolInformation.Class
+        (* e.g. "const type Ta = string;" -- absent from LSP *))
     | SymbolDefinition.GlobalConst -> SymbolInformation.Constant
-    | SymbolDefinition.Enum -> SymbolInformation.Enum
-    | SymbolDefinition.Interface -> SymbolInformation.Interface
-    | SymbolDefinition.Trait -> SymbolInformation.Interface
+    | SymbolDefinition.(Classish { classish_kind = Enum; _ }) ->
+      SymbolInformation.Enum
+    | SymbolDefinition.(Classish { classish_kind = Interface; _ })
+    | SymbolDefinition.(Classish { classish_kind = Trait; _ }) ->
+      SymbolInformation.Interface
     (* LSP doesn't have traits, so we approximate with interface *)
     | SymbolDefinition.LocalVar -> SymbolInformation.Variable
     | SymbolDefinition.TypeVar -> SymbolInformation.TypeParameter
-    | SymbolDefinition.Typeconst -> SymbolInformation.Class
-    (* e.g. "const type Ta = string;" -- absent from LSP *)
     | SymbolDefinition.Typedef -> SymbolInformation.Class
     (* e.g. top level type alias -- absent from LSP *)
     | SymbolDefinition.Param -> SymbolInformation.Variable
@@ -2649,7 +2648,11 @@ let rec hack_symbol_tree_to_lsp
   (* Flattens the recursive list of symbols *)
   | [] -> List.rev accu
   | def :: defs ->
-    let children = Option.value def.children ~default:[] in
+    let children =
+      match def.kind with
+      | Classish { members; _ } -> members
+      | _ -> []
+    in
     let accu = hack_symbol_to_lsp def container_name :: accu in
     let accu =
       hack_symbol_tree_to_lsp
@@ -3448,6 +3451,12 @@ let publish_and_report_after_recomputing_live_squiggles
           uris
     in
     let params = ide_diagnostics_to_lsp_diagnostics file_path diagnostics in
+    let _ =
+      (* Log diagnostics so we can track error lifetime *)
+      Option.iter
+        (Telemetry.of_json_opt (Lsp_fmt.print_diagnostics params))
+        ~f:HackEventLogger.Diagnostics.log
+    in
     let notification = PublishDiagnosticsNotification params in
     notify_jsonrpc ~powered_by:Serverless_ide notification;
     report_recheck_telemetry ~trigger ~ref_unblocked_time uri (Ok diagnostics);
@@ -3542,7 +3551,7 @@ let handle_errors_file_item
           lenv.Run_env.uris_with_standalone_diagnostics
           |> UriMap.filter_map (fun uri (existing_time, diagnostics_from) ->
                  if
-                   UriMap.mem uri lenv.Run_env.editor_open_files
+                   UriSet.mem uri lenv.Run_env.uris_with_unsaved_changes
                    || Float.(existing_time > start_time)
                  then begin
                    Some (existing_time, diagnostics_from)
@@ -3589,7 +3598,7 @@ let handle_errors_file_item
         ~f:(fun path file_errors acc ->
           let path = Relative_path.to_absolute path in
           let uri = path_string_to_lsp_uri path ~default_path:path in
-          if UriMap.mem uri lenv.Run_env.editor_open_files then
+          if UriSet.mem uri lenv.Run_env.uris_with_unsaved_changes then
             acc
           else
             match UriMap.find_opt uri acc with
@@ -3597,7 +3606,9 @@ let handle_errors_file_item
               when Float.(existing_timestamp > start_time) ->
               acc
             | _ ->
-              let file_errors = Filter_errors.filter error_filter file_errors in
+              let file_errors =
+                Filter_errors.filter_with_hash error_filter file_errors
+              in
               (* We do not precompute additional diagnostic information (like
                  where to display additional LSP visual hints) for errors
                  received from the server. They will in general only be received

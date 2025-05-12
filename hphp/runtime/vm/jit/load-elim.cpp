@@ -16,11 +16,10 @@
 #include "hphp/runtime/vm/jit/opt.h"
 
 #include <cstdint>
-#include <algorithm>
 
-#include <boost/variant.hpp>
+#include <utility>
+#include <variant>
 #include <folly/ScopeGuard.h>
-#include <folly/Hash.h>
 
 #include "hphp/util/bitset-utils.h"
 #include "hphp/util/configs/hhir.h"
@@ -32,7 +31,6 @@
 
 #include "hphp/runtime/base/perf-warning.h"
 
-#include "hphp/runtime/vm/hhbc-codec.h"
 #include "hphp/runtime/vm/unwind.h"
 
 #include "hphp/runtime/vm/jit/alias-analysis.h"
@@ -54,7 +52,7 @@ namespace HPHP::jit {
 
 namespace {
 
-TRACE_SET_MOD(hhir_load);
+TRACE_SET_MOD(hhir_load)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -121,8 +119,8 @@ struct State {
 
   /*
    * If we know we've already executed a jmpz on an SSATmp, we can elide
-   * future jmpz instructions on same SSATmp. For jmpnz, we could just 
-   * use the tracked field above, but there is not a current way to 
+   * future jmpz instructions on same SSATmp. For jmpnz, we could just
+   * use the tracked field above, but there is not a current way to
    * specify "not zero" for type/value.
    */
   hphp_fast_set<SSATmp*> jmpz{};
@@ -303,14 +301,14 @@ struct FJmpTaken {};
 
 /*
  * The instruction can be turned into specialized frame teardown instructions
- * followed by an EndCatch or an EnterTCUnwind that will omit the teardown
+ * followed by an EndCatch that will omit the teardown
  */
 struct FFrameTeardown {
   int32_t numStackElems;
   CompactVector<std::pair<uint32_t, Type>> elems;
 };
 
-using Flags = boost::variant<FNone,FRedundant,FReducible,FRefinableLoad,
+using Flags = std::variant<FNone,FRedundant,FReducible,FRefinableLoad,
                              FRemovable,FJmpNext,FJmpTaken,FFrameTeardown>;
 
 //////////////////////////////////////////////////////////////////////
@@ -318,6 +316,7 @@ using Flags = boost::variant<FNone,FRedundant,FReducible,FRefinableLoad,
 // Conservative list of instructions which have type-parameters safe to refine.
 bool refinable_load_eligible(const IRInstruction& inst) {
   switch (inst.op()) {
+    case LdClosureArg:
     case LdLoc:
     case LdStk:
     case LdMem:
@@ -545,21 +544,21 @@ Flags handle_general_effects(Local& env,
 
       case InitSProps: {
         auto const handle = inst.extra<ClassData>()->cls->sPropInitHandle();
-        if (env.state.initRDS.count(handle) > 0) return FJmpNext{};
+        if (env.state.initRDS.contains(handle)) return FJmpNext{};
         env.state.initRDS.insert(handle);
         return std::nullopt;
       }
 
       case InitProps: {
         auto const handle = inst.extra<ClassData>()->cls->propHandle();
-        if (env.state.initRDS.count(handle) > 0) return FJmpNext{};
+        if (env.state.initRDS.contains(handle)) return FJmpNext{};
         env.state.initRDS.insert(handle);
         return std::nullopt;
       }
 
       case CheckRDSInitialized: {
         auto const handle = inst.extra<CheckRDSInitialized>()->handle;
-        if (env.state.initRDS.count(handle) > 0) return FJmpNext{};
+        if (env.state.initRDS.contains(handle)) return FJmpNext{};
         // set this unconditionally; we record taken state before every
         // instruction, and next state after each instruction
         env.state.initRDS.insert(handle);
@@ -568,7 +567,7 @@ Flags handle_general_effects(Local& env,
 
       case MarkRDSInitialized: {
         auto const handle = inst.extra<MarkRDSInitialized>()->handle;
-        if (env.state.initRDS.count(handle) > 0) return FRemovable{};
+        if (env.state.initRDS.contains(handle)) return FRemovable{};
         env.state.initRDS.insert(handle);
         return std::nullopt;
       }
@@ -625,7 +624,7 @@ Flags handle_irrelevant_effects(Local& env, const IRInstruction& inst) {
   switch (inst.op()) {
     case JmpZero: {
       auto const src = inst.src(0);
-      if (env.state.jmpz.count(src) > 0) return FJmpNext{};
+      if (env.state.jmpz.contains(src)) return FJmpNext{};
       // set this unconditionally; we record taken state before every
       // instruction, and next state after each instruction
       env.state.jmpz.insert(src);
@@ -649,7 +648,8 @@ void handle_call_effects(Local& env,
                     env.global.ainfo.all_ffunc    |
                     env.global.ainfo.all_fmeta    |
                     env.global.ainfo.all_local    |
-                    env.global.ainfo.all_iter;
+                    env.global.ainfo.all_iter     |
+                    env.global.ainfo.all_closureArg;
   env.state.avail &= keep;
 
   // Any stack locations modified by the callee are no longer valid
@@ -720,7 +720,7 @@ void check_decref_eligible(
       auto const type = tloc->knownType <= TCell ? tloc->knownType : TCell;
       elems.push_back({index, type});
     }
-  };
+  }
 
 Flags handle_end_catch(Local& env, const IRInstruction& inst) {
   if (env.global.unit.context().kind != TransKind::Optimize
@@ -792,39 +792,6 @@ Flags handle_end_catch(Local& env, const IRInstruction& inst) {
   }
 
   return FFrameTeardown { numStackElems, std::move(elems) };
-}
-
-Flags handle_enter_tc_unwind(Local& env, const IRInstruction& inst) {
-  if (env.global.unit.context().kind != TransKind::Optimize
-      || !Cfg::HHIR::LoadEnableTeardownOpts) {
-    return FNone{};
-  }
-  assertx(inst.op() == EnterTCUnwind);
-  auto const data = inst.extra<EnterTCUnwind>();
-  if (!data->teardown || inst.func()->isCPPBuiltin()) {
-    FTRACE(2, "      non-reducible EnterTCUnwind\n");
-    return FNone{};
-  }
-  auto const numLocals = inst.func()->numLocals();
-
-  FTRACE(2, "      reducible EnterTCUnwind\n");
-  CompactVector<std::pair<uint32_t, Type>> locals;
-
-  for (uint32_t i = 0; i < numLocals; ++i) {
-    check_decref_eligible(
-      env,
-      locals,
-      i,
-      AliasClass { ALocal { inst.marker().fp(), i }});
-  }
-
-  if (locals.size() > Cfg::HHIR::LoadThrowMaxDecrefs) {
-    FTRACE(2, "      handle_enter_tc_unwind: refusing -- too many decrefs {}\n",
-           locals.size());
-    return FNone{};
-  }
-
-  return FFrameTeardown { 0, std::move(locals) };
 }
 
 void refine_value(Local& env, SSATmp* newVal, SSATmp* oldVal) {
@@ -948,7 +915,7 @@ Flags analyze_inst(Local& env, const IRInstruction& inst) {
             show(effects));
 
   auto flags = Flags{};
-  match<void>(
+  match(
     effects,
     [&] (const IrrelevantEffects&) {
       flags = handle_irrelevant_effects(env, inst);
@@ -956,7 +923,6 @@ Flags analyze_inst(Local& env, const IRInstruction& inst) {
     [&] (const UnknownEffects&)    { clear_everything(env); },
     [&] (const ExitEffects&)       {
       if (inst.op() == EndCatch) flags = handle_end_catch(env, inst);
-      if (inst.op() == EnterTCUnwind) flags = handle_enter_tc_unwind(env, inst);
       clear_everything(env);
     },
     [&] (const ReturnEffects&)     {},
@@ -1279,34 +1245,8 @@ void optimize_end_catch(Global& env, IRInstruction& inst,
     teardownMode,
     original->vmspOffset
   };
-  env.unit.replace(&inst, EndCatch, data, inst.src(0), inst.src(1));
-  ++env.stackTeardownsOptimized;
-}
-
-void optimize_enter_tc_unwind(
-  Global& env,
-  IRInstruction& inst,
-  CompactVector<std::pair<uint32_t, Type>>& locals) {
-  FTRACE(3, "Optimizing EnterTCUnwind\n{}\n", inst.marker().show());
-
-  auto const block = inst.block();
-  auto const extra = inst.extra<EnterTCUnwind>();
-  assertx(extra->teardown);
-
-  for (auto local : locals) {
-    int locId = local.first;
-    auto const type = local.second;
-    FTRACE(5, "    Emitting decref for LocalId {}\n", locId);
-    auto const loadInst =
-      env.unit.gen(LdLoc, inst.bcctx(), type,
-                   LocalId{(uint32_t)locId}, inst.marker().fixupFP());
-    block->insert(block->iteratorTo(&inst), loadInst);
-    auto const decref =
-      env.unit.gen(DecRef, inst.bcctx(), DecRefData{locId}, loadInst->dst());
-    block->insert(block->iteratorTo(&inst), decref);
-  }
-  auto const etcData = EnterTCUnwindData {extra->offset, false};
-  env.unit.replace(&inst, EnterTCUnwind, etcData, inst.src(0));
+  env.unit.replace(
+    &inst, EndCatch, data, inst.src(0), inst.src(1), inst.src(2));
   ++env.stackTeardownsOptimized;
 }
 
@@ -1315,7 +1255,7 @@ void optimize_enter_tc_unwind(
 void optimize_inst(Global& env, IRInstruction& inst, Flags flags,
                    bool createPhis) {
   auto simplify = false;
-  match<void>(
+  match(
     flags,
     [&] (FNone) {},
 
@@ -1391,15 +1331,11 @@ void optimize_inst(Global& env, IRInstruction& inst, Flags flags,
 
     [&] (FFrameTeardown f) {
       FTRACE(2, "      frame teardown\n");
-      if (inst.op() == EndCatch) {
-        DEBUG_ONLY auto const data = inst.extra<EndCatchData>();
-        assertx(data->teardown == EndCatchData::Teardown::Full);
-        assertx(data->stublogue == EndCatchData::FrameMode::Phplogue);
-        optimize_end_catch(env, inst, f.numStackElems, f.elems);
-        return;
-      }
-      assertx(inst.op() == EnterTCUnwind && f.numStackElems == 0);
-      optimize_enter_tc_unwind(env, inst, f.elems);
+      assertx(inst.is(EndCatch));
+      DEBUG_ONLY auto const data = inst.extra<EndCatchData>();
+      assertx(data->teardown == EndCatchData::Teardown::Full);
+      assertx(data->stublogue == EndCatchData::FrameMode::Phplogue);
+      optimize_end_catch(env, inst, f.numStackElems, f.elems);
     }
   );
 
@@ -1425,7 +1361,7 @@ void optimize_edges(Global& env, Block* blk) {
 
     auto const handleCheck = [&](Type typeParam) -> Block* {
       assertx(inst.next() && inst.taken());
-      auto const ge = boost::get<GeneralEffects>(memory_effects(inst));
+      auto const ge = std::get<GeneralEffects>(memory_effects(inst));
       auto const meta = env.ainfo.find(canonicalize(ge.loads));
       if (!meta) return nullptr;
       if (!state.avail[meta->index]) return nullptr;
@@ -1580,8 +1516,8 @@ void merge_into(Global& genv, Block* target, State& dst, const State& src) {
     }
   );
 
-  folly::erase_if(dst.initRDS, [&](rds::Handle x) {return !src.initRDS.count(x);});
-  folly::erase_if(dst.jmpz, [&](SSATmp* x) {return !src.jmpz.count(x);});
+  folly::erase_if(dst.initRDS, [&](rds::Handle x) {return !src.initRDS.contains(x);});
+  folly::erase_if(dst.jmpz, [&](SSATmp* x) {return !src.jmpz.contains(x);});
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -1595,7 +1531,7 @@ void save_taken_state(Global& genv, const IRInstruction& inst,
   auto const handleCheck = [&](Type maxTakenType, Type subtractedType) {
     assertx(!inst.maySyncVMRegsWithSources());
     auto const effects = memory_effects(inst);
-    auto const ge = boost::get<GeneralEffects>(effects);
+    auto const ge = std::get<GeneralEffects>(effects);
     assertx(ge.inout == AEmpty);
     assertx(ge.backtrace.empty());
     auto const meta = genv.ainfo.find(canonicalize(ge.loads));

@@ -65,7 +65,7 @@ mstch::map t_mstch_generator::dump(const t_structured& strct, bool shallow) {
       {"exception?", strct.is_exception()},
       {"union?", strct.is_union()},
       {"plain?", !strct.is_exception() && !strct.is_union()},
-      {"annotations", dump_elems(strct.annotations())},
+      {"annotations", dump_elems(strct.unstructured_annotations())},
   };
 
   mstch::map extension = extend_struct(strct);
@@ -85,7 +85,7 @@ mstch::map t_mstch_generator::dump(const t_field& field, int32_t index) {
       {"optional?", req == t_field::e_req::optional},
       {"opt_in_req_out?", req == t_field::e_req::opt_in_req_out},
       {"terse?", req == t_field::e_req::terse},
-      {"annotations", dump_elems(field.annotations())},
+      {"annotations", dump_elems(field.unstructured_annotations())},
   };
 
   if (field.get_value() != nullptr) {
@@ -103,7 +103,7 @@ mstch::map t_mstch_generator::dump(const t_type& orig_type) {
 
   mstch::map result{
       {"name", type.get_name()},
-      {"annotations", dump_elems(type.annotations())},
+      {"annotations", dump_elems(type.unstructured_annotations())},
 
       {"void?", type.is_void()},
       {"string?", type.is_string()},
@@ -116,10 +116,11 @@ mstch::map t_mstch_generator::dump(const t_type& orig_type) {
       {"double?", type.is_double()},
       {"float?", type.is_float()},
       {"floating_point?", type.is_floating_point()},
-      {"struct?", type.is_struct() || type.is_exception()},
+      // TODO(T219861020): Evaluate if unions should be included and rename as
+      // needed.
+      {"struct?", type.is_struct_or_union() || type.is_exception()},
       {"union?", type.is_union()},
       {"enum?", type.is_enum()},
-      {"service?", type.is_service()},
       {"base?", type.is_primitive_type()},
       {"container?", type.is_container()},
       {"list?", type.is_list()},
@@ -128,13 +129,11 @@ mstch::map t_mstch_generator::dump(const t_type& orig_type) {
       {"typedef?", type.is_typedef()},
   };
 
-  if (type.is_struct() || type.is_exception()) {
+  if (type.is_struct_or_union() || type.is_exception()) {
     // Shallow dump the struct
     result.emplace("struct", dump(dynamic_cast<const t_struct&>(type), true));
   } else if (type.is_enum()) {
     result.emplace("enum", dump(dynamic_cast<const t_enum&>(type)));
-  } else if (type.is_service()) {
-    result.emplace("service", dump(dynamic_cast<const t_service&>(type)));
   } else if (type.is_list()) {
     result.emplace(
         "list_elem_type",
@@ -162,7 +161,7 @@ mstch::map t_mstch_generator::dump(const t_enum& enm) {
   mstch::map result{
       {"name", enm.get_name()},
       {"values", dump_elems(enm.get_enum_values())},
-      {"annotations", dump_elems(enm.annotations())},
+      {"annotations", dump_elems(enm.unstructured_annotations())},
   };
 
   mstch::map extension = extend_enum(enm);
@@ -185,7 +184,7 @@ mstch::map t_mstch_generator::dump(const t_service& service) {
   const t_service* extends = service.get_extends();
   mstch::map result{
       {"name", service.get_name()},
-      {"annotations", dump_elems(service.annotations())},
+      {"annotations", dump_elems(service.unstructured_annotations())},
       {"functions", dump_elems(service.get_functions())},
       {"functions?", !service.get_functions().empty()},
       {"extends?", extends != nullptr},
@@ -205,7 +204,7 @@ mstch::map t_mstch_generator::dump(const t_function& function) {
       {"return_type", dump(*function.return_type())},
       {"exceptions", dump_elems(exceptions)},
       {"exceptions?", !exceptions.empty()},
-      {"annotations", dump_elems(function.annotations())},
+      {"annotations", dump_elems(function.unstructured_annotations())},
       {"args", dump_elems(function.params().fields())},
   };
 
@@ -323,7 +322,7 @@ mstch::map t_mstch_generator::dump(const string& value) {
 
 mstch::map t_mstch_generator::dump_options() {
   mstch::map result;
-  for (auto& elem : options_) {
+  for (auto& elem : compiler_options()) {
     result.emplace(elem.first, elem.second);
   }
   return prepend_prefix("option", std::move(result));
@@ -395,13 +394,15 @@ const std::string& t_mstch_generator::get_template(
 }
 
 bool t_mstch_generator::has_option(const std::string& option) const {
-  return options_.find(option) != options_.end();
+  return has_compiler_option(option);
 }
 
 std::optional<std::string> t_mstch_generator::get_option(
     const std::string& option) const {
-  auto itr = options_.find(option);
-  return itr != options_.end() ? itr->second : std::optional<std::string>();
+  if (std::optional<std::string_view> found = get_compiler_option(option)) {
+    return std::string{*found};
+  }
+  return std::nullopt;
 }
 
 mstch::map t_mstch_generator::prepend_prefix(
@@ -413,9 +414,9 @@ mstch::map t_mstch_generator::prepend_prefix(
   return res;
 }
 
-whisker::map t_mstch_generator::globals() const {
+whisker::map::raw t_mstch_generator::globals() const {
   auto options = render_options();
-  whisker::map result;
+  whisker::map::raw result = t_whisker_generator::globals();
   for (const auto& undefined_name : options.allowed_undefined_variables) {
     result.insert({undefined_name, whisker::make::null});
   }

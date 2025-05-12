@@ -41,6 +41,7 @@ from python_test.containers.thrift_types import (
     Maps as MapsType,
 )
 from python_test.maps.thrift_types import (
+    constant_map,
     easy as easyType,
     F14MapFollyString as F14MapFollyStringType,
     StrAtoIValueMap as StrAtoIValueMapType,
@@ -73,6 +74,18 @@ class ImmutableMapTests(unittest.TestCase):
             {"foo": immutable_maps_types.StrI32ListMap()}
         )
         hash(x["foo"])
+
+    def test_constant_map(self) -> None:
+        self.assertEqual(constant_map["1"], 1)
+        self.assertEqual(constant_map["2"], 2)
+        self.assertEqual(constant_map["3"], 3)
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "'thrift.python.types.Map' object does not support item assignment",
+        ):
+            # pyre-ignore[16]: `typing.Mapping` has no attribute `__setitem__`
+            constant_map["4"] = 4
 
 
 @parameterized_class(

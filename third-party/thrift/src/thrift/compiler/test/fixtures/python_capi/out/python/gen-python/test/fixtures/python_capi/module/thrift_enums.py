@@ -11,11 +11,9 @@ import apache.thrift.metadata.thrift_types as _fbthrift_metadata
 import thrift.python.types as _fbthrift_python_types
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_MyEnum:
-    pass
 
 
-class MyEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_MyEnum):
+class MyEnum(_fbthrift_python_types.Enum, int):
     MyValue1 = 0
     MyValue2 = 1
     @staticmethod
@@ -33,20 +31,16 @@ class MyEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_MyEnum)
     def _to_python(self) -> "MyEnum":
         return self
 
-    def _to_py3(self) -> "test.fixtures.python_capi.module.types.MyEnum": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("test.fixtures.python_capi.module.types")
-        return py3_types.MyEnum(self.value)
+    def _to_py3(self) -> "MyEnum":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_AnnoyingEnum:
-    pass
 
 
-class AnnoyingEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_AnnoyingEnum):
+class AnnoyingEnum(_fbthrift_python_types.Enum, int):
     FOO = 1
     BAR = 2
     @staticmethod
@@ -64,10 +58,8 @@ class AnnoyingEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_A
     def _to_python(self) -> "AnnoyingEnum":
         return self
 
-    def _to_py3(self) -> "test.fixtures.python_capi.module.types.AnnoyingEnum": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("test.fixtures.python_capi.module.types")
-        return py3_types.AnnoyingEnum(self.value)
+    def _to_py3(self) -> "AnnoyingEnum":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value

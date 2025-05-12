@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct max_i64_field;
 struct min_i64_field;
@@ -56,11 +54,9 @@ APACHE_THRIFT_DEFINE_ACCESSOR(max_byte_field);
 APACHE_THRIFT_DEFINE_ACCESSOR(min_byte_field);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace cpp2 {
@@ -97,7 +93,11 @@ class Limits final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 8;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2,3,4,5,6,7,8};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::max_i64_field,
     ::apache::thrift::ident::min_i64_field,
     ::apache::thrift::ident::max_i32_field,
@@ -108,7 +108,6 @@ class Limits final  {
     ::apache::thrift::ident::min_byte_field
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2,3,4,5,6,7,8};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i64_t,
     ::apache::thrift::type::i64_t,
@@ -118,25 +117,6 @@ class Limits final  {
     ::apache::thrift::type::i16_t,
     ::apache::thrift::type::byte_t,
     ::apache::thrift::type::byte_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 8;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -198,451 +178,355 @@ class Limits final  {
   bool operator<(const Limits&) const;
 
   /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_i64_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_i64_field_ref() const& {
     return {this->__fbthrift_field_max_i64_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_i64_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_i64_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_i64_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_i64_field_ref() & {
     return {this->__fbthrift_field_max_i64_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_i64_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_i64_field), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_i64_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_i64_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_i64_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_i64_field() const& {
     return {this->__fbthrift_field_max_i64_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_i64_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_i64_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_i64_field() & {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_i64_field() & {
     return {this->__fbthrift_field_max_i64_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "max_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_i64_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_i64_field), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_i64_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_i64_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_i64_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_i64_field_ref() const& {
     return {this->__fbthrift_field_min_i64_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_i64_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_i64_field), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_i64_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_i64_field_ref() & {
     return {this->__fbthrift_field_min_i64_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_i64_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_i64_field), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_i64_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_i64_field), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_i64_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_i64_field() const& {
     return {this->__fbthrift_field_min_i64_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_i64_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_i64_field), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_i64_field() & {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_i64_field() & {
     return {this->__fbthrift_field_min_i64_field, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "min_i64_field" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_i64_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_i64_field), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_i64_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_i64_field), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_i32_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_i32_field_ref() const& {
     return {this->__fbthrift_field_max_i32_field, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_i32_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_i32_field), __isset.at(2), __isset.bit(2)};
-  }
-
-  /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_i32_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_i32_field_ref() & {
     return {this->__fbthrift_field_max_i32_field, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_i32_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_i32_field), __isset.at(2), __isset.bit(2)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_i32_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_i32_field), __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_i32_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_i32_field() const& {
     return {this->__fbthrift_field_max_i32_field, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_i32_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_i32_field), __isset.at(2), __isset.bit(2)};
-  }
-
-  /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_i32_field() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_i32_field() & {
     return {this->__fbthrift_field_max_i32_field, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "max_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_i32_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_i32_field), __isset.at(2), __isset.bit(2)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_i32_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_i32_field), __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_i32_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_i32_field_ref() const& {
     return {this->__fbthrift_field_min_i32_field, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_i32_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_i32_field), __isset.at(3), __isset.bit(3)};
-  }
-
-  /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_i32_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_i32_field_ref() & {
     return {this->__fbthrift_field_min_i32_field, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_i32_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_i32_field), __isset.at(3), __isset.bit(3)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_i32_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_i32_field), __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_i32_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_i32_field() const& {
     return {this->__fbthrift_field_min_i32_field, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_i32_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_i32_field), __isset.at(3), __isset.bit(3)};
-  }
-
-  /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_i32_field() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_i32_field() & {
     return {this->__fbthrift_field_min_i32_field, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "min_i32_field" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_i32_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_i32_field), __isset.at(3), __isset.bit(3)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_i32_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_i32_field), __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_i16_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_i16_field_ref() const& {
     return {this->__fbthrift_field_max_i16_field, __isset.at(4), __isset.bit(4)};
   }
 
   /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_i16_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_i16_field), __isset.at(4), __isset.bit(4)};
-  }
-
-  /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_i16_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_i16_field_ref() & {
     return {this->__fbthrift_field_max_i16_field, __isset.at(4), __isset.bit(4)};
   }
 
   /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_i16_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_i16_field), __isset.at(4), __isset.bit(4)};
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_i16_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_i16_field), __isset.at(4), __isset.bit(4)};
   }
 
   /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_i16_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_i16_field() const& {
     return {this->__fbthrift_field_max_i16_field, __isset.at(4), __isset.bit(4)};
   }
 
   /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_i16_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_i16_field), __isset.at(4), __isset.bit(4)};
-  }
-
-  /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_i16_field() & {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_i16_field() & {
     return {this->__fbthrift_field_max_i16_field, __isset.at(4), __isset.bit(4)};
   }
 
   /** Glean { "field": "max_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_i16_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_i16_field), __isset.at(4), __isset.bit(4)};
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_i16_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_i16_field), __isset.at(4), __isset.bit(4)};
   }
 
   /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_i16_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_i16_field_ref() const& {
     return {this->__fbthrift_field_min_i16_field, __isset.at(5), __isset.bit(5)};
   }
 
   /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_i16_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_i16_field), __isset.at(5), __isset.bit(5)};
-  }
-
-  /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_i16_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_i16_field_ref() & {
     return {this->__fbthrift_field_min_i16_field, __isset.at(5), __isset.bit(5)};
   }
 
   /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_i16_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_i16_field), __isset.at(5), __isset.bit(5)};
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_i16_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_i16_field), __isset.at(5), __isset.bit(5)};
   }
 
   /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_i16_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_i16_field() const& {
     return {this->__fbthrift_field_min_i16_field, __isset.at(5), __isset.bit(5)};
   }
 
   /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_i16_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_i16_field), __isset.at(5), __isset.bit(5)};
-  }
-
-  /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_i16_field() & {
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_i16_field() & {
     return {this->__fbthrift_field_min_i16_field, __isset.at(5), __isset.bit(5)};
   }
 
   /** Glean { "field": "min_i16_field" } */
-  template <typename..., typename T = ::std::int16_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_i16_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_i16_field), __isset.at(5), __isset.bit(5)};
+  template <typename..., typename fbthrift_T = ::std::int16_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_i16_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_i16_field), __isset.at(5), __isset.bit(5)};
   }
 
   /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_byte_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_byte_field_ref() const& {
     return {this->__fbthrift_field_max_byte_field, __isset.at(6), __isset.bit(6)};
   }
 
   /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_byte_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_byte_field), __isset.at(6), __isset.bit(6)};
-  }
-
-  /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_byte_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_byte_field_ref() & {
     return {this->__fbthrift_field_max_byte_field, __isset.at(6), __isset.bit(6)};
   }
 
   /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_byte_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_byte_field), __isset.at(6), __isset.bit(6)};
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_byte_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_byte_field), __isset.at(6), __isset.bit(6)};
   }
 
   /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> max_byte_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> max_byte_field() const& {
     return {this->__fbthrift_field_max_byte_field, __isset.at(6), __isset.bit(6)};
   }
 
   /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> max_byte_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_max_byte_field), __isset.at(6), __isset.bit(6)};
-  }
-
-  /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> max_byte_field() & {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> max_byte_field() & {
     return {this->__fbthrift_field_max_byte_field, __isset.at(6), __isset.bit(6)};
   }
 
   /** Glean { "field": "max_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> max_byte_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_max_byte_field), __isset.at(6), __isset.bit(6)};
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> max_byte_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_max_byte_field), __isset.at(6), __isset.bit(6)};
   }
 
   /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_byte_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_byte_field_ref() const& {
     return {this->__fbthrift_field_min_byte_field, __isset.at(7), __isset.bit(7)};
   }
 
   /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_byte_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_byte_field), __isset.at(7), __isset.bit(7)};
-  }
-
-  /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_byte_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_byte_field_ref() & {
     return {this->__fbthrift_field_min_byte_field, __isset.at(7), __isset.bit(7)};
   }
 
   /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_byte_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_byte_field), __isset.at(7), __isset.bit(7)};
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_byte_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_byte_field), __isset.at(7), __isset.bit(7)};
   }
 
   /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> min_byte_field() const& {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> min_byte_field() const& {
     return {this->__fbthrift_field_min_byte_field, __isset.at(7), __isset.bit(7)};
   }
 
   /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> min_byte_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_min_byte_field), __isset.at(7), __isset.bit(7)};
-  }
-
-  /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> min_byte_field() & {
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> min_byte_field() & {
     return {this->__fbthrift_field_min_byte_field, __isset.at(7), __isset.bit(7)};
   }
 
   /** Glean { "field": "min_byte_field" } */
-  template <typename..., typename T = ::std::int8_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> min_byte_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_min_byte_field), __isset.at(7), __isset.bit(7)};
+  template <typename..., typename fbthrift_T = ::std::int8_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> min_byte_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_min_byte_field), __isset.at(7), __isset.bit(7)};
   }
 
   /** Glean { "field": "max_i64_field" } */
-  [[deprecated("Use `FOO.max_i64_field().value();` instead of `FOO.get_max_i64_field();`")]]
+  [[deprecated("Use `FOO.max_i64_field().value()` instead of `FOO.get_max_i64_field()`")]]
   ::std::int64_t get_max_i64_field() const;
 
   /** Glean { "field": "max_i64_field" } */
-  [[deprecated("Use `FOO.max_i64_field() = BAR;` instead of `FOO.set_max_i64_field(BAR);`")]]
+  [[deprecated("Use `FOO.max_i64_field() = BAR` instead of `FOO.set_max_i64_field(BAR)`")]]
   ::std::int64_t& set_max_i64_field(::std::int64_t max_i64_field_);
 
   /** Glean { "field": "min_i64_field" } */
-  [[deprecated("Use `FOO.min_i64_field().value();` instead of `FOO.get_min_i64_field();`")]]
+  [[deprecated("Use `FOO.min_i64_field().value()` instead of `FOO.get_min_i64_field()`")]]
   ::std::int64_t get_min_i64_field() const;
 
   /** Glean { "field": "min_i64_field" } */
-  [[deprecated("Use `FOO.min_i64_field() = BAR;` instead of `FOO.set_min_i64_field(BAR);`")]]
+  [[deprecated("Use `FOO.min_i64_field() = BAR` instead of `FOO.set_min_i64_field(BAR)`")]]
   ::std::int64_t& set_min_i64_field(::std::int64_t min_i64_field_);
 
   /** Glean { "field": "max_i32_field" } */
-  [[deprecated("Use `FOO.max_i32_field().value();` instead of `FOO.get_max_i32_field();`")]]
+  [[deprecated("Use `FOO.max_i32_field().value()` instead of `FOO.get_max_i32_field()`")]]
   ::std::int32_t get_max_i32_field() const;
 
   /** Glean { "field": "max_i32_field" } */
-  [[deprecated("Use `FOO.max_i32_field() = BAR;` instead of `FOO.set_max_i32_field(BAR);`")]]
+  [[deprecated("Use `FOO.max_i32_field() = BAR` instead of `FOO.set_max_i32_field(BAR)`")]]
   ::std::int32_t& set_max_i32_field(::std::int32_t max_i32_field_);
 
   /** Glean { "field": "min_i32_field" } */
-  [[deprecated("Use `FOO.min_i32_field().value();` instead of `FOO.get_min_i32_field();`")]]
+  [[deprecated("Use `FOO.min_i32_field().value()` instead of `FOO.get_min_i32_field()`")]]
   ::std::int32_t get_min_i32_field() const;
 
   /** Glean { "field": "min_i32_field" } */
-  [[deprecated("Use `FOO.min_i32_field() = BAR;` instead of `FOO.set_min_i32_field(BAR);`")]]
+  [[deprecated("Use `FOO.min_i32_field() = BAR` instead of `FOO.set_min_i32_field(BAR)`")]]
   ::std::int32_t& set_min_i32_field(::std::int32_t min_i32_field_);
 
   /** Glean { "field": "max_i16_field" } */
-  [[deprecated("Use `FOO.max_i16_field().value();` instead of `FOO.get_max_i16_field();`")]]
+  [[deprecated("Use `FOO.max_i16_field().value()` instead of `FOO.get_max_i16_field()`")]]
   ::std::int16_t get_max_i16_field() const;
 
   /** Glean { "field": "max_i16_field" } */
-  [[deprecated("Use `FOO.max_i16_field() = BAR;` instead of `FOO.set_max_i16_field(BAR);`")]]
+  [[deprecated("Use `FOO.max_i16_field() = BAR` instead of `FOO.set_max_i16_field(BAR)`")]]
   ::std::int16_t& set_max_i16_field(::std::int16_t max_i16_field_);
 
   /** Glean { "field": "min_i16_field" } */
-  [[deprecated("Use `FOO.min_i16_field().value();` instead of `FOO.get_min_i16_field();`")]]
+  [[deprecated("Use `FOO.min_i16_field().value()` instead of `FOO.get_min_i16_field()`")]]
   ::std::int16_t get_min_i16_field() const;
 
   /** Glean { "field": "min_i16_field" } */
-  [[deprecated("Use `FOO.min_i16_field() = BAR;` instead of `FOO.set_min_i16_field(BAR);`")]]
+  [[deprecated("Use `FOO.min_i16_field() = BAR` instead of `FOO.set_min_i16_field(BAR)`")]]
   ::std::int16_t& set_min_i16_field(::std::int16_t min_i16_field_);
 
   /** Glean { "field": "max_byte_field" } */
-  [[deprecated("Use `FOO.max_byte_field().value();` instead of `FOO.get_max_byte_field();`")]]
+  [[deprecated("Use `FOO.max_byte_field().value()` instead of `FOO.get_max_byte_field()`")]]
   ::std::int8_t get_max_byte_field() const;
 
   /** Glean { "field": "max_byte_field" } */
-  [[deprecated("Use `FOO.max_byte_field() = BAR;` instead of `FOO.set_max_byte_field(BAR);`")]]
+  [[deprecated("Use `FOO.max_byte_field() = BAR` instead of `FOO.set_max_byte_field(BAR)`")]]
   ::std::int8_t& set_max_byte_field(::std::int8_t max_byte_field_);
 
   /** Glean { "field": "min_byte_field" } */
-  [[deprecated("Use `FOO.min_byte_field().value();` instead of `FOO.get_min_byte_field();`")]]
+  [[deprecated("Use `FOO.min_byte_field().value()` instead of `FOO.get_min_byte_field()`")]]
   ::std::int8_t get_min_byte_field() const;
 
   /** Glean { "field": "min_byte_field" } */
-  [[deprecated("Use `FOO.min_byte_field() = BAR;` instead of `FOO.set_min_byte_field(BAR);`")]]
+  [[deprecated("Use `FOO.min_byte_field() = BAR` instead of `FOO.set_min_byte_field(BAR)`")]]
   ::std::int8_t& set_min_byte_field(::std::int8_t min_byte_field_);
 
   template <class Protocol_>
@@ -671,3 +555,11 @@ unsigned long Limits::read(Protocol_* iprot) {
 
 
 } // namespace cpp2
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::cpp2::Limits, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 7679448199460944269;
+  static constexpr ::std::string_view definitionKey = {"\x99\xa8\x8e\x26\x67\x17\x25\x40\xcf\xdb\x5f\x9b\x19\x6a\x4f\x30", 16};
+};
+} // namespace apache::thrift::detail

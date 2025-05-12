@@ -16,7 +16,6 @@
 
 #include "hphp/runtime/vm/jit/ir-builder.h"
 
-#include <algorithm>
 #include <utility>
 
 #include <folly/ScopeGuard.h>
@@ -25,7 +24,6 @@
 #include "hphp/util/configs/hhir.h"
 #include "hphp/util/trace.h"
 
-#include "hphp/runtime/base/rds.h"
 #include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/guard-constraint.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
@@ -35,13 +33,12 @@
 #include "hphp/runtime/vm/jit/punt.h"
 #include "hphp/runtime/vm/jit/simple-propagation.h"
 #include "hphp/runtime/vm/jit/simplify.h"
-#include "hphp/runtime/vm/jit/translator.h"
 
 namespace HPHP::jit::irgen {
 
 namespace {
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 using Trace::Indent;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1193,6 +1190,42 @@ IRBuilder::SkToBlockMap IRBuilder::saveAndClearOffsetMapping() {
 
 void IRBuilder::restoreOffsetMapping(SkToBlockMap&& offsetMapping) {
   m_skToBlockMap = std::move(offsetMapping);
+}
+
+Block* IRBuilder::getEHBlock(SrcKey sk) const {
+  auto const it = m_skToEHBlockMap.find(sk);
+  return it != m_skToEHBlockMap.end() ? it->second : nullptr;
+}
+
+Block* IRBuilder::getEHDecRefBlock(Block* prev, SSATmp* value) const {
+  auto const valueId = value != nullptr
+    ? value->id()
+    : std::numeric_limits<uint32_t>::max();
+  auto const key = std::make_pair(prev->id(), valueId);
+  auto const it = m_skToEHDecRefBlockMap.find(key);
+  return it != m_skToEHDecRefBlockMap.end() ? it->second : nullptr;
+}
+
+void IRBuilder::setEHBlock(SrcKey sk, Block* block) {
+  assertx(getEHBlock(sk) == nullptr);
+  m_skToEHBlockMap[sk] = block;
+}
+
+void IRBuilder::setEHDecRefBlock(Block* prev, SSATmp* value, Block* block) {
+  assertx(getEHDecRefBlock(prev, value) == nullptr);
+  auto const valueId = value != nullptr
+    ? value->id()
+    : std::numeric_limits<uint32_t>::max();
+  auto const key = std::make_pair(prev->id(), valueId);
+  m_skToEHDecRefBlockMap[key] = block;
+}
+
+IRBuilder::SkToBlockMap IRBuilder::saveAndClearEHBlockMapping() {
+  return std::move(m_skToEHBlockMap);
+}
+
+void IRBuilder::restoreEHBlockMapping(SkToBlockMap&& ehBlockMapping) {
+  m_skToEHBlockMap = std::move(ehBlockMapping);
 }
 
 void IRBuilder::pushBlock(const BCMarker& marker, Block* b) {

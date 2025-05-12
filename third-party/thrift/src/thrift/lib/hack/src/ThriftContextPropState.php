@@ -1,5 +1,20 @@
 <?hh
-// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 // Reference implementations:
 //  www/flib/core/contextprop/ContextManager.php
@@ -11,6 +26,8 @@ final class ThriftContextPropState {
   private static ?ThriftContextPropState $instance = null;
   private ThriftFrameworkMetadata $storage;
   private dict<int, string> $serializedStorage;
+  public static ?bool $setFBUserIdInPSP = null;
+  public static ?bool $setIGUserIdInPSP = null;
 
   private function __construct()[write_props, zoned_shallow] {
     $this->storage = ThriftFrameworkMetadata::withDefaultValues();
@@ -22,7 +39,26 @@ final class ThriftContextPropState {
    */
   public static function initFromHeaders()[defaults]: void {
     $tfm = HTTPHeaders::get()->getHeader(HTTPRequestHeader::THRIFT_FMHK);
-    self::initFromString($tfm);
+    $skip_experiment_id_ingestion =
+      !JustKnobs::eval('lumos/experimentation:enable_www_experiment_id_api');
+    self::initFromString($tfm, $skip_experiment_id_ingestion);
+  }
+
+  /**
+  * Initializes ThriftContextPropState from WWW subrequest Headers.
+  * Takes in custom subrequest headers
+  */
+  public static function getOriginIdFromSubrequestHeaders(
+    HTTPHeaders $headers,
+  )[defaults]: ?int {
+    $tfm = $headers->getHeader(HTTPRequestHeader::THRIFT_FMHK);
+    $skip_experiment_id_ingestion =
+      !JustKnobs::eval('lumos/experimentation:enable_www_experiment_id_api');
+    if ($tfm === null) {
+      return 0;
+    }
+    return
+      self::getTfmFromString($tfm, $skip_experiment_id_ingestion)->origin_id;
   }
 
   // If anything changes with the ThriftFrameworkMetadata, throw out the
@@ -75,23 +111,22 @@ final class ThriftContextPropState {
    * Initizes ThriftContextPropState from a string (base64-encoded
    * compact-serialized ThriftFrameworkMetadata).
    */
-  public static function initFromString(?string $s)[defaults]: void {
+  public static function initFromString(
+    ?string $s,
+    bool $skip_experiment_id_ingestion = true,
+  )[defaults]: void {
     try {
       $rid_set = false;
+
       if ($s !== null) {
-        $transport = Base64::decode($s);
-        $buf = new TMemoryBuffer($transport);
-        $prot = new TCompactProtocolAccelerated($buf);
-        $tfm = ThriftFrameworkMetadata::withDefaultValues();
-        $tfm->read($prot);
+        $tfm = self::getTfmFromString($s, $skip_experiment_id_ingestion);
+        self::get()->storage = $tfm;
+        self::get()->dirty();
 
         $rid = $tfm->request_id;
         if ($rid !== null && !Str\is_empty($rid)) {
           $rid_set = true;
         }
-
-        self::get()->storage = $tfm;
-        self::get()->dirty();
       }
     } catch (\Exception $ex) {
       // Swallow the error, rather than nuke the whole request
@@ -106,11 +141,32 @@ final class ThriftContextPropState {
     }
   }
 
+  private static function getTfmFromString(
+    string $s,
+    bool $skip_experiment_id_ingestion = true,
+  ): ThriftFrameworkMetadata {
+    $transport = Base64::decode($s);
+    $buf = new TMemoryBuffer($transport);
+    $prot = new TCompactProtocolAccelerated($buf);
+    $tfm = ThriftFrameworkMetadata::withDefaultValues();
+    $tfm->read($prot);
+
+    if ($skip_experiment_id_ingestion && $tfm->experiment_ids is nonnull) {
+      $tfm->experiment_ids = vec[];
+    }
+
+    return $tfm;
+
+  }
+
   // update FB user id from explicit value
   public static function updateFBUserId(?int $fb_user_id, string $src): bool {
     // don't overwrite if TCPS already has a valid fb user id
     $tcps_fb_user_id = self::get()->getFBUserId();
+    $ods = CategorizedOBC::typedGet(ODSCategoryID::ODS_CONTEXTPROP);
+
     if (self::coerceId($tcps_fb_user_id) is nonnull) {
+      $ods->bumpKey('contextprop.fb_user_id_exists.'.$src);
       return false;
     }
     if (
@@ -125,14 +181,13 @@ final class ThriftContextPropState {
 
     $fb_user_id = self::coerceId($fb_user_id);
 
-    $ods = CategorizedOBC::typedGet(ODSCategoryID::ODS_CONTEXTPROP);
     if ($fb_user_id is nonnull) {
       self::get()->setFBUserId($fb_user_id);
-      $ods->bumpKey('contextprop.set_fb_user_id'.$src);
+      $ods->bumpKey('contextprop.set_fb_user_id.'.$src);
       return true;
     }
 
-    $ods->bumpKey('contextprop.missing_fb_user_id'.$src);
+    $ods->bumpKey('contextprop.missing_fb_user_id.'.$src);
     return false;
   }
 
@@ -168,12 +223,42 @@ final class ThriftContextPropState {
     }
   }
 
+  public static function updateIGUserId(?int $ig_user_id, string $src): bool {
+    // don't overwrite if TCPS already has a valid ig user id
+    $tcps_ig_user_id = self::get()->getIGUserId();
+    $ods = CategorizedOBC::typedGet(ODSCategoryID::ODS_CONTEXTPROP);
+
+    if (self::coerceId($tcps_ig_user_id) is nonnull) {
+      $ods->bumpKey('contextprop.ig_user_id_exists.'.$src);
+      return false;
+    }
+    if (
+      !JustKnobs::eval(
+        'meta_cp/www:enable_user_id_ctx_prop',
+        /*hashval=*/null,
+        /*switchval=*/$src,
+      )
+    ) {
+      return false;
+    }
+    $ig_user_id = self::coerceId($ig_user_id);
+
+    if ($ig_user_id is nonnull) {
+      self::get()->setIGUserId($ig_user_id);
+      $ods->bumpKey('contextprop.set_ig_user_id.'.$src);
+      return true;
+    }
+
+    $ods->bumpKey('contextprop.missing_ig_user_id.'.$src);
+    return false;
+  }
+
   private static function updateFBUserIdFromVC(
     IFBViewerContext $vc,
     string $src,
   ): bool {
     $ods = CategorizedOBC::typedGet(ODSCategoryID::ODS_CONTEXTPROP);
-    $ods->bumpKey('contextprop.fb_vc'.$src);
+    $ods->bumpKey('contextprop.fb_vc.'.$src);
 
     $fb_user_id = self::coerceId($vc->getUserID());
     return self::updateFBUserId($fb_user_id, $src);
@@ -184,22 +269,10 @@ final class ThriftContextPropState {
     string $src,
   ): bool {
     $ods = CategorizedOBC::typedGet(ODSCategoryID::ODS_CONTEXTPROP);
-    $ods->bumpKey('contextprop.ig_vc'.$src);
-    // don't overwrite if TCPS already has a valid ig user id
-    $tcps_ig_user_id = self::get()->getIGUserId();
-    if (self::coerceId($tcps_ig_user_id) is nonnull) {
-      return false;
-    }
+    $ods->bumpKey('contextprop.ig_vc.'.$src);
 
     $ig_user_id = self::coerceId($vc->getViewerID());
-    if ($ig_user_id is nonnull) {
-      $ods->bumpKey('contextprop.set_ig_user_id'.$src);
-      self::get()->setIGUserId($ig_user_id);
-      return true;
-    }
-
-    $ods->bumpKey('contextprop.missing_ig_user_id'.$src);
-    return false;
+    return self::updateIGUserId($ig_user_id, $src);
   }
 
   // returns id if it is valid (non-null, positive)
@@ -365,7 +438,7 @@ final class ThriftContextPropState {
     $this->dirty();
   }
 
-  public function setFBUserId(int $fb_user_id)[write_props]: void {
+  public function setFBUserId(int $fb_user_id): void {
     $this->storage->baggage =
       $this->storage->baggage ?? ContextProp\Baggage::withDefaultValues();
     $baggage = $this->storage->baggage as nonnull;
@@ -373,10 +446,12 @@ final class ThriftContextPropState {
     $baggage->user_ids =
       $baggage->user_ids ?? ContextProp\UserIds::withDefaultValues();
     $baggage->user_ids->fb_user_id = $fb_user_id;
+
+    self::$setFBUserIdInPSP = PSP()->isRunning();
     $this->dirty();
   }
 
-  public function setIGUserId(int $ig_user_id)[write_props]: void {
+  public function setIGUserId(int $ig_user_id): void {
     $this->storage->baggage =
       $this->storage->baggage ?? ContextProp\Baggage::withDefaultValues();
     $baggage = $this->storage->baggage as nonnull;
@@ -384,6 +459,8 @@ final class ThriftContextPropState {
     $baggage->user_ids =
       $baggage->user_ids ?? ContextProp\UserIds::withDefaultValues();
     $baggage->user_ids->ig_user_id = $ig_user_id;
+
+    self::$setIGUserIdInPSP = PSP()->isRunning();
     $this->dirty();
   }
 
@@ -410,14 +487,14 @@ final class ThriftContextPropState {
     return vec[];
   }
 
-  public function addExperimentId(int $eid)[write_props]: void {
+  public function addExperimentId(int $eid): void {
     $v = $this->getExperimentIds();
     $v[] = $eid;
     $this->storage->experiment_ids = $v;
     $this->dirty();
   }
 
-  public function setExperimentIds(vec<int> $eids)[write_props]: void {
+  public function setExperimentIds(vec<int> $eids): void {
     $this->storage->experiment_ids = $eids;
     $this->dirty();
   }
@@ -518,6 +595,37 @@ final class ThriftContextPropState {
     }
     $flags1 &= ~(1 << (int)$flag_name); //set bit at flag position to 0
     $this->setBaggageFlags1($flags1);
+  }
+
+  // Getters for the root_product_id
+  public readonly function getRootProductId()[leak_safe]: ?int {
+    if ($this->storage->baggage is null) {
+      return null;
+    }
+    $root_product_id = $this->storage->baggage?->root_product_id;
+    if ($root_product_id is null) {
+      return null;
+    }
+    return ($root_product_id as int);
+  }
+
+  // Immutable setter for the root_product_id
+  public function setRootProductId(int $root_product_id): ?int {
+    $current_root_product_id = $this->getRootProductId();
+
+    // By design, If the root product id is already set, do not overwrite it
+    if ($current_root_product_id is null) {
+      $this->storage->baggage =
+        $this->storage->baggage ?? ContextProp\Baggage::withDefaultValues();
+
+      $baggage = $this->storage->baggage as nonnull;
+      $baggage->root_product_id = $root_product_id;
+      $current_root_product_id = $root_product_id;
+
+      $this->dirty();
+    }
+
+    return $current_root_product_id;
   }
 
   public function getTFMCopy(): ThriftFrameworkMetadata {

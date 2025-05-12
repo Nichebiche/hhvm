@@ -16,9 +16,11 @@
 
 #pragma once
 
+#include <thrift/compiler/whisker/ast.h>
 #include <thrift/compiler/whisker/expected.h>
 #include <thrift/compiler/whisker/object.h>
 
+#include <cassert>
 #include <cstddef>
 #include <deque>
 #include <functional>
@@ -43,9 +45,12 @@ namespace whisker {
 class eval_scope_lookup_error {
  public:
   explicit eval_scope_lookup_error(
-      std::string property_name, std::vector<object::ptr> searched_scopes)
+      std::string property_name,
+      std::vector<object> searched_scopes,
+      std::string cause = {})
       : property_name_(std::move(property_name)),
-        searched_scopes_(std::move(searched_scopes)) {}
+        searched_scopes_(std::move(searched_scopes)),
+        cause_(std::move(cause)) {}
 
   /**
    * The name of the property that was missing.
@@ -58,13 +63,19 @@ class eval_scope_lookup_error {
    * The order of objects on the stack is the order of search (most to least
    * local).
    */
-  const std::vector<object::ptr>& searched_scopes() const {
+  const std::vector<object>& searched_scopes() const {
     return searched_scopes_;
   }
+  /**
+   * The underlying cause of the failed lookup, or empty string if simply
+   * missing.
+   */
+  const std::string& cause() const { return cause_; }
 
  private:
   std::string property_name_;
-  std::vector<object::ptr> searched_scopes_;
+  std::vector<object> searched_scopes_;
+  std::string cause_;
 };
 
 /**
@@ -78,17 +89,19 @@ class eval_scope_lookup_error {
 class eval_property_lookup_error {
  public:
   explicit eval_property_lookup_error(
-      object::ptr missing_from,
+      object missing_from,
       std::vector<std::string> success_path,
-      std::string property_name)
+      std::string property_name,
+      std::string cause = std::string())
       : missing_from_(std::move(missing_from)),
         success_path_(std::move(success_path)),
-        property_name_(std::move(property_name)) {}
+        property_name_(std::move(property_name)),
+        cause_(std::move(cause)) {}
 
   /**
    * The object on which the property named by property_name() was missing.
    */
-  const object::ptr& missing_from() const { return missing_from_; }
+  const object& missing_from() const { return missing_from_; }
   /**
    * The path of property lookups that succeeded before the failure.
    */
@@ -97,11 +110,17 @@ class eval_property_lookup_error {
    * The name of the property that was missing.
    */
   const std::string& property_name() const { return property_name_; }
+  /**
+   * The underlying cause of the failed lookup, or empty string if simply
+   * missing.
+   */
+  const std::string& cause() const { return cause_; }
 
  private:
-  object::ptr missing_from_;
+  object missing_from_;
   std::vector<std::string> success_path_;
   std::string property_name_;
+  std::string cause_;
 };
 
 /**
@@ -144,8 +163,9 @@ class eval_name_already_bound_error {
  */
 class eval_context {
  public:
-  eval_context() : eval_context(map()) {}
-  explicit eval_context(map globals);
+  explicit eval_context(diagnostics_engine& diags)
+      : eval_context(diags, map::raw()) {}
+  eval_context(diagnostics_engine&, map::raw globals);
 
   /**
    * Creates an eval_context with an initial root scope.
@@ -153,11 +173,8 @@ class eval_context {
    * Post-conditions:
    *   - stack_depth() == 1
    */
-  static eval_context with_root_scope(object::ptr root_scope, map globals = {});
-  static eval_context with_root_scope(object root_scope, map globals = {}) {
-    return with_root_scope(
-        manage_owned<object>(std::move(root_scope)), std::move(globals));
-  }
+  static eval_context with_root_scope(
+      diagnostics_engine&, object root_scope, map::raw globals = {});
 
   ~eval_context() noexcept;
 
@@ -174,7 +191,7 @@ class eval_context {
    *
    * Calling push_scope() increases the stack depth by 1.
    */
-  void push_scope(object::ptr object);
+  void push_scope(object);
 
   /**
    * Pops the top-most lexical scope from the stack. The previous scope becomes
@@ -194,7 +211,7 @@ class eval_context {
    *
    * The global scope cannot be popped off the stack.
    */
-  const object::ptr& global_scope() const;
+  const object& global_scope() const;
 
   /**
    * Binds a name to an object. This binding is local to the current scope,
@@ -206,14 +223,40 @@ class eval_context {
    *     the current scope.
    */
   [[nodiscard]] expected<std::monostate, eval_name_already_bound_error>
-  bind_local(std::string name, object::ptr value);
+  bind_local(std::string name, object value);
 
+  struct lookup_result {
+    /**
+     * The found object at the end of a lookup path. That is, for the lookup
+     * `a.b.c`, the result is `c`.
+     */
+    object found;
+    const object* operator->() const noexcept { return &found; }
+    const object& operator*() const noexcept { return found; }
+
+    /**
+     * The found object's predecessor. That is, for the lookup `a.b.c`, the
+     * parent is `b`.
+     *
+     * When the path only has one component, this points to a null whisker
+     * object (see whisker::make::null).
+     */
+    object parent;
+    static lookup_result without_parent(object found) {
+      return lookup_result{found, whisker::make::null};
+    }
+  };
+  using lookup_error =
+      std::variant<eval_scope_lookup_error, eval_property_lookup_error>;
   /**
    * Performs a lexical search for an object by name (chain of properties)
    * within the current scope (top of the stack).
    *
    * If the provided path is empty, the object backing the current scope is
    * returned. That is, the "{{.}}" object. This is infallible.
+   *
+   * This function returns the object at the provided path as well as its
+   * precedessor.
    *
    * Preconditions:
    *   - The provided path is a series of valid Whisker identifier
@@ -224,10 +267,8 @@ class eval_context {
    *   - eval_property_lookup_error if any subsequent identifier is not found in
    *     the chain of resolved whisker::objects.
    */
-  expected<
-      object::ptr,
-      std::variant<eval_scope_lookup_error, eval_property_lookup_error>>
-  lookup_object(const std::vector<std::string>& path);
+  expected<lookup_result, lookup_error> lookup_object(
+      const ast::variable_lookup& path);
 
   /**
    * Creates a new "derived" eval_context from the current one.
@@ -235,10 +276,12 @@ class eval_context {
    * A derived eval_context has a fresh stack (empty) but retains the same
    * global scope from the current one.
    */
-  eval_context make_derived() const { return eval_context(global_scope_); }
+  eval_context make_derived() const {
+    return eval_context(diags_, global_scope_);
+  }
 
  private:
-  explicit eval_context(object::ptr globals);
+  explicit eval_context(diagnostics_engine&, object globals);
 
   /**
    * A lexical scope which determines how name lookups are performed within the
@@ -255,7 +298,7 @@ class eval_context {
    * stack of lexical_scope).
    *
    * In Whisker, all lexical scopes are backed by whisker::object. However, only
-   * whisker::map and whisker::native_object have enumerable property names.
+   * whisker::map and whisker::native_handle<> have enumerable property names.
    * Other types only allow the self-referential {{.}} lookup.
    *
    * Lexical scopes can also have "locals" — these are names bound to the
@@ -265,32 +308,37 @@ class eval_context {
    */
   class lexical_scope {
    public:
-    explicit lexical_scope(object::ptr this_ref)
-        : this_ref_(std::move(this_ref)) {}
+    explicit lexical_scope(object this_ref) : this_ref_(std::move(this_ref)) {}
 
     // The {{.}} object is always available in the current scope (or else the
     // scope couldn't exist).
-    const object::ptr& this_ref() const { return this_ref_; }
+    const object& this_ref() const { return this_ref_; }
 
     /**
      * Looks up a properties in the following order:
      *   1. Locals
      *   2. Backing object (this_ref())
+     *
+     * Throws:
+     *   - `eval_error` if the lookup into the backing object
+     *     throws
      */
-    object::ptr lookup_property(std::string_view identifier);
+    std::optional<object> lookup_property(
+        diagnostics_engine& diags, const ast::identifier& identifier);
 
     // Before C++20, std::unordered_map does not support heterogenous lookups
-    using locals_map = std::map<std::string, object::ptr, std::less<>>;
+    using locals_map = std::map<std::string, object, std::less<>>;
     locals_map& locals() noexcept { return locals_; }
     const locals_map& locals() const noexcept { return locals_; }
 
    private:
-    object::ptr this_ref_;
+    object this_ref_;
     locals_map locals_;
   };
 
+  std::reference_wrapper<diagnostics_engine> diags_;
   // The bottom of the stack that holds all global bindings.
-  object::ptr global_scope_;
+  object global_scope_;
   // We're using a deque because we want to maintain reference stability when
   // push_scope() / pop_scope() are called. This is because there may be
   // references passed around to those scope objects.

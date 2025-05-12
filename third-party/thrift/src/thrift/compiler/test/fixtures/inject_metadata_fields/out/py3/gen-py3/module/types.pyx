@@ -37,6 +37,7 @@ from thrift.py3.types cimport (
     make_const_shared,
     constant_shared_ptr,
 )
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -63,6 +64,7 @@ cdef object get_types_reflection():
     )
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class Fields(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -114,10 +116,7 @@ cdef class Fields(thrift.py3.types.Struct):
 
 
     def __copy__(Fields self):
-        cdef shared_ptr[_module_cbindings.cFields] cpp_obj = make_shared[_module_cbindings.cFields](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return Fields._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -178,6 +177,7 @@ cdef class Fields(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.Fields, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class FieldsInjectedToEmptyStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -229,10 +229,7 @@ cdef class FieldsInjectedToEmptyStruct(thrift.py3.types.Struct):
 
 
     def __copy__(FieldsInjectedToEmptyStruct self):
-        cdef shared_ptr[_module_cbindings.cFieldsInjectedToEmptyStruct] cpp_obj = make_shared[_module_cbindings.cFieldsInjectedToEmptyStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return FieldsInjectedToEmptyStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -293,6 +290,7 @@ cdef class FieldsInjectedToEmptyStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.FieldsInjectedToEmptyStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class FieldsInjectedToStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -352,10 +350,7 @@ cdef class FieldsInjectedToStruct(thrift.py3.types.Struct):
 
 
     def __copy__(FieldsInjectedToStruct self):
-        cdef shared_ptr[_module_cbindings.cFieldsInjectedToStruct] cpp_obj = make_shared[_module_cbindings.cFieldsInjectedToStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return FieldsInjectedToStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -416,6 +411,7 @@ cdef class FieldsInjectedToStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.FieldsInjectedToStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class FieldsInjectedWithIncludedStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -495,10 +491,7 @@ cdef class FieldsInjectedWithIncludedStruct(thrift.py3.types.Struct):
 
 
     def __copy__(FieldsInjectedWithIncludedStruct self):
-        cdef shared_ptr[_module_cbindings.cFieldsInjectedWithIncludedStruct] cpp_obj = make_shared[_module_cbindings.cFieldsInjectedWithIncludedStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return FieldsInjectedWithIncludedStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)

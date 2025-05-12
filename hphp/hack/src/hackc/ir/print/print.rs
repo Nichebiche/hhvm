@@ -28,9 +28,9 @@ use ir_core::instr::Terminator;
 use ir_core::instr::Tmp;
 use ir_core::*;
 
+use crate::FmtEscapedString;
 use crate::formatters::*;
 use crate::util::FmtSep;
-use crate::FmtEscapedString;
 
 pub(crate) struct FuncContext {
     pub(crate) cur_loc: SrcLoc,
@@ -726,6 +726,7 @@ fn print_hhbc(w: &mut dyn Write, ctx: &FuncContext, func: &Func, hhbc: &Hhbc) ->
         Hhbc::AwaitAll(ref range, _) => {
             write!(w, "await_all {}", FmtLids(range))?;
         }
+        Hhbc::AwaitLowPri(_) => write!(w, "await_low_pri")?,
         Hhbc::BareThis(op, _) => {
             write!(w, "bare_this {}", FmtBareThisOp(op))?;
         }
@@ -779,6 +780,11 @@ fn print_hhbc(w: &mut dyn Write, ctx: &FuncContext, func: &Func, hhbc: &Hhbc) ->
             FmtVid(func, vid, verbose)
         )?,
         Hhbc::ClassGetTS(vid, _) => write!(w, "class_get_ts {}", FmtVid(func, vid, verbose))?,
+        Hhbc::ClassGetTSWithGenerics(vid, _) => write!(
+            w,
+            "class_get_ts_with_generics {}",
+            FmtVid(func, vid, verbose)
+        )?,
         Hhbc::ClassHasReifiedGenerics(vid, _) => write!(
             w,
             "class_has_reified_generics {}",
@@ -1094,6 +1100,15 @@ fn print_hhbc(w: &mut dyn Write, ctx: &FuncContext, func: &Func, hhbc: &Hhbc) ->
             "record_reified_generic {}",
             FmtVid(func, vid, ctx.verbose)
         )?,
+        Hhbc::ReifiedInit(vids, local, _) => {
+            write!(
+                w,
+                "reified_init {}, {}, {}",
+                FmtLid(local),
+                FmtVid(func, vids[0], verbose),
+                FmtVid(func, vids[1], verbose),
+            )?;
+        }
         Hhbc::ResolveClass(clsid, _) => {
             write!(w, "resolve_class {}", FmtIdentifierId(clsid.as_bytes_id()))?
         }
@@ -1282,6 +1297,14 @@ fn print_hhbc(w: &mut dyn Write, ctx: &FuncContext, func: &Func, hhbc: &Hhbc) ->
             write!(
                 w,
                 "verify_ret_type_ts {}, {}",
+                FmtVid(func, ops[0], verbose),
+                FmtVid(func, ops[1], verbose)
+            )?;
+        }
+        Hhbc::VerifyTypeTS(ops, _) => {
+            write!(
+                w,
+                "verify_type_ts {}, {}",
                 FmtVid(func, ops[0], verbose),
                 FmtVid(func, ops[1], verbose)
             )?;

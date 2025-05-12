@@ -18,7 +18,6 @@
 #define THRIFT_TEST_PERF_ASYNCINTERVALTIMER_H_ 1
 
 #include <thrift/lib/cpp/TLogging.h>
-#include <thrift/lib/cpp/concurrency/Util.h>
 #include <thrift/lib/cpp/test/loadgen/RNG.h>
 
 #include <chrono>
@@ -26,8 +25,7 @@
 #include <thread>
 #include <folly/portability/Unistd.h>
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 /**
  * AsyncIntervalTimer helps async tasks run at a desired rate. It is very
@@ -79,7 +77,7 @@ class AsyncIntervalTimer {
     if (rate == 0)
       intervalNsec_ = 0;
     else
-      intervalNsec_ = (concurrency::Util::NS_PER_S * threads) / rate;
+      intervalNsec_ = (std::nano::den * threads) / rate;
 
     // With interval per operation per thread, you know the time gap in which
     // all the threads should start, pick a random spot in that time gap
@@ -160,7 +158,6 @@ class AsyncIntervalTimer {
   std::mutex mutex_;
 };
 
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 #endif // THRIFT_TEST_PERF_ASYNCINTERVALTIMER_H_

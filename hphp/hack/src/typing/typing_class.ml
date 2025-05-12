@@ -23,6 +23,7 @@ module TCO = TypecheckerOptions
 module Cls = Folded_class
 module SN = Naming_special_names
 module Profile = Typing_toplevel_profile
+module Enable = Typing_toplevel_enable
 
 let is_literal_with_trivially_inferable_type (_, _, e) =
   Option.is_some @@ Decl_utils.infer_const e
@@ -137,6 +138,7 @@ let method_return ~supportdyn env cls m ret_decl_ty =
 let method_def ~is_disposable env cls m =
   WorkerCancel.raise_if_stop_requested ();
   let tcopt = Env.get_tcopt env in
+  Enable.if_matches_regexp tcopt (Some env) ~default:None m.m_name @@ fun () ->
   Profile.measure_elapsed_time_and_report tcopt (Some env) m.m_name @@ fun () ->
   Errors.run_with_span m.m_span @@ fun () ->
   with_timeout env m.m_name @@ fun env ->
@@ -173,6 +175,14 @@ let method_def ~is_disposable env cls m =
       Env.set_support_dynamic_type env true
     else
       env
+  in
+  let env =
+    let needs_concrete =
+      Naming_attributes.mem
+        SN.UserAttributes.uaNeedsConcrete
+        m.m_user_attributes
+    in
+    Env.set_needs_concrete env needs_concrete
   in
   let no_auto_likes =
     match Cls.get_any_method ~is_static:m.m_static cls method_name with
@@ -591,14 +601,11 @@ let rec check_implements_or_extends_unique impl ~env =
 
 (** Add a dependency to constructors or produce an error if not a Tapply. *)
 let check_is_tapply_add_constructor_extends_dep
-    env
-    ?(skip_constructor_dep = false)
-    (deps : ((pos * _) * decl_ty) list)
-    ~is_req =
+    env ?(skip_constructor_dep = false) (deps : ((pos * _) * decl_ty) list) =
   List.iter deps ~f:(fun ((p, _dep_hint), dep) ->
       match get_node dep with
       | Tapply ((_, class_name), _) ->
-        Env.add_parent_dep env ~skip_constructor_dep ~is_req class_name
+        Env.add_parent_dep env ~skip_constructor_dep class_name
       | Tgeneric _ ->
         Typing_error_utils.add_typing_error
           ~env
@@ -963,6 +970,21 @@ let typeconst_def
       c_tconst_is_ctx;
     } =
   let tcopt = Env.get_tcopt env in
+  Enable.if_matches_regexp
+    tcopt
+    (Some env)
+    ~default:
+      ( env,
+        {
+          c_tconst_name = id;
+          c_tconst_kind;
+          c_tconst_user_attributes = [];
+          c_tconst_span;
+          c_tconst_doc_comment;
+          c_tconst_is_ctx;
+        } )
+    id
+  @@ fun () ->
   Profile.measure_elapsed_time_and_report tcopt (Some env) id @@ fun () ->
   (if Ast_defs.is_c_enum cls.c_kind then
     let (class_pos, class_name) = cls.c_name in
@@ -1074,6 +1096,22 @@ let typeconst_def
 
 let class_const_def ~in_enum_class c cls env cc =
   let tcopt = Env.get_tcopt env in
+  Enable.if_matches_regexp
+    ~default:
+      ( env,
+        ( {
+            cc_user_attributes = [];
+            cc_type = None;
+            cc_id = cc.cc_id;
+            cc_kind = CCAbstract None;
+            cc_span = cc.cc_span;
+            cc_doc_comment = cc.cc_doc_comment;
+          },
+          Typing_make_type.nothing Reason.none ) )
+    tcopt
+    (Some env)
+    cc.cc_id
+  @@ fun () ->
   Profile.measure_elapsed_time_and_report tcopt (Some env) cc.cc_id @@ fun () ->
   let { cc_type = h; cc_id = id; cc_kind = k; _ } = cc in
   let (env, hint_ty, opt_expected, et_enforced) =
@@ -1316,6 +1354,7 @@ let class_var_def ~is_static ~is_noautodynamic cls env cv =
       | Private -> Naming_error.Vprivate
       | Internal -> Naming_error.Vinternal
       | Protected -> Naming_error.Vprotected
+      | ProtectedInternal -> Naming_error.Vprotected_internal
     in
     let (pos, prop_name) = cv.cv_id in
     Errors.add_error
@@ -1591,23 +1630,21 @@ let check_sealed env c =
   let is_enum = is_enum_or_enum_class c.c_kind in
   sealed_subtype (Env.get_ctx env) c ~is_enum ~hard_error ~env
 
-let check_class_require_non_strict_constraints env c =
+let check_class_require_non_strict_constraints env c tc =
   let req_non_strict_constraints =
-    List.filter_map c.c_reqs ~f:(fun req ->
-        match req with
-        | (t, RequireClass) ->
-          let pos = fst t in
-          Some ((pos, Hthis), Ast_defs.Constraint_eq, t)
-        | (t, RequireThisAs) ->
-          let pos = fst t in
-          Some ((pos, Hthis), Ast_defs.Constraint_as, t)
-        | _ -> None)
+    List.map (Cls.all_ancestor_req_class_requirements tc) ~f:(fun (_p, t) ->
+        (mk (Reason.none, Tthis), Ast_defs.Constraint_eq, t))
+    @ List.map (Cls.all_ancestor_req_this_as_requirements tc) ~f:(fun (_p, t) ->
+          (mk (Reason.none, Tthis), Ast_defs.Constraint_as, t))
+  in
+  let tparams : decl_tparam list =
+    List.map c.c_tparams ~f:(Decl_hint.aast_tparam_to_decl_tparam env.decl_env)
   in
   let (env, ty_err_opt1) =
-    Phase.localize_and_add_ast_generic_parameters_and_where_constraints
+    Phase.localize_and_add_generic_parameters_and_where_constraints
+      ~ety_env:empty_expand_env
       env
-      ~ignore_errors:false
-      c.c_tparams
+      tparams
       req_non_strict_constraints
   in
   Option.iter ty_err_opt1 ~f:(Typing_error_utils.add_typing_error ~env);
@@ -1671,25 +1708,21 @@ let check_parents_are_tapply_add_constructor_deps
   } =
     parents
   in
-  check_is_tapply_add_constructor_extends_dep env ~is_req:false extends;
+  check_is_tapply_add_constructor_extends_dep env extends;
   check_is_tapply_add_constructor_extends_dep
     env
     implements
     ~skip_constructor_dep:
-      (not (Ast_defs.is_c_trait c.c_kind || Ast_defs.is_c_abstract c.c_kind))
-    ~is_req:false;
-  check_is_tapply_add_constructor_extends_dep env ~is_req:false uses;
-  check_is_tapply_add_constructor_extends_dep env ~is_req:true req_class;
-  check_is_tapply_add_constructor_extends_dep env ~is_req:true req_this_as;
-  check_is_tapply_add_constructor_extends_dep env ~is_req:true req_extends;
-  check_is_tapply_add_constructor_extends_dep env ~is_req:true req_implements;
-  Option.iter
-    enum_includes
-    ~f:(check_is_tapply_add_constructor_extends_dep env ~is_req:false);
+      (not (Ast_defs.is_c_trait c.c_kind || Ast_defs.is_c_abstract c.c_kind));
+  check_is_tapply_add_constructor_extends_dep env uses;
+  check_is_tapply_add_constructor_extends_dep env req_class;
+  check_is_tapply_add_constructor_extends_dep env req_this_as;
+  check_is_tapply_add_constructor_extends_dep env req_extends;
+  check_is_tapply_add_constructor_extends_dep env req_implements;
+  Option.iter enum_includes ~f:(check_is_tapply_add_constructor_extends_dep env);
   check_is_tapply_add_constructor_extends_dep
     env
     xhp_attr_uses
-    ~is_req:false
     ~skip_constructor_dep:true;
   ()
 
@@ -1709,8 +1742,8 @@ let check_class_attributes env ~cls =
   (env, (user_attributes, file_attrs))
 
 (** Check type parameter definition, including variance, and add constraints to the environment. *)
-let check_class_type_parameters_add_constraints env c =
-  let env = check_class_require_non_strict_constraints env c in
+let check_class_type_parameters_add_constraints env c tc =
+  let env = check_class_require_non_strict_constraints env c tc in
   Typing_variance.class_def env c;
   env
 
@@ -1738,7 +1771,7 @@ let class_wellformedness_checks env c tc (parents : class_parents) =
     Env.run_with_no_self env (check_class_attributes ~cls:c)
   in
   NastInitCheck.class_ env c;
-  let env = check_class_type_parameters_add_constraints env c in
+  let env = check_class_type_parameters_add_constraints env c tc in
   let env = check_hint_wellformedness_in_class env c parents in
   check_no_generic_static_property env tc;
   (env, user_attributes, file_attrs)
@@ -1961,7 +1994,7 @@ let class_def ctx (c : _ class_) =
     let env =
       Env.set_support_dynamic_type env (Cls.get_support_dynamic_type tc)
     in
-    Env.add_non_external_deps env c;
+    Env.make_depend_on_current_module env;
     Typing_helpers.add_decl_errors ~env (Cls.decl_errors tc);
     Some (class_def_ env c tc)
 
@@ -1977,7 +2010,7 @@ let make_class_member_standalone_check_env ctx class_ =
   let name = Ast_defs.get_id class_.c_name in
   let open Option in
   Env.get_class env name |> Decl_entry.to_option >>| fun cls ->
-  let env = check_class_type_parameters_add_constraints env class_ in
+  let env = check_class_type_parameters_add_constraints env class_ cls in
   (env, { env; cls; class_ })
 
 let method_def_standalone standalone_env method_name =

@@ -43,8 +43,22 @@ void maybeLogTlsPeerCertEvent(
   DCHECK(context.getWorker() && context.getWorker()->getServer());
   auto ret = detail::isCertIPMismatch(context, cert);
   switch (ret) {
-    case CertIPResult::SKIPPED:
-      THRIFT_CONNECTION_EVENT(tls.cert_ip_skipped).log(context);
+    case CertIPResult::SKIPPED_OTHER:
+      THRIFT_CONNECTION_EVENT(tls.cert_ip_skipped_other).log(context);
+      return;
+    case CertIPResult::SKIPPED_TLS_TUNNEL:
+      THRIFT_CONNECTION_EVENT(tls.cert_ip_skipped_tls_tunnel).log(context);
+      return;
+    case CertIPResult::SKIPPED_EXTENSION_NOT_PRESENT:
+      THRIFT_CONNECTION_EVENT(tls.cert_ip_skipped_extension_not_present)
+          .log(context);
+      return;
+    case CertIPResult::SKIPPED_LOCALHOST:
+      THRIFT_CONNECTION_EVENT(tls.cert_ip_skipped_localhost).log(context);
+      return;
+    case CertIPResult::SKIPPED_LOCALHOST_IPONLY:
+      THRIFT_CONNECTION_EVENT(tls.cert_ip_skipped_localhost_iponly)
+          .log(context);
       return;
     case CertIPResult::MATCHED_ENFORCED:
       THRIFT_CONNECTION_EVENT(tls.cert_ip_match_enforced).log(context);
@@ -54,8 +68,6 @@ void maybeLogTlsPeerCertEvent(
       return;
     case CertIPResult::MISMATCHED:
       THRIFT_CONNECTION_EVENT(tls.cert_ip_mismatch).log(context);
-      return;
-    default:
       return;
   }
 }
@@ -101,9 +113,16 @@ void logSetupConnectionEventsOnce(
         const auto& protocol = context.getSecurityProtocol();
         if (protocol == "TLS" || protocol == "Fizz" || protocol == "stopTLS" ||
             protocol == "Fizz/KTLS") {
-          if (!transport->getPeerCertificate()) {
+          /*
+           * We have to deal with two cases here
+           * 1. no peer cert received at all
+           * 2. If a peer cert was received we can additionally log data from
+           * said cert but only if it hasn't been dropped from
+           * the context/transport, which may have happened to conserve memory
+           */
+          if (!context.peerCertReceived()) {
             logTlsNoPeerCertEvent(context);
-          } else {
+          } else if (transport->getPeerCertificate() != nullptr) {
             maybeLogTlsPeerCertEvent(context, transport->getPeerCertificate());
           }
         } else {

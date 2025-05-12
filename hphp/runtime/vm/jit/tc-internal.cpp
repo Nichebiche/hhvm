@@ -17,7 +17,6 @@
 #include "hphp/runtime/vm/jit/tc-internal.h"
 #include "hphp/runtime/vm/jit/tc.h"
 
-#include "hphp/runtime/base/init-fini-node.h"
 #include "hphp/runtime/base/perf-warning.h"
 #include "hphp/runtime/base/stats.h"
 #include "hphp/runtime/base/bespoke/layout.h"
@@ -36,7 +35,6 @@
 #include "hphp/runtime/vm/jit/service-requests.h"
 #include "hphp/runtime/vm/jit/srcdb.h"
 #include "hphp/runtime/vm/jit/tc-intercept.h"
-#include "hphp/runtime/vm/jit/tc-prologue.h"
 #include "hphp/runtime/vm/jit/tc-record.h"
 #include "hphp/runtime/vm/jit/timer.h"
 #include "hphp/runtime/vm/jit/trans-db.h"
@@ -61,7 +59,7 @@ extern "C" _Unwind_Reason_Code
 __gxx_personality_v0(int, _Unwind_Action, uint64_t, _Unwind_Exception*,
                      _Unwind_Context*);
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 namespace HPHP::jit::tc {
 
@@ -197,7 +195,7 @@ TranslationResult::Scope shouldTranslateNoSizeLimit(SrcKey sk, TransKind kind,
       fullName = cls->name()->toCppString() + "::";
     }
     fullName.append(func->name()->data());
-    if (Cfg::Jit::FuncBlockList.count(fullName)) {
+    if (Cfg::Jit::FuncBlockList.contains(fullName)) {
       return TranslationResult::Scope::Process;
     }
   }

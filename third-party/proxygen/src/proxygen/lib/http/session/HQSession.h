@@ -35,6 +35,7 @@
 #include <quic/api/QuicSocket.h>
 #include <quic/common/BufUtil.h>
 #include <quic/common/events/FollyQuicEventBase.h>
+#include <quic/priority/HTTPPriorityQueue.h>
 
 namespace proxygen {
 
@@ -194,7 +195,9 @@ class HQSession
 
   void onConnectionError(quic::QuicError code) noexcept override;
 
-  void onKnob(uint64_t knobSpace, uint64_t knobId, quic::Buf knobBlob) override;
+  void onKnob(uint64_t knobSpace,
+              uint64_t knobId,
+              quic::BufPtr knobBlob) override;
 
   // returns false in case of failure
   bool onTransportReadyCommon() noexcept;
@@ -236,10 +239,10 @@ class HQSession
     os << "proto=" << alpn_;
     auto clientCid = (sock_ && sock_->getClientConnectionId())
                          ? *sock_->getClientConnectionId()
-                         : quic::ConnectionId({0, 0, 0, 0});
+                         : quic::ConnectionId::createZeroLength();
     auto serverCid = (sock_ && sock_->getServerConnectionId())
                          ? *sock_->getServerConnectionId()
-                         : quic::ConnectionId({0, 0, 0, 0});
+                         : quic::ConnectionId::createZeroLength();
     if (direction_ == TransportDirection::DOWNSTREAM) {
       os << ", UA=" << userAgent_ << ", client CID=" << clientCid
          << ", server CID=" << serverCid << ", downstream=" << getPeerAddress()
@@ -373,26 +376,8 @@ class HQSession
    * Sends a knob frame on the session.
    */
   folly::Expected<folly::Unit, quic::LocalErrorCode> sendKnob(
-      uint64_t knobSpace, uint64_t knobId, quic::Buf knobBlob) {
+      uint64_t knobSpace, uint64_t knobId, quic::BufPtr knobBlob) {
     return sock_->setKnob(knobSpace, knobId, std::move(knobBlob));
-  }
-
-  /**
-   * Sends a priority message on this session.  If the underlying protocol
-   * doesn't support priority, this is a no-op.  A new stream identifier will
-   * be selected and returned.
-   */
-  HTTPCodec::StreamID sendPriority(http2::PriorityUpdate /*pri*/) override {
-    return 0;
-  }
-
-  /**
-   * As above, but updates an existing priority node.  Do not use for
-   * real nodes, prefer HTTPTransaction::changePriority.
-   */
-  size_t sendPriority(HTTPCodec::StreamID /*id*/,
-                      http2::PriorityUpdate /*pri*/) override {
-    return 0;
   }
 
   size_t sendPriority(HTTPCodec::StreamID id, HTTPPriority pri);
@@ -1093,7 +1078,7 @@ class HQSession
       : public HQStreamBase
       , public HTTPTransaction::Transport
       , public HTTP2PriorityQueueBase
-      , public quic::QuicSocket::ByteEventCallback {
+      , public quic::ByteEventCallback {
    protected:
     HQStreamTransportBase(
         HQSession& session,
@@ -1134,9 +1119,8 @@ class HQSession
         const folly::Range<quic::QuicSocket::PeekIterator>& peekData);
 
     // QuicSocket::DeliveryCallback
-    void onByteEvent(quic::QuicSocket::ByteEvent byteEvent) override;
-    void onByteEventCanceled(
-        quic::QuicSocket::ByteEventCancellation cancellation) override;
+    void onByteEvent(quic::ByteEvent byteEvent) override;
+    void onByteEventCanceled(quic::ByteEventCancellation cancellation) override;
 
     // HTTPCodec::Callback methods
     void onMessageBegin(HTTPCodec::StreamID streamID,
@@ -1274,11 +1258,6 @@ class HQSession
       VLOG(4) << __func__ << " txn=" << txn_;
     }
 
-    void onPriority(HTTPCodec::StreamID /* stream */,
-                    const HTTPMessage::HTTP2Priority& /* priority */) override {
-      VLOG(4) << __func__ << " txn=" << txn_;
-    }
-
     bool onNativeProtocolUpgrade(HTTPCodec::StreamID /* stream */,
                                  CodecProtocol /* protocol */,
                                  const std::string& /* protocolString */,
@@ -1349,9 +1328,6 @@ class HQSession
 
     size_t sendAbortImpl(HTTP3::ErrorCode errorCode, std::string errorMsg);
 
-    size_t sendPriority(
-        HTTPTransaction* /* txn */,
-        const http2::PriorityUpdate& /* pri */) noexcept override;
     size_t changePriority(HTTPTransaction* txn,
                           HTTPPriority pri) noexcept override;
 
@@ -1510,7 +1486,9 @@ class HQSession
       if (session_.sock_ && hasStreamId()) {
         auto sp = session_.sock_->getStreamPriority(getStreamId());
         if (sp) {
-          return HTTPPriority(sp.value().level, sp.value().incremental);
+          quic::HTTPPriorityQueue::Priority priority(sp.value());
+          return HTTPPriority(
+              priority->urgency, priority->incremental, priority->order);
         }
       }
       return folly::none;
@@ -1702,7 +1680,7 @@ class HQSession
     HTTPTransaction::BufferMeta bufMeta_;
 
     void armStreamByteEventCb(uint64_t streamOffset,
-                              quic::QuicSocket::ByteEvent::Type type);
+                              quic::ByteEvent::Type type);
     void armEgressHeadersAckCb(uint64_t streamOffset);
     void armEgressBodyCallbacks(uint64_t bodyOffset,
                                 uint64_t streamOffset,
@@ -1740,10 +1718,9 @@ class HQSession
         HTTPHeaderSize* size) noexcept;
     void coalesceEOM(size_t encodedBodySize);
     void handleHeadersAcked(uint64_t streamOffset);
-    void handleBodyEvent(uint64_t streamOffset,
-                         quic::QuicSocket::ByteEvent::Type type);
+    void handleBodyEvent(uint64_t streamOffset, quic::ByteEvent::Type type);
     void handleBodyEventCancelled(uint64_t streamOffset,
-                                  quic::QuicSocket::ByteEvent::Type type);
+                                  quic::ByteEvent::Type type);
     uint64_t bodyBytesEgressed_{0};
     folly::Optional<uint64_t> egressHeadersAckOffset_;
     struct BodyByteOffset {
@@ -1833,9 +1810,11 @@ class HQSession
     newWebTransportUniStream() override;
 
     folly::Expected<WebTransport::FCState, WebTransport::ErrorCode>
-    sendWebTransportStreamData(HTTPCodec::StreamID /*id*/,
-                               std::unique_ptr<folly::IOBuf> /*data*/,
-                               bool /*eof*/) override;
+    sendWebTransportStreamData(
+        HTTPCodec::StreamID /*id*/,
+        std::unique_ptr<folly::IOBuf> /*data*/,
+        bool /*eof*/,
+        WebTransport::ByteEventCallback* /* deliveryCallback */) override;
 
     folly::Expected<folly::Unit, WebTransport::ErrorCode>
     notifyPendingWriteOnStream(HTTPCodec::StreamID,
@@ -1878,8 +1857,9 @@ class HQSession
         resumeWebTransportIngress(HTTPCodec::StreamID /*id*/) override;
 
     folly::Expected<folly::Unit, WebTransport::ErrorCode>
-        stopReadingWebTransportIngress(HTTPCodec::StreamID /*id*/,
-                                       uint32_t /*errorCode*/) override;
+        stopReadingWebTransportIngress(
+            HTTPCodec::StreamID /*id*/,
+            folly::Optional<uint32_t> /*errorCode*/) override;
 
   }; // HQStreamTransport
 

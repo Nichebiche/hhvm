@@ -31,8 +31,6 @@
 #include "hphp/util/dataflow-worklist.h"
 #include "hphp/util/trace.h"
 
-#include <boost/dynamic_bitset.hpp>
-
 #include <folly/Format.h>
 
 #include <algorithm>
@@ -44,7 +42,7 @@ namespace HPHP::jit {
 
 namespace {
 
-TRACE_SET_MOD(vasm_copy);
+TRACE_SET_MOD(vasm_copy)
 
 ///////////////////////////////////////////////////////////////////////////////
 

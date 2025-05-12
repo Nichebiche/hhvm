@@ -21,17 +21,10 @@
 
 #include "hphp/runtime/base/tv-conv-notice.h"
 #include "hphp/util/alloc.h"
-#include "hphp/util/safe-cast.h"
 
-#include "hphp/runtime/base/apc-handle-defs.h"
-#include "hphp/runtime/base/apc-string.h"
-#include "hphp/runtime/base/builtin-functions.h"
-#include "hphp/runtime/base/exceptions.h"
 #include "hphp/runtime/base/runtime-error.h"
 #include "hphp/runtime/base/tv-uncounted.h"
 #include "hphp/runtime/base/zend-functions.h"
-#include "hphp/runtime/base/zend-string.h"
-#include "hphp/runtime/ext/apc/ext_apc.h"
 
 #include "hphp/runtime/vm/unit-emitter.h"
 
@@ -842,7 +835,7 @@ void BlobEncoderHelper<const StringData*>::serde(BlobEncoder& encoder,
     encoder(id);
     return;
   }
-  if (auto const indexer = tl_indexer) {
+  if (tl_indexer) {
     auto const it = tl_indexer->m_indices.find(sd);
     if (it == end(tl_indexer->m_indices)) {
       auto const id = tl_indexer->m_indices.size();
@@ -873,10 +866,10 @@ void BlobEncoderHelper<const StringData*>::serde(BlobDecoder& decoder,
     Id id;
     decoder(id);
     if (makeStatic) {
-      sd = ue->lookupLitstr(id);
+      sd = ue->lookupLitstrId(id);
       assertx(!sd || sd->isStatic());
     } else {
-      sd = ue->lookupLitstrCopy(id).detach();
+      sd = ue->lookupLitstrIdCopy(id).detach();
     }
     return;
   }
@@ -926,7 +919,7 @@ BlobEncoderHelper<const StringData*>::asStringPiece(BlobDecoder& decoder) {
   if (auto const ue = tl_unitEmitter) {
     Id id;
     decoder(id);
-    auto const sd = ue->lookupLitstr(id);
+    auto const sd = ue->lookupLitstrId(id);
     if (!sd) return { nullptr, size_t{0} };
     return sd->slice();
   }

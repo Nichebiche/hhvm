@@ -102,12 +102,6 @@ void HTTPCodecStatsFilter::onSettingsAck() {
 }
 
 void HTTPCodecStatsFilter::onPriority(StreamID stream,
-                                      const HTTPMessage::HTTP2Priority& pri) {
-  counters_->recordIngressPriority();
-  callback_->onPriority(stream, pri);
-}
-
-void HTTPCodecStatsFilter::onPriority(StreamID stream,
                                       const HTTPPriority& priority) {
   counters_->recordIngressPriority();
   callback_->onPriority(stream, priority);
@@ -204,14 +198,6 @@ size_t HTTPCodecStatsFilter::generateWindowUpdate(folly::IOBufQueue& writeBuf,
                                                   uint32_t delta) {
   counters_->recordEgressWindowUpdate();
   return call_->generateWindowUpdate(writeBuf, stream, delta);
-}
-
-size_t HTTPCodecStatsFilter::generatePriority(
-    folly::IOBufQueue& writeBuf,
-    StreamID stream,
-    const HTTPMessage::HTTP2Priority& pri) {
-  counters_->recordEgressPriority();
-  return call_->generatePriority(writeBuf, stream, pri);
 }
 
 size_t HTTPCodecStatsFilter::generatePriority(folly::IOBufQueue& writeBuf,

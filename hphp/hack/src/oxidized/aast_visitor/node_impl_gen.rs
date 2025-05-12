@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<be5239b7154f181abb07f72d9a81c79e>>
+// @generated SignedSource<<1e56692cb13a3e0f306d4d890505409f>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -746,7 +746,8 @@ impl<P: Params> Node<P> for Efun<P::Ex, P::En> {
     ) -> Result<(), P::Error> {
         self.fun.accept(c, v)?;
         self.use_.accept(c, v)?;
-        self.closure_class_name.accept(c, v)
+        self.closure_class_name.accept(c, v)?;
+        self.is_expr_tree_virtual_expr.accept(c, v)
     }
 }
 impl<P: Params> Node<P> for EmitId {
@@ -802,6 +803,7 @@ impl<P: Params> Node<P> for EtSplice<P::Ex, P::En> {
         self.extract_client_type.accept(c, v)?;
         self.contains_await.accept(c, v)?;
         self.macro_variables.accept(c, v)?;
+        self.temp_lid.accept(c, v)?;
         self.spliced_expr.accept(c, v)
     }
 }
@@ -1149,7 +1151,8 @@ impl<P: Params> Node<P> for ExpressionTree<P::Ex, P::En> {
         v: &mut dyn Visitor<'node, Params = P>,
     ) -> Result<(), P::Error> {
         self.class.accept(c, v)?;
-        self.runtime_expr.accept(c, v)
+        self.runtime_expr.accept(c, v)?;
+        self.free_vars.accept(c, v)
     }
 }
 impl<P: Params> Node<P> for Field<P::Ex, P::En> {
@@ -1433,12 +1436,31 @@ impl<P: Params> Node<P> for HintFun {
         v: &mut dyn Visitor<'node, Params = P>,
     ) -> Result<(), P::Error> {
         self.is_readonly.accept(c, v)?;
+        self.tparams.accept(c, v)?;
         self.param_tys.accept(c, v)?;
         self.param_info.accept(c, v)?;
         self.variadic_ty.accept(c, v)?;
         self.ctxs.accept(c, v)?;
         self.return_ty.accept(c, v)?;
         self.is_readonly_return.accept(c, v)
+    }
+}
+impl<P: Params> Node<P> for HintTparam {
+    fn accept<'node>(
+        &'node self,
+        c: &mut P::Context,
+        v: &mut dyn Visitor<'node, Params = P>,
+    ) -> Result<(), P::Error> {
+        v.visit_hint_tparam(c, self)
+    }
+    fn recurse<'node>(
+        &'node self,
+        c: &mut P::Context,
+        v: &mut dyn Visitor<'node, Params = P>,
+    ) -> Result<(), P::Error> {
+        self.name.accept(c, v)?;
+        self.user_attributes.accept(c, v)?;
+        self.constraints.accept(c, v)
     }
 }
 impl<P: Params> Node<P> for Hint_ {
@@ -2613,6 +2635,7 @@ impl<P: Params> Node<P> for Visibility {
             Visibility::Public => Ok(()),
             Visibility::Protected => Ok(()),
             Visibility::Internal => Ok(()),
+            Visibility::ProtectedInternal => Ok(()),
         }
     }
 }

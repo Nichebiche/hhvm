@@ -48,11 +48,11 @@
 #include <thrift/lib/cpp2/async/ReplyInfo.h>
 #include <thrift/lib/cpp2/async/ResponseChannel.h>
 #include <thrift/lib/cpp2/async/RpcTypes.h>
-#include <thrift/lib/cpp2/async/SchemaV1.h>
 #include <thrift/lib/cpp2/async/ServerRequestData.h>
 #include <thrift/lib/cpp2/async/ServerStream.h>
 #include <thrift/lib/cpp2/async/Sink.h>
 #include <thrift/lib/cpp2/protocol/Protocol.h>
+#include <thrift/lib/cpp2/schema/SchemaV1.h>
 #include <thrift/lib/cpp2/server/ConcurrencyControllerInterface.h>
 #include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
 #include <thrift/lib/cpp2/server/IOWorkerContext.h>
@@ -682,23 +682,20 @@ class ServiceHandlerBase {
 
   virtual folly::SemiFuture<folly::Unit> semifuture_onStartServing() {
 #if FOLLY_HAS_COROUTINES
-    if constexpr (folly::kIsLinux) {
-      return co_onStartServing().semi();
-    }
-#endif
+    return co_onStartServing().semi();
+#else
     return folly::makeSemiFuture();
+#endif
   }
 
   virtual folly::SemiFuture<folly::Unit> semifuture_onStopRequested() {
 #if FOLLY_HAS_COROUTINES
-    if constexpr (folly::kIsLinux) {
-      // TODO(srir): onStopRequested should be implemented similar to
-      // onStartServing
-      try {
-        return co_onStopRequested().semi();
-      } catch (MethodNotImplemented&) {
-        // If co_onStopRequested() is not implemented we just return
-      }
+    // TODO(srir): onStopRequested should be implemented similar to
+    // onStartServing
+    try {
+      return co_onStopRequested().semi();
+    } catch (MethodNotImplemented&) {
+      // If co_onStopRequested() is not implemented we just return
     }
 #endif
     return folly::makeSemiFuture();
@@ -1904,7 +1901,6 @@ void HandlerCallback<T>::doResult(InputType r) {
       this->ctx_.get(),
       executor_ ? executor_.get() : eb_,
       std::forward<InputType>(r));
-  this->ctx_.reset();
   sendReply(std::move(reply));
 }
 
@@ -1914,11 +1910,11 @@ namespace detail {
 // unique_ptr<S>, in which case it typedefs type to S.
 template <class S>
 struct inner_type {
-  typedef S type;
+  using type = S;
 };
 template <class S>
 struct inner_type<std::unique_ptr<S>> {
-  typedef S type;
+  using type = S;
 };
 
 template <typename T>

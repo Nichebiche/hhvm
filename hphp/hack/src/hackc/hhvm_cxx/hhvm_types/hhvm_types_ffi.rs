@@ -159,10 +159,10 @@ pub mod ffi {
     }
 }
 
-use ffi::type_flags_to_string_ffi;
 pub use ffi::Attr;
 pub use ffi::TypeConstraintFlags;
 pub use ffi::TypeStructureKind;
+use ffi::type_flags_to_string_ffi;
 
 impl Default for Attr {
     fn default() -> Self {
@@ -265,6 +265,7 @@ impl From<oxidized::ast_defs::Visibility> for Attr {
             // modifier on top the others.
             // In order to unblock typechecker, let it be a modifier on top for now.
             Visibility::Internal => Self::AttrInternal | Self::AttrPublic,
+            Visibility::ProtectedInternal => Self::AttrInternal | Self::AttrProtected,
         }
     }
 }
@@ -281,6 +282,7 @@ impl From<&oxidized::ast_defs::Visibility> for Attr {
             // modifier on top the others.
             // In order to unblock typechecker, let it be a modifier on top for now.
             Visibility::Internal => Self::AttrInternal | Self::AttrPublic,
+            Visibility::ProtectedInternal => Self::AttrInternal | Self::AttrProtected,
         }
     }
 }

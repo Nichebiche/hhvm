@@ -17,8 +17,8 @@
 use anyhow::Error;
 use thiserror::Error;
 
-use crate::ttype::TType;
 use crate::ApplicationException;
+use crate::ttype::TType;
 
 #[derive(Debug, Error, PartialEq)]
 #[allow(dead_code)]
@@ -60,4 +60,18 @@ pub enum NonthrowingFunctionError {
     ApplicationException(#[from] ApplicationException),
     #[error(transparent)]
     ThriftError(#[from] Error),
+}
+
+#[derive(Debug, Error)]
+#[error("Error while deserializing {arg} arg of {function}")]
+pub struct DeserializingArgError {
+    pub arg: &'static str,
+    pub function: &'static str,
+}
+
+#[derive(Debug, Error)]
+#[error("Error while deserializing {field} field of {strct}")]
+pub struct DeserializingFieldError {
+    pub field: &'static str,
+    pub strct: &'static str,
 }

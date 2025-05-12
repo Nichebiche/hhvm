@@ -16,14 +16,12 @@
 
 #include "hphp/runtime/vm/jit/irlower-internal.h"
 
-#include "hphp/runtime/base/rds.h"
 #include "hphp/runtime/vm/class.h"
 #include "hphp/runtime/vm/class-meth-data.h"
 #include "hphp/runtime/vm/class-meth-data-ref.h"
 #include "hphp/runtime/vm/func.h"
 #include "hphp/runtime/vm/preclass.h"
 
-#include "hphp/runtime/vm/jit/types.h"
 #include "hphp/runtime/vm/jit/abi.h"
 #include "hphp/runtime/vm/jit/code-gen-helpers.h"
 #include "hphp/runtime/vm/jit/extra-data.h"
@@ -40,7 +38,7 @@
 
 namespace HPHP::jit::irlower {
 
-TRACE_SET_MOD(irlower);
+TRACE_SET_MOD(irlower)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -122,7 +120,7 @@ void cgLdObjInvoke(IRLS& env, const IRInstruction* inst) {
   emitLdLowPtr(v, cls[Class::invokeOff()], dst, sizeof(LowPtr<Func>));
 }
 
-IMPL_OPCODE_CALL(HasToString);
+IMPL_OPCODE_CALL(HasToString)
 
 void cgLdFuncVecLen(IRLS& env, const IRInstruction* inst) {
   auto const dst = dstLoc(env, inst, 0).reg();

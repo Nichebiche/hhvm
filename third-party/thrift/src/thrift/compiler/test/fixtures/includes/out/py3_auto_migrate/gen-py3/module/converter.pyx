@@ -6,8 +6,9 @@
 #  @generated
 #
 
-from libcpp.memory cimport make_shared
-from cython.operator cimport dereference as deref
+from libcpp.memory cimport make_shared, unique_ptr
+from cython.operator cimport dereference as deref, address
+from libcpp.utility cimport move as cmove
 from thrift.py3.types cimport const_pointer_cast
 cimport module.thrift_converter as _module_thrift_converter
 
@@ -17,6 +18,7 @@ cdef shared_ptr[_fbthrift_cbindings.cMyStruct] MyStruct_convert_to_cpp(object in
         _module_thrift_converter.MyStruct_convert_to_cpp(inst)
     )
 cdef object MyStruct_from_cpp(const shared_ptr[_fbthrift_cbindings.cMyStruct]& c_struct):
-    return _module_thrift_converter.MyStruct_from_cpp(deref(const_pointer_cast(c_struct)))
+    _py_struct = _module_thrift_converter.MyStruct_from_cpp(deref(const_pointer_cast(c_struct)))
+    return _py_struct
 
 

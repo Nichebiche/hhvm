@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <string>
+#include <new>
 #include <typeinfo>
 #include <utility>
 
@@ -33,7 +33,6 @@ class VTable {
       : typeInfo_(typeInfo) {}
   virtual void destroy(std::byte*) const noexcept = 0;
   virtual void move(std::byte* dst, std::byte* src) const noexcept = 0;
-  virtual void move_assign(std::byte* dst, std::byte* src) const noexcept = 0;
 
   const std::type_info& type() const noexcept { return typeInfo_; }
 
@@ -52,14 +51,10 @@ class VTableImpl final : public VTable {
   void move(std::byte* origin, std::byte* destination) const noexcept final {
     new (destination) T(std::move(value(origin)));
   }
-  void move_assign(
-      std::byte* origin, std::byte* destination) const noexcept final {
-    value(destination) = std::move(value(origin));
-  }
 
  private:
   static T& value(std::byte* storage) noexcept {
-    return *reinterpret_cast<T*>(storage);
+    return *std::launder(reinterpret_cast<T*>(storage));
   }
 };
 
@@ -163,7 +158,7 @@ class TypeErasedValue final {
     FOLLY_SAFE_DCHECK(
         holds_alternative<T>(),
         "Tried to call value_unchecked() on TypeErasedValue with incompatible type");
-    return *reinterpret_cast<const T*>(storage_);
+    return *std::launder(reinterpret_cast<const T*>(storage_));
   }
 
   template <class T>
@@ -172,7 +167,7 @@ class TypeErasedValue final {
     FOLLY_SAFE_DCHECK(
         holds_alternative<T>(),
         "Tried to call value_unchecked() on TypeErasedValue with incompatible type");
-    return *reinterpret_cast<T*>(storage_);
+    return *std::launder(reinterpret_cast<T*>(storage_));
   }
 
  public:
@@ -192,9 +187,10 @@ class TypeErasedValue final {
   }
 
   TypeErasedValue& operator=(TypeErasedValue&& other) noexcept {
+    reset();
     vtable_ = other.vtable_;
     if (has_value()) {
-      vtable_->move_assign(other.storage_, storage_);
+      vtable_->move(other.storage_, storage_);
       other.reset();
     }
     return *this;

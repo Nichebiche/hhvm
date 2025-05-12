@@ -381,7 +381,7 @@ private:
   const StateMutationUndo::Mark& currentMark() const {
     assertx(!m_undos.events.empty());
     auto const mark =
-      boost::get<StateMutationUndo::Mark>(&m_undos.events.back());
+      std::get_if<StateMutationUndo::Mark>(&m_undos.events.back());
     assertx(mark);
     return *mark;
   }
@@ -472,7 +472,11 @@ std::tuple<Type, bool, bool> verify_param_type(const IIndex&,
  */
 Type adjust_type_for_prop(const IIndex& index,
                           const php::Class& propCls,
-                          const TypeConstraint* tc,
+                          const TypeConstraint& tc,
+                          const Type& ty);
+Type adjust_type_for_prop(const IIndex& index,
+                          const php::Class& propCls,
+                          const TypeIntersectionConstraint* tc,
                           const Type& ty);
 
 /*
@@ -513,6 +517,19 @@ Optional<Type> parentClsExact(const IIndex&, const Context&);
  * the resultant class is a builtin.
  */
 res::Class builtin_class(const IIndex&, SString);
+
+
+/*
+ * Compute an initial return type based on the function and the
+ * return type-constraints. The Resolve std::function is used to resolve
+ * the classname for objects and Self is used to lookup the class in case
+ * of the "this" type hint.
+ */
+Type return_type_from_constraints(
+  const php::Func& f,
+  const std::function<Optional<res::Class>(SString)>& resolve,
+  const std::function<Optional<Type>()>& self
+);
 
 //////////////////////////////////////////////////////////////////////
 

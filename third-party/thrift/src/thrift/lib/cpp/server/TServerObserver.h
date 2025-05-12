@@ -28,9 +28,7 @@
 
 #include <thrift/lib/cpp2/server/Overload.h>
 
-namespace apache {
-namespace thrift {
-namespace server {
+namespace apache::thrift::server {
 
 class TServerObserver {
  public:
@@ -211,7 +209,9 @@ class TServerObserver {
   // The observer has to specify a sample rate for callCompleted notifications
   inline uint32_t getSampleRate() const { return sampleRate_; }
 
-  virtual std::string getName() const final { return typeid(*this).name(); }
+  virtual std::string getName() const final {
+    return folly::demangle(typeid(*this)).toStdString();
+  }
 
  protected:
   uint32_t sampleRate_;
@@ -225,8 +225,6 @@ class TServerObserverFactory {
 
 extern std::shared_ptr<server::TServerObserverFactory> observerFactory_;
 
-} // namespace server
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::server
 
 #endif

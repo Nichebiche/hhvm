@@ -11,8 +11,8 @@ use std::rc::Rc;
 use parser_core_types::lexable_token::LexableToken;
 use parser_core_types::lexable_trivia::LexableTrivia;
 use parser_core_types::lexable_trivia::LexableTrivium;
-use parser_core_types::source_text::SourceText;
 use parser_core_types::source_text::INVALID;
+use parser_core_types::source_text::SourceText;
 use parser_core_types::syntax_error::Error;
 use parser_core_types::syntax_error::SyntaxError;
 use parser_core_types::syntax_error::{self as Errors};
@@ -617,7 +617,7 @@ where
                         i += 1
                     }
                     '\\' => i += 2,
-                    '\'' => break (1 + i),
+                    '\'' => break 1 + i,
                     _ => i += 1,
                 }
             }

@@ -106,8 +106,8 @@ struct UnitEmitter {
    * Look up a static string or array/arraytype by ID. This might load
    * the data from the repo if lazy loading is enabled.
    */
-  const StringData* lookupLitstr(Id id) const;
-  const ArrayData* lookupArray(Id id) const;
+  const StringData* lookupLitstrId(Id id) const;
+  const ArrayData* lookupArrayId(Id id) const;
   const RepoAuthType::Array* lookupRATArray(Id id) const;
 
   /*
@@ -116,8 +116,8 @@ struct UnitEmitter {
    * verifier, where we want to lookup the values, but not keep them
    * around.
    */
-  String lookupLitstrCopy(Id id) const;
-  Array lookupArrayCopy(Id id) const;
+  String lookupLitstrIdCopy(Id id) const;
+  Array lookupArrayIdCopy(Id id) const;
 
   Id numArrays() const { return m_arrays.size(); }
   Id numLitstrs() const { return m_litstrs.size(); }
@@ -171,16 +171,6 @@ struct UnitEmitter {
    * Does /not/ add it to the FE vector.
    */
   FuncEmitter* newMethodEmitter(const StringData* name, PreClassEmitter* pce, int64_t sn = -1);
-
-  /*
-   * Create a new function for `fe'.
-   *
-   * This should only be called from fe->create(), and just constructs a new
-   * Func* and adds it to unit.m_funcTable if required.
-   */
-  Func* newFunc(const FuncEmitter* fe, Unit& unit, const StringData* name,
-                Attr attrs, int numParams);
-
 
   /////////////////////////////////////////////////////////////////////////////
   // PreClassEmitters.
@@ -247,7 +237,7 @@ struct UnitEmitter {
   /*
    * Is this a Unit for a systemlib?
    */
-  bool isASystemLib() const;
+  bool isSystemLib() const;
 
   /*
    * Use StructuredLog to record decl related information about this unit.

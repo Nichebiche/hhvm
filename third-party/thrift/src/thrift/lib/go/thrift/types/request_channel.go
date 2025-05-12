@@ -16,7 +16,10 @@
 
 package types
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // RequestChannel is an API that implements the most minimal surface for
 // generated client code. An implementation:
@@ -26,8 +29,13 @@ import "context"
 //   - May implement connection pooling
 //   - Hides implementation details of the protocol and transport.
 type RequestChannel interface {
-	ClientInterface
+	io.Closer
 
-	Call(ctx context.Context, method string, request IRequest, response IResponse) error
-	Oneway(ctx context.Context, method string, request IRequest) error
+	SendRequestResponse(ctx context.Context, method string, request WritableStruct, response ReadableStruct) error
+	SendRequestNoResponse(ctx context.Context, method string, request WritableStruct) error
+}
+
+// DO NOT USE: temporary migration workaround.
+type DO_NOT_USE_ChannelWrapper interface {
+	DO_NOT_USE_WrapChannel() RequestChannel
 }

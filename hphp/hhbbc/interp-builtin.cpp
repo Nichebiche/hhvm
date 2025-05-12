@@ -27,10 +27,8 @@
 #include "hphp/hhbbc/eval-cell.h"
 #include "hphp/hhbbc/interp-internal.h"
 #include "hphp/hhbbc/optimize.h"
-#include "hphp/hhbbc/type-builtins.h"
 #include "hphp/hhbbc/type-structure.h"
 #include "hphp/hhbbc/type-system.h"
-#include "hphp/hhbbc/unit-util.h"
 
 namespace HPHP::HHBBC {
 
@@ -51,7 +49,7 @@ const Type getArg(ISS& env, const php::Func* func, const FCallArgs& fca,
 
 struct Reduced {};
 struct NoReduced {};
-using TypeOrReduced = boost::variant<Type, Reduced, NoReduced>;
+using TypeOrReduced = std::variant<Type, Reduced, NoReduced>;
 
 //////////////////////////////////////////////////////////////////////
 

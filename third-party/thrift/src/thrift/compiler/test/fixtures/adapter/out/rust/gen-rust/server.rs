@@ -101,7 +101,7 @@ struct Args_Service_func {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Service_func {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "Service.func"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("arg1", ::fbthrift::TType::String, 1),
             ::fbthrift::Field::new("arg2", ::fbthrift::TType::String, 2),
@@ -115,9 +115,9 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Se
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::String, 1) => field_arg1 = ::std::option::Option::Some(<crate::types::adapters::StringWithAdapter as ::fbthrift::adapter::ThriftAdapter>::from_thrift_field::<fbthrift::metadata::NoThriftAnnotations>(::fbthrift::Deserialize::read(p)?, 1)?),
-                (::fbthrift::TType::String, 2) => field_arg2 = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
-                (::fbthrift::TType::Struct, 3) => field_arg3 = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::String, 1) => field_arg1 = ::std::option::Option::Some(<crate::types::adapters::StringWithAdapter as ::fbthrift::adapter::ThriftAdapter>::from_thrift_field::<fbthrift::metadata::NoThriftAnnotations>(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "arg1", function: "func"})?, 1)?),
+                (::fbthrift::TType::String, 2) => field_arg2 = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "arg2", function: "func"})?),
+                (::fbthrift::TType::Struct, 3) => field_arg3 = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "arg3", function: "func"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -166,13 +166,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"Service";
         const METHOD_NAME: &::std::ffi::CStr = c"func";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"Service.func";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_Service_func = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_Service_func = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -198,12 +199,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "Service.func", exception = ?exn);
+                ::tracing::error!(method = "Service.func", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("Service.func", exn);
-                ::tracing::error!(method = "Service.func", panic = ?aexn);
+                ::tracing::error!(method = "Service.func", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::service::FuncExn::ApplicationException(aexn))
             }
         };
@@ -492,7 +493,7 @@ struct Args_AdapterService_count {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_AdapterService_count {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "AdapterService.count"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -518,7 +519,7 @@ struct Args_AdapterService_adaptedTypes {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_AdapterService_adaptedTypes {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "AdapterService.adaptedTypes"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("arg", ::fbthrift::TType::Struct, 1),
         ];
@@ -528,7 +529,7 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_Ad
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::Struct, 1) => field_arg = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::Struct, 1) => field_arg = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "arg", function: "adaptedTypes"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -575,13 +576,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"AdapterService";
         const METHOD_NAME: &::std::ffi::CStr = c"count";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"AdapterService.count";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_AdapterService_count = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_AdapterService_count = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -604,12 +606,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "AdapterService.count", exception = ?exn);
+                ::tracing::error!(method = "AdapterService.count", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("AdapterService.count", exn);
-                ::tracing::error!(method = "AdapterService.count", panic = ?aexn);
+                ::tracing::error!(method = "AdapterService.count", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::adapter_service::CountExn::ApplicationException(aexn))
             }
         };
@@ -636,13 +638,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"AdapterService";
         const METHOD_NAME: &::std::ffi::CStr = c"adaptedTypes";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"AdapterService.adaptedTypes";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_AdapterService_adaptedTypes = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_AdapterService_adaptedTypes = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -666,12 +669,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "AdapterService.adaptedTypes", exception = ?exn);
+                ::tracing::error!(method = "AdapterService.adaptedTypes", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("AdapterService.adaptedTypes", exn);
-                ::tracing::error!(method = "AdapterService.adaptedTypes", panic = ?aexn);
+                ::tracing::error!(method = "AdapterService.adaptedTypes", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::adapter_service::AdaptedTypesExn::ApplicationException(aexn))
             }
         };

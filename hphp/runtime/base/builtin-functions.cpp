@@ -21,32 +21,21 @@
 #include "hphp/runtime/base/container-functions.h"
 #include "hphp/runtime/base/execution-context.h"
 #include "hphp/runtime/base/file-util.h"
-#include "hphp/runtime/base/opaque-resource.h"
 #include "hphp/runtime/base/request-injection-data.h"
 #include "hphp/runtime/base/unit-cache.h"
-#include "hphp/runtime/base/variable-serializer.h"
 #include "hphp/runtime/base/variable-unserializer.h"
 
 #include "hphp/runtime/debugger/debugger.h"
 
 #include "hphp/runtime/ext/core/ext_core_closure.h"
-#include "hphp/runtime/ext/std/ext_std_function.h"
-#include "hphp/runtime/ext/string/ext_string.h"
 
-#include "hphp/runtime/vm/event-hook.h"
 #include "hphp/runtime/vm/func.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/jit/translator.h"
 #include "hphp/runtime/vm/method-lookup.h"
-#include "hphp/runtime/vm/reified-generics.h"
-#include "hphp/runtime/vm/type-constraint.h"
-#include "hphp/runtime/vm/unit-util.h"
 #include "hphp/runtime/vm/unit.h"
 
 #include "hphp/system/systemlib.h"
 
-#include "hphp/util/configs/php7.h"
-#include "hphp/util/logger.h"
 #include "hphp/util/process.h"
 #include "hphp/util/string-vsnprintf.h"
 #include "hphp/util/text-util.h"
@@ -764,10 +753,6 @@ void throw_call_reified_func_without_generics(const Func* f) {
   SystemLib::throwBadMethodCallExceptionObject(msg);
 }
 
-void throw_implicit_context_exception(std::string s) {
-  SystemLib::throwInvalidOperationExceptionObject(s);
-}
-
 void raise_implicit_context_warning(std::string s) {
   raise_warning(s);
 }
@@ -977,19 +962,6 @@ void throw_late_init_prop(const Class* cls,
   );
 }
 
-NEVER_INLINE
-void throw_parameter_wrong_type(TypedValue tv,
-                                const Func* callee,
-                                unsigned int arg_num,
-                                const StringData* expected_type) {
-  auto const msg = param_type_error_message(
-    callee->name()->data(), arg_num, expected_type->data(), tv);
-  if (Cfg::PHP7::EngineExceptions) {
-    SystemLib::throwTypeErrorObject(msg);
-  }
-  SystemLib::throwRuntimeExceptionObject(msg);
-}
-
 void check_collection_cast_to_array() {
   if (Cfg::Server::WarnOnCollectionToArray) {
     raise_warning("Casting a collection to an array is an expensive operation "
@@ -1010,6 +982,11 @@ Object init_object(const String& s, const Array& params, ObjectData* o) {
 Object
 create_object(const String& s, const Array& params, bool init /* = true */) {
   return Object::attach(g_context->createObject(s.get(), params, init));
+}
+
+Object
+create_object(const Class* cls, const Array& params, bool init /* = true */) {
+  return Object::attach(g_context->createObject(cls, params, init));
 }
 
 void throw_object(const Object& e) {

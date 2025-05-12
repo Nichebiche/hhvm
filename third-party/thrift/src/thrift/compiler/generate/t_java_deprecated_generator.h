@@ -276,7 +276,7 @@ class t_java_deprecated_generator : public t_concat_generator {
     ttype = ttype->get_true_type();
 
     return generate_boxed_primitive || ttype->is_container() ||
-        ttype->is_struct() || ttype->is_exception() ||
+        ttype->is_struct_or_union() || ttype->is_exception() ||
         ttype->is_string_or_binary() || ttype->is_enum();
   }
 
@@ -286,11 +286,11 @@ class t_java_deprecated_generator : public t_concat_generator {
   // indicate if we can generate the method
   // E.g. Java doesn't support streaming, so all streaming methods are skipped
   bool can_generate_method(const t_function* func) {
-    return !func->sink_or_stream() && !func->return_type()->is_service();
+    return !func->sink_or_stream();
   }
 
   bool is_field_sensitive(const t_field* field) {
-    return field->has_annotation("java.sensitive");
+    return field->has_unstructured_annotation("java.sensitive");
   }
 
   std::string namespace_key_;

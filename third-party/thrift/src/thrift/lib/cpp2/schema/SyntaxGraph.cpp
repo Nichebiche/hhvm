@@ -17,6 +17,8 @@
 #include <thrift/lib/cpp2/schema/SyntaxGraph.h>
 
 #include <thrift/lib/cpp/util/EnumUtils.h>
+#include <thrift/lib/cpp2/schema/detail/Resolver.h>
+#include <thrift/lib/cpp2/schema/detail/SchemaBackedResolver.h>
 
 #include <folly/MapUtil.h>
 #include <folly/container/Array.h>
@@ -24,6 +26,7 @@
 
 #include <fmt/core.h>
 
+#include <functional>
 #include <ostream>
 #include <stdexcept>
 
@@ -37,196 +40,27 @@ namespace apache::thrift::schema {
 
 namespace detail {
 
-namespace {
-
-// Due to circular dependency concerns in the Thrift compiler, the standard
-// annotation library does not bundle its runtime schema information.
-// For now, we pretend that they do not exist.
-bool isIgnoredUri(std::string_view uri) {
-  static const auto kIgnoredUriPrefixes =
-      folly::make_array<std::string_view>("facebook.com/thrift/annotation/");
-  for (std::string_view prefix : kIgnoredUriPrefixes) {
-    if (uri.substr(0, prefix.length()) == prefix) {
-      return true;
-    }
+const DefinitionNode& lookUpDefinition(
+    const SyntaxGraph& syntaxGraph,
+    const apache::thrift::type::DefinitionKey& definitionKey) {
+  if (const DefinitionNode* def =
+          syntaxGraph.resolver_->definitionOf(definitionKey)) {
+    return *def;
   }
-  return false;
+  folly::throw_exception<std::out_of_range>(
+      fmt::format("Definition not found for key '{}'", definitionKey));
 }
 
-/**
- * Transparent hashing for DefinitionKey and DefinitionKeyRef. This enables
- * heterogenous access in F14Map / F14Set.
- */
-class DefinitionKeyHash : public std::hash<type::DefinitionKey> {
- private:
-  using Delegate = std::hash<type::DefinitionKey>;
-
- public:
-  using is_transparent = void;
-
-  using Delegate::operator();
-  std::size_t operator()(const DefinitionKeyRef& other) const {
-    return Delegate::operator()(other.get());
-  }
-};
-
-/**
- * Transparent equality comparison for DefinitionKey and DefinitionKeyRef. This
- * enables heterogenous access in F14Map / F14Set.
- */
-class DefinitionKeyEqual : public std::equal_to<type::DefinitionKey> {
- private:
-  using Delegate = std::equal_to<type::DefinitionKey>;
-
- public:
-  using is_transparent = void;
-
-  using Delegate::operator();
-  bool operator()(
-      const DefinitionKeyRef& lhs, const DefinitionKeyRef& rhs) const {
-    return Delegate::operator()(lhs.get(), rhs.get());
-  }
-  bool operator()(
-      const type::DefinitionKey& lhs, const DefinitionKeyRef& rhs) const {
-    return Delegate::operator()(lhs, rhs.get());
-  }
-  bool operator()(
-      const DefinitionKeyRef& lhs, const type::DefinitionKey& rhs) const {
-    return Delegate::operator()(lhs.get(), rhs);
-  }
-};
-
-} // namespace
-
-class Resolver final {
- private:
-  friend class ::apache::thrift::schema::SyntaxGraph;
-  friend const DefinitionNode& lazyResolve(
-      const Resolver&, const type::DefinitionKey&);
-
-  folly::not_null<SyntaxGraph*> syntaxGraph_;
-
-  // In schema.thrift, certain references use URIs instead of DefinitionKeys.
-  // They could probably be changed to DefinitionKeys in practice but
-  // standard.TypeUri is a union of both URI and DefinitionKey.
-  //
-  // We use this map to normalize all indexing to DefinitionKeys.
-  using DefinitionKeysByUri =
-      folly::F14FastMap<std::string_view, DefinitionKeyRef>;
-  DefinitionKeysByUri definitionKeysByUri_;
-
-  // Every top-level definition has exactly one associated graph node. These are
-  // stored and kept alive in this map.
-  using DefinitionsByKey = folly::F14FastMap<
-      DefinitionKeyRef,
-      DefinitionNode,
-      DefinitionKeyHash,
-      DefinitionKeyEqual>;
-  DefinitionsByKey definitionsByKey_;
-
-  // Every top-level definition is defined in a .thrift file. This map allows
-  // back-references from these definition graph nodes to have efficient lookup
-  // of their containing file.
-  using ProgramsById = folly::F14FastMap<type::ProgramId, ProgramNode>;
-  ProgramsById programsById_;
-
-  // A mapping of value IDs to a runtime representation of their value. This
-  // matches how the data is stored in schema.thrift and de-duplicated.
-  using ValuesById = folly::F14FastMap<type::ValueId, protocol::Value>;
-  ValuesById valuesById_;
-
-  // A mapping of a definition to its containing Thrift file. Chaining this with
-  // the ProgramsById map produces a mapping from DefinitionKey → Program graph
-  // node.
-  using ProgramIdsByDefinitionKey = folly::F14FastMap<
-      DefinitionKeyRef,
-      type::ProgramId,
-      DefinitionKeyHash,
-      DefinitionKeyEqual>;
-
-  static DefinitionKeysByUri createDefinitionKeysByUri(const type::Schema&);
-  ProgramsById createProgramsById(const type::Schema&, const DefinitionsByKey&);
-  ValuesById createValuesById(const type::Schema& schema);
-
-  static ProgramIdsByDefinitionKey createProgramIdsByDefinitionKey(
-      const type::Schema&);
-  DefinitionsByKey createDefinitionsByKey(
-      const type::Schema&, const ProgramIdsByDefinitionKey&);
-
-  DefinitionNode createDefinition(
-      const ProgramIdsByDefinitionKey&,
-      const type::DefinitionKey&,
-      const type::DefinitionAttrs&,
-      DefinitionNode::Alternative&&);
-  StructNode createStruct(const type::DefinitionKey&, const type::Struct&);
-  UnionNode createUnion(const type::DefinitionKey&, const type::Union&);
-  ExceptionNode createException(
-      const type::DefinitionKey&, const type::Exception&);
-  FieldNode createField(
-      const type::DefinitionKey& parentDefinitionKey, const type::Field&);
-
-  EnumNode createEnum(const type::DefinitionKey&, const type::Enum&);
-  TypedefNode createTypedef(const type::DefinitionKey&, const type::Typedef&);
-  ConstantNode createConstant(const type::DefinitionKey&, const type::Const&);
-
-  ServiceNode createService(const type::DefinitionKey&, const type::Service&);
-  InteractionNode createInteraction(
-      const type::DefinitionKey&, const type::Interaction&);
-  FunctionNode createFunction(
-      const type::DefinitionKey&, const type::Function&);
-
-  std::vector<Annotation> createAnnotations(
-      const std::map<std::string, type::Annotation>& annotations);
-
- public:
-  explicit Resolver(const type::Schema& schema, SyntaxGraph& syntaxGraph)
-      : syntaxGraph_(&syntaxGraph),
-        definitionKeysByUri_(createDefinitionKeysByUri(schema)),
-        definitionsByKey_(createDefinitionsByKey(
-            schema, createProgramIdsByDefinitionKey(schema))),
-        programsById_(createProgramsById(schema, definitionsByKey_)),
-        valuesById_(createValuesById(schema)) {}
-
-  const SyntaxGraph& syntaxGraph() const { return *syntaxGraph_; }
-  /**
-   * Programs are identified by a separate namespace of IDs than definitions.
-   */
-  const ProgramNode& programOf(const type::ProgramId&) const;
-  /**
-   * All graph nodes representing definitions are identified by their
-   * `DefinitionKey` rather than URI. However, schema.thrift can sometimes refer
-   * to definitions using URIs. In those cases, we may need to "normalize" the
-   * reference.
-   *
-   * Note that `TypeUri` does not mean the reference is a URI. The naming is
-   * confusing but the `TypeUri` is a union that can possibly contain a URI, or
-   * a `DefinitionKey`.
-   */
-  const type::DefinitionKey& definitionKeyOf(const type::TypeUri&) const;
-  /**
-   * Creates a `TypeRef` object, which is really a non-owning and unresolved
-   * reference to a Thrift type.
-   *
-   * This function does not resolve composite types like typedefs, list etc.
-   * (i.e. types that refer to other types). Non-composite types, such as struct
-   * definitions are lazily resolved. This means that it's safe to call
-   * typeOf(...) even if the pointed-to type has not been seen yet.
-   */
-  TypeRef typeOf(const type::TypeStruct&) const;
-  TypeRef typeOf(const type::Type& type) const {
-    return typeOf(type.toThrift());
-  }
-  /**
-   * schema.thrift de-duplicates Thrift values in the IDL via interning. This
-   * function performs a lookup to access an interned value by its ID.
-   */
-  const protocol::Value& valueOf(const type::ValueId&) const;
-};
+WithName::WithName(std::string_view name) : name_(name) {
+  FOLLY_SAFE_DCHECK(
+      name_.data()[name_.size()] == '\0',
+      "name must be backed by a null-terminated string!");
+}
 
 } // namespace detail
 
 TypeRef FieldNode::type() const {
-  return resolver().typeOf(*type_);
+  return *type_;
 }
 
 const protocol::Value* FOLLY_NULLABLE FieldNode::customDefault() const {
@@ -240,53 +74,12 @@ const StructuredNode& FieldNode::parent() const {
   return detail::lazyResolve(resolver(), parent_).asStructured();
 }
 
-std::string StructNode::toDebugString() const {
-  return fmt::format(
-      "Struct(uri='{}', {})", uri(), definition().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const StructNode& s) {
-  return out << s.toDebugString();
-}
-
-std::string UnionNode::toDebugString() const {
-  return fmt::format(
-      "Union(uri='{}', {})", uri(), definition().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const UnionNode& u) {
-  return out << u.toDebugString();
-}
-
-std::string ExceptionNode::toDebugString() const {
-  return fmt::format(
-      "Exception(uri='{}', {})", uri(), definition().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const ExceptionNode& e) {
-  return out << e.toDebugString();
-}
-
-std::string EnumNode::toDebugString() const {
-  return fmt::format("Enum(uri='{}', {})", uri(), definition().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const EnumNode& e) {
-  return out << e.toDebugString();
-}
-
 TypedefNode::TypedefNode(
     const detail::Resolver& resolver,
     const type::DefinitionKey& definitionKey,
     TypeRef&& targetType)
     : detail::WithDefinition(resolver, definitionKey),
       targetType_(folly::copy_to_unique_ptr(std::move(targetType))) {}
-
-std::string TypedefNode::toDebugString() const {
-  return fmt::format(
-      "Typedef(to={}, {})",
-      targetType().toDebugString(),
-      definition().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const TypedefNode& t) {
-  return out << t.toDebugString();
-}
 
 ConstantNode::ConstantNode(
     const detail::Resolver& resolver,
@@ -314,13 +107,6 @@ bool operator==(const List& lhs, const List& rhs) {
   return lhs.elementType() == rhs.elementType();
 }
 
-std::string List::toDebugString() const {
-  return fmt::format("List(of={})", elementType().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const List& l) {
-  return out << l.toDebugString();
-}
-
 /* static */ List List::of(TypeRef elementType) {
   return List(std::move(elementType));
 }
@@ -336,13 +122,6 @@ Set& Set::operator=(const Set& other) {
 
 bool operator==(const Set& lhs, const Set& rhs) {
   return lhs.elementType() == rhs.elementType();
-}
-
-std::string Set::toDebugString() const {
-  return fmt::format("Set(of={})", elementType().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const Set& s) {
-  return out << s.toDebugString();
 }
 
 /* static */ Set Set::of(TypeRef elementType) {
@@ -364,16 +143,6 @@ Map& Map::operator=(const Map& other) {
 bool operator==(const Map& lhs, const Map& rhs) {
   return std::tie(lhs.keyType(), lhs.valueType()) ==
       std::tie(rhs.keyType(), rhs.valueType());
-}
-
-std::string Map::toDebugString() const {
-  return fmt::format(
-      "Map(of={}, to={})",
-      keyType().toDebugString(),
-      valueType().toDebugString());
-}
-std::ostream& operator<<(std::ostream& out, const Map& m) {
-  return out << m.toDebugString();
 }
 
 /* static */ Map Map::of(TypeRef keyType, TypeRef valueType) {
@@ -407,42 +176,64 @@ std::string_view toString(Primitive p) {
 }
 
 FunctionStream::FunctionStream(
-    TypeRef&& payloadType, std::vector<TypeRef>&& exceptions)
+    TypeRef&& payloadType, std::vector<FunctionNode::Exception>&& exceptions)
     : payloadType_(folly::copy_to_unique_ptr(std::move(payloadType))),
       exceptions_(std::move(exceptions)) {}
 
-folly::span<const TypeRef> FunctionStream::exceptions() const {
+folly::span<const FunctionNode::Exception> FunctionStream::exceptions() const {
   return exceptions_;
 }
 
 FunctionSink::FunctionSink(
     TypeRef&& payloadType,
     TypeRef&& finalResponseType,
-    std::vector<TypeRef>&& clientExceptions,
-    std::vector<TypeRef>&& serverExceptions)
+    std::vector<FunctionNode::Exception>&& clientExceptions,
+    std::vector<FunctionNode::Exception>&& serverExceptions)
     : payloadType_(folly::copy_to_unique_ptr(std::move(payloadType))),
       finalResponseType_(
           folly::copy_to_unique_ptr(std::move(finalResponseType))),
       clientExceptions_(std::move(clientExceptions)),
       serverExceptions_(std::move(serverExceptions)) {}
 
-folly::span<const TypeRef> FunctionSink::clientExceptions() const {
+folly::span<const FunctionNode::Exception> FunctionSink::clientExceptions()
+    const {
   return clientExceptions_;
 }
 
-folly::span<const TypeRef> FunctionSink::serverExceptions() const {
+folly::span<const FunctionNode::Exception> FunctionSink::serverExceptions()
+    const {
   return serverExceptions_;
 }
 
 TypeRef FunctionParam::type() const {
-  return resolver().typeOf(*type_);
+  return *type_;
 }
+
+TypeRef FunctionException::type() const {
+  return *type_;
+}
+
+FunctionNode::FunctionNode(
+    const detail::Resolver& resolver,
+    const apache::thrift::type::DefinitionKey& parent,
+    std::vector<Annotation>&& annotations,
+    Response&& response,
+    std::string_view name,
+    std::vector<Param>&& params,
+    std::vector<Exception>&& exceptions)
+    : detail::WithResolver(resolver),
+      detail::WithName(name),
+      detail::WithAnnotations(std::move(annotations)),
+      parent_(parent),
+      response_(std::move(response)),
+      params_(std::move(params)),
+      exceptions_(std::move(exceptions)) {}
 
 const RpcInterfaceNode& FunctionNode::parent() const {
   return detail::lazyResolve(resolver(), parent_).asRpcInterface();
 }
 
-folly::span<const TypeRef> FunctionNode::exceptions() const {
+folly::span<const FunctionNode::Exception> FunctionNode::exceptions() const {
   return exceptions_;
 }
 
@@ -452,28 +243,20 @@ const ServiceNode* FOLLY_NULLABLE ServiceNode::baseService() const {
       : nullptr;
 }
 
+DefinitionNode::DefinitionNode(
+    const detail::Resolver& resolver,
+    apache::thrift::type::ProgramId programId,
+    std::vector<Annotation>&& annotations,
+    std::string_view name,
+    Alternative&& definition)
+    : detail::WithResolver(resolver),
+      detail::WithName(name),
+      detail::WithAnnotations(std::move(annotations)),
+      programId_(programId),
+      definition_(std::move(definition)) {}
+
 const ProgramNode& DefinitionNode::program() const {
   return resolver().programOf(programId_);
-}
-
-std::string DefinitionNode::toDebugString() const {
-  std::string_view kindString = visit(
-      [](const StructNode&) { return "Struct"; },
-      [](const UnionNode&) { return "Union"; },
-      [](const ExceptionNode&) { return "Exception"; },
-      [](const EnumNode&) { return "Enum"; },
-      [](const TypedefNode&) { return "Typedef"; },
-      [](const ConstantNode&) { return "Constant"; },
-      [](const ServiceNode&) { return "Service"; },
-      [](const InteractionNode&) { return "Interaction"; });
-  return fmt::format(
-      "Definition(kind={}, name='{}', program='{}.thrift')",
-      kindString,
-      name(),
-      program().name());
-}
-std::ostream& operator<<(std::ostream& out, const DefinitionNode& definition) {
-  return out << definition.toDebugString();
 }
 
 /* static */ TypeRef TypeRef::of(Primitive p) {
@@ -540,15 +323,6 @@ bool operator==(const TypeRef& lhs, const DefinitionNode& rhs) {
       });
 }
 
-std::string TypeRef::toDebugString() const {
-  return visit(
-      [&](Primitive p) -> std::string { return std::string(toString(p)); },
-      [&](const auto& t) -> std::string { return t.toDebugString(); });
-}
-std::ostream& operator<<(std::ostream& out, const TypeRef& type) {
-  return out << type.toDebugString();
-}
-
 Annotation::Annotation(TypeRef&& type, Fields&& fields)
     : type_(folly::copy_to_unique_ptr(std::move(type))),
       fields_(std::move(fields)) {}
@@ -561,528 +335,347 @@ ProgramNode::IncludesList ProgramNode::includes() const {
   return includes;
 }
 
-ProgramNode::DefinitionsByName ProgramNode::definitions() const {
+ProgramNode::DefinitionsByName ProgramNode::definitionsByName() const {
   DefinitionsByName result;
-  for (const auto& [name, definitionKey] : definitionKeysByName_) {
-    result.emplace(name, &detail::lazyResolve(resolver(), definitionKey));
+  for (folly::not_null<const DefinitionNode*> definition : definitions_) {
+    result.emplace(definition->name(), definition);
   }
   return result;
 }
 
-const SyntaxGraph& ProgramNode::syntaxGraph() const {
-  return resolver().syntaxGraph();
-}
-
 /* static */ SyntaxGraph SyntaxGraph::fromSchema(
     folly::not_null<const type::Schema*> schema) {
-  return SyntaxGraph{ManagedSchema(*schema)};
+  return SyntaxGraph{detail::createResolverfromSchemaRef(*schema)};
 }
 
 /* static */ SyntaxGraph SyntaxGraph::fromSchema(type::Schema&& schema) {
-  return SyntaxGraph{ManagedSchema(std::move(schema))};
+  return SyntaxGraph{detail::createResolverfromSchema(std::move(schema))};
 }
 
-SyntaxGraph::SyntaxGraph(ManagedSchema&& schema)
-    : rawSchema_(std::move(schema)),
-      resolver_(
-          folly::make_not_null_unique<detail::Resolver>(*rawSchema_, *this)) {}
+SyntaxGraph::SyntaxGraph(std::unique_ptr<detail::Resolver> resolver)
+    : resolver_(std::move(resolver)) {}
 
 SyntaxGraph::SyntaxGraph(SyntaxGraph&&) noexcept = default;
 SyntaxGraph& SyntaxGraph::operator=(SyntaxGraph&&) noexcept = default;
 SyntaxGraph::~SyntaxGraph() noexcept = default;
 
 ProgramNode::IncludesList SyntaxGraph::programs() const {
-  ProgramNode::IncludesList programs;
-  for (const auto& [_, program] : resolver_->programsById_) {
-    programs.emplace_back(&program);
-  }
-  return programs;
+  return resolver_->programs();
 }
 
 namespace detail {
+
+WithAnnotations::WithAnnotations(std::vector<Annotation>&& annotations)
+    : annotations_(std::move(annotations)) {}
 
 folly::span<const Annotation> WithAnnotations::annotations() const {
   return annotations_;
 }
 
-namespace {
-
-template <typename... F>
-decltype(auto) visitDefinition(
-    const type::Definition& definition, F&&... visitors) {
-  auto overloaded = folly::overload(std::forward<F>(visitors)...);
-  switch (definition.getType()) {
-    case type::Definition::Type::structDef:
-      return overloaded(*definition.structDef_ref());
-    case type::Definition::Type::unionDef:
-      return overloaded(*definition.unionDef_ref());
-    case type::Definition::Type::exceptionDef:
-      return overloaded(*definition.exceptionDef_ref());
-    case type::Definition::Type::enumDef:
-      return overloaded(*definition.enumDef_ref());
-    case type::Definition::Type::typedefDef:
-      return overloaded(*definition.typedefDef_ref());
-    case type::Definition::Type::constDef:
-      return overloaded(*definition.constDef_ref());
-    case type::Definition::Type::serviceDef:
-      return overloaded(*definition.serviceDef_ref());
-    case type::Definition::Type::interactionDef:
-      return overloaded(*definition.interactionDef_ref());
-    case type::Definition::Type::__EMPTY__:
-    default:
-      folly::throw_exception<InvalidSyntaxGraphError>(fmt::format(
-          "Unknown Definition::Type '{}'", enumNameSafe(definition.getType())));
-  }
-}
-
-FieldNode::PresenceQualifier presenceOf(const type::FieldQualifier& qualifier) {
-  switch (qualifier) {
-    case type::FieldQualifier::Default:
-    case type::FieldQualifier::Terse:
-    case type::FieldQualifier::Fill:
-      return FieldNode::PresenceQualifier::UNQUALIFIED;
-    case type::FieldQualifier::Optional:
-      return FieldNode::PresenceQualifier::OPTIONAL;
-    default:
-      folly::throw_exception<InvalidSyntaxGraphError>(
-          fmt::format("Unknown FieldQualifier '{}'", enumNameSafe(qualifier)));
-  }
-}
-
-std::optional<type::ValueId> valueIdOf(const type::ValueId& valueIdField) {
-  // schema.thrift leaves behind a value of 0 for fields without custom
-  // defaults.
-  return valueIdField == type::ValueId{0} ? std::nullopt
-                                          : std::optional{valueIdField};
-}
-
-bool isEmptyTypeUri(const type::TypeUri& typeUri) {
-  return typeUri.getType() == type::TypeUri::Type::__EMPTY__;
-}
-
-} // namespace
-
 const DefinitionNode& lazyResolve(
     const Resolver& resolver, const type::DefinitionKey& definitionKey) {
-  return folly::get_or_throw<InvalidSyntaxGraphError>(
-      resolver.definitionsByKey_, definitionKey);
-}
-
-const ProgramNode& Resolver::programOf(const type::ProgramId& id) const {
-  return folly::get_or_throw<InvalidSyntaxGraphError>(
-      programsById_, id, "Unknown ProgramId: ");
-}
-
-const type::DefinitionKey& Resolver::definitionKeyOf(
-    const type::TypeUri& typeUri) const {
-  using T = type::TypeUri::Type;
-  switch (typeUri.getType()) {
-    case T::uri:
-      return folly::get_or_throw<InvalidSyntaxGraphError>(
-          definitionKeysByUri_,
-          *typeUri.uri_ref(),
-          "Unknown DefinitionKey for URI: ");
-    case T::definitionKey:
-      return *typeUri.definitionKey_ref();
-    case T::typeHashPrefixSha2_256:
-    case T::scopedName:
-    case T::__EMPTY__:
-    default:
-      folly::throw_exception<InvalidSyntaxGraphError>(fmt::format(
-          "Unsupported TypeUri::Type '{}'", enumNameSafe(typeUri.getType())));
+  if (const auto* definition = resolver.definitionOf(definitionKey)) {
+    return *definition;
   }
-}
-
-TypeRef Resolver::typeOf(const type::TypeStruct& type) const {
-  return TypeRef([&]() -> TypeRef::Alternative {
-    using T = type::TypeName::Type;
-    T t = type.name()->getType();
-    switch (t) {
-      case T::boolType:
-        return Primitive::BOOL;
-      case T::byteType:
-        return Primitive::BYTE;
-      case T::i16Type:
-        return Primitive::I16;
-      case T::i32Type:
-        return Primitive::I32;
-      case T::i64Type:
-        return Primitive::I64;
-      case T::floatType:
-        return Primitive::FLOAT;
-      case T::doubleType:
-        return Primitive::DOUBLE;
-      case T::stringType:
-        return Primitive::STRING;
-      case T::binaryType:
-        return Primitive::BINARY;
-      case T::enumType:
-        return detail::Lazy<EnumNode>::Unresolved(
-            *this, definitionKeyOf(*type.name()->enumType_ref()));
-      case T::typedefType:
-        return detail::Lazy<TypedefNode>::Unresolved(
-            *this, definitionKeyOf(*type.name()->typedefType_ref()));
-      case T::structType:
-        return detail::Lazy<StructNode>::Unresolved(
-            *this, definitionKeyOf(*type.name()->structType_ref()));
-      case T::unionType:
-        return detail::Lazy<UnionNode>::Unresolved(
-            *this, definitionKeyOf(*type.name()->unionType_ref()));
-      case T::exceptionType:
-        return detail::Lazy<ExceptionNode>::Unresolved(
-            *this, definitionKeyOf(*type.name()->exceptionType_ref()));
-      case T::listType: {
-        const auto& params = *type.params();
-        if (params.size() != 1) {
-          folly::throw_exception<InvalidSyntaxGraphError>(fmt::format(
-              "Invalid number of type params for list: {}", params.size()));
-        }
-        return List(typeOf(params.front()));
-      }
-      case T::setType: {
-        const auto& params = *type.params();
-        if (params.size() != 1) {
-          folly::throw_exception<InvalidSyntaxGraphError>(fmt::format(
-              "Invalid number of type params for set: {}", params.size()));
-        }
-        return Set(typeOf(params.front()));
-      }
-      case T::mapType: {
-        const auto& params = *type.params();
-        if (params.size() != 2) {
-          folly::throw_exception<InvalidSyntaxGraphError>(fmt::format(
-              "Invalid number of type params for map: {}", params.size()));
-        }
-        return Map(typeOf(params[0]), typeOf(params[1]));
-      }
-      default:
-        folly::throw_exception<InvalidSyntaxGraphError>(
-            fmt::format("Unknown TypeName '{}'", enumNameSafe(t)));
-    }
-  }());
-}
-
-const protocol::Value& Resolver::valueOf(const type::ValueId& id) const {
-  return folly::get_or_throw<InvalidSyntaxGraphError>(
-      valuesById_, id, "Unknown ValueId: ");
-}
-
-/* static */ Resolver::DefinitionKeysByUri Resolver::createDefinitionKeysByUri(
-    const type::Schema& schema) {
-  DefinitionKeysByUri result;
-  const auto emplaceUri = [&result](
-                              std::string_view uri,
-                              const type::DefinitionKey& definitionKey) {
-    if (uri.empty()) {
-      // Empty URI string indicates that the type has no URI. This design
-      // choice was made with the assumption that eventually all user-defined
-      // types will have URIs.
-      return;
-    }
-    if (isIgnoredUri(uri)) {
-      return;
-    }
-    result.emplace(uri, definitionKey);
-  };
-
-  for (const auto& entry : *schema.definitionsMap()) {
-    const type::DefinitionKey& definitionKey = entry.first;
-    const type::Definition& definition = entry.second;
-    visitDefinition(
-        definition,
-        [](const type::Typedef&) {
-          // Typedefs should not have URIs
-        },
-        [](const type::Const&) {
-          // Consts should not have URIs
-        },
-        [&](auto&& def) { emplaceUri(*def.uri(), definitionKey); });
-  }
-  return result;
-}
-
-Resolver::ProgramsById Resolver::createProgramsById(
-    const type::Schema& schema, const DefinitionsByKey& definitionsByKey) {
-  ProgramsById result;
-  for (const type::Program& program : *schema.programs()) {
-    ProgramNode::DefinitionKeysByName definitionKeysByName;
-    for (const type::DefinitionKey& definitionKey : *program.definitionKeys()) {
-      if (const DefinitionNode* definition =
-              folly::get_ptr(definitionsByKey, definitionKey)) {
-        definitionKeysByName.emplace(definition->name(), definitionKey);
-      }
-    }
-    result.emplace(
-        *program.id(),
-        ProgramNode(
-            *this,
-            *program.path(),
-            *program.name(),
-            *program.includes(),
-            std::move(definitionKeysByName)));
-  }
-  return result;
-}
-
-Resolver::ValuesById Resolver::createValuesById(const type::Schema& schema) {
-  ValuesById result;
-  for (const auto& [valueId, value] : *schema.valuesMap()) {
-    result.emplace(valueId, value);
-  }
-  return result;
-}
-
-/* static */ Resolver::ProgramIdsByDefinitionKey
-Resolver::createProgramIdsByDefinitionKey(const type::Schema& schema) {
-  ProgramIdsByDefinitionKey result;
-  for (const type::Program& program : *schema.programs()) {
-    for (const type::DefinitionKey& definitionKey : *program.definitionKeys()) {
-      result.emplace(definitionKey, *program.id());
-    }
-  }
-  return result;
-}
-
-Resolver::DefinitionsByKey Resolver::createDefinitionsByKey(
-    const type::Schema& schema,
-    const Resolver::ProgramIdsByDefinitionKey& programIdsByDefinitionKey) {
-  DefinitionsByKey result;
-  for (const auto& entry : *schema.definitionsMap()) {
-    const type::DefinitionKey& definitionKey = entry.first;
-    const type::Definition& definition = entry.second;
-    const auto& definitionAttrs = visitDefinition(
-        definition, [](auto&& def) -> const type::DefinitionAttrs& {
-          return *def.attrs();
-        });
-    auto alternative = visitDefinition(
-        definition,
-        [&](const type::Struct& structDef) -> DefinitionNode::Alternative {
-          return createStruct(definitionKey, structDef);
-        },
-        [&](const type::Union& unionDef) -> DefinitionNode::Alternative {
-          return createUnion(definitionKey, unionDef);
-        },
-        [&](const type::Exception& exceptionDef)
-            -> DefinitionNode::Alternative {
-          return createException(definitionKey, exceptionDef);
-        },
-        [&](const type::Enum& enumDef) -> DefinitionNode::Alternative {
-          return createEnum(definitionKey, enumDef);
-        },
-        [&](const type::Typedef& typedefDef) -> DefinitionNode::Alternative {
-          return createTypedef(definitionKey, typedefDef);
-        },
-        [&](const type::Const& constDef) -> DefinitionNode::Alternative {
-          return createConstant(definitionKey, constDef);
-        },
-        [&](const type::Service& serviceDef) -> DefinitionNode::Alternative {
-          return createService(definitionKey, serviceDef);
-        },
-        [&](const type::Interaction& interactionDef)
-            -> DefinitionNode::Alternative {
-          return createInteraction(definitionKey, interactionDef);
-        });
-    result.emplace(
-        definitionKey,
-        createDefinition(
-            programIdsByDefinitionKey,
-            definitionKey,
-            definitionAttrs,
-            std::move(alternative)));
-  }
-  return result;
-}
-
-DefinitionNode Resolver::createDefinition(
-    const Resolver::ProgramIdsByDefinitionKey& programIdsByDefinitionKey,
-    const type::DefinitionKey& definitionKey,
-    const type::DefinitionAttrs& attrs,
-    DefinitionNode::Alternative&& alternative) {
-  return DefinitionNode(
-      *this,
-      folly::get_or_throw<InvalidSyntaxGraphError>(
-          programIdsByDefinitionKey,
-          definitionKey,
-          "Unknown ProgramId for DefinitionKey: "),
-      createAnnotations(*attrs.annotations()),
-      *attrs.name(),
-      std::move(alternative));
-}
-
-StructNode Resolver::createStruct(
-    const type::DefinitionKey& definitionKey, const type::Struct& structDef) {
-  std::vector<FieldNode> fields;
-  for (const type::Field& field : *structDef.fields()) {
-    fields.emplace_back(createField(definitionKey, field));
-  }
-  return StructNode(*this, definitionKey, *structDef.uri(), std::move(fields));
-}
-
-UnionNode Resolver::createUnion(
-    const type::DefinitionKey& definitionKey, const type::Union& unionDef) {
-  std::vector<FieldNode> fields;
-  for (const type::Field& field : *unionDef.fields()) {
-    fields.emplace_back(createField(definitionKey, field));
-  }
-  return UnionNode(*this, definitionKey, *unionDef.uri(), std::move(fields));
-}
-
-ExceptionNode Resolver::createException(
-    const type::DefinitionKey& definitionKey,
-    const type::Exception& exceptionDef) {
-  std::vector<FieldNode> fields;
-  for (const type::Field& field : *exceptionDef.fields()) {
-    fields.emplace_back(createField(definitionKey, field));
-  }
-  return ExceptionNode(
-      *this, definitionKey, *exceptionDef.uri(), std::move(fields));
-}
-
-FieldNode Resolver::createField(
-    const type::DefinitionKey& parentDefinitionKey, const type::Field& field) {
-  return FieldNode(
-      *this,
-      parentDefinitionKey,
-      *field.id(),
-      presenceOf(*field.qualifier()),
-      *field.name(),
-      *field.type(),
-      valueIdOf(*field.customDefault()));
-}
-
-EnumNode Resolver::createEnum(
-    const type::DefinitionKey& definitionKey, const type::Enum& enumDef) {
-  std::vector<EnumNode::Value> values;
-  for (const type::EnumValue& enumValue : *enumDef.values()) {
-    values.emplace_back(EnumNode::Value(*enumValue.name(), *enumValue.value()));
-  }
-  return EnumNode(*this, definitionKey, *enumDef.uri(), std::move(values));
-}
-
-TypedefNode Resolver::createTypedef(
-    const type::DefinitionKey& definitionKey, const type::Typedef& typedefDef) {
-  return TypedefNode(*this, definitionKey, typeOf(*typedefDef.type()));
-}
-
-ConstantNode Resolver::createConstant(
-    const type::DefinitionKey& definitionKey, const type::Const& constDef) {
-  return ConstantNode(
-      *this, definitionKey, typeOf(*constDef.type()), *constDef.value());
-}
-
-ServiceNode Resolver::createService(
-    const type::DefinitionKey& definitionKey, const type::Service& service) {
-  std::vector<FunctionNode> functions;
-  for (const type::Function& function : *service.functions()) {
-    functions.emplace_back(createFunction(definitionKey, function));
-  }
-  auto baseServiceKey = [&]() -> std::optional<detail::DefinitionKeyRef> {
-    const auto& baseServiceUri = *service.baseService()->uri();
-    if (isEmptyTypeUri(baseServiceUri)) {
-      return std::nullopt;
-    }
-    return definitionKeyOf(baseServiceUri);
-  }();
-  return ServiceNode(
-      *this,
-      definitionKey,
-      *service.uri(),
-      std::move(functions),
-      std::move(baseServiceKey));
-}
-
-InteractionNode Resolver::createInteraction(
-    const type::DefinitionKey& definitionKey,
-    const type::Interaction& interaction) {
-  std::vector<FunctionNode> functions;
-  for (const type::Function& function : *interaction.functions()) {
-    functions.emplace_back(createFunction(definitionKey, function));
-  }
-  return InteractionNode(
-      *this, definitionKey, *interaction.uri(), std::move(functions));
-}
-
-FunctionNode Resolver::createFunction(
-    const type::DefinitionKey& interfaceDefinitionKey,
-    const type::Function& function) {
-  const bool isVoid = *function.returnType() == type::Type();
-  std::unique_ptr<TypeRef> initialResponse = isVoid
-      ? nullptr
-      : folly::copy_to_unique_ptr(typeOf(*function.returnType()));
-
-  auto interaction = [&]() -> std::optional<detail::Lazy<InteractionNode>> {
-    if (const auto& interactionTypeUri = *function.interactionType()->uri();
-        !isEmptyTypeUri(interactionTypeUri)) {
-      return detail::Lazy<InteractionNode>::Unresolved(
-          *this, definitionKeyOf(interactionTypeUri));
-    }
-    return std::nullopt;
-  }();
-
-  const auto collectExceptions =
-      [this](folly::span<const type::Field> exceptions) {
-        std::vector<TypeRef> result;
-        for (const type::Field& ex : exceptions) {
-          result.emplace_back(typeOf(*ex.type()));
-        }
-        return result;
-      };
-
-  auto sinkOrStream = [&]() -> FunctionNode::Response::SinkOrStream {
-    if (const auto& streamRef = function.streamOrSink()->streamType_ref();
-        streamRef.has_value()) {
-      return FunctionNode::Stream(
-          typeOf(*streamRef->payload()),
-          collectExceptions(*streamRef->exceptions()));
-    } else if (const auto& sinkRef = function.streamOrSink()->sinkType_ref();
-               sinkRef.has_value()) {
-      return FunctionNode::Sink(
-          typeOf(*sinkRef->payload()),
-          typeOf(*sinkRef->finalResponse()),
-          collectExceptions(*sinkRef->clientExceptions()),
-          collectExceptions(*sinkRef->serverExceptions()));
-    } else {
-      return {};
-    }
-  }();
-
-  std::vector<FunctionNode::Param> params;
-  for (const type::Field& param : *function.paramlist()->fields()) {
-    params.emplace_back(
-        FunctionNode::Param(*this, *param.id(), *param.name(), *param.type()));
-  }
-
-  return FunctionNode(
-      *this,
-      interfaceDefinitionKey,
-      createAnnotations(*function.annotations()),
-      FunctionNode::Response(
-          std::move(initialResponse),
-          std::move(interaction),
-          std::move(sinkOrStream)),
-      *function.name(),
-      std::move(params),
-      collectExceptions(*function.exceptions()));
-}
-
-std::vector<Annotation> Resolver::createAnnotations(
-    const std::map<std::string, type::Annotation>& annotations) {
-  std::vector<Annotation> result;
-  for (const auto& [uri, annotation] : annotations) {
-    if (isIgnoredUri(uri)) {
-      continue;
-    }
-    auto type = type::Type::create<type::struct_c>(uri);
-    Annotation::Fields fields;
-    for (const auto& [fieldName, value] : *annotation.fields()) {
-      fields.emplace(fieldName, value);
-    }
-    result.emplace_back(Annotation(typeOf(type), std::move(fields)));
-  }
-  return result;
+  folly::throw_exception<InvalidSyntaxGraphError>(
+      fmt::format("Definition key {} not found", definitionKey));
 }
 
 } // namespace detail
+
+void FieldNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print(
+      "FieldNode (id={}, presence={}, name='{}')",
+      id(),
+      enumNameSafe(presence()),
+      name());
+  type().printTo(scope.make_child("type = "), visited);
+  if (customDefault()) {
+    // TODO(praihan): Implement printing custom default values
+    scope.make_child("customDefault = ...");
+  }
+}
+
+void StructNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("StructNode '{}'", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+  for (const auto& field : fields()) {
+    field.printTo(scope.make_child(), visited);
+  }
+}
+
+void UnionNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("UnionNode '{}'", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+  for (const auto& field : fields()) {
+    field.printTo(scope.make_child(), visited);
+  }
+}
+
+void ExceptionNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("ExceptionNode '{}'", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+  for (const auto& field : fields()) {
+    field.printTo(scope.make_child(), visited);
+  }
+}
+
+void EnumNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("EnumNode '{}'", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+  for (const auto& entry : values()) {
+    scope.make_child("'{}' → {}", entry.name(), entry.i32());
+  }
+}
+
+void TypedefNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("TypedefNode '{}'", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+  targetType().printTo(scope.make_child("targetType = "), visited);
+}
+
+void ConstantNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("ConstantNode '{}'", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+  type().printTo(scope.make_child("type = "), visited);
+  // TODO(praihan): Implement printing constant values
+  scope.make_child("value = ...");
+}
+
+void List::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("List");
+  elementType().printTo(scope.make_child("elementType = "), visited);
+}
+
+void Set::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("Set");
+  elementType().printTo(scope.make_child("elementType = "), visited);
+}
+
+void Map::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("Map");
+  keyType().printTo(scope.make_child("keyType = "), visited);
+  valueType().printTo(scope.make_child("valueType = "), visited);
+}
+
+void TypeRef::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  visit(
+      [&](const Primitive& primitive) {
+        scope.print("{}", enumNameSafe(primitive));
+      },
+      [&](const auto& node) { node.printTo(scope, visited); });
+}
+
+void FunctionNode::Stream::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("FunctionNode::Stream");
+
+  // A Thrift stream in IDL takes the form:
+  //     stream<{payloadType} throws (... {exceptions} ...)>
+
+  payloadType().printTo(scope.make_child("payloadType = "), visited);
+  if (folly::span<const FunctionNode::Exception> excepts = exceptions();
+      !excepts.empty()) {
+    tree_printer::scope& exceptionsScope = scope.make_child("exceptions");
+    for (const FunctionNode::Exception& e : excepts) {
+      e.printTo(exceptionsScope.make_child(), visited);
+    }
+  }
+}
+
+void FunctionNode::Sink::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("FunctionNode::Sink");
+
+  // A Thrift sink in IDL takes the form:
+  //     sink<{payloadType} throws (... {clientExceptions} ...),
+  //          {finalResponseType} throws (... {serverExceptions} ...)>
+
+  payloadType().printTo(scope.make_child("payloadType = "), visited);
+  if (folly::span<const FunctionNode::Exception> exceptions =
+          clientExceptions();
+      !exceptions.empty()) {
+    tree_printer::scope& clientExceptionsScope =
+        scope.make_child("clientExceptions");
+    for (const FunctionNode::Exception& e : exceptions) {
+      e.printTo(clientExceptionsScope.make_child(), visited);
+    }
+  }
+
+  finalResponseType().printTo(
+      scope.make_child("finalResponseType = "), visited);
+  if (folly::span<const FunctionNode::Exception> exceptions =
+          serverExceptions();
+      !exceptions.empty()) {
+    tree_printer::scope& serverExceptionsScope =
+        scope.make_child("serverExceptions");
+    for (const FunctionNode::Exception& e : exceptions) {
+      e.printTo(serverExceptionsScope.make_child(), visited);
+    }
+  }
+}
+
+void FunctionNode::Response::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("FunctionNode::Response");
+
+  tree_printer::scope& returnTypeNode = scope.make_child("returnType = ");
+  if (const TypeRef* ret = type()) {
+    ret->printTo(returnTypeNode, visited);
+  } else {
+    returnTypeNode.print("void");
+  }
+  if (const InteractionNode* returnedInteraction = interaction()) {
+    returnedInteraction->printTo(scope.make_child(), visited);
+  }
+
+  if (const FunctionNode::Sink* sinkNode = sink()) {
+    sinkNode->printTo(scope.make_child(), visited);
+  } else if (const FunctionNode::Stream* streamNode = stream()) {
+    streamNode->printTo(scope.make_child(), visited);
+  }
+}
+
+void FunctionNode::Param::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("FunctionNode::Param (id={}, name='{}')", id(), name());
+  type().printTo(scope.make_child("type = "), visited);
+}
+
+void FunctionNode::Exception::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("FunctionNode::Exception (id={}, name='{}')", id(), name());
+  type().printTo(scope.make_child("type = "), visited);
+}
+
+void FunctionNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("FunctionNode (name='{}')", name());
+  response().printTo(scope.make_child(), visited);
+
+  if (folly::span<const FunctionNode::Param> paramList = params();
+      !paramList.empty()) {
+    tree_printer::scope& paramsScope = scope.make_child("params");
+    for (const FunctionNode::Param& p : paramList) {
+      p.printTo(paramsScope.make_child(), visited);
+    }
+  }
+
+  if (folly::span<const FunctionNode::Exception> exceptionsList = exceptions();
+      !exceptionsList.empty()) {
+    tree_printer::scope& exceptionsScope = scope.make_child("exceptions");
+    for (const FunctionNode::Exception& e : exceptionsList) {
+      e.printTo(exceptionsScope.make_child(), visited);
+    }
+  }
+}
+
+void ServiceNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("ServiceNode (name='{}')", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+
+  if (const ServiceNode* base = baseService()) {
+    base->printTo(scope.make_child("baseService = "), visited);
+  }
+
+  if (folly::span<const FunctionNode> funcs = functions(); !funcs.empty()) {
+    tree_printer::scope& functionsScope = scope.make_child("functions");
+    for (const FunctionNode& f : funcs) {
+      f.printTo(functionsScope.make_child(), visited);
+    }
+  }
+}
+
+void InteractionNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("InteractionNode (name='{}')", definition().name());
+  if (visited.mark(definition()).already) {
+    return;
+  }
+
+  if (folly::span<const FunctionNode> funcs = functions(); !funcs.empty()) {
+    tree_printer::scope& functionsScope = scope.make_child("functions");
+    for (const FunctionNode& f : funcs) {
+      f.printTo(functionsScope.make_child(), visited);
+    }
+  }
+}
+
+void DefinitionNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("DefinitionNode (name='{}')", name());
+  if (visited.mark(*this).already) {
+    return;
+  }
+  visit([&](const auto& def) { def.printTo(scope.make_child(), visited); });
+}
+
+void Annotation::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("Annotation");
+  type().printTo(scope.make_child("type = "), visited);
+  // TODO(praihan): Implement printing annotation values
+  scope.make_child("value = ...");
+}
+
+void ProgramNode::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("ProgramNode (path='{}')", path());
+  if (visited.mark(*this).already) {
+    return;
+  }
+
+  if (ProgramNode::IncludesList includesList = includes();
+      !includesList.empty()) {
+    tree_printer::scope& includesScope = scope.make_child("includes");
+    for (folly::not_null<const ProgramNode*> include : includesList) {
+      include->printTo(includesScope.make_child(), visited);
+    }
+  }
+
+  if (ProgramNode::Definitions definitionsList = definitions();
+      !definitionsList.empty()) {
+    tree_printer::scope& definitionsScope = scope.make_child("definitions");
+    for (folly::not_null<const DefinitionNode*> def : definitionsList) {
+      def->printTo(definitionsScope.make_child(), visited);
+    }
+  }
+}
+
+void SyntaxGraph::printTo(
+    tree_printer::scope& scope, detail::VisitationTracker& visited) const {
+  scope.print("SyntaxGraph");
+  tree_printer::scope& programsScope = scope.make_child("programs");
+  for (folly::not_null<const ProgramNode*> program : programs()) {
+    program->printTo(programsScope.make_child(), visited);
+  }
+}
 
 } // namespace apache::thrift::schema
 

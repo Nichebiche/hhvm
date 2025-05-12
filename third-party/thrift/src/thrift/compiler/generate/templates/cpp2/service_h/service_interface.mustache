@@ -15,6 +15,8 @@
   limitations under the License.
 
 }}
+{{#import "types/schema_association" as schema_association}}
+{{#import "method_decorators/decorator" as method_decorator}}
 namespace {{service:qualified_namespace}} {
 class {{service:cpp_name}};
 class {{service:cpp_name}}AsyncProcessor;
@@ -24,8 +26,20 @@ class {{service:cpp_name}}AsyncProcessor;
 } // namespace {{service:qualified_namespace}}
 
 namespace apache::thrift {
+{{#if service:self.cpp_requires_method_decorator?}}
+
+// ServiceMethodDecorator is only supported for coroutines
+#if FOLLY_HAS_COROUTINES
+
+{{#partial method_decorator.declaration service=service:self}}
+
+#endif // FOLLY_HAS_COROUTINES
+
+{{/if service:self.cpp_requires_method_decorator?}}
 template <>
 class ServiceHandler<{{service:qualified_name}}> : {{#service:extends}}virtual public ::{{service:qualified_namespace}}::{{service:cpp_name}}SvIf{{/service:extends}}{{^service:extends}}public apache::thrift::ServerInterface{{/service:extends}} {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, {{service:qualified_name}}>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "{{service:name}}"; }
 {{#service:thrift_uri}}
@@ -41,6 +55,7 @@ class ServiceHandler<{{service:qualified_name}}> : {{#service:extends}}virtual p
   {{#service:has_service_schema}}
   #if defined(THRIFT_SCHEMA_AVAILABLE)
   std::optional<schema::DefinitionsSchema> getServiceSchema() override;
+  std::vector<folly::not_null<const schema::ServiceNode*>> getServiceSchemaNodes() override;
   #endif
   {{/service:has_service_schema}}
   {{^service:extends}}
@@ -56,6 +71,9 @@ class ServiceHandler<{{service:qualified_name}}> : {{#service:extends}}virtual p
 {{> service_h/service_interface_functions}}
 };
 
+namespace detail {
+{{#partial schema_association.declaration node=service:self}}
+}
 } // namespace apache::thrift
 
 namespace {{service:qualified_namespace}} {

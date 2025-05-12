@@ -73,7 +73,7 @@ Fiery::Fiery(apache::thrift::FragileConstructor, ::std::string message__arg) :
 
 void Fiery::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
 }
 
 void Fiery::__fbthrift_clear_terse_fields() {
@@ -97,6 +97,7 @@ void swap([[maybe_unused]] Fiery& a, [[maybe_unused]] Fiery& b) {
   swap(a.__fbthrift_field_message, b.__fbthrift_field_message);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Fiery::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Fiery::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Fiery::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -105,6 +106,7 @@ template void Fiery::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Fiery::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Fiery::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Fiery::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -172,7 +174,7 @@ Serious::Serious(apache::thrift::FragileConstructor, ::std::string sonnet__arg) 
 
 void Serious::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_sonnet = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_sonnet = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -206,6 +208,7 @@ void swap([[maybe_unused]] Serious& a, [[maybe_unused]] Serious& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Serious::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Serious::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Serious::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -214,6 +217,7 @@ template void Serious::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Serious::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Serious::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Serious::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -285,8 +289,8 @@ ComplexFieldNames::ComplexFieldNames(apache::thrift::FragileConstructor, ::std::
 
 void ComplexFieldNames::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_error_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_internal_error_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_error_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_internal_error_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -313,6 +317,7 @@ void swap([[maybe_unused]] ComplexFieldNames& a, [[maybe_unused]] ComplexFieldNa
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ComplexFieldNames::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ComplexFieldNames::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ComplexFieldNames::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -321,6 +326,7 @@ template void ComplexFieldNames::readNoXfer<>(apache::thrift::CompactProtocolRea
 template uint32_t ComplexFieldNames::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ComplexFieldNames::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ComplexFieldNames::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -392,8 +398,8 @@ CustomFieldNames::CustomFieldNames(apache::thrift::FragileConstructor, ::std::st
 
 void CustomFieldNames::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_error_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_internal_error_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_error_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_internal_error_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -420,6 +426,7 @@ void swap([[maybe_unused]] CustomFieldNames& a, [[maybe_unused]] CustomFieldName
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void CustomFieldNames::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t CustomFieldNames::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t CustomFieldNames::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -428,6 +435,7 @@ template void CustomFieldNames::readNoXfer<>(apache::thrift::CompactProtocolRead
 template uint32_t CustomFieldNames::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t CustomFieldNames::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t CustomFieldNames::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -500,7 +508,7 @@ ExceptionWithPrimitiveField::ExceptionWithPrimitiveField(apache::thrift::Fragile
 
 void ExceptionWithPrimitiveField::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_error_code = ::std::int32_t();
   __isset = {};
 }
@@ -537,6 +545,7 @@ void swap([[maybe_unused]] ExceptionWithPrimitiveField& a, [[maybe_unused]] Exce
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ExceptionWithPrimitiveField::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ExceptionWithPrimitiveField::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ExceptionWithPrimitiveField::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -545,6 +554,7 @@ template void ExceptionWithPrimitiveField::readNoXfer<>(apache::thrift::CompactP
 template uint32_t ExceptionWithPrimitiveField::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ExceptionWithPrimitiveField::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ExceptionWithPrimitiveField::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -617,7 +627,7 @@ ExceptionWithStructuredAnnotation::ExceptionWithStructuredAnnotation(apache::thr
 
 void ExceptionWithStructuredAnnotation::__fbthrift_clear() {
   // clear all fields
-  this->__fbthrift_field_message_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_message_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_error_code = ::std::int32_t();
   __isset = {};
 }
@@ -654,6 +664,7 @@ void swap([[maybe_unused]] ExceptionWithStructuredAnnotation& a, [[maybe_unused]
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ExceptionWithStructuredAnnotation::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ExceptionWithStructuredAnnotation::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ExceptionWithStructuredAnnotation::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -662,6 +673,7 @@ template void ExceptionWithStructuredAnnotation::readNoXfer<>(apache::thrift::Co
 template uint32_t ExceptionWithStructuredAnnotation::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ExceptionWithStructuredAnnotation::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ExceptionWithStructuredAnnotation::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -738,6 +750,7 @@ void swap([[maybe_unused]] Banal& a, [[maybe_unused]] Banal& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void Banal::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t Banal::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t Banal::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -746,6 +759,7 @@ template void Banal::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t Banal::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t Banal::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t Banal::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2

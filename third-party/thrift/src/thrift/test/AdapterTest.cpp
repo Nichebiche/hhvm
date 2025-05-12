@@ -23,7 +23,7 @@
 #include <set>
 #include <vector>
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/Adapt.h>
 #include <thrift/lib/cpp2/op/Get.h>
 #include <thrift/lib/cpp2/protocol/CompactProtocol.h>
@@ -36,6 +36,7 @@
 #include <thrift/test/gen-cpp2/adapter_terse_types.h>
 #include <thrift/test/gen-cpp2/adapter_types.h>
 
+#include <thrift/lib/cpp2/protocol/DebugProtocol.h>
 #include <thrift/lib/cpp2/protocol/Object.h>
 
 namespace apache::thrift::test {
@@ -685,6 +686,18 @@ TEST(AdaptTest, LessThanComparisonFallbackTest) {
   EXPECT_FALSE(obj1c > obj2c);
   EXPECT_TRUE(obj1c < obj2c);
 }
+
+TEST(AdaptTest, ThreeWayComparisonFallbackTest) {
+  auto obj1a = AdapterThreeWayComparisonStruct();
+  obj1a.field1_ref() = "1";
+
+  auto obj2a = AdapterThreeWayComparisonStruct();
+  obj2a.field1_ref() = "2";
+  // It should use the Adapter3WayCompareStringAdapter compareThreeWay for
+  // comparison.
+  EXPECT_TRUE(obj1a > obj2a);
+  EXPECT_FALSE(obj1a < obj2a);
+}
 } // namespace no_uri
 
 namespace terse {
@@ -1092,6 +1105,14 @@ TEST_F(AdapterTest, WrappedMyStruct) {
 
   CompactSerializer::deserialize(&iobuf, s);
   EXPECT_EQ(s.myStruct()->toThrift().field1(), 20);
+}
+
+TEST_F(AdapterTest, DebugString) {
+  basic::AdaptedString s{"42"};
+  EXPECT_EQ(
+      (debugStringViaEncode<
+          type::adapted<TemplatedTestAdapter, type::string_t>>(s)),
+      (debugStringViaEncode<type::string_t>(s.value)));
 }
 
 } // namespace apache::thrift::test

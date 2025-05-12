@@ -36,6 +36,8 @@ class TestServiceServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::test::namespace_from_package_without_module_name::TestService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::test::namespace_from_package_without_module_name::TestService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "TestService"; }
 
@@ -65,6 +67,13 @@ class ServiceHandler<::test::namespace_from_package_without_module_name::TestSer
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_init{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::test::namespace_from_package_without_module_name::TestService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -3315706113137741452;
+  static constexpr ::std::string_view definitionKey = {"\xf0\xe3\x68\x4d\x9b\xeb\x52\x71\x51\x4a\x8e\x32\xbb\x98\x9d\xf7", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace test::namespace_from_package_without_module_name {

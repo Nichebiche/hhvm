@@ -27,6 +27,22 @@
 
 namespace apache::thrift {
 
+template <typename T>
+struct LastFieldId {
+  static constexpr FieldId value = [] {
+    FieldId max = FieldId{0};
+    op::for_each_ordinal<T>([&](auto ord) {
+      using Ord = decltype(ord);
+      max = std::max(max, op::get_field_id_v<T, Ord>);
+    });
+    return max;
+  }();
+};
+
+template <typename T>
+constexpr auto FieldAfterLast =
+    FieldId{folly::to_underlying(LastFieldId<T>::value) + 1};
+
 template <typename T, typename ProtocolReader, bool Contiguous>
 class StructuredCursorReader;
 template <typename Tag, typename ProtocolReader, bool Contiguous>
@@ -160,6 +176,7 @@ class BaseCursorWriter {
     Active,
     Child,
     Done,
+    Abandoned,
   };
   State state_ = State::Active;
 
@@ -183,7 +200,8 @@ class BaseCursorWriter {
   }
 
   ~BaseCursorWriter() {
-    DCHECK(state_ == State::Done) << "Writer must be passed to endWrite";
+    DCHECK(state_ == State::Done || state_ == State::Abandoned)
+        << "Writer must be passed to endWrite";
   }
 
   BaseCursorWriter(BaseCursorWriter&& other) noexcept {
@@ -193,7 +211,8 @@ class BaseCursorWriter {
   }
   BaseCursorWriter& operator=(BaseCursorWriter&& other) noexcept {
     if (this != &other) {
-      DCHECK(state_ == State::Done) << "Writer must be passed to endWrite";
+      DCHECK(state_ == State::Done || state_ == State::Abandoned)
+          << "Writer must be passed to endWrite";
       protocol_ = std::move(other.protocol_);
       state_ = other.state_;
       other.state_ = State::Done;
@@ -207,6 +226,8 @@ class BaseCursorWriter {
 
   template <typename T>
   friend class StructuredCursorWriter;
+
+  void abandon() { state_ = State::Abandoned; }
 };
 
 // std::swap isn't constexpr until C++20 so we need to reimplement :(
@@ -266,8 +287,8 @@ struct DefaultValueWriter {
     constexpr bool operator<(const Field& other) const { return id < other.id; }
   };
 
-  static constexpr std::array<Field, op::size_v<T>> fields = [] {
-    std::array<Field, op::size_v<T>> fields;
+  static constexpr std::array<Field, op::num_fields<T>> fields = [] {
+    std::array<Field, op::num_fields<T>> fields{};
     op::for_each_ordinal<T>([&](auto ord) {
       using Ord = decltype(ord);
       using Id = op::get_field_id<T, Ord>;

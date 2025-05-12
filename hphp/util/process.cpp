@@ -14,15 +14,12 @@
    +----------------------------------------------------------------------+
 */
 #include "hphp/util/process.h"
-#include "hphp/util/process-cpu.h"
 #include "hphp/util/process-host.h"
 
-#include <sys/types.h>
 #include <stdlib.h>
 
 #include <sys/fcntl.h>
 #include <sys/utsname.h>
-#include <sys/wait.h>
 #include <pwd.h>
 
 #include <folly/portability/Sockets.h>
@@ -39,7 +36,6 @@
 
 #include "hphp/util/hugetlb.h"
 #include "hphp/util/managed-arena.h"
-#include "hphp/util/text-color.h"
 #include "hphp/util/user-info.h"
 
 namespace {
@@ -451,8 +447,8 @@ void ProcStatus::update() {
     unused += alloc::getRange(alloc::AddrRangeClass::VeryLow).retained();
     unused += alloc::getRange(alloc::AddrRangeClass::Low).retained();
     unused += alloc::getRange(alloc::AddrRangeClass::Uncounted).retained();
-    if (alloc::g_arena0) {
-      unused += alloc::g_arena0->retained();
+    for (auto const arena : alloc::g_auto_arenas) {
+      if (arena) unused += arena->retained();
     }
     for (auto const arena : alloc::g_local_arenas) {
       if (arena) unused += arena->retained();

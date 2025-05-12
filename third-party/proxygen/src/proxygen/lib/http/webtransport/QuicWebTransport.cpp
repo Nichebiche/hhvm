@@ -7,6 +7,7 @@
  */
 
 #include <proxygen/lib/http/webtransport/QuicWebTransport.h>
+#include <quic/priority/HTTPPriorityQueue.h>
 
 using FCState = proxygen::WebTransport::FCState;
 
@@ -93,11 +94,14 @@ QuicWebTransport::newWebTransportUniStream() {
 }
 
 folly::Expected<WebTransport::FCState, WebTransport::ErrorCode>
-QuicWebTransport::sendWebTransportStreamData(HTTPCodec::StreamID id,
-                                             std::unique_ptr<folly::IOBuf> data,
-                                             bool eof) {
+QuicWebTransport::sendWebTransportStreamData(
+    HTTPCodec::StreamID id,
+    std::unique_ptr<folly::IOBuf> data,
+    bool eof,
+    ByteEventCallback* deliveryCallback) {
   XCHECK(quicSocket_);
-  auto res = quicSocket_->writeChain(id, std::move(data), eof);
+  auto res =
+      quicSocket_->writeChain(id, std::move(data), eof, deliveryCallback);
   if (!res) {
     return folly::makeUnexpected(WebTransport::ErrorCode::GENERIC_ERROR);
   }
@@ -139,7 +143,9 @@ QuicWebTransport::setWebTransportStreamPriority(HTTPCodec::StreamID id,
 
   XCHECK(quicSocket_);
   auto res = quicSocket_->setStreamPriority(
-      id, quic::Priority(pri.urgency, pri.incremental, pri.orderId));
+      id,
+      quic::HTTPPriorityQueue::Priority(
+          pri.urgency, pri.incremental, pri.orderId));
   if (res.hasError()) {
     return folly::makeUnexpected(WebTransport::ErrorCode::GENERIC_ERROR);
   }
@@ -168,11 +174,14 @@ QuicWebTransport::resumeWebTransportIngress(HTTPCodec::StreamID id) {
 }
 
 folly::Expected<folly::Unit, WebTransport::ErrorCode>
-QuicWebTransport::stopReadingWebTransportIngress(HTTPCodec::StreamID id,
-                                                 uint32_t errorCode) {
+QuicWebTransport::stopReadingWebTransportIngress(
+    HTTPCodec::StreamID id, folly::Optional<uint32_t> errorCode) {
   XCHECK(quicSocket_);
-  auto res = quicSocket_->setReadCallback(
-      id, nullptr, quic::ApplicationErrorCode(errorCode));
+  quic::Optional<quic::ApplicationErrorCode> quicErrorCode;
+  if (errorCode) {
+    quicErrorCode = quic::ApplicationErrorCode(*errorCode);
+  }
+  auto res = quicSocket_->setReadCallback(id, nullptr, quicErrorCode);
   if (res.hasError()) {
     return folly::makeUnexpected(WebTransport::ErrorCode::GENERIC_ERROR);
   }

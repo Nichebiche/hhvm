@@ -19,7 +19,7 @@
 #include <memory>
 #include <type_traits>
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/FieldRefTraits.h>
 #include <thrift/lib/cpp2/op/Create.h>
 #include <thrift/lib/thrift/gen-cpp2/schema_types.h>
@@ -147,6 +147,55 @@ TEST(GetValueOrNullTest, Union) {
 
 TEST(FindByOrdinal, Empty) {
   EXPECT_FALSE(find_by_ordinal<test::Empty>([](auto) { return true; }));
+}
+
+TEST(VisitUnionTest, Basic) {
+  test::Union obj;
+
+  auto visit = [&] {
+    int fid;
+    op::visit_union_with_tag(
+        obj,
+        [&]<typename ident>(folly::tag_t<ident>, auto& value) {
+          fid = folly::to_underlying(op::get_field_id_v<test::Union, ident>);
+          LOG(INFO) << "Active field: "
+                    << op::get_name_v<test::Union, ident> << " with value: "
+                    << value;
+        },
+        [&]() {
+          fid = 0;
+          LOG(INFO) << "No active field";
+        });
+    return fid;
+  };
+
+  EXPECT_EQ(visit(), 0);
+
+  obj.int_field_ref() = 0;
+  EXPECT_EQ(visit(), 1);
+
+  obj.string_field_ref() = "foo";
+  EXPECT_EQ(visit(), 2);
+
+  apache::thrift::clear(obj);
+  EXPECT_EQ(visit(), 0);
+
+  // Ensure examples compile.
+  op::visit_union_with_tag(
+      obj,
+      [&](folly::tag_t<ident::int_field>, int& f) {
+        LOG(INFO) << "Int value: " << f;
+      },
+      [&](folly::tag_t<ident::string_field>, std::string& f) {
+        LOG(INFO) << "String value: " << f;
+      },
+      [&]() { LOG(INFO) << "No active field"; });
+  op::visit_union_with_tag(
+      obj,
+      []<typename ident>(folly::tag_t<ident>, auto& value) {
+        LOG(INFO) << op::get_name_v<test::Union, ident> << " --> " << value;
+      },
+      []() { LOG(INFO) << "Empty union"; });
 }
 
 } // namespace

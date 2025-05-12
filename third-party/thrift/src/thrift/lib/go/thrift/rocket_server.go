@@ -27,6 +27,7 @@ import (
 	"github.com/rsocket/rsocket-go/payload"
 	"github.com/rsocket/rsocket-go/rx/mono"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/rocket"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/stats"
 )
 
@@ -35,7 +36,7 @@ type rocketServer struct {
 	listener      net.Listener
 	transportID   TransportID
 	zstdSupported bool
-	log           func(format string, args ...interface{})
+	log           func(format string, args ...any)
 	connContext   ConnContextFunc
 
 	pipeliningEnabled bool
@@ -46,7 +47,7 @@ type rocketServer struct {
 }
 
 func newRocketServer(proc Processor, listener net.Listener, opts *serverOptions) Server {
-	setRsocketLogger(opts.log)
+	rocket.SetRsocketLogger(opts.log)
 	return &rocketServer{
 		proc:          proc,
 		listener:      listener,
@@ -64,7 +65,7 @@ func newRocketServer(proc Processor, listener net.Listener, opts *serverOptions)
 }
 
 func newUpgradeToRocketServer(proc Processor, listener net.Listener, opts *serverOptions) Server {
-	setRsocketLogger(opts.log)
+	rocket.SetRsocketLogger(opts.log)
 	return &rocketServer{
 		proc:          proc,
 		listener:      listener,
@@ -83,7 +84,7 @@ func newUpgradeToRocketServer(proc Processor, listener net.Listener, opts *serve
 
 func (s *rocketServer) ServeContext(ctx context.Context) error {
 	transporter := func(context.Context) (transport.ServerTransport, error) {
-		return newRocketServerTransport(s.listener, s.connContext, s.proc, s.transportID, s.log, s.stats), nil
+		return newRocketServerTransport(s.listener, s.connContext, s.proc, s.transportID, s.log, s.stats, s.pstats), nil
 	}
 	r := rsocket.Receive().
 		Scheduler(s.requestScheduler(), s.responeScheduler()).
@@ -104,15 +105,15 @@ func (s *rocketServer) responeScheduler() scheduler.Scheduler {
 }
 
 func (s *rocketServer) acceptor(ctx context.Context, setup payload.SetupPayload, sendingSocket rsocket.CloseableRSocket) (rsocket.RSocket, error) {
-	if err := checkRequestSetupMetadata8(setup); err != nil {
+	if err := rocket.CheckRequestSetupMetadata8(setup); err != nil {
 		return nil, err
 	}
-	serverMetadataPush, err := encodeServerMetadataPush(s.zstdSupported)
+	serverMetadataPush, err := rocket.EncodeServerMetadataPush(s.zstdSupported)
 	if err != nil {
 		return nil, err
 	}
 	sendingSocket.MetadataPush(serverMetadataPush)
-	socket := newRocketServerSocket(ctx, s.proc, s.pipeliningEnabled, s.log, s.stats)
+	socket := newRocketServerSocket(ctx, s.proc, s.pipeliningEnabled, s.log, s.stats, s.pstats)
 	return rsocket.NewAbstractSocket(
 		rsocket.MetadataPush(socket.metadataPush),
 		rsocket.RequestResponse(socket.requestResonse),
@@ -124,22 +125,31 @@ type rocketServerSocket struct {
 	ctx               context.Context
 	proc              Processor
 	pipeliningEnabled bool
-	log               func(format string, args ...interface{})
+	log               func(format string, args ...any)
 	stats             *stats.ServerStats
+	pstats            map[string]*stats.TimingSeries
 }
 
-func newRocketServerSocket(ctx context.Context, proc Processor, pipeliningEnabled bool, log func(format string, args ...interface{}), stats *stats.ServerStats) *rocketServerSocket {
+func newRocketServerSocket(
+	ctx context.Context,
+	proc Processor,
+	pipeliningEnabled bool,
+	log func(format string, args ...any),
+	stats *stats.ServerStats,
+	pstats map[string]*stats.TimingSeries,
+) *rocketServerSocket {
 	return &rocketServerSocket{
 		ctx:               ctx,
 		proc:              proc,
 		pipeliningEnabled: pipeliningEnabled,
 		log:               log,
 		stats:             stats,
+		pstats:            pstats,
 	}
 }
 
 func (s *rocketServerSocket) metadataPush(msg payload.Payload) {
-	_, err := decodeClientMetadataPush(msg)
+	_, err := rocket.DecodeClientMetadataPush(msg)
 	if err != nil {
 		panic(err)
 	}
@@ -147,7 +157,7 @@ func (s *rocketServerSocket) metadataPush(msg payload.Payload) {
 }
 
 func (s *rocketServerSocket) requestResonse(msg payload.Payload) mono.Mono {
-	request, err := decodeRequestPayload(msg)
+	request, err := rocket.DecodeRequestPayload(msg)
 	if err != nil {
 		return mono.Error(err)
 	}
@@ -160,11 +170,11 @@ func (s *rocketServerSocket) requestResonse(msg payload.Payload) mono.Mono {
 		s.stats.SchedulingWorkCount.Decr()
 		s.stats.WorkingCount.Incr()
 		defer s.stats.WorkingCount.Decr()
-		if err := process(ctx, s.proc, protocol); err != nil {
+		if err := process(ctx, s.proc, protocol, s.pstats); err != nil {
 			return nil, err
 		}
-		protocol.SetRequestHeader(LoadHeaderKey, fmt.Sprintf("%d", loadFn(s.stats)))
-		return encodeResponsePayload(protocol.name, protocol.messageType, protocol.getRequestHeaders(), request.Zstd(), protocol.Bytes())
+		protocol.setRequestHeader(LoadHeaderKey, fmt.Sprintf("%d", loadFn(s.stats)))
+		return rocket.EncodeResponsePayload(protocol.name, protocol.messageType, protocol.getRequestHeaders(), request.GetCompressionForResponse(), protocol.Bytes())
 	}
 	if s.pipeliningEnabled {
 		return mono.FromFunc(workItem)
@@ -177,7 +187,7 @@ func (s *rocketServerSocket) requestResonse(msg payload.Payload) mono.Mono {
 }
 
 func (s *rocketServerSocket) fireAndForget(msg payload.Payload) {
-	request, err := decodeRequestPayload(msg)
+	request, err := rocket.DecodeRequestPayload(msg)
 	if err != nil {
 		s.log("rocketServer fireAndForget decode request payload error: %v", err)
 		return
@@ -188,13 +198,13 @@ func (s *rocketServerSocket) fireAndForget(msg payload.Payload) {
 		return
 	}
 	// TODO: support pipelining
-	if err := process(s.ctx, s.proc, protocol); err != nil {
+	if err := process(s.ctx, s.proc, protocol, s.pstats); err != nil {
 		s.log("rocketServer fireAndForget process error: %v", err)
 		return
 	}
 }
 
-func newProtocolBufferFromRequest(request *requestPayload) (*protocolBuffer, error) {
+func newProtocolBufferFromRequest(request *rocket.RequestPayload) (*protocolBuffer, error) {
 	if !request.HasMetadata() {
 		return nil, fmt.Errorf("expected metadata")
 	}

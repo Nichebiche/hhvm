@@ -4,8 +4,6 @@
 // LICENSE file in the "hack" directory of this source tree.
 
 use std::collections::VecDeque;
-use std::ffi::OsString;
-use std::fs::File;
 use std::sync::OnceLock;
 
 use dep_graph_delta::DepGraphDelta;
@@ -89,9 +87,10 @@ impl<B: BaseDepgraphTrait> DepGraphWithDelta<B> {
         let Self { base, delta } = self;
         let HashSetDelta { added, removed } = delta.get(dependency);
         added.is_some_and(|added| added.contains(&dependent))
-            || (base.as_ref().map_or(false, |g| {
-                g.dependent_dependency_edge_exists(dependent, dependency)
-            }) && !removed.is_some_and(|removed| removed.contains(&dependent)))
+            || (base
+                .as_ref()
+                .is_some_and(|g| g.dependent_dependency_edge_exists(dependent, dependency))
+                && !removed.is_some_and(|removed| removed.contains(&dependent)))
     }
 
     /// Returns the recursive 'extends' dependents of a dep.
@@ -132,15 +131,6 @@ impl<B: BaseDepgraphTrait> DepGraphWithDelta<B> {
                     }
                 })
             });
-            let require_extends_hash = source_class.class_to_require_extends();
-            self.iter_dependents_with_duplicates(require_extends_hash, |iter| {
-                iter.for_each(|dep: Dep| {
-                    if !acc.contains(&dep) {
-                        acc.insert_mut(dep);
-                        queue.push_back(dep);
-                    }
-                })
-            });
         }
     }
 
@@ -174,7 +164,7 @@ impl<B: BaseDepgraphTrait> DepGraphWithDelta<B> {
         let mut visited = HashSet::default();
 
         self.visit_class_dep_for_member_fanout(
-            (class_dep, false),
+            class_dep,
             member_type,
             member_name,
             &mut visited,
@@ -198,20 +188,18 @@ impl<B: BaseDepgraphTrait> DepGraphWithDelta<B> {
 
     fn visit_class_dep_for_member_fanout(
         &self,
-        (class_dep, via_req): (Dep, bool),
+        class_dep: Dep,
         member_type: DepType,
         member_name: &str,
-        visited: &mut HashSet<(Dep, bool)>,
-        queue: &mut VecDeque<(Dep, bool)>,
+        visited: &mut HashSet<Dep>,
+        queue: &mut VecDeque<Dep>,
         fanout_acc: &mut HashTrieSet<Dep>,
         stop_if_declared: bool,
     ) {
-        if !visited.insert((class_dep, via_req)) {
+        if !visited.insert(class_dep) {
             return;
         }
-        if !via_req {
-            fanout_acc.insert_mut(class_dep);
-        }
+        fanout_acc.insert_mut(class_dep);
         let member_dep = class_dep.member(member_type, member_name);
         let mut member_is_declared = false;
         let mut member_deps = HashSet::default();
@@ -233,11 +221,7 @@ impl<B: BaseDepgraphTrait> DepGraphWithDelta<B> {
                 .for_each(|dep| fanout_acc.insert_mut(dep));
             let extends_dep_for_class = class_dep.class_to_extends().unwrap();
             self.iter_dependents_with_duplicates(extends_dep_for_class, |iter| {
-                iter.for_each(|dep| queue.push_back((dep, via_req)));
-            });
-            let requires_extends_dep_for_class = class_dep.class_to_require_extends();
-            self.iter_dependents_with_duplicates(requires_extends_dep_for_class, |iter| {
-                iter.for_each(|dep| queue.push_back((dep, true)));
+                iter.for_each(|dep| queue.push_back(dep));
             });
         }
     }
@@ -253,24 +237,6 @@ impl<B: BaseDepgraphTrait> DepGraphWithDelta<B> {
                 }
             });
         }
-    }
-
-    pub fn load_delta(&mut self, source: OsString) -> usize {
-        let f = File::open(source).unwrap();
-        let mut r = std::io::BufReader::new(f);
-
-        let Self { base, delta } = self;
-        let result = match base {
-            Some(base) => {
-                delta.read_added_edges_from(&mut r, |dependent, dependency| {
-                    // Only add when it's not already in
-                    // the graph!
-                    !base.dependent_dependency_edge_exists(dependent, dependency)
-                })
-            }
-            None => delta.read_added_edges_from(&mut r, |_, _| true),
-        };
-        result.unwrap()
     }
 
     pub fn remove(&mut self, dependent: Dep, dependency: Dep) {
@@ -460,7 +426,7 @@ mod tests {
         fn dependent_dependency_edge_exists(&self, dependent: Dep, dependency: Dep) -> bool {
             self.graph
                 .get(&dependency)
-                .map_or(false, |set| set.contains(&dependent))
+                .is_some_and(|set| set.contains(&dependent))
         }
     }
 

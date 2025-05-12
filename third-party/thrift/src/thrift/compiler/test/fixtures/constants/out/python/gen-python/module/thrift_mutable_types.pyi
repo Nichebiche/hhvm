@@ -20,22 +20,15 @@ import thrift.python.mutable_containers as _fbthrift_python_mutable_containers
 
 from module.thrift_enums import (
     EmptyEnum as _fbthrift_EmptyEnum,
-    _fbthrift_compatible_with_EmptyEnum,
     City as _fbthrift_City,
-    _fbthrift_compatible_with_City,
     Company as _fbthrift_Company,
-    _fbthrift_compatible_with_Company,
 )
 EmptyEnum = _fbthrift_EmptyEnum
 City = _fbthrift_City
 Company = _fbthrift_Company
 
 
-class _fbthrift_compatible_with_Internship:
-    pass
-
-
-class Internship(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_with_Internship, _fbthrift_python_abstract_types.Internship):
+class Internship(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_python_abstract_types.Internship):
     @property
     def weeks(self) -> int: ...
     @weeks.setter
@@ -65,7 +58,7 @@ class Internship(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compati
         self, *,
         weeks: _typing.Optional[int]=...,
         title: _typing.Optional[str]=...,
-        employer: _typing.Optional[_fbthrift_compatible_with_Company]=...,
+        employer: _typing.Optional[Company]=...,
         compensation: _typing.Optional[float]=...,
         school: _typing.Optional[str]=...
     ) -> None: ...
@@ -74,7 +67,7 @@ class Internship(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compati
         self, *,
         weeks: _typing.Optional[int]=...,
         title: _typing.Optional[str]=...,
-        employer: _typing.Optional[_fbthrift_compatible_with_Company]=...,
+        employer: _typing.Optional[Company]=...,
         compensation: _typing.Optional[float]=...,
         school: _typing.Optional[str]=...
     ) -> _typing.Self: ...
@@ -85,11 +78,7 @@ class Internship(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compati
     def _to_py_deprecated(self) -> "module.ttypes.Internship": ...  # type: ignore
 _fbthrift_Internship = Internship
 
-class _fbthrift_compatible_with_Range:
-    pass
-
-
-class Range(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_with_Range, _fbthrift_python_abstract_types.Range):
+class Range(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_python_abstract_types.Range):
     @property
     def min(self) -> int: ...
     @min.setter
@@ -118,11 +107,7 @@ class Range(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_w
     def _to_py_deprecated(self) -> "module.ttypes.Range": ...  # type: ignore
 _fbthrift_Range = Range
 
-class _fbthrift_compatible_with_struct1:
-    pass
-
-
-class struct1(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_with_struct1, _fbthrift_python_abstract_types.struct1):
+class struct1(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_python_abstract_types.struct1):
     @property
     def a(self) -> int: ...
     @a.setter
@@ -151,11 +136,7 @@ class struct1(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
     def _to_py_deprecated(self) -> "module.ttypes.struct1": ...  # type: ignore
 _fbthrift_struct1 = struct1
 
-class _fbthrift_compatible_with_struct2:
-    pass
-
-
-class struct2(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_with_struct2, _fbthrift_python_abstract_types.struct2):
+class struct2(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_python_abstract_types.struct2):
     @property
     def a(self) -> int: ...
     @a.setter
@@ -180,7 +161,7 @@ class struct2(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
         self, *,
         a: _typing.Optional[int]=...,
         b: _typing.Optional[str]=...,
-        c: _typing.Optional[_fbthrift_compatible_with_struct1]=...,
+        c: _typing.Optional[struct1]=...,
         d: _typing.Optional[_fbthrift_python_mutable_containers.MutableList[int] | _fbthrift_python_mutable_types._ThriftListWrapper]=...
     ) -> None: ...
 
@@ -188,7 +169,7 @@ class struct2(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
         self, *,
         a: _typing.Optional[int]=...,
         b: _typing.Optional[str]=...,
-        c: _typing.Optional[_fbthrift_compatible_with_struct1]=...,
+        c: _typing.Optional[struct1]=...,
         d: _typing.Optional[_fbthrift_python_mutable_containers.MutableList[int] | _fbthrift_python_mutable_types._ThriftListWrapper]=...
     ) -> _typing.Self: ...
     def __iter__(self) -> _typing.Iterator[_typing.Tuple[str, _typing.Union[int, str, _fbthrift_struct1, _fbthrift_python_mutable_containers.MutableList[int]]]]: ...
@@ -198,11 +179,7 @@ class struct2(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
     def _to_py_deprecated(self) -> "module.ttypes.struct2": ...  # type: ignore
 _fbthrift_struct2 = struct2
 
-class _fbthrift_compatible_with_struct3:
-    pass
-
-
-class struct3(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_with_struct3, _fbthrift_python_abstract_types.struct3):
+class struct3(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_python_abstract_types.struct3):
     @property
     def a(self) -> str: ...
     @a.setter
@@ -222,14 +199,14 @@ class struct3(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
         self, *,
         a: _typing.Optional[str]=...,
         b: _typing.Optional[int]=...,
-        c: _typing.Optional[_fbthrift_compatible_with_struct2]=...
+        c: _typing.Optional[struct2]=...
     ) -> None: ...
 
     def __call__(
         self, *,
         a: _typing.Optional[str]=...,
         b: _typing.Optional[int]=...,
-        c: _typing.Optional[_fbthrift_compatible_with_struct2]=...
+        c: _typing.Optional[struct2]=...
     ) -> _typing.Self: ...
     def __iter__(self) -> _typing.Iterator[_typing.Tuple[str, _typing.Union[str, int, _fbthrift_struct2]]]: ...
     def _to_python(self) -> "module.thrift_types.struct3": ...  # type: ignore
@@ -238,11 +215,7 @@ class struct3(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
     def _to_py_deprecated(self) -> "module.ttypes.struct3": ...  # type: ignore
 _fbthrift_struct3 = struct3
 
-class _fbthrift_compatible_with_struct4:
-    pass
-
-
-class struct4(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible_with_struct4, _fbthrift_python_abstract_types.struct4):
+class struct4(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_python_abstract_types.struct4):
     @property
     def a(self) -> int: ...
     @a.setter
@@ -278,11 +251,7 @@ class struct4(_fbthrift_python_mutable_types.MutableStruct, _fbthrift_compatible
     def _to_py_deprecated(self) -> "module.ttypes.struct4": ...  # type: ignore
 _fbthrift_struct4 = struct4
 
-class _fbthrift_compatible_with_union1:
-    pass
-
-
-class union1(_fbthrift_python_mutable_types.MutableUnion, _fbthrift_compatible_with_union1, _fbthrift_python_abstract_types.union1):
+class union1(_fbthrift_python_mutable_types.MutableUnion, _fbthrift_python_abstract_types.union1):
     @property
     def i(self) -> int: ...
     @i.setter
@@ -316,11 +285,7 @@ class union1(_fbthrift_python_mutable_types.MutableUnion, _fbthrift_compatible_w
     def _to_py_deprecated(self) -> "module.ttypes.union1": ...  # type: ignore
 _fbthrift_union1 = union1
 
-class _fbthrift_compatible_with_union2:
-    pass
-
-
-class union2(_fbthrift_python_mutable_types.MutableUnion, _fbthrift_compatible_with_union2, _fbthrift_python_abstract_types.union2):
+class union2(_fbthrift_python_mutable_types.MutableUnion, _fbthrift_python_abstract_types.union2):
     @property
     def i(self) -> int: ...
     @i.setter
@@ -345,8 +310,8 @@ class union2(_fbthrift_python_mutable_types.MutableUnion, _fbthrift_compatible_w
         self, *,
         i: _typing.Optional[int]=...,
         d: _typing.Optional[float]=...,
-        s: _typing.Optional[_fbthrift_compatible_with_struct1]=...,
-        u: _typing.Optional[_fbthrift_compatible_with_union1]=...
+        s: _typing.Optional[struct1]=...,
+        u: _typing.Optional[union1]=...
     ) -> None: ...
 
 
@@ -375,7 +340,7 @@ name: str = ...
 
 multi_line_string: str = ...
 
-states: _typing.List[_fbthrift_python_mutable_containers.MutableMap[str, int]] = ...
+states: _typing.Sequence[_fbthrift_python_mutable_containers.MutableMap[str, int]] = ...
 
 x: float = ...
 
@@ -395,17 +360,17 @@ foo: str = ...
 
 bar: int = ...
 
-mymap: _typing.Dict[str, str] = ...
+mymap: _typing.Mapping[str, str] = ...
 
-my_apps: _typing.List[_fbthrift_Company] = ...
+my_apps: _typing.Sequence[_fbthrift_Company] = ...
 
 instagram: _fbthrift_Internship = ...
 
 partial_const: _fbthrift_Internship = ...
 
-kRanges: _typing.List[_fbthrift_Range] = ...
+kRanges: _typing.Sequence[_fbthrift_Range] = ...
 
-internList: _typing.List[_fbthrift_Internship] = ...
+internList: _typing.Sequence[_fbthrift_Internship] = ...
 
 pod_0: _fbthrift_struct1 = ...
 
@@ -455,11 +420,11 @@ backslash: str = ...
 
 escaped_a: str = ...
 
-char2ascii: _typing.Dict[str, int] = ...
+char2ascii: _typing.Mapping[str, int] = ...
 
-escaped_strings: _typing.List[str] = ...
+escaped_strings: _typing.Sequence[str] = ...
 
-unicode_list: _typing.List[str] = ...
+unicode_list: _typing.Sequence[str] = ...
 
 false_c: bool = ...
 
@@ -477,23 +442,23 @@ zero_dot_zero: float = ...
 
 empty_string: str = ...
 
-empty_int_list: _typing.List[int] = ...
+empty_int_list: _typing.Sequence[int] = ...
 
-empty_string_list: _typing.List[str] = ...
+empty_string_list: _typing.Sequence[str] = ...
 
-empty_int_set: _typing.Set[int] = ...
+empty_int_set: _typing.AbstractSet[int] = ...
 
-empty_string_set: _typing.Set[str] = ...
+empty_string_set: _typing.AbstractSet[str] = ...
 
-empty_int_int_map: _typing.Dict[int, int] = ...
+empty_int_int_map: _typing.Mapping[int, int] = ...
 
-empty_int_string_map: _typing.Dict[int, str] = ...
+empty_int_string_map: _typing.Mapping[int, str] = ...
 
-empty_string_int_map: _typing.Dict[str, int] = ...
+empty_string_int_map: _typing.Mapping[str, int] = ...
 
-empty_string_string_map: _typing.Dict[str, str] = ...
+empty_string_string_map: _typing.Mapping[str, str] = ...
 
-unicode_map: _typing.Dict[str, str] = ...
+unicode_map: _typing.Mapping[str, str] = ...
 
 maxIntDec: int = ...
 
@@ -537,9 +502,9 @@ minNDub: float = ...
 
 minNSDub: float = ...
 
-I2B: _typing.Dict[int, bool] = ...
+I2B: _typing.Mapping[int, bool] = ...
 
-I2B_REF: _typing.Dict[int, bool] = ...
+I2B_REF: _typing.Mapping[int, bool] = ...
 
 MyCompany = _fbthrift_Company
 MyStringIdentifier = str

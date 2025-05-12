@@ -331,6 +331,7 @@ let rec tparam_info_as_value env tpinfo =
           newable;
           require_dynamic;
           parameters;
+          rank;
         } =
     tpinfo
   in
@@ -343,6 +344,7 @@ let rec tparam_info_as_value env tpinfo =
       ("newable", bool_as_value newable);
       ("require_dynamic", bool_as_value require_dynamic);
       ("parameters", named_tparam_info_list_as_value env parameters);
+      ("rank", string_as_value (Int.to_string rank));
     ]
 
 and named_tparam_info_list_as_value env parameters =
@@ -385,7 +387,9 @@ let continuations_map_as_value f m =
        SMap.empty)
 
 let local_as_value
-    env Typing_local_types.{ ty; defined; bound_ty; pos = _; eid } =
+    env
+    Typing_local_types.
+      { ty; defined; bound_ty; pos = _; eid; macro_splice_vars = _ } =
   let bound =
     match bound_ty with
     | None -> ""
@@ -530,6 +534,7 @@ let genv_as_value env genv =
     this_internal;
     this_support_dynamic_type;
     no_auto_likes;
+    needs_concrete;
   } =
     genv
   in
@@ -547,6 +552,7 @@ let genv_as_value env genv =
        ("this_internal", bool_as_value this_internal);
        ("this_support_dynamic_type", bool_as_value this_support_dynamic_type);
        ("no_auto_likes", bool_as_value no_auto_likes);
+       ("needs_concrete", bool_as_value needs_concrete);
      ]
     @ (match current_module with
       | Some current_module ->
@@ -595,6 +601,12 @@ let in_expr_tree_as_value env = function
         ("outer_locals", local_id_map_as_value (local_as_value env) outer_locals);
       ]
 
+let in_macro_splice_as_value env = function
+  | None -> bool_as_value false
+  | Some macro_vars ->
+    make_map
+      [("macro_vars", local_id_map_as_value (local_as_value env) macro_vars)]
+
 let env_as_value env =
   let {
     expression_id_provider = _;
@@ -608,12 +620,14 @@ let env_as_value env =
     in_try;
     in_lambda;
     in_expr_tree;
+    in_macro_splice;
     inside_constructor;
     checked;
     tpenv;
     log_levels = _;
     allow_wildcards;
     inference_env;
+    rank;
     big_envs = _;
     fun_tast_info;
     loaded_packages = _;
@@ -630,11 +644,13 @@ let env_as_value env =
       ("in_try", bool_as_value in_try);
       ("in_lambda", bool_as_value in_lambda);
       ("in_expr_tree", in_expr_tree_as_value env in_expr_tree);
+      ("in_macro_splice", in_macro_splice_as_value env in_macro_splice);
       ("inside_constructor", bool_as_value inside_constructor);
       ("checked", checked_as_value checked);
       ("tpenv", tpenv_as_value env tpenv);
       ("allow_wildcards", bool_as_value allow_wildcards);
       ("inference_env", Inf.Log.inference_env_as_value inference_env);
+      ("rank", string_as_value (Int.to_string rank));
       ("fun_tast_info", fun_tast_info_as_map fun_tast_info);
     ]
 
@@ -699,12 +715,8 @@ let log_types p env items =
       go items)
 
 let log_function
-    (type res)
-    p
-    ~function_name
-    ~arguments
-    ~(result : res -> string option)
-    (f : unit -> res) : res =
+    p ~function_name ~arguments ~(result : 'a -> string option) (f : unit -> 'a)
+    : 'a =
   log_pos_or_decl p @@ fun () ->
   indentEnv ~color:(Normal Yellow) function_name @@ fun () ->
   List.iter arguments ~f:print_key_value;

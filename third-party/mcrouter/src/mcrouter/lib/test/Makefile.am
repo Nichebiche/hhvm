@@ -20,8 +20,9 @@ mcrouter_lib_test_SOURCES = \
   RouteHandleTest.cpp \
   WeightedChHashFuncBaseTest.cpp \
   WeightedCh3HashFuncTest.cpp \
-  WeightedCh4HashFuncTest.cpp \
-  WeightedRendezvousHashTest.cpp
+  WeightedRendezvousHashTest.cpp \
+  observable_test.cpp \
+  runtime_vars_data_test.cpp
 
 mcrouter_lib_test_CPPFLAGS = \
   -I$(top_srcdir)/.. \

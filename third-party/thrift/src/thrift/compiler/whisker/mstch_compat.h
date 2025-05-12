@@ -42,7 +42,7 @@ template <class N>
 class object_t {
  public:
   using node_ref = std::reference_wrapper<const N>;
-  using lookup_result = std::variant<whisker::object::ptr, node_ref>;
+  using lookup_result = std::variant<whisker::object, node_ref>;
 
   lookup_result at(std::string_view name) const {
     assert(has(name));
@@ -86,14 +86,11 @@ class object_t {
         : bind(cached_whisker_object(method)) {}
     /* implicit */ property_descriptor(whisker::string (Self::*method)())
         : bind(cached_whisker_object(method)) {}
-    /* implicit */ property_descriptor(whisker::array (Self::*method)())
+    /* implicit */ property_descriptor(whisker::array::ptr (Self::*method)())
         : bind(cached_whisker_object(method)) {}
-    /* implicit */ property_descriptor(whisker::map (Self::*method)())
+    /* implicit */ property_descriptor(whisker::map::ptr (Self::*method)())
         : bind(cached_whisker_object(method)) {}
     /* implicit */ property_descriptor(whisker::object (Self::*method)())
-        : bind(cached_whisker_object(method)) {}
-    /* implicit */ property_descriptor(
-        whisker::native_object::ptr (Self::*method)())
         : bind(cached_whisker_object(method)) {}
     /* implicit */ property_descriptor(
         whisker::native_function::ptr (Self::*method)())
@@ -161,19 +158,18 @@ class object_t {
     template <typename T>
     static binder cached_whisker_object(T (Self::*method)()) {
       return [method](Self* self) -> property_dispatcher {
-        return [self,
-                method,
-                cache = std::optional<whisker::object::ptr>()]() mutable
-               -> lookup_result {
-          if (!cache) {
-            if constexpr (std::is_same_v<T, whisker::object::ptr>) {
-              cache = (self->*method)();
-            } else {
-              cache = whisker::manage_owned<whisker::object>((self->*method)());
-            }
-          }
-          return *cache;
-        };
+        return
+            [self, method, cache = std::optional<whisker::object>()]() mutable
+            -> lookup_result {
+              if (!cache) {
+                if constexpr (std::is_same_v<T, whisker::object::ptr>) {
+                  cache = (self->*method)();
+                } else {
+                  cache = whisker::object((self->*method)());
+                }
+              }
+              return *cache;
+            };
       };
     }
   };
@@ -248,7 +244,7 @@ using array = std::vector<node>;
 namespace whisker {
 
 /**
- * A mstch::object is analogous to whisker::native_object.
+ * A mstch::object is analogous to whisker::map.
  */
 using mstch_object = apache::thrift::mstch::object;
 /**
@@ -284,26 +280,7 @@ using mstch_node = apache::thrift::mstch::node;
  * Note that, such data contained within a mstch_array or mstch_map will be
  * lazily marshaled. In other words, the eager marshaling only applies to values
  * in the object tree at depth 0.
- *
- * Internally, this function uses whisker::native_object to implement proxying.
- * Therefore, from_mstch() with a mstch_array as input will not create a
- * whisker::array and so calling is_array() on it will return false. Instead the
- * helper functions of the family, is_mstch_<type>, can be used to check for
- * such objects.
  */
 object from_mstch(mstch_node);
-
-/**
- * Determines if the provided object is proxying a mstch_object internally.
- */
-bool is_mstch_object(const object&);
-/**
- * Determines if the provided object is proxying a mstch_map internally.
- */
-bool is_mstch_map(const object&);
-/**
- * Determines if the provided object is proxying a mstch_array internally.
- */
-bool is_mstch_array(const object&);
 
 } // namespace whisker

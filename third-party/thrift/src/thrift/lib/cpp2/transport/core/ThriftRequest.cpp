@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <thrift/lib/cpp2/async/InterceptorFrameworkMetadata.h>
 #include <thrift/lib/cpp2/server/CPUConcurrencyController.h>
 #include <thrift/lib/cpp2/server/LoggingEvent.h>
 #include <thrift/lib/cpp2/transport/core/ThriftRequest.h>
@@ -27,11 +28,15 @@ namespace apache::thrift {
 
 namespace detail {
 THRIFT_PLUGGABLE_FUNC_REGISTER(
-    void, handleFrameworkMetadata, std::unique_ptr<folly::IOBuf>&&) {}
+    void,
+    handleFrameworkMetadata,
+    std::unique_ptr<folly::IOBuf>&&,
+    Cpp2RequestContext*) {}
 THRIFT_PLUGGABLE_FUNC_REGISTER(
     bool,
     handleFrameworkMetadataHeader,
-    folly::F14NodeMap<std::string, std::string>&) {
+    folly::F14NodeMap<std::string, std::string>&,
+    Cpp2RequestContext*) {
   return false;
 }
 THRIFT_PLUGGABLE_FUNC_REGISTER(
@@ -90,12 +95,14 @@ ThriftRequestCore::ThriftRequestCore(
     header_.setCallPriority(static_cast<concurrency::PRIORITY>(*priority));
   }
   auto otherMetadata = metadata.otherMetadata_ref();
+
   // When processing ThriftFrameworkMetadata, the header takes priority.
   if (!otherMetadata ||
-      !detail::handleFrameworkMetadataHeader(*otherMetadata)) {
+      !detail::handleFrameworkMetadataHeader(*otherMetadata, &reqContext_)) {
     if (auto frameworkMetadata = metadata.frameworkMetadata_ref()) {
       DCHECK(*frameworkMetadata && !(**frameworkMetadata).empty());
-      detail::handleFrameworkMetadata(std::move(*frameworkMetadata));
+      detail::handleFrameworkMetadata(
+          std::move(*frameworkMetadata), &reqContext_);
     }
   }
   if (otherMetadata) {
@@ -248,8 +255,13 @@ ThriftRequestCore::LogRequestSampleCallback::buildRequestLoggingContext(
   requestLoggingContext.clientTimeoutMs = thriftRequest.clientTimeout_;
 
   // CPUConcurrencyController mode
-  requestLoggingContext.cpuConcurrencyControllerMode = static_cast<uint8_t>(
-      serverConfigs_.getCPUConcurrencyController().config()->mode);
+  if (serverConfigs_.getCPUConcurrencyController() != nullptr) {
+    requestLoggingContext.cpuConcurrencyControllerMode = static_cast<uint8_t>(
+        serverConfigs_.getCPUConcurrencyController()->config()->mode);
+  } else {
+    requestLoggingContext.cpuConcurrencyControllerMode =
+        static_cast<uint8_t>(CPUConcurrencyController::Mode::DISABLED);
+  }
 
   return requestLoggingContext;
 }

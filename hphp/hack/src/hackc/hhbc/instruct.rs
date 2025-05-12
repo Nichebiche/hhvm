@@ -6,7 +6,6 @@
 use ffi::Vector;
 use serde::Serialize;
 
-use crate::opcodes::Opcode;
 use crate::BytesId;
 use crate::FCallArgsFlags;
 use crate::IterArgsFlags;
@@ -14,6 +13,7 @@ use crate::PropName;
 use crate::ReadonlyOp;
 use crate::SrcLoc;
 use crate::StringId;
+use crate::opcodes::Opcode;
 
 /// see runtime/base/repo-auth-type.h
 pub type RepoAuthType = StringId;
@@ -97,7 +97,7 @@ impl FCallArgs {
             "length of readonly must be either zero or num_args"
         );
         assert!(
-            context.map_or(true, |c| !c.is_empty()),
+            context.is_none_or(|c| !c.is_empty()),
             "unexpected empty context"
         );
         if context.is_some() {
@@ -271,6 +271,7 @@ pub enum Visibility {
     Public,
     Protected,
     Internal,
+    ProtectedInternal,
 }
 
 impl std::convert::From<oxidized::ast_defs::Visibility> for Visibility {
@@ -281,6 +282,7 @@ impl std::convert::From<oxidized::ast_defs::Visibility> for Visibility {
             ast_defs::Visibility::Public => Self::Public,
             ast_defs::Visibility::Protected => Self::Protected,
             ast_defs::Visibility::Internal => Self::Internal,
+            ast_defs::Visibility::ProtectedInternal => Self::ProtectedInternal,
         }
     }
 }
@@ -292,6 +294,7 @@ impl AsRef<str> for Visibility {
             Self::Public => "public",
             Self::Protected => "protected",
             Self::Internal => "internal",
+            Self::ProtectedInternal => "protected internal",
         }
     }
 }
@@ -307,6 +310,7 @@ impl From<Visibility> for hhvm_types_ffi::Attr {
             // modifier on top the others.
             // In order to unblock typechecker, let it be a modifier on top for now.
             Visibility::Internal => Self::AttrInternal | Self::AttrPublic,
+            Visibility::ProtectedInternal => Self::AttrInternal | Self::AttrProtected,
         }
     }
 }

@@ -776,6 +776,11 @@ To string conversions:
 
   Set D to true iff S0 has a reified parent.
 
+| ReifiedInit, ND, S(Cls) S(Vec) S(Obj), LA
+
+  Invokes setReifiedInit on S2 if S0 or its parent is a reified class,
+  using the generics specified in S1.
+
 | CallViolatesModuleBoundary<caller>, D(Bool), S(Func,Cls), NF
 
   Set D to true iff function call from caller to S0 violates module boundary.
@@ -1196,6 +1201,10 @@ To string conversions:
   Given the `index` of a property in S0 that may be a handle to some lazily-
   deserialized APC value, check if the property is lazy and deserialize it in
   place if so. After this op, the prop will be a valid TypedValue.
+
+| LdClosureArg<T, index>, DParam(Cell), S(Obj), NF
+
+  Loads the argument of closure S0 at physical index `index` into D.
 
 | LdPropAddr<T,index>, D(LvalToProp), S(Obj), NF
 
@@ -1692,7 +1701,7 @@ ReqBindJmp and CallFuncEntry.
   Execute a call to the native builtin specified by the current function. S0
   and S1 should be the current vmfp and vmsp, respectively.
 
-| CallBuiltin, DBuiltin, S(FramePtr) S(StkPtr) SVar(Mem,Cell,Nullptr), PRc
+| CallBuiltin, DBuiltin, S(FramePtr) S(StkPtr) SVar(Ptr,Cell,Nullptr), PRc
 
   Call builtin function with N arguments. S0 and S1 should be the current vmfp
   and vmsp, respectively.
@@ -1973,8 +1982,8 @@ ReqBindJmp and CallFuncEntry.
 
 | DecReleaseCheck<locId>, ND, S(Cell), B|CRc
 
-  Decrease the refcount of S0 and fall through if the refcount goes to zero.
-  Otherwise, branch to B.
+  If the refcount of S0 is 1, fall through.
+  Otherwise, decrease the refcount of S0 and branch to B.
 
 12. Misc
 
@@ -2204,6 +2213,11 @@ ReqBindJmp and CallFuncEntry.
 | VerifyReifiedReturnType<func>, ND, S(Cell) S(Dict) S(Cls|Nullptr), LA
 
   Raises a catchable type hint error if the reified generics of S0 does not
+  match the type structure given on S1.
+
+| VerifyType<func>, ND, S(Cell) S(Dict) S(Cls|Nullptr), LA
+
+  Warns or raises a catchable type hint error if value S0 does not
   match the type structure given on S1.
 
 | ThrowUninitLoc<localId>, ND, S(Str), T
@@ -2547,6 +2561,10 @@ ReqBindJmp and CallFuncEntry.
   the native resume address to S2, resume offset to S3, and mark it blocked on
   non-finished child S4.
 
+| CreateAFWHL, DAllocObj, S(FramePtr) C(Int) S(TCA,Nullptr) C(Int), PRc
+
+  Same as `CreateAFWH`, but force low priority on the awaitable.
+
 | CreateAGWH, DAllocObj,
 |             S(FramePtr) S(TCA,Nullptr) C(Int) S(Obj),
 |             CRc|PRc
@@ -2565,6 +2583,10 @@ ReqBindJmp and CallFuncEntry.
 | CreateSSWH, DAllocObj, S(Cell), CRc|PRc
 
   Call c_StaticWaitHandle::CreateSucceeded.
+
+| CreateFSWH, DAllocObj, S(Cell), CRc|PRc
+
+  Call c_StaticWaitHandle::CreateFailed.
 
 | AFWHPrepareChild, ND, S(FramePtr) S(Obj), NF
 
@@ -3443,11 +3465,6 @@ fields of that struct for holding intermediate values.
   property. S0 is the class the property was declared on. S1 is the property
   name. S2 is true if its a static property, false otherwise.
 
-| ThrowParameterWrongType<expectedType, func, argNum>, ND, S(Cell), T
-
-  Throws a RuntimeException if calling a function with an argument that has the
-  wrong type
-
 | ThrowMustBeMutableException<cls>, ND, S(Str), T
 
   Throws an InvalidOperationException indicating a readonly semantics violation
@@ -3607,7 +3624,10 @@ fields of that struct for holding intermediate values.
   Marks the beginning of a catch region. Exact behavior is implementation and
   architecture specific.
 
-| EndCatch<spOffset,mode,stublogue>, ND, S(FramePtr) S(StkPtr), T
+| EndCatch<spOffset,mode,stublogue>,
+|   ND,
+|   S(FramePtr) S(StkPtr) S(Obj|Nullptr),
+|   CRc|T
 
   Marks the end of a catch region and returns control to the unwinder.  The
   `spOffset' field represents a logical adjustment to S1 (in cells) to yield
@@ -3630,13 +3650,9 @@ fields of that struct for holding intermediate values.
 
   Loads the value contained by the current unwinder exception.
 
-| EnterTCUnwind<spOff,teardown>, ND, S(Obj), CRc|T
+| StUnwinderExn, ND, S(Obj), NF
 
-  Enters tc_unwind_resume by doing a side enter, i.e. skipping
-  itanium ABI. Stores the exception given by S0 to UnwindRDS's exn
-  field as well as true to sideEnter field.
-
-  If teardown is set, it notifies tc_unwind_resume to also teardown the locals.
+  Stores the exception given by S0 to UnwindRDS's exn field.
 
 19. Function prologues
 

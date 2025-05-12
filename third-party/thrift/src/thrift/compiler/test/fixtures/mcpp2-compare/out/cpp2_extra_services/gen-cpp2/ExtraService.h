@@ -42,6 +42,8 @@ class ExtraServiceServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::extra::svc::ExtraService> : virtual public ::some::valid::ns::ParamServiceSvIf {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::extra::svc::ExtraService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "ExtraService"; }
 
@@ -128,6 +130,13 @@ class ServiceHandler<::extra::svc::ExtraService> : virtual public ::some::valid:
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_oneway_void_ret_listunion_param{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::extra::svc::ExtraService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 7963631300631695261;
+  static constexpr ::std::string_view definitionKey = {"\xf4\x9d\x99\xcb\xe7\xe7\xbe\xb5\xb8\x9b\x41\x92\x5b\xd2\x28\x1b", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace extra::svc {

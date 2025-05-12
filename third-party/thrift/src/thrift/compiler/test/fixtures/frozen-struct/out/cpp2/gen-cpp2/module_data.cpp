@@ -6,32 +6,11 @@
  */
 
 #include "thrift/compiler/test/fixtures/frozen-struct/gen-cpp2/module_data.h"
+#include "thrift/compiler/test/fixtures/frozen-struct/gen-cpp2/module_constants.h"
 
 #include <thrift/lib/cpp2/gen/module_data_cpp.h>
 
-FOLLY_CLANG_DISABLE_WARNING("-Wunused-macros")
-
-#if defined(__GNUC__) && defined(__linux__) && !FOLLY_MOBILE
-// These attributes are applied to the static data members to ensure that they
-// are not stripped from the compiled binary, in order to keep them available
-// for use by debuggers at runtime.
-//
-// The "used" attribute is required to ensure the compiler always emits unused
-// data.
-//
-// The "section" attribute is required to stop the linker from stripping used
-// data. It works by forcing all of the data members (both used and unused ones)
-// into the same section. As the linker strips data on a per-section basis, it
-// is then unable to remove unused data without also removing used data.
-// This has a similar effect to the "retain" attribute, but works with older
-// toolchains.
-#define THRIFT_DATA_MEMBER [[gnu::used]] [[gnu::section(".rodata.thrift.data")]]
-#else
-#define THRIFT_DATA_MEMBER
-#endif
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 THRIFT_DATA_MEMBER const std::string_view TStructDataStorage<::some::ns::ModuleA>::name = "ModuleA";
 THRIFT_DATA_MEMBER const std::array<std::string_view, 6> TStructDataStorage<::some::ns::ModuleA>::fields_names = { {
@@ -58,14 +37,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 6> TStructDataStorage<::som
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 6> TStructDataStorage<::some::ns::ModuleA>::storage_names = { {
-  "__fbthrift_field_i32Field"sv,
-  "__fbthrift_field_strField"sv,
-  "__fbthrift_field_listField"sv,
-  "__fbthrift_field_mapField"sv,
-  "__fbthrift_field_inclAField"sv,
-  "__fbthrift_field_inclBField"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 6> TStructDataStorage<::some::ns::ModuleA>::isset_indexes = { {
   0,
   1,
@@ -88,10 +59,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::som
   TType::T_I32,
   TType::T_I32,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::some::ns::ModuleB>::storage_names = { {
-  "__fbthrift_field_i32Field"sv,
-  "__fbthrift_field_inclEnumB"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::some::ns::ModuleB>::isset_indexes = { {
   0,
   1,
@@ -106,9 +73,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::some::ns::d
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::some::ns::detail::DirectlyAdapted>::fields_types = { {
   TType::T_I32,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::some::ns::detail::DirectlyAdapted>::storage_names = { {
-  "__fbthrift_field_field"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::some::ns::detail::DirectlyAdapted>::isset_indexes = { {
   0,
@@ -136,13 +100,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 5> TStructDataStorage<::som
   TType::T_I32,
   TType::T_I32,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 5> TStructDataStorage<::some::ns::CppRef>::storage_names = { {
-  "__fbthrift_field_shared_field"sv,
-  "__fbthrift_field_shared_const_field"sv,
-  "__fbthrift_field_opt_shared_field"sv,
-  "__fbthrift_field_opt_shared_const_field"sv,
-  "__fbthrift_field_boxed_field"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 5> TStructDataStorage<::some::ns::CppRef>::isset_indexes = { {
   -1,
   -1,
@@ -151,5 +108,22 @@ THRIFT_DATA_MEMBER const std::array<int, 5> TStructDataStorage<::some::ns::CppRe
   -1,
 }};
 
-} // namespace thrift
-} // namespace apache
+namespace detail {
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::some::ns::ModuleA, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::some::ns::ModuleB, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::some::ns::detail::DirectlyAdapted, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::some::ns::CppRef, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::some::ns::EnumB, true>::bundle)() =
+    nullptr;
+
+} // namespace detail
+} // namespace apache::thrift

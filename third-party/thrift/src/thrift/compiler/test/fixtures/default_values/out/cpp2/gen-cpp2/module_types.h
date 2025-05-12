@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct int_value;
 struct unqualified_integer;
@@ -81,11 +79,9 @@ APACHE_THRIFT_DEFINE_ACCESSOR(optional_struct);
 APACHE_THRIFT_DEFINE_ACCESSOR(required_struct);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace facebook::thrift::compiler::test::fixtures::default_values {
@@ -125,32 +121,16 @@ class TrivialStruct final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 1;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::int_value
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i32_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 1;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -192,59 +172,47 @@ class TrivialStruct final  {
   bool operator<(const TrivialStruct&) const;
 
   /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> int_value_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> int_value_ref() const& {
     return {this->__fbthrift_field_int_value, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> int_value_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_int_value), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> int_value_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> int_value_ref() & {
     return {this->__fbthrift_field_int_value, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> int_value_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_int_value), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> int_value_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_int_value), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> int_value() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> int_value() const& {
     return {this->__fbthrift_field_int_value, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> int_value() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_int_value), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> int_value() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> int_value() & {
     return {this->__fbthrift_field_int_value, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "int_value" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> int_value() && {
-    return {static_cast<T&&>(this->__fbthrift_field_int_value), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> int_value() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_int_value), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "int_value" } */
-  [[deprecated("Use `FOO.int_value().value();` instead of `FOO.get_int_value();`")]]
+  [[deprecated("Use `FOO.int_value().value()` instead of `FOO.get_int_value()`")]]
   ::std::int32_t get_int_value() const;
 
   /** Glean { "field": "int_value" } */
-  [[deprecated("Use `FOO.int_value() = BAR;` instead of `FOO.set_int_value(BAR);`")]]
+  [[deprecated("Use `FOO.int_value() = BAR` instead of `FOO.set_int_value(BAR)`")]]
   ::std::int32_t& set_int_value(::std::int32_t int_value_);
 
   template <class Protocol_>
@@ -288,7 +256,11 @@ class StructWithNoCustomDefaultValues final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 6;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2,3,4,5,6};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::unqualified_integer,
     ::apache::thrift::ident::optional_integer,
     ::apache::thrift::ident::required_integer,
@@ -297,7 +269,6 @@ class StructWithNoCustomDefaultValues final  {
     ::apache::thrift::ident::required_struct
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2,3,4,5,6};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t,
@@ -305,25 +276,6 @@ class StructWithNoCustomDefaultValues final  {
     ::apache::thrift::type::struct_t<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>,
     ::apache::thrift::type::struct_t<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>,
     ::apache::thrift::type::struct_t<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 6;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -377,368 +329,296 @@ class StructWithNoCustomDefaultValues final  {
   bool operator<(const StructWithNoCustomDefaultValues&) const;
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_integer_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_integer_ref() const& {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_integer_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_integer_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_integer_ref() & {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_integer_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_integer_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_integer() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_integer() const& {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_integer() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_integer() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_integer() & {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_integer() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_integer() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_integer_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_integer_ref() const& {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_integer_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_integer_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_integer_ref() & {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_integer_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_integer_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_integer() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_integer() const& {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_integer() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_integer() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_integer() & {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_integer() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_integer() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_integer_ref() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_integer};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_integer_ref() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_integer_ref() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_integer)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_integer_ref() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_integer_ref() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_integer};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_integer_ref() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_integer)};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_integer_ref() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_integer)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_integer() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_integer() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_integer};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_integer() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_integer() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_integer)};
-  }
-
-  /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_integer() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_integer};
-  }
-
-  /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_integer() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_integer)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_integer() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_integer)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_struct_ref() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_struct_ref() const& {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_struct_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
-  }
-
-  /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_struct_ref() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_struct_ref() & {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_struct_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_struct_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_struct() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_struct() const& {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_struct() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
-  }
-
-  /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_struct() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_struct() & {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_struct() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_struct() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_struct_ref() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_struct_ref() const& {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_struct_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
-  }
-
-  /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_struct_ref() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_struct_ref() & {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_struct_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_struct_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_struct() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_struct() const& {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_struct() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
-  }
-
-  /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_struct() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_struct() & {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_struct() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_struct() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_struct_ref() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_struct};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_struct_ref() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_struct_ref() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_struct)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_struct_ref() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_struct_ref() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_struct};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_struct_ref() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_struct)};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_struct_ref() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_struct)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_struct() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_struct() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_struct};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_struct() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_struct() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_struct)};
-  }
-
-  /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_struct() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_struct};
-  }
-
-  /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_struct() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_struct)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_struct() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_struct)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  [[deprecated("Use `FOO.unqualified_integer().value();` instead of `FOO.get_unqualified_integer();`")]]
+  [[deprecated("Use `FOO.unqualified_integer().value()` instead of `FOO.get_unqualified_integer()`")]]
   ::std::int32_t get_unqualified_integer() const;
 
   /** Glean { "field": "unqualified_integer" } */
-  [[deprecated("Use `FOO.unqualified_integer() = BAR;` instead of `FOO.set_unqualified_integer(BAR);`")]]
+  [[deprecated("Use `FOO.unqualified_integer() = BAR` instead of `FOO.set_unqualified_integer(BAR)`")]]
   ::std::int32_t& set_unqualified_integer(::std::int32_t unqualified_integer_);
 
   /** Glean { "field": "optional_integer" } */
-  [[deprecated("Use `FOO.optional_integer().value();` instead of `FOO.get_optional_integer();`")]]
+  [[deprecated("Use `FOO.optional_integer().value()` instead of `FOO.get_optional_integer()`")]]
   const ::std::int32_t* get_optional_integer() const&;
 
   /** Glean { "field": "optional_integer" } */
-  [[deprecated("Use `FOO.optional_integer().value();` instead of `FOO.get_optional_integer();`")]]
+  [[deprecated("Use `FOO.optional_integer().value()` instead of `FOO.get_optional_integer()`")]]
   ::std::int32_t* get_optional_integer() &;
 
   ::std::int32_t* get_optional_integer() && = delete;
 
   /** Glean { "field": "optional_integer" } */
-  [[deprecated("Use `FOO.optional_integer() = BAR;` instead of `FOO.set_optional_integer(BAR);`")]]
+  [[deprecated("Use `FOO.optional_integer() = BAR` instead of `FOO.set_optional_integer(BAR)`")]]
   ::std::int32_t& set_optional_integer(::std::int32_t optional_integer_);
 
   /** Glean { "field": "required_integer" } */
-  [[deprecated("Use `FOO.required_integer().value();` instead of `FOO.get_required_integer();`")]]
+  [[deprecated("Use `FOO.required_integer().value()` instead of `FOO.get_required_integer()`")]]
   ::std::int32_t get_required_integer() const;
 
   /** Glean { "field": "required_integer" } */
-  [[deprecated("Use `FOO.required_integer() = BAR;` instead of `FOO.set_required_integer(BAR);`")]]
+  [[deprecated("Use `FOO.required_integer() = BAR` instead of `FOO.set_required_integer(BAR)`")]]
   ::std::int32_t& set_required_integer(::std::int32_t required_integer_);
 
   /** Glean { "field": "unqualified_struct" } */
-  [[deprecated("Use `FOO.unqualified_struct().value();` instead of `FOO.get_unqualified_struct();`")]]
+  [[deprecated("Use `FOO.unqualified_struct().value()` instead of `FOO.get_unqualified_struct()`")]]
   const ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& get_unqualified_struct() const&;
 
   /** Glean { "field": "unqualified_struct" } */
-  [[deprecated("Use `FOO.unqualified_struct().value();` instead of `FOO.get_unqualified_struct();`")]]
+  [[deprecated("Use `FOO.unqualified_struct().value()` instead of `FOO.get_unqualified_struct()`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct get_unqualified_struct() &&;
 
   /** Glean { "field": "unqualified_struct" } */
   template <typename T_StructWithNoCustomDefaultValues_unqualified_struct_struct_setter = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  [[deprecated("Use `FOO.unqualified_struct() = BAR;` instead of `FOO.set_unqualified_struct(BAR);`")]]
+  [[deprecated("Use `FOO.unqualified_struct() = BAR` instead of `FOO.set_unqualified_struct(BAR)`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& set_unqualified_struct(T_StructWithNoCustomDefaultValues_unqualified_struct_struct_setter&& unqualified_struct_) {
     unqualified_struct_ref() = std::forward<T_StructWithNoCustomDefaultValues_unqualified_struct_struct_setter>(unqualified_struct_);
     return __fbthrift_field_unqualified_struct;
   }
 
   /** Glean { "field": "optional_struct" } */
-  [[deprecated("Use `FOO.optional_struct().value();` instead of `FOO.get_optional_struct();`")]]
+  [[deprecated("Use `FOO.optional_struct().value()` instead of `FOO.get_optional_struct()`")]]
   const ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct* get_optional_struct() const&;
 
   /** Glean { "field": "optional_struct" } */
-  [[deprecated("Use `FOO.optional_struct().value();` instead of `FOO.get_optional_struct();`")]]
+  [[deprecated("Use `FOO.optional_struct().value()` instead of `FOO.get_optional_struct()`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct* get_optional_struct() &;
 
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct* get_optional_struct() && = delete;
 
   /** Glean { "field": "optional_struct" } */
   template <typename T_StructWithNoCustomDefaultValues_optional_struct_struct_setter = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  [[deprecated("Use `FOO.optional_struct() = BAR;` instead of `FOO.set_optional_struct(BAR);`")]]
+  [[deprecated("Use `FOO.optional_struct() = BAR` instead of `FOO.set_optional_struct(BAR)`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& set_optional_struct(T_StructWithNoCustomDefaultValues_optional_struct_struct_setter&& optional_struct_) {
     optional_struct_ref() = std::forward<T_StructWithNoCustomDefaultValues_optional_struct_struct_setter>(optional_struct_);
     return __fbthrift_field_optional_struct;
   }
 
   /** Glean { "field": "required_struct" } */
-  [[deprecated("Use `FOO.required_struct().value();` instead of `FOO.get_required_struct();`")]]
+  [[deprecated("Use `FOO.required_struct().value()` instead of `FOO.get_required_struct()`")]]
   const ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& get_required_struct() const&;
 
   /** Glean { "field": "required_struct" } */
-  [[deprecated("Use `FOO.required_struct().value();` instead of `FOO.get_required_struct();`")]]
+  [[deprecated("Use `FOO.required_struct().value()` instead of `FOO.get_required_struct()`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct get_required_struct() &&;
 
   /** Glean { "field": "required_struct" } */
   template <typename T_StructWithNoCustomDefaultValues_required_struct_struct_setter = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  [[deprecated("Use `FOO.required_struct() = BAR;` instead of `FOO.set_required_struct(BAR);`")]]
+  [[deprecated("Use `FOO.required_struct() = BAR` instead of `FOO.set_required_struct(BAR)`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& set_required_struct(T_StructWithNoCustomDefaultValues_required_struct_struct_setter&& required_struct_) {
     required_struct_ref() = std::forward<T_StructWithNoCustomDefaultValues_required_struct_struct_setter>(required_struct_);
     return __fbthrift_field_required_struct;
@@ -785,7 +665,11 @@ class StructWithCustomDefaultValues final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 6;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2,3,4,5,6};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::unqualified_integer,
     ::apache::thrift::ident::optional_integer,
     ::apache::thrift::ident::required_integer,
@@ -794,7 +678,6 @@ class StructWithCustomDefaultValues final  {
     ::apache::thrift::ident::required_struct
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2,3,4,5,6};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i32_t,
     ::apache::thrift::type::i32_t,
@@ -802,25 +685,6 @@ class StructWithCustomDefaultValues final  {
     ::apache::thrift::type::struct_t<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>,
     ::apache::thrift::type::struct_t<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>,
     ::apache::thrift::type::struct_t<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 6;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -877,368 +741,296 @@ class StructWithCustomDefaultValues final  {
   bool operator<(const StructWithCustomDefaultValues&) const;
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_integer_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_integer_ref() const& {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_integer_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_integer_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_integer_ref() & {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_integer_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_integer_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_integer() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_integer() const& {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_integer() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_integer() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_integer() & {
     return {this->__fbthrift_field_unqualified_integer, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_integer() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_integer() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_integer), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_integer_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_integer_ref() const& {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_integer_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_integer_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_integer_ref() & {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_integer_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_integer_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_integer() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_integer() const& {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_integer() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_integer() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_integer() & {
     return {this->__fbthrift_field_optional_integer, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "optional_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_integer() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_integer() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_integer), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_integer_ref() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_integer};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_integer_ref() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_integer_ref() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_integer)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_integer_ref() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_integer_ref() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_integer};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_integer_ref() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_integer)};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_integer_ref() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_integer)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_integer() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_integer() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_integer};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_integer() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_integer};
   }
 
   /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_integer() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_integer)};
-  }
-
-  /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_integer() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_integer};
-  }
-
-  /** Glean { "field": "required_integer" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_integer() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_integer)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_integer() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_integer)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_struct_ref() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_struct_ref() const& {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_struct_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
-  }
-
-  /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_struct_ref() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_struct_ref() & {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_struct_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_struct_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> unqualified_struct() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> unqualified_struct() const& {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> unqualified_struct() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
-  }
-
-  /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> unqualified_struct() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> unqualified_struct() & {
     return {this->__fbthrift_field_unqualified_struct, __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "unqualified_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> unqualified_struct() && {
-    return {static_cast<T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> unqualified_struct() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_unqualified_struct), __isset.at(2), __isset.bit(2)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_struct_ref() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_struct_ref() const& {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_struct_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
-  }
-
-  /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_struct_ref() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_struct_ref() & {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_struct_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_struct_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> optional_struct() const& {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> optional_struct() const& {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> optional_struct() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
-  }
-
-  /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> optional_struct() & {
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> optional_struct() & {
     return {this->__fbthrift_field_optional_struct, __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "optional_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> optional_struct() && {
-    return {static_cast<T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> optional_struct() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_optional_struct), __isset.at(3), __isset.bit(3)};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_struct_ref() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_struct};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_struct_ref() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_struct_ref() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_struct)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_struct_ref() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_struct_ref() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_struct};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_struct_ref() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_struct)};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_struct_ref() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_struct)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> required_struct() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> required_struct() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_required_struct};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> required_struct() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_required_struct};
   }
 
   /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> required_struct() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_required_struct)};
-  }
-
-  /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> required_struct() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_required_struct};
-  }
-
-  /** Glean { "field": "required_struct" } */
-  template <typename..., typename T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> required_struct() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_required_struct)};
+  template <typename..., typename fbthrift_T = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> required_struct() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_required_struct)};
   }
 
   /** Glean { "field": "unqualified_integer" } */
-  [[deprecated("Use `FOO.unqualified_integer().value();` instead of `FOO.get_unqualified_integer();`")]]
+  [[deprecated("Use `FOO.unqualified_integer().value()` instead of `FOO.get_unqualified_integer()`")]]
   ::std::int32_t get_unqualified_integer() const;
 
   /** Glean { "field": "unqualified_integer" } */
-  [[deprecated("Use `FOO.unqualified_integer() = BAR;` instead of `FOO.set_unqualified_integer(BAR);`")]]
+  [[deprecated("Use `FOO.unqualified_integer() = BAR` instead of `FOO.set_unqualified_integer(BAR)`")]]
   ::std::int32_t& set_unqualified_integer(::std::int32_t unqualified_integer_);
 
   /** Glean { "field": "optional_integer" } */
-  [[deprecated("Use `FOO.optional_integer().value();` instead of `FOO.get_optional_integer();`")]]
+  [[deprecated("Use `FOO.optional_integer().value()` instead of `FOO.get_optional_integer()`")]]
   const ::std::int32_t* get_optional_integer() const&;
 
   /** Glean { "field": "optional_integer" } */
-  [[deprecated("Use `FOO.optional_integer().value();` instead of `FOO.get_optional_integer();`")]]
+  [[deprecated("Use `FOO.optional_integer().value()` instead of `FOO.get_optional_integer()`")]]
   ::std::int32_t* get_optional_integer() &;
 
   ::std::int32_t* get_optional_integer() && = delete;
 
   /** Glean { "field": "optional_integer" } */
-  [[deprecated("Use `FOO.optional_integer() = BAR;` instead of `FOO.set_optional_integer(BAR);`")]]
+  [[deprecated("Use `FOO.optional_integer() = BAR` instead of `FOO.set_optional_integer(BAR)`")]]
   ::std::int32_t& set_optional_integer(::std::int32_t optional_integer_);
 
   /** Glean { "field": "required_integer" } */
-  [[deprecated("Use `FOO.required_integer().value();` instead of `FOO.get_required_integer();`")]]
+  [[deprecated("Use `FOO.required_integer().value()` instead of `FOO.get_required_integer()`")]]
   ::std::int32_t get_required_integer() const;
 
   /** Glean { "field": "required_integer" } */
-  [[deprecated("Use `FOO.required_integer() = BAR;` instead of `FOO.set_required_integer(BAR);`")]]
+  [[deprecated("Use `FOO.required_integer() = BAR` instead of `FOO.set_required_integer(BAR)`")]]
   ::std::int32_t& set_required_integer(::std::int32_t required_integer_);
 
   /** Glean { "field": "unqualified_struct" } */
-  [[deprecated("Use `FOO.unqualified_struct().value();` instead of `FOO.get_unqualified_struct();`")]]
+  [[deprecated("Use `FOO.unqualified_struct().value()` instead of `FOO.get_unqualified_struct()`")]]
   const ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& get_unqualified_struct() const&;
 
   /** Glean { "field": "unqualified_struct" } */
-  [[deprecated("Use `FOO.unqualified_struct().value();` instead of `FOO.get_unqualified_struct();`")]]
+  [[deprecated("Use `FOO.unqualified_struct().value()` instead of `FOO.get_unqualified_struct()`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct get_unqualified_struct() &&;
 
   /** Glean { "field": "unqualified_struct" } */
   template <typename T_StructWithCustomDefaultValues_unqualified_struct_struct_setter = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  [[deprecated("Use `FOO.unqualified_struct() = BAR;` instead of `FOO.set_unqualified_struct(BAR);`")]]
+  [[deprecated("Use `FOO.unqualified_struct() = BAR` instead of `FOO.set_unqualified_struct(BAR)`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& set_unqualified_struct(T_StructWithCustomDefaultValues_unqualified_struct_struct_setter&& unqualified_struct_) {
     unqualified_struct_ref() = std::forward<T_StructWithCustomDefaultValues_unqualified_struct_struct_setter>(unqualified_struct_);
     return __fbthrift_field_unqualified_struct;
   }
 
   /** Glean { "field": "optional_struct" } */
-  [[deprecated("Use `FOO.optional_struct().value();` instead of `FOO.get_optional_struct();`")]]
+  [[deprecated("Use `FOO.optional_struct().value()` instead of `FOO.get_optional_struct()`")]]
   const ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct* get_optional_struct() const&;
 
   /** Glean { "field": "optional_struct" } */
-  [[deprecated("Use `FOO.optional_struct().value();` instead of `FOO.get_optional_struct();`")]]
+  [[deprecated("Use `FOO.optional_struct().value()` instead of `FOO.get_optional_struct()`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct* get_optional_struct() &;
 
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct* get_optional_struct() && = delete;
 
   /** Glean { "field": "optional_struct" } */
   template <typename T_StructWithCustomDefaultValues_optional_struct_struct_setter = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  [[deprecated("Use `FOO.optional_struct() = BAR;` instead of `FOO.set_optional_struct(BAR);`")]]
+  [[deprecated("Use `FOO.optional_struct() = BAR` instead of `FOO.set_optional_struct(BAR)`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& set_optional_struct(T_StructWithCustomDefaultValues_optional_struct_struct_setter&& optional_struct_) {
     optional_struct_ref() = std::forward<T_StructWithCustomDefaultValues_optional_struct_struct_setter>(optional_struct_);
     return __fbthrift_field_optional_struct;
   }
 
   /** Glean { "field": "required_struct" } */
-  [[deprecated("Use `FOO.required_struct().value();` instead of `FOO.get_required_struct();`")]]
+  [[deprecated("Use `FOO.required_struct().value()` instead of `FOO.get_required_struct()`")]]
   const ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& get_required_struct() const&;
 
   /** Glean { "field": "required_struct" } */
-  [[deprecated("Use `FOO.required_struct().value();` instead of `FOO.get_required_struct();`")]]
+  [[deprecated("Use `FOO.required_struct().value()` instead of `FOO.get_required_struct()`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct get_required_struct() &&;
 
   /** Glean { "field": "required_struct" } */
   template <typename T_StructWithCustomDefaultValues_required_struct_struct_setter = ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>
-  [[deprecated("Use `FOO.required_struct() = BAR;` instead of `FOO.set_required_struct(BAR);`")]]
+  [[deprecated("Use `FOO.required_struct() = BAR` instead of `FOO.set_required_struct(BAR)`")]]
   ::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct& set_required_struct(T_StructWithCustomDefaultValues_required_struct_struct_setter&& required_struct_) {
     required_struct_ref() = std::forward<T_StructWithCustomDefaultValues_required_struct_struct_setter>(required_struct_);
     return __fbthrift_field_required_struct;
@@ -1270,3 +1062,21 @@ unsigned long StructWithCustomDefaultValues::read(Protocol_* iprot) {
 
 
 } // namespace facebook::thrift::compiler::test::fixtures::default_values
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -5104176906672562463;
+  static constexpr ::std::string_view definitionKey = {"\x06\x9f\xfb\xc4\x99\x3e\xdd\x28\xfb\x06\x88\x2f\x20\x2d\xd1\x4b", 16};
+};
+template <> struct TSchemaAssociation<::facebook::thrift::compiler::test::fixtures::default_values::StructWithNoCustomDefaultValues, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -5104176906672562463;
+  static constexpr ::std::string_view definitionKey = {"\x06\xbc\x51\xb7\xf6\xe7\xe7\xa6\xa6\x64\x4f\x15\x3c\x05\x4d\xb8", 16};
+};
+template <> struct TSchemaAssociation<::facebook::thrift::compiler::test::fixtures::default_values::StructWithCustomDefaultValues, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -5104176906672562463;
+  static constexpr ::std::string_view definitionKey = {"\x91\x18\x00\x49\x31\xa3\x5b\xe1\xfd\x39\xa7\xd4\xc4\x2a\x29\x0d", 16};
+};
+} // namespace apache::thrift::detail

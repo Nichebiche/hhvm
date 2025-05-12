@@ -32,7 +32,7 @@ namespace HPHP{
 
 namespace {
 
-using PType = boost::variant<PreClass*, PreTypeAlias*>;
+using PType = std::variant<PreClass*, PreTypeAlias*>;
 
 struct ArgTC {
   const Func* fn;
@@ -128,7 +128,7 @@ bool loadTypeSafe(PType initial, FactsStore* fs) {
         continue;
       }
 
-      match<void>(
+      match(
         p,
         [&] (PreClass* pc) {
           if (auto const parent = pc->parent())    load(parent);
@@ -246,10 +246,10 @@ bool checkConstraints(const TCtx& ctx,
 bool checkFuncConstraints(const FuncEmitter* hhbc,
                           const Func* src,
                           FactsStore* fs) {
-  bool status = checkConstraint(
+  bool status = checkConstraints(
     RetTC{src},
-    hhbc->retTypeConstraints.main(),
-    src->returnTypeConstraints().main(),
+    hhbc->retTypeConstraints,
+    src->returnTypeConstraints(),
     fs
   );
   if (src->numParams() != hhbc->params.size()) {
@@ -600,8 +600,8 @@ void compare_resolved_types(const std::string& hhbc_file,
 
           Unit* src = nullptr;
           try {
-            src = hhbc->isASystemLib() ? SystemLib::findPersistentUnit(uname)
-                                       : loadPathSafe(uname, facts);
+            src = hhbc->isSystemLib() ? SystemLib::findPersistentUnit(uname)
+                                      : loadPathSafe(uname, facts);
             if (!src) {
               Logger::FVerbose("Skipping {}, not found", uname->data());
               skipped++;

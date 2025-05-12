@@ -17,6 +17,8 @@
 package thrift
 
 import (
+	"maps"
+
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 	"github.com/facebook/fbthrift/thrift/lib/thrift/metadata"
 )
@@ -31,15 +33,17 @@ type CompositeProcessor interface {
 // compositeProcessor allows different ComposableProcessor to sit under one
 // server as long as their functions carry distinct names
 type compositeProcessor struct {
-	serviceProcessorMap map[string]types.ProcessorFunction
-	metadata            *metadata.ThriftMetadata
+	processorFunctionMap map[string]types.ProcessorFunction
+	functionServiceMap   map[string]string
+	metadata             *metadata.ThriftMetadata
 }
 
 // NewCompositeProcessor creates a new CompositeProcessor
 func NewCompositeProcessor() CompositeProcessor {
 	return &compositeProcessor{
-		serviceProcessorMap: make(map[string]types.ProcessorFunction),
-		metadata:            metadata.NewThriftMetadata(),
+		processorFunctionMap: make(map[string]types.ProcessorFunction),
+		functionServiceMap:   make(map[string]string),
+		metadata:             metadata.NewThriftMetadata(),
 	}
 }
 
@@ -49,33 +53,29 @@ func NewCompositeProcessor() CompositeProcessor {
 // A full solution (inclusion respecting namespaces) will require changes
 // to the thrift compiler
 func (p *compositeProcessor) Include(processor Processor) {
-	for name, tfunc := range processor.ProcessorFunctionMap() {
-		p.serviceProcessorMap[name] = tfunc
-	}
+	maps.Copy(p.processorFunctionMap, processor.ProcessorFunctionMap())
+	maps.Copy(p.functionServiceMap, processor.FunctionServiceMap())
+
 	metadata := processor.GetThriftMetadata()
-	for name, v := range metadata.GetEnums() {
-		p.metadata.Enums[name] = v
-	}
-	for name, v := range metadata.GetStructs() {
-		p.metadata.Structs[name] = v
-	}
-	for name, v := range metadata.GetExceptions() {
-		p.metadata.Exceptions[name] = v
-	}
-	for name, v := range metadata.GetServices() {
-		p.metadata.Services[name] = v
-	}
+	maps.Copy(p.metadata.Enums, metadata.GetEnums())
+	maps.Copy(p.metadata.Structs, metadata.GetStructs())
+	maps.Copy(p.metadata.Exceptions, metadata.GetExceptions())
+	maps.Copy(p.metadata.Services, metadata.GetServices())
 }
 
 // GetProcessorFunction multiplexes redirects to the appropriate Processor
 func (p *compositeProcessor) GetProcessorFunction(name string) types.ProcessorFunction {
-	tfunc, _ := p.serviceProcessorMap[name]
-	return tfunc
+	return p.processorFunctionMap[name]
 }
 
 // ProcessorMap returns the map that maps method names to Processors
 func (p *compositeProcessor) ProcessorFunctionMap() map[string]types.ProcessorFunction {
-	return p.serviceProcessorMap
+	return p.processorFunctionMap
+}
+
+// FunctionServiceMap returns the map that maps method names to service names
+func (p *compositeProcessor) FunctionServiceMap() map[string]string {
+	return p.functionServiceMap
 }
 
 func (p *compositeProcessor) GetThriftMetadata() *metadata.ThriftMetadata {

@@ -152,7 +152,7 @@ function nullthrows<T>(?T $x): T {
 let nullthrows_cases =
   [
     (("nullthrows.php", 3, 13), "?T");
-    (("nullthrows.php", 5, 10), "(nonnull & T)");
+    (("nullthrows.php", 5, 10), "(T & nonnull)");
   ]
 
 let nullvec =
@@ -256,7 +256,7 @@ let class_id_cases =
     (("class_id.php", 5, 3), "A");
     (("class_id.php", 7, 3), "A");
     (("class_id.php", 9, 3), "A");
-    (("class_id.php", 12, 4), "classname<A>");
+    (("class_id.php", 12, 4), "class<A>");
   ]
 
 let files =

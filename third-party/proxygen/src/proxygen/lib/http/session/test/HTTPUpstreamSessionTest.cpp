@@ -8,7 +8,6 @@
 
 #include <proxygen/lib/http/session/HTTPUpstreamSession.h>
 
-#include <folly/io/Cursor.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/TimeoutManager.h>
 #include <folly/io/async/test/MockAsyncTransport.h>
@@ -35,18 +34,6 @@ using namespace testing;
 using std::string;
 using std::unique_ptr;
 
-class TestPriorityMapBuilder : public HTTPUpstreamSession::PriorityMapFactory {
- public:
-  std::unique_ptr<HTTPUpstreamSession::PriorityAdapter> createVirtualStreams(
-      HTTPPriorityMapFactoryProvider* session) const override;
-  ~TestPriorityMapBuilder() override = default;
-
-  uint8_t hiPriWeight_{18};
-  uint8_t hiPriLevel_{0};
-  uint8_t loPriWeight_{2};
-  uint8_t loPriLevel_{2};
-};
-
 class TestPriorityAdapter : public HTTPUpstreamSession::PriorityAdapter {
  public:
   folly::Optional<const HTTPMessage::HTTP2Priority> getHTTPPriority(
@@ -71,28 +58,6 @@ class TestPriorityAdapter : public HTTPUpstreamSession::PriorityAdapter {
   HTTPMessage::HTTP2Priority hiPri_{std::make_tuple(0, false, 0)};
   HTTPMessage::HTTP2Priority loPri_{std::make_tuple(0, false, 0)};
 };
-
-std::unique_ptr<HTTPUpstreamSession::PriorityAdapter>
-TestPriorityMapBuilder::createVirtualStreams(
-    HTTPPriorityMapFactoryProvider* session) const {
-  std::unique_ptr<TestPriorityAdapter> a =
-      std::make_unique<TestPriorityAdapter>();
-  a->parentId_ = session->sendPriority({0, false, 1});
-
-  std::get<0>(a->hiPri_) = a->parentId_;
-  std::get<2>(a->hiPri_) = hiPriWeight_;
-  a->hiPriId_ = session->sendPriority({a->parentId_, false, hiPriWeight_});
-  a->priorityMap_[hiPriLevel_] = a->hiPri_;
-
-  std::get<0>(a->loPri_) = a->parentId_;
-  std::get<2>(a->loPri_) = loPriWeight_;
-  a->loPriId_ = session->sendPriority({a->parentId_, false, loPriWeight_});
-  a->priorityMap_[loPriLevel_] = a->loPri_;
-
-  a->minPriority_ = a->loPri_;
-
-  return std::move(a);
-}
 
 namespace {
 HTTPMessage getUpgradePostRequest(uint32_t bodyLen,
@@ -624,94 +589,6 @@ TEST_F(HTTP2UpstreamSessionTest, TestOverlimitResume) {
   EXPECT_EQ(this->sessionDestroyed_, true);
 }
 
-TEST_F(HTTP2UpstreamSessionTest, TestPriority) {
-  // virtual priority node with pri=8
-  auto priGroupID = httpSession_->sendPriority({0, false, 7});
-  auto handler1 = openTransaction();
-  auto handler2 = openTransaction();
-
-  auto req = getGetRequest();
-  // send request with maximal weight
-  req.setHTTP2Priority(HTTPMessage::HTTP2Priority(0, false, 255));
-  handler1->sendRequest(req);
-  handler2->sendRequest(req);
-
-  auto id = handler1->txn_->getID();
-  auto id2 = handler2->txn_->getID();
-
-  // Insert depth is 1, only root node has depth 0
-  EXPECT_EQ(std::get<0>(handler1->txn_->getPrioritySummary()), 1);
-  EXPECT_EQ(handler1->txn_->getPriorityFallback(), false);
-
-  // update handler to be in the pri-group
-  handler1->txn_->updateAndSendPriority(
-      http2::PriorityUpdate{priGroupID, false, 15});
-  handler2->txn_->updateAndSendPriority(
-      http2::PriorityUpdate{priGroupID + 254, false, 15});
-
-  // Change pri-group weight to max
-  httpSession_->sendPriority(priGroupID, http2::PriorityUpdate{0, false, 255});
-  eventBase_.loop();
-
-  auto serverCodec = makeServerCodec();
-  NiceMock<MockHTTPCodecCallback> callbacks;
-  serverCodec->setCallback(&callbacks);
-  EXPECT_CALL(callbacks,
-              onPriority(priGroupID, HTTPMessage::HTTP2Priority(0, false, 7)));
-  EXPECT_CALL(callbacks, onHeadersComplete(id, _))
-      .WillOnce(
-          Invoke([&](HTTPCodec::StreamID, std::shared_ptr<HTTPMessage> msg) {
-            EXPECT_EQ(*(msg->getHTTP2Priority()),
-                      HTTPMessage::HTTP2Priority(0, false, 255));
-          }));
-  EXPECT_CALL(callbacks, onHeadersComplete(id2, _))
-      .WillOnce(
-          Invoke([&](HTTPCodec::StreamID, std::shared_ptr<HTTPMessage> msg) {
-            EXPECT_EQ(*(msg->getHTTP2Priority()),
-                      HTTPMessage::HTTP2Priority(0, false, 255));
-          }));
-  EXPECT_CALL(
-      callbacks,
-      onPriority(id, HTTPMessage::HTTP2Priority(priGroupID, false, 15)));
-  EXPECT_CALL(
-      callbacks,
-      onPriority(id2, HTTPMessage::HTTP2Priority(priGroupID + 254, false, 15)));
-  EXPECT_EQ(handler1->txn_->getPriorityFallback(), false);
-  EXPECT_EQ(handler2->txn_->getPriorityFallback(), false);
-
-  EXPECT_EQ(std::get<1>(handler1->txn_->getPrioritySummary()), 2);
-  // created virtual parent node
-  EXPECT_EQ(std::get<1>(handler2->txn_->getPrioritySummary()), 2);
-  EXPECT_CALL(
-      callbacks,
-      onPriority(priGroupID, HTTPMessage::HTTP2Priority(0, false, 255)));
-  parseOutput(*serverCodec);
-  eventBase_.loop();
-
-  handler1->expectError();
-  handler1->expectDetachTransaction();
-  handler2->expectError();
-  handler2->expectDetachTransaction();
-  httpSession_->dropConnection();
-  eventBase_.loop();
-  EXPECT_EQ(sessionDestroyed_, true);
-}
-
-TEST_F(HTTP2UpstreamSessionTest, TestCircularPriority) {
-  InSequence enforceOrder;
-  auto handler1 = openTransaction();
-
-  auto req = getGetRequest();
-  // send request with circular dep
-  req.setHTTP2Priority(HTTPMessage::HTTP2Priority(1, false, 255));
-  handler1->sendRequest(req);
-  handler1->terminate();
-  handler1->expectDetachTransaction();
-  httpSession_->dropConnection();
-  eventBase_.loop();
-  EXPECT_EQ(sessionDestroyed_, true);
-}
-
 TEST_F(HTTP2UpstreamSessionTest, TestSettingsAck) {
   auto serverCodec = makeServerCodec();
   folly::IOBufQueue buf{folly::IOBufQueue::cacheChainLength()};
@@ -1060,9 +937,7 @@ class HTTP2UpstreamSessionWithVirtualNodesTest
                                            peerAddr_,
                                            std::move(codec),
                                            mockTransportInfo_,
-                                           this,
-                                           level_,
-                                           builder_);
+                                           this);
     eventBase_.loop();
     ASSERT_EQ(this->sessionDestroyed_, false);
   }
@@ -1077,95 +952,7 @@ class HTTP2UpstreamSessionWithVirtualNodesTest
   uint32_t nextOutgoingTxn_{1};
   std::vector<HTTPCodec::StreamID> dependencies;
   uint8_t level_{3};
-  std::shared_ptr<TestPriorityMapBuilder> builder_;
 };
-
-TEST_F(HTTP2UpstreamSessionWithVirtualNodesTest, VirtualNodes) {
-  InSequence enforceOrder;
-
-  HTTPCodec::StreamID deps[] = {11, 13, 15};
-  EXPECT_CALL(*codecPtr_, addPriorityNodes(_, _, _))
-      .Times(1)
-      .WillOnce(Invoke(
-          [&](HTTPCodec::PriorityQueue&, folly::IOBufQueue&, uint8_t maxLevel) {
-            for (size_t i = 0; i < maxLevel; i++) {
-              dependencies.push_back(deps[i]);
-            }
-            return 123;
-          }));
-  httpSession_->startNow();
-
-  EXPECT_EQ(level_, dependencies.size());
-  StrictMock<MockHTTPHandler> handler;
-  handler.expectTransaction();
-  auto txn = httpSession_->newTransaction(&handler);
-
-  EXPECT_CALL(*codecPtr_, mapPriorityToDependency(_))
-      .Times(1)
-      .WillOnce(
-          Invoke([&](uint8_t priority) { return dependencies[priority]; }));
-  txn->updateAndSendPriority(0);
-
-  handler.expectError();
-  handler.expectDetachTransaction();
-  httpSession_->dropConnection();
-
-  eventBase_.loop();
-}
-
-class HTTP2UpstreamSessionWithPriorityTree
-    : public HTTP2UpstreamSessionWithVirtualNodesTest {
- public:
-  HTTP2UpstreamSessionWithPriorityTree() {
-    builder_ = std::make_shared<TestPriorityMapBuilder>();
-  }
-};
-
-TEST_F(HTTP2UpstreamSessionWithPriorityTree, PriorityTree) {
-  InSequence enforceOrder;
-
-  std::array<HTTPCodec::StreamID, 3> deps = {{11, 13, 15}};
-  EXPECT_CALL(*codecPtr_, addPriorityNodes(_, _, _))
-      .Times(0)
-      .WillOnce(Invoke(
-          [&](HTTPCodec::PriorityQueue&, folly::IOBufQueue&, uint8_t maxLevel) {
-            for (size_t i = 0; i < maxLevel; i++) {
-              dependencies.push_back(deps[i]);
-            }
-            return 123;
-          }));
-  httpSession_->startNow();
-
-  // It should have built the virtual streams from the tree but not the old
-  // priority levels.
-  EXPECT_EQ(dependencies.size(), 0);
-  HTTPMessage::HTTP2Priority hiPri =
-      *httpSession_->getHTTPPriority(builder_->hiPriLevel_);
-  EXPECT_EQ(std::get<2>(hiPri), builder_->hiPriWeight_);
-  HTTPMessage::HTTP2Priority loPri =
-      *httpSession_->getHTTPPriority(builder_->loPriLevel_);
-  EXPECT_EQ(std::get<2>(loPri), builder_->loPriWeight_);
-
-  for (size_t level = 0; level < 256; ++level) {
-    if (level == builder_->hiPriLevel_) {
-      continue;
-    }
-    HTTPMessage::HTTP2Priority pri = *httpSession_->getHTTPPriority(level);
-    EXPECT_EQ(pri, loPri);
-  }
-
-  StrictMock<MockHTTPHandler> handler;
-  handler.expectTransaction();
-  auto txn = httpSession_->newTransaction(&handler);
-
-  txn->updateAndSendPriority(0);
-
-  handler.expectError();
-  handler.expectDetachTransaction();
-  httpSession_->dropConnection();
-
-  eventBase_.loop();
-}
 
 TYPED_TEST_P(HTTPUpstreamTest, ImmediateEof) {
   // Receive an EOF without any request data
@@ -1900,6 +1687,33 @@ TEST_F(HTTPUpstreamSessionTest, HttpUpgradeOnTxn2) {
   handler2->expectDetachTransaction();
   readAndLoop("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
   httpSession_->destroy();
+}
+
+TEST_F(HTTPUpstreamSessionTest, FailedUpgradeDrainsSession) {
+  // rejected upgrade (e.g. 500 resp from upstream) should drain the connection;
+  // future ::newTransactions should fail
+  folly::DelayedDestruction::DestructorGuard g(httpSession_);
+  HTTPMessage req = getGetRequest();
+  req.setEgressWebsocketUpgrade();
+  req.getHeaders().set(HTTP_HEADER_UPGRADE, "websocket");
+
+  auto handler = openTransaction();
+  handler->expectHeaders([&](std::shared_ptr<HTTPMessage> msg) {
+    EXPECT_EQ(msg->getStatusCode(), 500);
+  });
+  handler->expectEOM();
+  handler->expectDetachTransaction();
+
+  handler->txn_->sendHeadersWithEOM(req);
+  eventBase_.loop();
+
+  readAndLoop(
+      "HTTP/1.1 500 Internal Server Error\r\n"
+      "Content-length: 0\r\n\r\n");
+
+  // new txn fails
+  NiceMock<MockHTTPHandler> handler2;
+  EXPECT_FALSE(httpSession_->newTransaction(&handler2));
 }
 
 class HTTPUpstreamRecvStreamTest : public HTTPUpstreamSessionTest {

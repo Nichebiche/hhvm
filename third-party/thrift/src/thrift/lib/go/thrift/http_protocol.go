@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/format"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 )
 
@@ -30,12 +31,10 @@ type httpProtocol struct {
 	persistentHeaders map[string]string
 }
 
-var _ types.Protocol = (*httpProtocol)(nil)
-var _ types.RequestHeaders = (*httpProtocol)(nil)
-var _ types.ResponseHeaderGetter = (*httpProtocol)(nil)
+var _ Protocol = (*httpProtocol)(nil)
 
 // NewHTTPProtocol creates a Protocol from a format that serializes directly to an HTTPClient.
-func NewHTTPProtocol(url string) (types.Protocol, error) {
+func NewHTTPProtocol(url string) (Protocol, error) {
 	httpClient, err := newHTTPPostClient(url)
 	if err != nil {
 		return nil, err
@@ -45,7 +44,7 @@ func NewHTTPProtocol(url string) (types.Protocol, error) {
 		persistentHeaders: make(map[string]string),
 		protoID:           types.ProtocolIDCompact,
 	}
-	p.SetRequestHeader("User-Agent", "Go/THttpClient")
+	p.setRequestHeader("User-Agent", "Go/THttpClient")
 	if err := p.resetProtocol(); err != nil {
 		return nil, err
 	}
@@ -60,9 +59,9 @@ func (p *httpProtocol) resetProtocol() error {
 	switch p.protoID {
 	case types.ProtocolIDBinary:
 		// These defaults match cpp implementation
-		p.Format = NewBinaryFormatOptions(p.transport, false, true)
+		p.Format = format.NewBinaryFormatOptions(p.transport, false, true)
 	case types.ProtocolIDCompact:
-		p.Format = NewCompactFormat(p.transport)
+		p.Format = format.NewCompactFormat(p.transport)
 	default:
 		return types.NewProtocolException(fmt.Errorf("Unknown protocol id: %d", p.protoID))
 	}
@@ -78,11 +77,11 @@ func (p *httpProtocol) Close() error {
 	return p.transport.Close()
 }
 
-func (p *httpProtocol) GetResponseHeaders() map[string]string {
+func (p *httpProtocol) getResponseHeaders() map[string]string {
 	return nil
 }
 
-func (p *httpProtocol) SetRequestHeader(key, value string) {
+func (p *httpProtocol) setRequestHeader(key, value string) {
 	p.transport.SetHeader(key, value)
 }
 
@@ -91,4 +90,12 @@ func (p *httpProtocol) WriteMessageBegin(name string, typeID types.MessageType, 
 		p.transport.SetHeader(k, v)
 	}
 	return p.Format.WriteMessageBegin(name, typeID, seqid)
+}
+
+func (p *httpProtocol) DO_NOT_USE_WrapChannel() RequestChannel {
+	return NewSerialChannel(p)
+}
+
+func (p *httpProtocol) DO_NOT_USE_GetResponseHeaders() map[string]string {
+	return p.getResponseHeaders()
 }

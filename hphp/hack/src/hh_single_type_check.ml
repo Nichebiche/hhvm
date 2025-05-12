@@ -36,6 +36,7 @@ let standard_deviation mean samples =
 type mode =
   | Cst_search
   | Dump_symbol_info
+  | RunSimpliHack
   | Glean_index of string
   | Glean_sym_hash
   | Dump_inheritance
@@ -62,7 +63,6 @@ type mode =
   | Dump_tast
   | Find_refs of File_content.Position.t
   | Highlight_refs of File_content.Position.t
-  | Shallow_class_diff
   | Go_to_impl of File_content.Position.t
   | Hover of File_content.Position.t option
   | Apply_quickfixes
@@ -282,8 +282,6 @@ let parse_options () =
   let enable_strict_string_concat_interp = ref false in
   let ignore_unsafe_cast = ref false in
   let typeconst_concrete_concrete_error = ref false in
-  let enable_strict_const_semantics = ref 0 in
-  let strict_wellformedness = ref 0 in
   let meth_caller_only_public_visibility = ref true in
   let require_extends_implements_ancestors = ref false in
   let strict_value_equality = ref false in
@@ -312,6 +310,7 @@ let parse_options () =
   let enable_class_pointer_hint = ref true in
   let disallow_non_annotated_memoize = ref false in
   let treat_non_annotated_memoize_as_kbic = ref false in
+  let use_oxidized_by_ref_decls = ref true in
   let options =
     [
       ( "--config",
@@ -372,6 +371,12 @@ let parse_options () =
       ( "--dump-symbol-info",
         Arg.Unit (set_mode Dump_symbol_info),
         " Dump all symbol information" );
+      ( "--run-simplihack",
+        Arg.Unit
+          (fun () ->
+            skip_tast_checks := true;
+            set_mode RunSimpliHack ()),
+        " Run SimpliHack on the file and print the prompts that are produced" );
       ( "--glean-index",
         Arg.String (fun output_dir -> set_mode (Glean_index output_dir) ()),
         " Run indexer and output json in provided dir" );
@@ -514,10 +519,6 @@ let parse_options () =
                    ());
            ]),
         "<pos> Highlight all usages of a symbol at given line and column" );
-      ( "--shallow-class-diff",
-        Arg.Unit (set_mode Shallow_class_diff),
-        " Test shallow class comparison used in incremental mode on shallow class declarations"
-      );
       ( "--forbid_nullable_cast",
         Arg.Set forbid_nullable_cast,
         " Forbid casting from nullable values." );
@@ -677,13 +678,6 @@ let parse_options () =
         Arg.Set typeconst_concrete_concrete_error,
         " Raise an error when a concrete type constant is overridden by a concrete type constant in a child class."
       );
-      ( "--enable-strict-const-semantics",
-        Arg.Int (fun x -> enable_strict_const_semantics := x),
-        " Raise an error when a concrete constants is overridden or multiply defined"
-      );
-      ( "--strict-wellformedness",
-        Arg.Int (fun x -> strict_wellformedness := x),
-        " Re-introduce missing well-formedness checks in AST positions" );
       ( "--meth-caller-only-public-visibility",
         Arg.Bool (fun x -> meth_caller_only_public_visibility := x),
         " Controls whether meth_caller can be used on non-public methods" );
@@ -772,6 +766,9 @@ let parse_options () =
         Arg.Bool (fun x -> enable_class_pointer_hint := x),
         " Killswitch to interpret class<T> hint as class<T> type when true, classname<T> when false"
       );
+      ( "--use-oxidized-by-ref-decls",
+        Arg.Bool (fun x -> use_oxidized_by_ref_decls := x),
+        " Use oxidized by ref for decling" );
     ]
   in
 
@@ -922,6 +919,7 @@ let parse_options () =
         disallow_non_annotated_memoize = !disallow_non_annotated_memoize;
         treat_non_annotated_memoize_as_kbic =
           !treat_non_annotated_memoize_as_kbic;
+        use_oxidized_by_ref_decls = !use_oxidized_by_ref_decls;
       }
   in
 
@@ -958,8 +956,6 @@ let parse_options () =
         !enable_strict_string_concat_interp
       ~tco_ignore_unsafe_cast:!ignore_unsafe_cast
       ~tco_typeconst_concrete_concrete_error:!typeconst_concrete_concrete_error
-      ~tco_enable_strict_const_semantics:!enable_strict_const_semantics
-      ~tco_strict_wellformedness:!strict_wellformedness
       ~tco_meth_caller_only_public_visibility:
         !meth_caller_only_public_visibility
       ~tco_require_extends_implements_ancestors:
@@ -1181,46 +1177,6 @@ let parse_name_and_decl ctx files_contents =
           Decl.make_env ~sh:SharedMem.Uses ctx fn);
 
       files_info)
-
-(** This function doesn't have side-effects. Its sole job is to return shallow decls. *)
-let get_shallow_decls ctx filename file_contents :
-    Shallow_decl_defs.shallow_class SMap.t =
-  let popt = Provider_context.get_popt ctx in
-  let opts = DeclParserOptions.from_parser_options popt in
-  (Direct_decl_parser.parse_decls_obr opts filename file_contents)
-    .Direct_decl_parser.pf_decls
-  |> List.fold ~init:SMap.empty ~f:(fun acc (name, decl) ->
-         match decl with
-         | Shallow_decl_defs.Class c -> SMap.add name c acc
-         | _ -> acc)
-
-let test_shallow_class_diff ctx filename =
-  let filename_after = Relative_path.to_absolute filename ^ ".after" in
-  let contents1 = Sys_utils.cat (Relative_path.to_absolute filename) in
-  let contents2 = Sys_utils.cat filename_after in
-  let decls1 = get_shallow_decls ctx filename contents1 in
-  let decls2 = get_shallow_decls ctx filename contents2 in
-  let decls =
-    SMap.merge (fun _ a b -> Some (a, b)) decls1 decls2 |> SMap.bindings
-  in
-  let diffs =
-    List.map decls ~f:(fun (cid, old_and_new) ->
-        ( Utils.strip_ns cid,
-          match old_and_new with
-          | (Some c1, Some c2) ->
-            Shallow_class_diff.diff_class
-              ctx
-              (Provider_context.get_package_info ctx)
-              c1
-              c2
-          | (None, None) ->
-            Some ClassDiff.(Major_change (MajorChange.Unknown Neither_found))
-          | (None, Some _) -> Some ClassDiff.(Major_change MajorChange.Added)
-          | (Some _, None) -> Some ClassDiff.(Major_change MajorChange.Removed)
-        ))
-  in
-  List.iter diffs ~f:(fun (cid, diff) ->
-      Format.printf "%s: %a@." cid (Format.pp_print_option ClassDiff.pp) diff)
 
 let compute_nasts ctx files_info interesting_files =
   let nasts = create_nasts ctx files_info in
@@ -1785,16 +1741,14 @@ let do_hover ~ctx ~filename oc (pos_given : File_content.Position.t option) =
   in
   let results = Ide_hover.go_quarantined ~ctx ~entry pos in
   let formatted_results =
-    List.map
-      ~f:(fun r ->
-        let open HoverService in
-        String.concat ~sep:"\n" (r.snippet :: r.addendum))
-      results
+    HoverService.as_marked_string_list results
+    |> List.map ~f:(fun (r : Lsp.markedString) ->
+           match r with
+           | Lsp.MarkedCode (_, s) -> s
+           | Lsp.MarkedString s -> s)
+    |> String.concat ~sep:"\n"
   in
-  Printf.fprintf
-    oc
-    "%s\n"
-    (String.concat ~sep:"\n-------------\n" formatted_results)
+  Printf.fprintf oc "%s\n" formatted_results
 
 let handle_mode
     mode
@@ -2086,7 +2040,7 @@ let handle_mode
         (ServerEnvBuild.make_env
            ~init_id
            ~deps_mode:(Typing_deps_mode.InMemoryMode None)
-           genv.ServerEnv.config)
+           genv.config)
         with
         ServerEnv.naming_table;
         ServerEnv.tcopt = Provider_context.get_tcopt ctx;
@@ -2132,7 +2086,7 @@ let handle_mode
            genv.ServerEnv.config)
         with
         ServerEnv.naming_table;
-        ServerEnv.tcopt = Provider_context.get_tcopt ctx;
+        tcopt = Provider_context.get_tcopt ctx;
       }
     in
     let filename = Relative_path.to_absolute filename in
@@ -2200,10 +2154,6 @@ let handle_mode
     in
     print_error_list error_format errors max_errors;
     if not (Errors.is_empty errors) then exit 2
-  | Shallow_class_diff ->
-    print_errors_if_present parse_errors;
-    let filename = expect_single_file () in
-    test_shallow_class_diff ctx filename
   | Get_member class_and_member_id ->
     let (cid, mid) =
       match Str.split (Str.regexp "::") class_and_member_id with
@@ -2234,7 +2184,7 @@ let handle_mode
             else
               ""
           in
-          let origin = ce.Typing_defs.ce_origin in
+          let origin = ce.ce_origin in
           let from =
             if String.equal origin cid then
               ""
@@ -2246,7 +2196,7 @@ let handle_mode
             abstract
             member_type
             from
-            (ty_to_string (Lazy.force ce.Typing_defs.ce_type))
+            (ty_to_string (Lazy.force ce.ce_type))
       in
       Printf.printf "%s::%s\n" cid mid;
       print_class_element "method" Cls.get_method mid;
@@ -2263,19 +2213,19 @@ let handle_mode
             | CCAbstract _ -> "abstract "
             | CCConcrete -> "")
         in
-        let origin = cc.Typing_defs.cc_origin in
+        let origin = cc.cc_origin in
         let from =
           if String.equal origin cid then
             ""
           else
             Printf.sprintf " from %s" (Utils.strip_ns origin)
         in
-        let ty = ty_to_string cc.Typing_defs.cc_type in
+        let ty = ty_to_string cc.cc_type in
         Printf.printf "  %sconst%s: %s\n" abstract from ty);
       (match Cls.get_typeconst cls mid with
       | None -> ()
       | Some ttc ->
-        let origin = ttc.Typing_defs.ttc_origin in
+        let origin = ttc.ttc_origin in
         let from =
           if String.equal origin cid then
             ""
@@ -2283,7 +2233,6 @@ let handle_mode
             Printf.sprintf " from %s" (Utils.strip_ns origin)
         in
         let ty =
-          let open Typing_defs in
           match ttc.ttc_kind with
           | TCConcrete { tc_type = ty } -> "= " ^ ty_to_string ty
           | TCAbstract
@@ -2302,10 +2251,9 @@ let handle_mode
                  ~f:(fun x -> x))
         in
         let abstract =
-          Typing_defs.(
-            match ttc.ttc_kind with
-            | TCConcrete _ -> ""
-            | TCAbstract _ -> "abstract ")
+          match ttc.ttc_kind with
+          | TCConcrete _ -> ""
+          | TCAbstract _ -> "abstract "
         in
         Printf.printf "  %stypeconst%s: %s %s\n" abstract from mid ty);
       ())
@@ -2375,6 +2323,26 @@ let handle_mode
       in
       let json = Count_imprecise_types.json_of_results results in
       Printf.printf "%s" (Hh_json.json_to_string json)
+  | RunSimpliHack ->
+    let (errors, tasts) = compute_tasts ctx files_info files_contents in
+    print_error_list error_format errors max_errors;
+    Relative_path.Map.iter tasts ~f:(fun fn tast ->
+        let prompts = Simplihack_prompt.find ctx tast in
+        Printf.printf "%s\n" @@ Relative_path.to_absolute fn;
+        List.iter prompts ~f:(fun prompt ->
+            let msg =
+              match prompt.Simplihack_prompt.derive_prompt () with
+              | Some p -> p
+              | None -> "<no prompt derived>"
+            in
+            let result =
+              Format.asprintf
+                "%a %s"
+                Pos.pp
+                prompt.Simplihack_prompt.param_pos
+                msg
+            in
+            Printf.printf "  %s\n" result))
   | Map_reduce_mode ->
     let (errors, tasts) = compute_tasts_by_name ctx files_info files_contents in
     print_errors_if_present (Errors.merge parse_errors errors);

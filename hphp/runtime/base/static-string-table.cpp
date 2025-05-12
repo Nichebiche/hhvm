@@ -16,9 +16,7 @@
 #include "hphp/runtime/base/static-string-table.h"
 
 #include "hphp/runtime/base/array-init.h"
-#include "hphp/runtime/base/configs/configs.h"
 #include "hphp/runtime/base/perf-warning.h"
-#include "hphp/runtime/base/rds.h"
 #include "hphp/runtime/base/type-array.h"
 #include "hphp/runtime/vm/debug/debug.h"
 #include "hphp/runtime/vm/reverse-data-map.h"
@@ -330,6 +328,21 @@ std::vector<StringData*> lookupDefinedStaticStrings() {
   return ret;
 }
 
+
+void log_static_strings() {
+  auto const effectiveRate = Cfg::Eval::StaticStringsSampleRate;
+  if (!StructuredLog::coinflip(effectiveRate)) return;
+
+  StructuredLogEntry sample;
+  auto const& list = lookupDefinedStaticStrings();
+  for (auto item : list) {
+    auto const len = std::min<size_t>(item->size(), 255);
+    std::string str(item->data(), len);
+    sample.setStr("string", str.data());
+    sample.setInt("size", item->size());
+    StructuredLog::log("www_static_strings", sample);
+  }
+}
 
 const StaticString s_user("user");
 const StaticString s_Core("Core");

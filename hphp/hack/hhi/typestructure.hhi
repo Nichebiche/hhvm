@@ -45,6 +45,8 @@ namespace HH {
     OF_NULL = 0;
     OF_NOTHING = 0;
     OF_DYNAMIC = 0;
+    OF_UNION = 0;
+    OF_RECURSIVE_UNION = 0;
     OF_CLASS_PTR = 0;
     OF_CLASS_OR_CLASSNAME = 0;
     OF_UNRESOLVED = 0;
@@ -55,56 +57,56 @@ namespace HH {
   // should be considered optional. Additionally, shapes of this type may contain
   // additional fields other than those specified here.
   newtype TypeStructure<T> as shape(
-    'nullable' => ?bool,
+    ?'nullable' => bool,
     'kind' => TypeStructureKind,
-    'name' => ?string,
+    ?'name' => string,
     'classname' => ?classname<T>,
-    'elem_types' => ?varray<mixed>,
+    ?'elem_types' => varray<mixed>,
     ?'optional_elem_types' => varray<mixed>,
     ?'variadic_type' => mixed,
-    'return_type' => mixed,
-    'param_types' => ?varray<mixed>,
-    'generic_types' => ?varray<mixed>,
-    'root_name' => ?string,
-    'access_list' => ?varray<string>,
+    ?'return_type' => mixed,
+    ?'param_types' => varray<mixed>,
+    ?'generic_types' => varray<mixed>,
+    ?'root_name' => string,
+    ?'access_list' => varray<string>,
     'fields' => ?darray<arraykey, mixed>,
-    'allows_unknown_fields' => ?bool,
-    'is_cls_cns' => ?bool,
-    'optional_shape_field' => ?bool,
-    'value' => mixed,
-    'typevars' => ?string,
-    'alias' => ?string,
+    ?'allows_unknown_fields' => bool,
+    ?'is_cls_cns' => bool,
+    ?'optional_shape_field' => bool,
+    ?'value' => mixed,
+    ?'typevars' => string,
+    ?'alias' => string,
     ?'exact' => bool,
     ?'like' => bool,
   ) = shape(
-    'nullable' => ?bool,
+    ?'nullable' => bool,
     'kind' => TypeStructureKind,
     // name for generics (type variables)
-    'name' => ?string,
+    ?'name' => string,
     // classname for classes, interfaces, enums, or traits
     'classname' => ?classname<T>,
     // for tuples
-    'elem_types' => ?varray<mixed>,
+    ?'elem_types' => varray<mixed>,
     ?'optional_elem_types' => varray<mixed>,
     // For tuples and functions
     ?'variadic_type' => mixed,
     // for functions
-    'return_type' => mixed,
-    'param_types' => ?varray<mixed>,
+    ?'return_type' => mixed,
+    ?'param_types' => varray<mixed>,
     // for arrays, classes
-    'generic_types' => ?varray<mixed>,
-    'root_name' => ?string,
-    'access_list' => ?varray<string>,
+    ?'generic_types' => varray<mixed>,
+    ?'root_name' => string,
+    ?'access_list' => varray<string>,
     // for shapes
     'fields' => ?darray<arraykey, mixed>,
-    'allows_unknown_fields' => ?bool,
-    'is_cls_cns' => ?bool,
-    'optional_shape_field' => ?bool,
-    'value' => mixed,
+    ?'allows_unknown_fields' => bool,
+    ?'is_cls_cns' => bool,
+    ?'optional_shape_field' => bool,
+    ?'value' => mixed,
     // Comma-separated string
-    'typevars' => ?string,
+    ?'typevars' => string,
     // for type aliases
-    'alias' => ?string,
+    ?'alias' => string,
     // if the type is exact (i.e., not a subtype)
     ?'exact' => bool,
     // if the type is a like-type

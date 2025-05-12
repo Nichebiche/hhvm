@@ -66,6 +66,7 @@ template <typename SerDe> void Param::serde(SerDe& sd) {
     (phpCode)
     ;
   SERDE_BITFIELD(inout, sd);
+  SERDE_BITFIELD(outOnly, sd);
   SERDE_BITFIELD(readonly, sd);
   SERDE_BITFIELD(isVariadic, sd);
   SERDE_BITFIELD(isOptional, sd);
@@ -99,7 +100,6 @@ template <typename SerDe> void Func::serde(SerDe& sd, Class* parentClass) {
     (numIters)
     (mainEntry)
     (returnUserType)
-    (originalFilename)
     (originalUnit)
     (originalClass)
     (originalModuleName)

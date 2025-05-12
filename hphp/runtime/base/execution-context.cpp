@@ -36,7 +36,6 @@
 #include "hphp/runtime/base/array-iterator.h"
 #include "hphp/runtime/base/debuggable.h"
 #include "hphp/runtime/base/memory-manager.h"
-#include "hphp/runtime/base/sweepable.h"
 #include "hphp/runtime/base/backtrace.h"
 #include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/comparisons.h"
@@ -67,8 +66,6 @@
 #include "hphp/runtime/vm/jit/enter-tc.h"
 #include "hphp/runtime/vm/jit/jit-resume-addr-defs.h"
 #include "hphp/runtime/vm/jit/tc.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
-#include "hphp/runtime/vm/jit/translator.h"
 #include "hphp/runtime/vm/jit/unwind-itanium.h"
 #include "hphp/runtime/vm/act-rec-defs.h"
 #include "hphp/runtime/vm/debugger-hook.h"
@@ -78,22 +75,19 @@
 #include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/runtime.h"
 #include "hphp/runtime/vm/runtime-compiler.h"
-#include "hphp/runtime/vm/treadmill.h"
 #include "hphp/runtime/vm/unwind.h"
-#include "hphp/runtime/base/php-globals.h"
 #include "hphp/runtime/base/exceptions.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/timer.h"
 #include "hphp/zend/zend-math.h"
 
-#include "hphp/runtime/base/bespoke-runtime.h"
 #include "hphp/runtime/ext/hh/ext_implicit_context.h"
 #include "hphp/runtime/ext/vsdebug/ext_vsdebug.h"
 
 namespace HPHP {
 ///////////////////////////////////////////////////////////////////////////////
-TRACE_SET_MOD(bcinterp);
+TRACE_SET_MOD(bcinterp)
 
 rds::local::AliasedRDSLocal<ExecutionContext,
                             rds::local::Initialize::Explicitly,
@@ -714,7 +708,7 @@ void ExecutionContext::onShutdownPostSend() {
       executeFunctions(PostSend);
     } catch (...) {
       try {
-        bump_counter_and_rethrow(true /* isPsp */);
+        bump_counter_and_rethrow(true /* isPsp */, this);
       } catch (const ExitException&) {
         // do nothing
       } catch (const Exception& e) {
@@ -734,8 +728,8 @@ void ExecutionContext::onShutdownPostSend() {
 // error handling
 
 bool ExecutionContext::errorNeedsHandling(int errnum,
-                                              bool callUserHandler,
-                                              ErrorThrowMode mode) {
+                                          bool callUserHandler,
+                                          ErrorThrowMode mode) {
   if (UNLIKELY(m_throwAllErrors)) {
     throw Exception(folly::sformat("throwAllErrors: {}", errnum));
   }
@@ -914,7 +908,7 @@ bool ExecutionContext::callUserErrorHandler(const Exception& e, int errnum,
                                         {ServiceData::StatsType::COUNT});
       requestErrorHandlerTimeoutCounter->addValue(1);
       ServerStats::Log("request.timed_out.error_handler", 1);
-
+      markTimedOut();
       if (!swallowExceptions) throw;
     } catch (const RequestCPUTimeoutException&) {
       static auto requestErrorHandlerCPUTimeoutCounter =
@@ -922,7 +916,7 @@ bool ExecutionContext::callUserErrorHandler(const Exception& e, int errnum,
                                         {ServiceData::StatsType::COUNT});
       requestErrorHandlerCPUTimeoutCounter->addValue(1);
       ServerStats::Log("request.cpu_timed_out.error_handler", 1);
-
+      markTimedOut();
       if (!swallowExceptions) throw;
     } catch (const RequestMemoryExceededException&) {
       static auto requestErrorHandlerMemoryExceededCounter =
@@ -1225,8 +1219,8 @@ StringData* ExecutionContext::getContainingFileName() {
   if (ar->skipFrame()) ar = getPrevVMStateSkipFrame(ar);
   if (ar == nullptr) return staticEmptyString();
   Unit* unit = ar->func()->unit();
-  auto const path = ar->func()->originalFilename() ?
-    ar->func()->originalFilename() : unit->filepath();
+  auto const path =  ar->func()->originalUnit() ?
+    ar->func()->originalUnit() : unit->filepath();
   return const_cast<StringData*>(path);
 }
 
@@ -1772,8 +1766,10 @@ void ExecutionContext::resumeAsyncFunc(Resumable* resumable,
   TypedValue* savedSP = vmStack().top();
   tvDup(awaitResult, *vmStack().allocC());
 
-  // decref after awaitResult is on the stack
-  decRefObj(freeObj);
+  // decref after awaitResult is on the stack (null when no child on WH)
+  if (freeObj) {
+    decRefObj(freeObj);
+  }
 
   pushVMState(savedSP);
   SCOPE_EXIT { popVMState(); };

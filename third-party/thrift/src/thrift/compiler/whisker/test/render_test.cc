@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <thrift/compiler/whisker/diagnostic.h>
 #include <thrift/compiler/whisker/dsl.h>
@@ -33,26 +33,19 @@ namespace {
  * When looking up a property, always returns a whisker::string that is the
  * property name repeated twice.
  */
-class double_property_name
-    : public native_object,
-      public native_object::map_like,
-      public std::enable_shared_from_this<double_property_name> {
+class double_property_name : public map {
  public:
-  native_object::map_like::ptr as_map_like() const override {
-    return shared_from_this();
+  std::optional<object> lookup_property(std::string_view id) const override {
+    return w::string(fmt::format("{0}{0}", id));
   }
+};
 
-  object::ptr lookup_property(std::string_view id) const override {
-    if (auto cached = cached_.find(id); cached != cached_.end()) {
-      return manage_as_static(cached->second);
-    }
-    auto [result, inserted] =
-        cached_.insert({std::string(id), w::string(fmt::format("{0}{0}", id))});
-    assert(inserted);
-    return manage_as_static(result->second);
+class throws_on_lookup : public map {
+ public:
+  [[noreturn]] std::optional<object> lookup_property(
+      std::string_view) const override {
+    throw eval_error{"I always throw!"};
   }
-
-  mutable std::map<std::string, object, std::less<>> cached_;
 };
 
 } // namespace
@@ -64,14 +57,32 @@ TEST_F(RenderTest, basic) {
 }
 
 TEST_F(RenderTest, variable_missing_in_scope) {
-  auto result = render("Some text {{foo}} More text", w::map({}));
+  auto result = render("Some text {{foo}} More text", w::map());
   EXPECT_FALSE(result.has_value());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(diagnostic(
           diagnostic_level::error,
-          "Name 'foo' was not found in the current scope. Tried to search through the following scopes:\n"
+          "Name 'foo' was not found in the current scope.\n"
+          "Tried to search through the following scopes:\n"
           "#0 map (size=0)\n"
+          "\n"
+          "#1 <global scope> (size=0)\n",
+          path_to_file,
+          1)));
+}
+
+TEST_F(RenderTest, variable_throws_on_scope_lookup) {
+  auto result = render("{{foo}}", w::make_map<throws_on_lookup>());
+  EXPECT_FALSE(result.has_value());
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Name 'foo' was not found in the current scope.\n"
+          "Cause: I always throw!\n"
+          "Tried to search through the following scopes:\n"
+          "#0 map [custom] (not enumerable)\n"
           "\n"
           "#1 <global scope> (size=0)\n",
           path_to_file,
@@ -87,10 +98,26 @@ TEST_F(RenderTest, variable_missing_property_in_object) {
       diagnostics(),
       testing::ElementsAre(diagnostic(
           diagnostic_level::error,
-          "Object 'foo' has no property named 'bar'. The object with the missing property is:\n"
+          "Object 'foo' has no property named 'bar'.\n"
+          "The object with the missing property is:\n"
           "map (size=1)\n"
-          "`-'baz'\n"
-          "  |-'qux'\n",
+          "╰─ 'baz' → 'qux'\n",
+          path_to_file,
+          1)));
+}
+
+TEST_F(RenderTest, variable_throws_on_property_lookup) {
+  auto result =
+      render("{{foo.bar}}", w::map({{"foo", w::make_map<throws_on_lookup>()}}));
+  EXPECT_FALSE(result.has_value());
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Object 'foo' has no property named 'bar'.\n"
+          "Cause: I always throw!\n"
+          "The object with the missing property is:\n"
+          "map [custom] (not enumerable)\n",
           path_to_file,
           1)));
 }
@@ -180,14 +207,23 @@ TEST_F(RenderTest, section_block_array_asymmetric_nested_scopes) {
       testing::ElementsAre(
           diagnostic(
               diagnostic_level::error,
-              "Name 'value' was not found in the current scope. Tried to search through the following scopes:\n"
+              "Name 'value' was not found in the current scope.\n"
+              "Tried to search through the following scopes:\n"
               "#0 map (size=1)\n"
-              "`-'oops'\n"
-              "  |-null\n"
+              "╰─ 'oops' → null\n"
               "\n"
               "#1 map (size=1)\n"
-              "`-'factorials'\n"
-              "  |-...\n"
+              "╰─ 'factorials' → array (size=5)\n"
+              "   ├─ [0] map (size=1)\n"
+              "   │  ╰─ 'value' → i64(1)\n"
+              "   ├─ [1] map (size=1)\n"
+              "   │  ╰─ 'oops' → null\n"
+              "   ├─ [2] map (size=1)\n"
+              "   │  ╰─ 'value' → i64(6)\n"
+              "   ├─ [3] map (size=1)\n"
+              "   │  ╰─ 'value' → i64(24)\n"
+              "   ╰─ [4] map (size=1)\n"
+              "      ╰─ 'value' → i64(120)\n"
               "\n"
               "#2 <global scope> (size=0)\n",
               path_to_file,
@@ -195,15 +231,15 @@ TEST_F(RenderTest, section_block_array_asymmetric_nested_scopes) {
           error_backtrace("#0 path/to/test.whisker <line:3, col:5>\n")));
 }
 
-TEST_F(RenderTest, section_block_array_iterable_native_object) {
+TEST_F(RenderTest, section_block_array_iterable_custom_array) {
   auto factorials = w::map(
       {{"factorials",
-        w::make_native_object<array_like_native_object>(array(
+        custom_array::make(
             {w::map({{"value", w::i64(1)}}),
              w::map({{"value", w::string("2")}}),
              w::map({{"value", w::i64(6)}}),
              w::map({{"value", w::i64(24)}}),
-             w::map({{"value", w::i64(120)}})}))}});
+             w::map({{"value", w::i64(120)}})})}});
   {
     auto result = render(
         "The factorial function looks like:{{#factorials}}\n"
@@ -265,13 +301,13 @@ TEST_F(RenderTest, section_block_map) {
   }
 }
 
-TEST_F(RenderTest, section_block_map_like_native_object) {
+TEST_F(RenderTest, section_block_custom_map) {
   auto factorials = w::map(
       {{"factorials",
-        w::make_native_object<map_like_native_object>(map(
+        custom_map::make(
             {{"first", w::i64(1)},
              {"second", w::string("2")},
-             {"third", w::i64(6)}}))}});
+             {"third", w::i64(6)}})}});
   {
     auto result = render(
         "The factorial function looks like:{{#factorials}}\n"
@@ -301,43 +337,12 @@ TEST_F(RenderTest, section_block_map_like_native_object) {
   }
 }
 
-TEST_F(RenderTest, section_block_pointless_native_object) {
-  auto context =
-      w::map({{"pointless", w::make_native_object<empty_native_object>()}});
-  {
-    strict_boolean_conditional(diagnostic_level::info);
-    auto result = render(
-        "{{#pointless}}\n"
-        "Should not be rendered\n"
-        "{{/pointless}}",
-        context);
-    EXPECT_EQ(*result, "");
-  }
-  {
-    strict_boolean_conditional(diagnostic_level::error);
-    auto result = render(
-        "{{#pointless}}\n"
-        "Should not be rendered\n"
-        "{{/pointless}}",
-        context);
-    EXPECT_FALSE(result.has_value());
-    EXPECT_THAT(
-        diagnostics(),
-        testing::ElementsAre(diagnostic(
-            diagnostic_level::error,
-            "Condition 'pointless' is not a boolean. The encountered value is:\n"
-            "<native_object>\n",
-            path_to_file,
-            1)));
-  }
-}
-
 TEST_F(RenderTest, section_block_empty_array) {
   auto result = render(
       "The factorial function looks like:{{#factorials}}\n"
       "{{value}}\n"
       "{{/factorials}}",
-      w::map({{"factorials", w::array({})}}));
+      w::map({{"factorials", w::array()}}));
   EXPECT_EQ(*result, "The factorial function looks like:");
 }
 
@@ -660,7 +665,7 @@ namespace functions {
  * negated.
  */
 class add : public dsl::function {
-  object::ptr invoke(context ctx) override {
+  object invoke(context ctx) override {
     ctx.declare_named_arguments({"negate"});
     const bool negate = [&] {
       auto arg = ctx.named_argument<boolean>("negate", context::optional);
@@ -670,7 +675,7 @@ class add : public dsl::function {
     for (std::size_t i = 0; i < ctx.arity(); ++i) {
       result += ctx.argument<i64>(i);
     }
-    return manage_owned<object>(w::i64(negate ? -result : result));
+    return w::i64(negate ? -result : result);
   }
 };
 
@@ -678,12 +683,12 @@ class add : public dsl::function {
  * Returns a boolean indicating if two i64 are equal or not.
  */
 class i64_eq : public dsl::function {
-  object::ptr invoke(context ctx) override {
+  object invoke(context ctx) override {
     ctx.declare_arity(2);
     ctx.declare_named_arguments({});
     i64 a = ctx.argument<i64>(0);
     i64 b = ctx.argument<i64>(1);
-    return manage_owned<object>(w::boolean(a == b));
+    return w::boolean(a == b);
   }
 };
 
@@ -692,20 +697,20 @@ class i64_eq : public dsl::function {
  * provided, then it is used as the delimiter between elements.
  */
 class str_concat : public dsl::function {
-  object::ptr invoke(context ctx) override {
+  object invoke(context ctx) override {
     ctx.declare_named_arguments({"sep"});
     const std::string sep = [&] {
       auto arg = ctx.named_argument<string>("sep", context::optional);
-      return arg == nullptr ? "" : *arg;
+      return arg.has_value() ? std::string{*arg} : "";
     }();
     string result;
     for (std::size_t i = 0; i < ctx.arity(); ++i) {
       if (i != 0) {
         result += sep;
       }
-      result += *ctx.argument<string>(i);
+      result += ctx.argument<string>(i);
     }
-    return manage_owned<object>(w::string(std::move(result)));
+    return w::string(std::move(result));
   }
 };
 
@@ -713,11 +718,11 @@ class str_concat : public dsl::function {
  * Returns the length of an array.
  */
 class array_len : public dsl::function {
-  object::ptr invoke(context ctx) override {
+  object invoke(context ctx) override {
     ctx.declare_arity(1);
     ctx.declare_named_arguments({});
-    auto len = i64(ctx.argument<array>(0).size());
-    return manage_owned<object>(w::i64(len));
+    auto len = i64(ctx.argument<array>(0)->size());
+    return w::i64(len);
   }
 };
 
@@ -726,14 +731,14 @@ class array_len : public dsl::function {
  * present.
  */
 class map_get : public dsl::function {
-  object::ptr invoke(context ctx) override {
+  object invoke(context ctx) override {
     ctx.declare_arity(1);
     ctx.declare_named_arguments({"key"});
     auto m = ctx.argument<map>(0);
     auto key = ctx.named_argument<string>("key", context::required);
 
-    if (object::ptr result = m.lookup_property(*key)) {
-      return result;
+    if (std::optional<object> result = m->lookup_property(*key)) {
+      return std::move(*result);
     }
     throw ctx.make_error("Key '{}' not found.", *key);
   }
@@ -877,11 +882,10 @@ TEST_F(RenderTest, user_defined_function_nested) {
 }
 
 TEST_F(RenderTest, user_defined_function_array_like_argument) {
-  const array arr{w::i64(1), w::string("foo"), w::i64(100)};
+  const array::raw arr{w::i64(1), w::string("foo"), w::i64(100)};
   const auto context = w::map(
-      {{"array", w::array(array(arr))},
-       {"array_like",
-        w::make_native_object<array_like_native_object>(array(arr))},
+      {{"array", w::array(arr)},
+       {"array_like", custom_array::make(arr)},
        {"not_array", w::string("not an array")},
        {"len", w::make_native_function<functions::array_len>()}});
 
@@ -905,7 +909,7 @@ TEST_F(RenderTest, user_defined_function_array_like_argument) {
         testing::ElementsAre(diagnostic(
             diagnostic_level::error,
             "Function 'len' threw an error:\n"
-            "Expected type of argument at index 0 to be `array` or `array-like native_object`, but found `string`.",
+            "Expected type of argument at index 0 to be `array`, but found `string`.",
             path_to_file,
             1)));
   }
@@ -913,19 +917,18 @@ TEST_F(RenderTest, user_defined_function_array_like_argument) {
 
 TEST_F(RenderTest, user_defined_function_array_like_named_argument) {
   class describe_array_len : public dsl::function {
-    object::ptr invoke(context ctx) override {
+    object invoke(context ctx) override {
       ctx.declare_arity(0);
       ctx.declare_named_arguments({"input"});
       auto len = i64(ctx.named_argument<array>("input")->size());
-      return manage_owned<object>(w::string(fmt::format("length is {}", len)));
+      return w::string(fmt::format("length is {}", len));
     }
   };
 
-  const array arr{w::i64(1), w::string("foo"), w::i64(100)};
+  const array::raw arr{w::i64(1), w::string("foo"), w::i64(100)};
   const auto context = w::map(
-      {{"array", w::array(array(arr))},
-       {"array_like",
-        w::make_native_object<array_like_native_object>(array(arr))},
+      {{"array", w::array(arr)},
+       {"array_like", custom_array::make(arr)},
        {"not_array", w::string("not an array")},
        {"describe_len", w::make_native_function<describe_array_len>()}});
 
@@ -949,17 +952,18 @@ TEST_F(RenderTest, user_defined_function_array_like_named_argument) {
         testing::ElementsAre(diagnostic(
             diagnostic_level::error,
             "Function 'describe_len' threw an error:\n"
-            "Expected type of named argument 'input' to be `array` or `array-like native_object`, but found `string`.",
+            "Expected type of named argument 'input' to be `array`, but found `string`.",
             path_to_file,
             1)));
   }
 }
 
 TEST_F(RenderTest, user_defined_function_map_like_argument) {
-  const map m{{"a", w::i64(1)}, {"b", w::string("foo")}, {"c", w::i64(100)}};
+  const map::raw m{
+      {"a", w::i64(1)}, {"b", w::string("foo")}, {"c", w::i64(100)}};
   const auto context = w::map(
-      {{"map", w::map(map(m))},
-       {"map_like", w::make_native_object<map_like_native_object>(map(m))},
+      {{"map", w::map(m)},
+       {"map_like", custom_map::make(m)},
        {"not_map", w::string("not a map")},
        {"get", w::make_native_function<functions::map_get>()}});
 
@@ -983,7 +987,7 @@ TEST_F(RenderTest, user_defined_function_map_like_argument) {
         testing::ElementsAre(diagnostic(
             diagnostic_level::error,
             "Function 'get' threw an error:\n"
-            "Expected type of argument at index 0 to be `map` or `map-like native_object`, but found `string`.",
+            "Expected type of argument at index 0 to be `map`, but found `string`.",
             path_to_file,
             1)));
   }
@@ -991,23 +995,23 @@ TEST_F(RenderTest, user_defined_function_map_like_argument) {
 
 TEST_F(RenderTest, user_defined_function_map_like_named_argument) {
   class describe_map_get : public dsl::function {
-    object::ptr invoke(context ctx) override {
+    object invoke(context ctx) override {
       ctx.declare_arity(0);
       ctx.declare_named_arguments({"input", "key"});
       auto m = ctx.named_argument<map>("input", context::required);
       auto key = ctx.named_argument<string>("key", context::required);
 
       std::string_view result =
-          m->lookup_property(*key) == nullptr ? "missing" : "present";
-      return manage_owned<object>(
-          w::string(fmt::format("map element is {}", result)));
+          m->lookup_property(*key).has_value() ? "present" : "missing";
+      return w::string(fmt::format("map element is {}", result));
     }
   };
 
-  const map m{{"a", w::i64(1)}, {"b", w::string("foo")}, {"c", w::i64(100)}};
+  const map::raw m{
+      {"a", w::i64(1)}, {"b", w::string("foo")}, {"c", w::i64(100)}};
   const auto context = w::map(
-      {{"map", w::map(map(m))},
-       {"map_like", w::make_native_object<map_like_native_object>(map(m))},
+      {{"map", w::map(m)},
+       {"map_like", custom_map::make(m)},
        {"not_map", w::string("not a map")},
        {"describe_get", w::make_native_function<describe_map_get>()}});
 
@@ -1034,7 +1038,7 @@ TEST_F(RenderTest, user_defined_function_map_like_named_argument) {
         testing::ElementsAre(diagnostic(
             diagnostic_level::error,
             "Function 'describe_get' threw an error:\n"
-            "Expected type of named argument 'input' to be `map` or `map-like native_object`, but found `string`.",
+            "Expected type of named argument 'input' to be `map`, but found `string`.",
             path_to_file,
             1)));
   }
@@ -1065,13 +1069,11 @@ TEST_F(RenderTest, user_defined_function_native_ref_argument) {
   const RenderTestMyCppType native_instance{"Hello from C++!"};
 
   class describe : public dsl::function {
-    object::ptr invoke(context ctx) override {
+    object invoke(context ctx) override {
       ctx.declare_arity(1);
       ctx.declare_named_arguments({});
       auto cpp_type = ctx.argument<native_handle<RenderTestMyCppType>>(0);
-      return manage_derived(
-          cpp_type.ptr(),
-          manage_owned<object>(w::string(cpp_type->description)));
+      return w::string(cpp_type->description);
     }
   };
 
@@ -1080,7 +1082,8 @@ TEST_F(RenderTest, user_defined_function_native_ref_argument) {
         "{{ (describe native_instance) }}\n",
         w::map({
             {"native_instance",
-             w::native_handle(manage_as_static(native_instance))},
+             w::native_handle(
+                 manage_as_static(native_instance), nullptr /* prototype */)},
             {"describe", w::make_native_function<describe>()},
         }));
     EXPECT_THAT(diagnostics(), testing::IsEmpty());
@@ -1092,7 +1095,9 @@ TEST_F(RenderTest, user_defined_function_native_ref_argument) {
         "{{ (describe wrong_native_instance) }}\n",
         w::map({
             {"wrong_native_instance",
-             w::native_handle(manage_owned<RenderTestUnknownCppType>())},
+             w::native_handle(
+                 manage_owned<RenderTestUnknownCppType>(),
+                 nullptr /* prototype */)},
             {"describe", w::make_native_function<describe>()},
         }));
     EXPECT_FALSE(result.has_value());
@@ -1125,9 +1130,13 @@ TEST_F(RenderTest, user_defined_function_polymorphic_native_ref_argument) {
         "{{ (describe mid) }}\n"
         "{{ (describe derived) }}\n",
         w::map({
-            {"mid", w::native_handle(manage_owned<RenderTestPolyMid>())},
+            {"mid",
+             w::native_handle(
+                 manage_owned<RenderTestPolyMid>(), nullptr /* prototype */)},
             {"derived",
-             w::native_handle(manage_owned<RenderTestPolyDerived>())},
+             w::native_handle(
+                 manage_owned<RenderTestPolyDerived>(),
+                 nullptr /* prototype */)},
             {"describe", w::native_function(describe)},
         }));
     EXPECT_THAT(diagnostics(), testing::IsEmpty());
@@ -1142,7 +1151,9 @@ TEST_F(RenderTest, user_defined_function_polymorphic_native_ref_argument) {
         "{{ (describe wrong_native_instance) }}\n",
         w::map({
             {"wrong_native_instance",
-             w::native_handle(manage_owned<RenderTestUnknownCppType>())},
+             w::native_handle(
+                 manage_owned<RenderTestUnknownCppType>(),
+                 nullptr /* prototype */)},
             {"describe", w::native_function(describe)},
         }));
     EXPECT_FALSE(result.has_value());
@@ -1163,7 +1174,9 @@ TEST_F(RenderTest, user_defined_function_polymorphic_native_ref_argument) {
         "{{ (describe alternate) }}\n",
         w::map({
             {"alternate",
-             w::native_handle(manage_owned<RenderTestPolyAlternate>())},
+             w::native_handle(
+                 manage_owned<RenderTestPolyAlternate>(),
+                 nullptr /* prototype */)},
             {"describe", w::native_function(describe)},
         }));
     EXPECT_FALSE(result.has_value());
@@ -1176,6 +1189,112 @@ TEST_F(RenderTest, user_defined_function_polymorphic_native_ref_argument) {
             path_to_file,
             1)));
   }
+}
+
+TEST_F(RenderTest, user_defined_function_self_argument) {
+  use_library(load_standard_library);
+
+  const auto return_self =
+      dsl::make_function([](dsl::function::context ctx) -> object {
+        ctx.declare_arity(0);
+        ctx.declare_named_arguments({});
+        return ctx.raw().self();
+      });
+
+  const auto self_object = w::map({
+      {"answer", w::i64(42)},
+      {"return_self", w::native_function(return_self)},
+  });
+  const auto context = w::map({
+      {"foo", self_object},
+      {"answer", w::i64(100)},
+  });
+
+  {
+    auto result = render(
+        "{{#let s = (foo.return_self)}}\n"
+        "{{s.answer}}\n",
+        context);
+    EXPECT_THAT(diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(*result, "42\n");
+  }
+
+  {
+    auto result = render(
+        "{{#let func = foo.return_self}}\n"
+        "{{#let s = (func)}}\n"
+        "{{#if (object.eq? s null)}}\n"
+        "It was null!\n"
+        "{{#else}}\n"
+        "It was not null!\n"
+        "{{/if (object.eq? s null)}}\n",
+        context);
+    EXPECT_THAT(diagnostics(), testing::IsEmpty());
+    EXPECT_EQ(*result, "It was null!\n");
+  }
+}
+
+TEST_F(RenderTest, user_defined_function_native_ref_prototype) {
+  class SomeCppObjectBase {
+   public:
+    virtual ~SomeCppObjectBase() = default;
+    int return42() const { return 42; }
+  };
+
+  class SomeCppObject : public SomeCppObjectBase {
+   public:
+    void increment() const { ++value_; }
+
+    int get() const { return value_; }
+
+   private:
+    mutable int value_ = 0;
+  };
+  SomeCppObject cpp_object;
+
+  using base_handle_type =
+      dsl::polymorphic_native_handle<SomeCppObjectBase, SomeCppObject>;
+  const auto base_proto = dsl::make_prototype<base_handle_type>([](auto&& def) {
+    def.property("return42", [](const SomeCppObjectBase& self) {
+      return w::i64(self.return42());
+    });
+  });
+
+  const auto proto = dsl::make_prototype<native_handle<SomeCppObject>>(
+      base_proto, [](auto&& def) {
+        def.property("get", [](const SomeCppObject& self) {
+          return w::i64(self.get());
+        });
+        def.function(
+            "increment",
+            [](const SomeCppObject& self, dsl::function::context ctx) {
+              ctx.declare_arity(0);
+              ctx.declare_named_arguments({});
+              self.increment();
+              return w::string("incremented!");
+            });
+      });
+
+  const auto context = w::map({
+      {"foo", w::native_handle(manage_as_static(cpp_object), proto)},
+  });
+  auto result = render(
+      "{{ foo.get }}\n"
+      "{{ (foo.increment) }}\n"
+      "{{ foo.get }}\n"
+      "{{ (foo.increment) }}\n"
+      "{{ foo.get }}\n"
+      "{{ foo.return42 }}\n",
+      context);
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(
+      *result,
+      "0\n"
+      "incremented!\n"
+      "1\n"
+      "incremented!\n"
+      "2\n"
+      "42\n");
 }
 
 TEST_F(RenderTest, let_statement) {
@@ -1221,7 +1340,7 @@ TEST_F(RenderTest, let_statement_rebinding_error) {
   auto result = render(
       "{{#let cond = (not false)}}\n"
       "{{#let cond = false}}\n",
-      w::map({}));
+      w::map());
   EXPECT_FALSE(result.has_value());
   EXPECT_THAT(
       diagnostics(),
@@ -1258,13 +1377,12 @@ TEST_F(RenderTest, with_not_map) {
           diagnostic_level::error,
           "Expression 'news' does not evaluate to a map. The encountered value is:\n"
           "array (size=1)\n"
-          "`-[0]\n"
-          "  |-i64(0)\n",
+          "╰─ [0] i64(0)\n",
           path_to_file,
           1)));
 }
 
-TEST_F(RenderTest, with_map_like_native_object) {
+TEST_F(RenderTest, with_custom_map) {
   auto result = render(
       "{{#with doubler}}\n"
       "{{foo}} {{bar}}\n"
@@ -1272,31 +1390,12 @@ TEST_F(RenderTest, with_map_like_native_object) {
       "{{baz}}\n"
       "{{/with}}\n"
       "{{/with}}\n",
-      w::map({{"doubler", w::make_native_object<double_property_name>()}}));
+      w::map({{"doubler", w::make_map<double_property_name>()}}));
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(
       *result,
       "foofoo barbar\n"
       "bazbaz\n");
-}
-
-TEST_F(RenderTest, with_not_map_like_native_object) {
-  show_source_backtrace_on_failure(true);
-  auto result = render(
-      "{{#with empty}}\n"
-      "{{/with}}\n",
-      w::map({{"empty", w::make_native_object<empty_native_object>()}}));
-  EXPECT_FALSE(result.has_value());
-  EXPECT_THAT(
-      diagnostics(),
-      testing::ElementsAre(
-          diagnostic(
-              diagnostic_level::error,
-              "Expression 'empty' is a native_object which is not map-like. The encountered value is:\n"
-              "<native_object>\n",
-              path_to_file,
-              1),
-          error_backtrace("#0 path/to/test.whisker <line:1, col:9>\n")));
 }
 
 TEST_F(RenderTest, each_block_array) {
@@ -1359,15 +1458,15 @@ TEST_F(RenderTest, each_block_array_with_capture_and_index) {
       "4. 120\n");
 }
 
-TEST_F(RenderTest, each_block_array_iterable_native_object) {
+TEST_F(RenderTest, each_block_array_iterable_custom_array) {
   auto factorials = w::map(
       {{"factorials",
-        w::make_native_object<array_like_native_object>(array(
+        custom_array::make(
             {w::map({{"value", w::i64(1)}}),
              w::map({{"value", w::string("2")}}),
              w::map({{"value", w::i64(6)}}),
              w::map({{"value", w::i64(24)}}),
-             w::map({{"value", w::i64(120)}})}))}});
+             w::map({{"value", w::i64(120)}})})}});
   auto result = render(
       "The factorial function looks like:\n"
       "{{#each factorials as |entry index|}}\n"
@@ -1392,7 +1491,7 @@ TEST_F(RenderTest, each_block_array_else) {
       "{{#else}}\n"
       "Hey! Where did they go?\n"
       "{{/each}}",
-      w::map({{"factorials", w::array({})}}));
+      w::map({{"factorials", w::array()}}));
   EXPECT_EQ(
       *result,
       "The factorial function looks like:\n"
@@ -1446,29 +1545,9 @@ TEST_F(RenderTest, each_block_non_array) {
           1)));
 }
 
-TEST_F(RenderTest, each_block_pointless_native_object) {
-  auto context =
-      w::map({{"pointless", w::make_native_object<empty_native_object>()}});
-
-  auto result = render(
-      "{{#each pointless}}\n"
-      "Should not be rendered\n"
-      "{{/each}}",
-      context);
-  EXPECT_FALSE(result.has_value());
-  EXPECT_THAT(
-      diagnostics(),
-      testing::ElementsAre(diagnostic(
-          diagnostic_level::error,
-          "Expression 'pointless' is a native_object which is not array-like. The encountered value is:\n"
-          "<native_object>\n",
-          path_to_file,
-          1)));
-}
-
 TEST_F(RenderTest, printable_types_strict_failure) {
   {
-    auto result = render(R"({{-42}} {{"hello"}})", w::map({}));
+    auto result = render(R"({{-42}} {{"hello"}})", w::map());
     EXPECT_EQ(*result, "-42 hello");
   }
   {
@@ -1484,7 +1563,7 @@ TEST_F(RenderTest, printable_types_strict_failure) {
     EXPECT_FALSE(result.has_value());
   }
   {
-    auto result = render("{{true}}", w::map({}));
+    auto result = render("{{true}}", w::map());
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1496,7 +1575,7 @@ TEST_F(RenderTest, printable_types_strict_failure) {
     EXPECT_FALSE(result.has_value());
   }
   {
-    auto result = render("{{null}}", w::map({}));
+    auto result = render("{{null}}", w::map());
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1508,7 +1587,7 @@ TEST_F(RenderTest, printable_types_strict_failure) {
     EXPECT_FALSE(result.has_value());
   }
   {
-    auto result = render("{{array}}", w::map({{"array", w::array({})}}));
+    auto result = render("{{array}}", w::map({{"array", w::array()}}));
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1520,7 +1599,7 @@ TEST_F(RenderTest, printable_types_strict_failure) {
     EXPECT_FALSE(result.has_value());
   }
   {
-    auto result = render("{{map}}", w::map({{"map", w::map({})}}));
+    auto result = render("{{map}}", w::map({{"map", w::map()}}));
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1531,27 +1610,13 @@ TEST_F(RenderTest, printable_types_strict_failure) {
             1)));
     EXPECT_FALSE(result.has_value());
   }
-  {
-    auto result = render(
-        "{{native}}",
-        w::map({{"native", w::make_native_object<empty_native_object>()}}));
-    EXPECT_THAT(
-        diagnostics(),
-        testing::ElementsAre(diagnostic(
-            diagnostic_level::error,
-            "Object named 'native' is not printable. The encountered value is:\n"
-            "<native_object>\n",
-            path_to_file,
-            1)));
-    EXPECT_FALSE(result.has_value());
-  }
 }
 
 TEST_F(RenderTest, printable_types_warning) {
   strict_printable_types(diagnostic_level::warning);
 
   {
-    auto result = render(R"({{-42}} {{"hello"}})", w::map({}));
+    auto result = render(R"({{-42}} {{"hello"}})", w::map());
     EXPECT_EQ(*result, "-42 hello");
   }
   {
@@ -1567,7 +1632,7 @@ TEST_F(RenderTest, printable_types_warning) {
     EXPECT_EQ(*result, "3.1415926");
   }
   {
-    auto result = render("{{false}}", w::map({}));
+    auto result = render("{{false}}", w::map());
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1579,7 +1644,7 @@ TEST_F(RenderTest, printable_types_warning) {
     EXPECT_EQ(*result, "false");
   }
   {
-    auto result = render("{{null}}", w::map({}));
+    auto result = render("{{null}}", w::map());
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1591,9 +1656,9 @@ TEST_F(RenderTest, printable_types_warning) {
     EXPECT_EQ(*result, "");
   }
 
-  // Arrays, maps, native_objects are not printable in any case
+  // Arrays, maps are not printable in any case
   {
-    auto result = render("{{array}}", w::map({{"array", w::array({})}}));
+    auto result = render("{{array}}", w::map({{"array", w::array()}}));
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1605,27 +1670,13 @@ TEST_F(RenderTest, printable_types_warning) {
     EXPECT_FALSE(result.has_value());
   }
   {
-    auto result = render("{{map}}", w::map({{"map", w::map({})}}));
+    auto result = render("{{map}}", w::map({{"map", w::map()}}));
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
             diagnostic_level::error,
             "Object named 'map' is not printable. The encountered value is:\n"
             "map (size=0)\n",
-            path_to_file,
-            1)));
-    EXPECT_FALSE(result.has_value());
-  }
-  {
-    auto result = render(
-        "{{native}}",
-        w::map({{"native", w::make_native_object<empty_native_object>()}}));
-    EXPECT_THAT(
-        diagnostics(),
-        testing::ElementsAre(diagnostic(
-            diagnostic_level::error,
-            "Object named 'native' is not printable. The encountered value is:\n"
-            "<native_object>\n",
             path_to_file,
             1)));
     EXPECT_FALSE(result.has_value());
@@ -1657,9 +1708,9 @@ TEST_F(RenderTest, printable_types_allowed) {
     EXPECT_EQ(*result, "");
   }
 
-  // Arrays, maps, native_objects are not printable in any case
+  // Arrays, maps are not printable in any case
   {
-    auto result = render("{{array}}", w::map({{"array", w::array({})}}));
+    auto result = render("{{array}}", w::map({{"array", w::array()}}));
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1671,7 +1722,7 @@ TEST_F(RenderTest, printable_types_allowed) {
     EXPECT_FALSE(result.has_value());
   }
   {
-    auto result = render("{{map}}", w::map({{"map", w::map({})}}));
+    auto result = render("{{map}}", w::map({{"map", w::map()}}));
     EXPECT_THAT(
         diagnostics(),
         testing::ElementsAre(diagnostic(
@@ -1681,20 +1732,6 @@ TEST_F(RenderTest, printable_types_allowed) {
             path_to_file,
             1)));
     EXPECT_FALSE(result.has_value());
-  }
-  {
-    auto result = render(
-        "{{native}}",
-        w::map({{"native", w::make_native_object<empty_native_object>()}}));
-    EXPECT_FALSE(result.has_value());
-    EXPECT_THAT(
-        diagnostics(),
-        testing::ElementsAre(diagnostic(
-            diagnostic_level::error,
-            "Object named 'native' is not printable. The encountered value is:\n"
-            "<native_object>\n",
-            path_to_file,
-            1)));
   }
 }
 
@@ -1725,7 +1762,7 @@ TEST_F(RenderTest, partials) {
       "  {{#partial foo}}\n"
       "{{#let bar = foo}}\n"
       "{{#partial bar}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(
       *result,
@@ -1741,7 +1778,7 @@ TEST_F(RenderTest, partials_with_arguments) {
       "{{#partial println txt=\"hello\"}}\n"
       "{{#let another-name = println}}\n"
       "{{#partial another-name txt=5}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(
       *result,
@@ -1755,7 +1792,7 @@ TEST_F(RenderTest, partials_with_arguments_out_of_order) {
       "{{arg1}} {{arg2}}\n"
       "{{/let partial}}\n"
       "{{#partial foo arg2=2 arg1=1}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(*result, "1 2\n");
 }
@@ -1768,7 +1805,7 @@ TEST_F(RenderTest, partials_with_missing_arguments) {
       "{{arg1}} {{arg2}}\n"
       "{{/let partial}}\n"
       "{{#partial foo arg1=\"hello\"}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
@@ -1789,7 +1826,7 @@ TEST_F(RenderTest, partials_with_extra_arguments) {
       "{{arg1}}\n"
       "{{/let partial}}\n"
       "{{#partial foo arg1=\"hello\" arg2=null}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
@@ -1805,7 +1842,7 @@ TEST_F(RenderTest, partials_with_extra_arguments) {
 TEST_F(RenderTest, partials_with_wrong_type) {
   show_source_backtrace_on_failure(true);
 
-  auto result = render("{{#partial true}}\n", w::map({}));
+  auto result = render("{{#partial true}}\n", w::map());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
@@ -1828,7 +1865,7 @@ TEST_F(RenderTest, partials_nested) {
       "  {{#partial bar arg=arg}}\n"
       "{{/let partial}}\n"
       "{{#partial foo arg=\"hello\"}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(*result, "      hello\n");
 }
@@ -1872,8 +1909,8 @@ TEST_F(RenderTest, partials_recursive) {
       "  {{/if (int.ne? n 1)}}\n"
       "{{/let partial}}\n"
       "{{#partial collatz n=6}}\n",
-      w::map({}),
-      macros({}),
+      w::map(),
+      sources({}),
       globals({
           {"even?", w::native_function(is_even)},
           {"mul", w::native_function(mul)},
@@ -1915,7 +1952,7 @@ TEST_F(RenderTest, partials_mutually_recursive) {
       ""
       "{{#partial even n=6}}\n"
       "{{#partial odd n=5}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(
       *result,
@@ -1943,18 +1980,18 @@ TEST_F(RenderTest, partial_derived_context) {
       "{{x}}\n"
       "{{/let partial}}\n"
       "{{#partial foo}}\n",
-      w::map({}),
-      macros({}),
+      w::map(),
+      sources({}),
       globals({{"global", w::i64(42)}}));
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
           diagnostic(
               diagnostic_level::error,
-              "Name 'x' was not found in the current scope. Tried to search through the following scopes:\n"
+              "Name 'x' was not found in the current scope.\n"
+              "Tried to search through the following scopes:\n"
               "#0 <global scope> (size=1)\n"
-              "`-'global'\n"
-              "  |-i64(42)\n",
+              "╰─ 'global' → i64(42)\n",
               path_to_file,
               3),
           error_backtrace("#0 foo @ path/to/test.whisker <line:3, col:3>\n"
@@ -1972,20 +2009,20 @@ TEST_F(RenderTest, partial_derived_context_no_leak) {
       "{{/let partial}}\n"
       "{{#partial foo}}\n"
       "{{x}}\n",
-      w::map({}),
-      macros({}),
+      w::map(),
+      sources({}),
       globals({{"global", w::i64(42)}}));
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
           diagnostic(
               diagnostic_level::error,
-              "Name 'x' was not found in the current scope. Tried to search through the following scopes:\n"
+              "Name 'x' was not found in the current scope.\n"
+              "Tried to search through the following scopes:\n"
               "#0 map (size=0)\n"
               "\n"
               "#1 <global scope> (size=1)\n"
-              "`-'global'\n"
-              "  |-i64(42)\n",
+              "╰─ 'global' → i64(42)\n",
               path_to_file,
               6),
           error_backtrace("#0 path/to/test.whisker <line:6, col:3>\n")));
@@ -2006,13 +2043,14 @@ TEST_F(RenderTest, partial_nested_backtrace) {
       "  {{#partial bar}}\n"
       "{{/let partial}}\n"
       "{{#partial foo}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
           diagnostic(
               diagnostic_level::error,
-              "Name 'undefined' was not found in the current scope. Tried to search through the following scopes:\n"
+              "Name 'undefined' was not found in the current scope.\n"
+              "Tried to search through the following scopes:\n"
               "#0 <global scope> (size=0)\n",
               path_to_file,
               4),
@@ -2029,13 +2067,14 @@ TEST_F(RenderTest, partials_capture_error) {
   auto result = render(
       "{{#let partial foo captures |bar|}}\n"
       "{{/let partial}}\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(
           diagnostic(
               diagnostic_level::error,
-              "Name 'bar' was not found in the current scope. Tried to search through the following scopes:\n"
+              "Name 'bar' was not found in the current scope.\n"
+              "Tried to search through the following scopes:\n"
               "#0 map (size=0)\n"
               "\n"
               "#1 <global scope> (size=0)\n",
@@ -2057,7 +2096,7 @@ TEST_F(RenderTest, macros) {
                 {w::map({{"value", w::i64(2)}}),
                  w::map({{"value", w::string("foo")}}),
                  w::map({{"value", w::string("bar")}})})}}),
-      macros({{"some/file/path", "{{value}} (from macro)\n"}}));
+      sources({{"some/file/path", "{{value}} (from macro)\n"}}));
   EXPECT_EQ(
       *result,
       "1 (from macro)\n"
@@ -2069,8 +2108,8 @@ TEST_F(RenderTest, macros) {
 TEST_F(RenderTest, macros_missing) {
   auto result = render(
       "{{> some/other/path}}",
-      w::map({}),
-      macros({{"some/file/path", "{{value}} (from macro)"}}));
+      w::map(),
+      sources({{"some/file/path", "{{value}} (from macro)"}}));
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(diagnostic(
@@ -2081,13 +2120,36 @@ TEST_F(RenderTest, macros_missing) {
   EXPECT_FALSE(result.has_value());
 }
 
+TEST_F(RenderTest, macros_parse_error) {
+  auto result = render(
+      "{{> some/file/path}}",
+      w::map(),
+      sources({
+          {"some/file/path", "{{#INVALID_CODE"},
+      }));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(
+          diagnostic(
+              diagnostic_level::error,
+              "expected `}}` to open section-block but found EOF",
+              "some/file/path",
+              1),
+          diagnostic(
+              diagnostic_level::error,
+              "Macro with path 'some/file/path' failed to parse",
+              path_to_file,
+              1)));
+  EXPECT_FALSE(result.has_value());
+}
+
 TEST_F(RenderTest, macros_no_resolver) {
-  auto result = render("{{> some/file/path}}", w::map({}));
+  auto result = render("{{> some/file/path}}", w::map());
   EXPECT_THAT(
       diagnostics(),
       testing::ElementsAre(diagnostic(
           diagnostic_level::error,
-          "No macro resolver was provided. Cannot resolve macro with path 'some/file/path'",
+          "No source resolver was provided. Cannot resolve macro with path 'some/file/path'",
           path_to_file,
           1)));
   EXPECT_FALSE(result.has_value());
@@ -2106,7 +2168,7 @@ TEST_F(RenderTest, macros_indentation) {
                 {w::map({{"value", w::i64(2)}}),
                  w::map({{"value", w::string("foo")}}),
                  w::map({{"value", w::string("bar")}})})}}),
-      macros(
+      sources(
           {{"some/file/path",
             "{{value}} (from macro)\n"
             "A second line\n"}}));
@@ -2139,7 +2201,7 @@ TEST_F(RenderTest, macros_indentation_nested) {
                 w::map({{"value", w::i64(2)}}),
                 w::map({{"value", w::string("foo")}}),
             })}}),
-      macros(
+      sources(
           {{"macro-1",
             "{{value}} (from macro-1)\n"
             "  nested: {{> macro-2}}\n"},
@@ -2164,7 +2226,7 @@ TEST_F(RenderTest, macro_preserves_whitespace_indentation) {
   auto result = render(
       " \t {{> macro-1}} \t \n",
       w::map({{"value", w::i64(42)}}),
-      macros(
+      sources(
           {{"macro-1",
             "\t 1\n"
             " \t {{>macro-2}} \n"},
@@ -2184,8 +2246,8 @@ TEST_F(RenderTest, macro_nested_undefined_variable_trace) {
   auto result = render(
       "\n"
       "{{> macro-1}}\n",
-      w::map({}),
-      macros(
+      w::map(),
+      sources(
           {{"macro-1",
             "\n"
             "\t {{>macro-2}}\n"},
@@ -2197,16 +2259,365 @@ TEST_F(RenderTest, macro_nested_undefined_variable_trace) {
       testing::ElementsAre(
           diagnostic(
               diagnostic_level::error,
-              "Name 'undefined' was not found in the current scope. Tried to search through the following scopes:\n"
+              "Name 'undefined' was not found in the current scope.\n"
+              "Tried to search through the following scopes:\n"
               "#0 map (size=0)\n"
               "\n"
               "#1 <global scope> (size=0)\n",
               "macro-3", // file name
               1),
-          error_backtrace("#0 macro-3 <line:1, col:3>\n"
-                          "#1 macro-2 <line:1, col:5>\n"
-                          "#2 macro-1 <line:2, col:3>\n"
+          error_backtrace("#0 <macro> @ macro-3 <line:1, col:3>\n"
+                          "#1 <macro> @ macro-2 <line:1, col:5>\n"
+                          "#2 <macro> @ macro-1 <line:2, col:3>\n"
                           "#3 path/to/test.whisker <line:2, col:1>\n")));
+}
+
+TEST_F(RenderTest, imports) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n"
+      "The answer is {{lib.answer}}\n",
+      w::map(),
+      sources({{"some/file/path", "{{#let export answer = 42}}\n"}}));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(*result, "The answer is 42\n");
+}
+
+TEST_F(RenderTest, imports_partial) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n"
+      "The answer is {{#partial lib.echo thing=42}}\n",
+      w::map(),
+      sources(
+          {{"some/file/path",
+            "{{#let export partial echo |thing|}}\n"
+            "{{#pragma ignore-newlines}}\n"
+            "{{thing}}\n"
+            "{{/let partial}}\n"}}));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(*result, "The answer is 42\n");
+}
+
+TEST_F(RenderTest, imports_missing) {
+  auto result = render(
+      "{{#import \"some/other/path\" as lib}}\"}}\n"
+      "The answer is {{lib.answer}}\n",
+      w::map(),
+      sources({{"some/file/path", "{{#let export answer = 42}}\n"}}));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Module with path 'some/other/path' was not found",
+          path_to_file,
+          1)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_parse_error) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\"}}\n"
+      "The answer is {{lib.answer}}\n",
+      w::map(),
+      sources({
+          {"some/file/path", "{{#INVALID_CODE"},
+      }));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(
+          diagnostic(
+              diagnostic_level::error,
+              "expected `}}` to open section-block but found EOF",
+              "some/file/path",
+              1),
+          diagnostic(
+              diagnostic_level::error,
+              "Module with path 'some/file/path' failed to parse",
+              path_to_file,
+              1)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_no_resolver) {
+  auto result = render("{{#import \"some/file/path\" as lib}}\n", w::map());
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "No source resolver was provided. Cannot resolve import with path 'some/file/path'",
+          path_to_file,
+          1)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_undefined) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n"
+      "The answer is {{lib.oops}}\n",
+      w::map(),
+      sources({{"some/file/path", "{{#let export answer = 42}}\n"}}));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Object 'lib' has no property named 'oops'.\n"
+          "The object with the missing property is:\n"
+          "map (size=1)\n"
+          "╰─ 'answer' → i64(42)\n",
+          path_to_file,
+          2)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_multiple) {
+  auto result = render(
+      "{{#import \"module1\" as mod1}}\n"
+      "{{#import \"module2\" as mod2}}\n"
+      "Module 1 answer: {{mod1.answer}}\n"
+      "Module 2 answer: {{mod2.answer}}\n",
+      w::map(),
+      sources({
+          {"module1", "{{#let export answer = 42}}\n"},
+          {"module2", "{{#let export answer = 84}}\n"},
+      }));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(
+      *result,
+      "Module 1 answer: 42\n"
+      "Module 2 answer: 84\n");
+}
+
+TEST_F(RenderTest, imports_same_module_multiple) {
+  auto result = render(
+      "{{#import \"module1\" as mod1}}\n"
+      "{{#import \"module1\" as mod2}}\n"
+      "Module 1 answer: {{mod1.answer}}\n"
+      "Module 2 answer: {{mod2.answer}}\n",
+      w::map(),
+      sources({
+          {"module1", "{{#let export answer = 42}}\n"},
+      }));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(
+      *result,
+      "Module 1 answer: 42\n"
+      "Module 2 answer: 42\n");
+}
+
+TEST_F(RenderTest, imports_empty_export) {
+  auto result = render(
+      "{{#import \"empty/module\" as lib}}\n"
+      "This should render without errors even if the module is empty.\n",
+      w::map(),
+      sources({{"empty/module", " {{!-- empty module --}} \n"}}));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(
+      *result,
+      "This should render without errors even if the module is empty.\n");
+}
+
+TEST_F(RenderTest, imports_with_multiple_exports) {
+  // Test for importing a module with multiple export statements
+  auto result = render(
+      "{{#import \"module\" as mod}}\n"
+      "Answer 1: {{mod.answer1}}\n"
+      "Answer 2: {{mod.answer2}}\n",
+      w::map(),
+      sources({
+          {"module",
+           "{{#let export answer1 = 42}}\n"
+           " {{!-- there are two answers here! --}}\n"
+           "{{#let export answer2 = 84}}\n"},
+      }));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(
+      *result,
+      "Answer 1: 42\n"
+      "Answer 2: 84\n");
+}
+
+TEST_F(RenderTest, imports_with_transitive_exports) {
+  auto result = render(
+      "{{#import \"module1\" as lib}}\n"
+      "The answer is {{lib.answer}}\n",
+      w::map(),
+      sources({
+          {"module1",
+           "{{#import \"module2\" as lib}}\n"
+           "{{#let export answer = lib.answer}}\n"},
+          {"module2", "{{#let export answer = 42}}\n"},
+      }));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(*result, "The answer is 42\n");
+}
+
+TEST_F(RenderTest, imports_access_globals) {
+  auto result = render(
+      "{{#import \"module\" as lib}}\n"
+      "The answer is {{lib.answer}}\n",
+      w::map({{"global_answer", w::i64(84)}}),
+      sources({
+          {"module", "{{#let export answer = global_answer}}\n"},
+      }),
+      globals({{"global_answer", w::i64(42)}}));
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(*result, "The answer is 42\n");
+}
+
+TEST_F(RenderTest, imports_multiple_with_conflict) {
+  auto result = render(
+      "{{#import \"module1\" as conflict}}\n"
+      "{{#import \"module2\" as conflict}}\n",
+      w::map(),
+      sources({
+          {"module1", "{{#let export answer = 42}}\n"},
+          {"module2", "{{#let export answer = 84}}\n"},
+      }));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Name 'conflict' is already bound in the current scope.",
+          path_to_file,
+          2)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_no_implicit_transitive_exports) {
+  auto result = render(
+      "{{#import \"module1\" as lib}}\n"
+      "The answer is {{lib.lib.answer}}\n",
+      w::map(),
+      sources({
+          {"module1", "{{#import \"module2\" as lib}}\n"},
+          {"module2", "{{#let export answer = 84}}\n"},
+      }));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Object 'lib' has no property named 'lib'.\n"
+          "The object with the missing property is:\n"
+          "map (size=0)\n",
+          path_to_file,
+          2)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_no_text_in_module) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n",
+      w::map(),
+      sources({{"some/file/path", "This is not a module"}}));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Modules cannot have non-whitespace text at the top-level",
+          "some/file/path",
+          1)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, imports_no_conditional_export) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n"
+      "The answer is {{lib.answer}}\n",
+      w::map(),
+      sources(
+          {{"some/file/path",
+            "{{#if true}}\n"
+            "{{#let export answer = 42}}\n"
+            "{{/if true}}\n"}}));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Modules cannot have conditional blocks at the top-level",
+          "some/file/path",
+          1)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, exports_in_root) {
+  auto result = render("{{#let export answer = 42}}\n", w::map());
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Exports are not allowed in root source files or partial blocks",
+          path_to_file,
+          1)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, exports_in_root_nested) {
+  auto result = render(
+      "{{#if true}}\n"
+      "{{#let export answer = 42}}\n"
+      "{{/if true}}\n"
+      "This should work!\n",
+      w::map());
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Exports are not allowed in root source files or partial blocks",
+          path_to_file,
+          2)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, exports_in_root_nested_not_executed) {
+  auto result = render(
+      "{{#if false}}\n"
+      "{{#let export answer = 42}}\n"
+      "{{/if false}}\n"
+      "This should work!\n",
+      w::map());
+  EXPECT_THAT(diagnostics(), testing::IsEmpty());
+  EXPECT_EQ(*result, "This should work!\n");
+}
+
+TEST_F(RenderTest, exports_in_partial) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n"
+      "The answer is {{#partial lib.echo thing=42}}\n",
+      w::map(),
+      sources(
+          {{"some/file/path",
+            "{{#let export partial echo |thing|}}\n"
+            "{{#let export oops = 42}}\n"
+            "{{thing}}\n"
+            "{{/let partial}}\n"}}));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Exports are not allowed in root source files or partial blocks",
+          "some/file/path",
+          2)));
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(RenderTest, exports_partial_in_partial) {
+  auto result = render(
+      "{{#import \"some/file/path\" as lib}}\n"
+      "The answer is {{#partial lib.echo thing=42}}\n",
+      w::map(),
+      sources(
+          {{"some/file/path",
+            "{{#let export partial echo |thing|}}\n"
+            "{{#let export partial oops}}{{/let partial}}\n"
+            "{{thing}}\n"
+            "{{/let partial}}\n"}}));
+  EXPECT_THAT(
+      diagnostics(),
+      testing::ElementsAre(diagnostic(
+          diagnostic_level::error,
+          "Exports are not allowed in root source files or partial blocks",
+          "some/file/path",
+          2)));
+  EXPECT_FALSE(result.has_value());
 }
 
 TEST_F(RenderTest, strip_standalone_lines) {
@@ -2319,7 +2730,7 @@ TEST_F(
       w::map(
           {{"value", w::i64(5)},
            {"boolean", w::map({{"condition", w::true_}})}}),
-      macros({{"ineligible", "{{value}} (from macro)\n"}}));
+      sources({{"ineligible", "{{value}} (from macro)\n"}}));
   EXPECT_EQ(
       *result,
       "| This Is\n"
@@ -2336,7 +2747,7 @@ TEST_F(RenderTest, globals) {
       "{{.}} — {{global-2}}\n"
       "{{/array}}\n",
       w::map({{"array", w::array({w::i64(1), w::i64(2)})}}),
-      macros({}),
+      sources({}),
       globals(
           {{"global", w::string("hello")}, {"global-2", w::string("hello!")}}));
   EXPECT_EQ(
@@ -2350,7 +2761,7 @@ TEST_F(RenderTest, globals_shadowing) {
   auto result = render(
       "{{global}}\n",
       w::map({{"global", w::string("good")}}),
-      macros({}),
+      sources({}),
       globals({{"global", w::string("bad")}}));
   EXPECT_EQ(*result, "good\n");
 }
@@ -2364,7 +2775,7 @@ TEST_F(RenderTest, pragma_ignore_newlines) {
       " all\n"
       " one\n"
       " line\n",
-      w::map({}));
+      w::map());
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(*result, "This is all one line");
 
@@ -2377,8 +2788,8 @@ TEST_F(RenderTest, pragma_ignore_newlines) {
       " all\n"
       " one\n"
       " line\n",
-      w::map({}),
-      macros({{"macro", "\nnot\n!\n"}}));
+      w::map(),
+      sources({{"macro", "\nnot\n!\n"}}));
   EXPECT_THAT(diagnostics(), testing::IsEmpty());
   EXPECT_EQ(*result, "This is\nnot\n!\n all one line");
 }

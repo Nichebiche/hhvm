@@ -18,6 +18,7 @@
 
 #include <folly/Portability.h>
 #include <thrift/lib/cpp2/protocol/Object.h>
+#include <thrift/lib/cpp2/protocol/detail/Patch.h>
 #include <thrift/lib/thrift/detail/protocol.h>
 #include <thrift/lib/thrift/gen-cpp2/field_mask_types.h>
 
@@ -48,7 +49,7 @@ struct ApplyPatch {
   void operator()(const Object& patch, double& value) const;
   void operator()(const Object& patch, folly::IOBuf& value) const;
   void operator()(const Object& patch, std::vector<Value>& value) const;
-  void operator()(const Object& patch, folly::F14FastSet<Value>& value) const;
+  void operator()(const Object& patch, folly::F14VectorSet<Value>& value) const;
   void operator()(
       const Object& patch, folly::F14FastMap<Value, Value>& value) const;
   void operator()(const Object& patch, Object& value) const;
@@ -70,7 +71,9 @@ int32_t calculateMinSafePatchVersion(const protocol::Object& patch);
  * @param patch Object
  * @param value to be patched
  */
-inline constexpr detail::ApplyPatch applyPatch{};
+[[deprecated(
+    "Use DynamicPatch::apply instead.")]] inline constexpr detail::ApplyPatch
+    applyPatch{};
 
 /**
  * Extracted Thrift Masks from Thrift Patch. Read Thrift Mask contains fields or
@@ -82,46 +85,29 @@ inline constexpr detail::ApplyPatch applyPatch{};
  * avoid full deserialization when applying Thrift Patch to serialized data in a
  * binary blob.
  */
-struct ExtractedMasksFromPatch {
-  Mask read; // read mask from patch
-  Mask write; // write mask from patch
-};
-
-inline ExtractedMasksFromPatch operator|(
-    const ExtractedMasksFromPatch& lhs, const ExtractedMasksFromPatch& rhs) {
-  ExtractedMasksFromPatch ret;
-  ret.read = lhs.read | rhs.read;
-  ret.write = lhs.write | rhs.write;
-  return ret;
-}
-
-/// Constructs read and write Thrift Mask that only contain fields that are
-/// modified by the Patch. It will construct nested Mask for map and object
-/// patches. For map, it uses the address of Value key as the key for the
-/// integer map mask. Note that Mask contains pointer to `protocol::Value` in
-/// patch, so caller needs to make sure Patch has longer lifetime than the mask.
-[[deprecated(
-    "Use protocol::extractMaskFromPatch instead.")]] ExtractedMasksFromPatch
-extractMaskViewFromPatch(const protocol::Object& patch);
-
-// Extracting mask from a temporary patch is dangerous and should be disallowed.
-ExtractedMasksFromPatch extractMaskViewFromPatch(Object&& patch) = delete;
+using detail::ExtractedMasksFromPatch;
 
 /// Constructs read and write Thrift Mask that only contain fields that are
 /// modified by the Patch. It will construct nested Mask for map and object
 /// patches. For map, it only supports integer or string key. If the type of key
 /// map is not integer or string, it throws.
-ExtractedMasksFromPatch extractMaskFromPatch(const protocol::Object& patch);
+[[deprecated(
+    "Use DynamicPatch::extractMaskFromPatch instead.")]] ExtractedMasksFromPatch
+extractMaskFromPatch(const protocol::Object& patch);
 
+/// @cond
 // Constructs read and write Thrift Map Mask of a given patch originating from
 // the field, map entry, or type entry specified mask. YOU PROBABLY SHOULDN'T BE
 // CALLING THIS!
 [[deprecated]] ExtractedMasksFromPatch extractMapMaskFromPatch_DO_NOT_USE(
     const protocol::Object& patch, const Mask& mask);
+/// @endcond
 
 template <type::StandardProtocol Protocol>
-std::unique_ptr<folly::IOBuf> applyPatchToSerializedData(
-    const protocol::Object& patch, const folly::IOBuf& buf);
+[[deprecated("Use DynamicPatch::applyToSerializedObject instead.")]] std::
+    unique_ptr<folly::IOBuf>
+    applyPatchToSerializedData(
+        const protocol::Object& patch, const folly::IOBuf& buf);
 
 /**
  * Returns a Thrift Dynamic Patch instance corresponding to the (decoded)
@@ -133,13 +119,15 @@ std::unique_ptr<folly::IOBuf> applyPatchToSerializedData(
  * Patch library in this process is not compatible with the minimum version
  * required by `SafePatch`).
  */
-Object fromSafePatch(const protocol::Object& safePatch);
+[[deprecated("Use DynamicPatch::fromSafePatch instead.")]] Object fromSafePatch(
+    const protocol::Object& safePatch);
 
 /**
  * Returns a `SafePatch` instance in Protocol Object corresponding to the
  * encoded Thrift Dynamic Patch.
  */
-Object toSafePatch(const protocol::Object& patch);
+[[deprecated("Use DynamicPatch::toSafePatch instead.")]] Object toSafePatch(
+    const protocol::Object& patch);
 
 } // namespace protocol
 } // namespace apache::thrift

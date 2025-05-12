@@ -31,17 +31,11 @@
 
 #include <folly/FBString.h>
 
-namespace apache {
-namespace thrift {
-namespace reflection {
+namespace apache::thrift::reflection {
 class Schema;
 }
-} // namespace thrift
-} // namespace apache
 
-namespace apache {
-namespace thrift {
-namespace protocol {
+namespace apache::thrift::protocol {
 
 using apache::thrift::transport::TTransport;
 
@@ -174,7 +168,10 @@ uint32_t skip(Protocol_& prot, TType arg_type) {
     case T_VOID:
     case T_STREAM:
       // Unimplemented, fallback to default
+      FOLLY_PUSH_WARNING
+      FOLLY_CLANG_DISABLE_WARNING("-Wcovered-switch-default")
     default: {
+      FOLLY_POP_WARNING
       TProtocolException::throwInvalidSkipType(arg_type);
     }
   }
@@ -542,8 +539,8 @@ class TProtocolFactory {
  * TProtocolPair.first = Input Protocol
  * TProtocolPair.second = Output Protocol
  */
-typedef std::pair<std::shared_ptr<TProtocol>, std::shared_ptr<TProtocol>>
-    TProtocolPair;
+using TProtocolPair =
+    std::pair<std::shared_ptr<TProtocol>, std::shared_ptr<TProtocol>>;
 
 class TDuplexProtocolFactory {
  public:
@@ -630,8 +627,6 @@ class TDualProtocolFactory : public TDuplexProtocolFactory {
  */
 class TDummyProtocol : public TProtocol {};
 
-} // namespace protocol
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::protocol
 
 #endif // #define _THRIFT_PROTOCOL_TPROTOCOL_H_ 1

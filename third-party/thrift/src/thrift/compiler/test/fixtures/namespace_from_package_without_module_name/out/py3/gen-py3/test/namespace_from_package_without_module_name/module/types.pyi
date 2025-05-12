@@ -14,6 +14,8 @@ import typing as _typing
 
 import sys
 import itertools
+import test.namespace_from_package_without_module_name.module.thrift_types
+
 
 
 class Foo(thrift.py3.types.Struct, _typing.Hashable):
@@ -42,7 +44,7 @@ class Foo(thrift.py3.types.Struct, _typing.Hashable):
     def __le__(self, other: 'Foo') -> bool: ...
     def __ge__(self, other: 'Foo') -> bool: ...
 
-    def _to_python(self) -> "test.namespace_from_package_without_module_name.module.thrift_types.Foo": ...   # type: ignore
+    def _to_python(self) -> test.namespace_from_package_without_module_name.module.thrift_types.Foo: ...
     def _to_py3(self) -> Foo: ...
     def _to_py_deprecated(self) -> "namespace_from_package_without_module_name.module.ttypes.Foo": ...   # type: ignore
 

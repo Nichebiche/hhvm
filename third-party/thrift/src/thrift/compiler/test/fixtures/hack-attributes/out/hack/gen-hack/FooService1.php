@@ -67,17 +67,13 @@ trait FooService1ClientBase {
    *   ping(1: string str_arg);
    */
   public async function ping(string $str_arg): Awaitable<int> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \test\fixtures\jsenum\FooService1_ping_args::fromShape(shape(
       'str_arg' => $str_arg,
     ));
     await $this->asyncHandler_->genBefore(FooService1StaticMetadata::THRIFT_SVC_NAME, "ping", $args);
     $currentseqid = $this->sendImplHelper($args, "ping", false, FooService1StaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\test\fixtures\jsenum\FooService1_ping_result::class, "ping", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\test\fixtures\jsenum\FooService1_ping_result::class, "ping", false, $currentseqid, $rpc_options))[0];
   }
 
 }

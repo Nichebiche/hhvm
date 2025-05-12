@@ -38,9 +38,9 @@ use pos::Symbol;
 use pos::ToOxidized;
 use pos::TypeConstName;
 use pos::TypeName;
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use utils::core::Ident;
 
 use crate::reason;
@@ -82,6 +82,7 @@ pub enum CeVisibility {
     Private(TypeName),
     Protected(TypeName),
     Internal(ModuleName),
+    ProtectedInternal(TypeName, ModuleName),
 }
 
 walkable!(CeVisibility => {
@@ -89,6 +90,7 @@ walkable!(CeVisibility => {
     Self::Private(t) => [t],
     Self::Protected(t) => [t],
     Self::Internal(m) => [m],
+    Self::ProtectedInternal(t, m) => [t, m],
 });
 
 // The OCaml type `tshape_field_name` includes positions, but ignores those
@@ -272,8 +274,8 @@ impl<R: Reason> Ty<R> {
         Self::new(reason, Ty_::TclassPtr(cls))
     }
 
-    pub fn generic(reason: R, name: TypeName, tparams: Box<[Ty<R>]>) -> Self {
-        Self::new(reason, Ty_::Tgeneric(Box::new((name, tparams))))
+    pub fn generic(reason: R, name: TypeName) -> Self {
+        Self::new(reason, Ty_::Tgeneric(name))
     }
 
     #[inline]
@@ -422,9 +424,8 @@ pub enum Ty_<R: Reason> {
     /// The type of a generic parameter. The constraints on a generic parameter
     /// are accessed through the lenv.tpenv component of the environment, which
     /// is set up when checking the body of a function or method. See uses of
-    /// Typing_phase.add_generic_parameters_and_constraints. The list denotes
-    /// type arguments.
-    Tgeneric(Box<(TypeName, Box<[Ty<R>]>)>),
+    /// Typing_phase.add_generic_parameters_and_constraints.
+    Tgeneric(TypeName),
     /// Union type.
     /// The values that are members of this type are the union of the values
     /// that are members of the components of the union.
@@ -460,7 +461,7 @@ impl<R: Reason> crate::visitor::Walkable<R> for Ty_<R> {
     fn recurse(&self, v: &mut dyn crate::visitor::Visitor<R>) {
         use Ty_::*;
         match self {
-            Tthis | Tmixed | Twildcard | Tany | Tnonnull | Tdynamic | Tprim(_) => {}
+            Tthis | Tmixed | Twildcard | Tany | Tnonnull | Tdynamic | Tprim(_) | Tgeneric(_) => {}
             Tapply(id_and_args) => {
                 let (_, args) = &**id_and_args;
                 args.accept(v)
@@ -476,10 +477,6 @@ impl<R: Reason> crate::visitor::Walkable<R> for Ty_<R> {
             Tshape(kind_and_fields) => {
                 let ShapeType(_, fields) = &**kind_and_fields;
                 fields.accept(v)
-            }
-            Tgeneric(id_and_args) => {
-                let (_, args) = &**id_and_args;
-                args.accept(v)
             }
             TvecOrDict(key_and_val_tys) => {
                 let (kty, vty) = &**key_and_val_tys;

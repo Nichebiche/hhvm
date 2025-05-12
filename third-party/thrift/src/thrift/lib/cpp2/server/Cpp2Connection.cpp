@@ -166,14 +166,14 @@ Cpp2Connection::~Cpp2Connection() {
 
 void Cpp2Connection::invokeServiceInterceptorsOnConnectionClosed() noexcept {
 #if FOLLY_HAS_COROUTINES
-  const auto& serviceInterceptorsInfo =
-      worker_->getServer()->getServiceInterceptors();
-  for (std::size_t i = 0; i < serviceInterceptorsInfo.size(); ++i) {
+  auto* server = worker_->getServer();
+  const auto& serviceInterceptors = server->getServiceInterceptors();
+  for (std::size_t i = 0; i < serviceInterceptors.size(); ++i) {
     ServiceInterceptorBase::ConnectionInfo connectionInfo{
         &context_,
         context_.getStorageForServiceInterceptorOnConnectionByIndex(i)};
-    serviceInterceptorsInfo[i].interceptor->internal_onConnectionClosed(
-        connectionInfo);
+    serviceInterceptors[i]->internal_onConnectionClosed(
+        connectionInfo, server->getInterceptorMetricCallback());
   }
 #endif // FOLLY_HAS_COROUTINES
 }
@@ -587,13 +587,6 @@ void Cpp2Connection::requestReceived(
               TApplicationException::TENANT_QUOTA_EXCEEDED,
               kTenantQuotaExceededErrorCode,
               aqe.getMessage().c_str());
-        },
-        [&](AppTenantBlocklistedException& atb) {
-          killRequest(
-              std::move(hreq),
-              TApplicationException::TENANT_BLOCKLISTED,
-              kTenantBlocklistedErrorCode,
-              atb.getMessage().c_str());
         },
         [&](AppServerException& ase) {
           handleAppError(std::move(hreq), ase.name(), ase.getMessage(), false);

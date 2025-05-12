@@ -799,6 +799,10 @@ class Py3EnableCppAdapter implements \IThriftSyncStruct, \IThriftStructMetadata,
 }
 
 /**
+ * Allows inheritance from a struct or exception in thrift-py3.
+ * Inheritance from union is DEPRECATED!
+ * Do not add new usage of this. Prefer composition over inheritance.
+ *
  * Original thrift struct:-
  * MigrationBlockingAllowInheritance
  */
@@ -846,7 +850,11 @@ class MigrationBlockingAllowInheritance implements \IThriftSyncStruct, \IThriftS
   public static function getAllStructuredAnnotations()[write_props]: \TStructAnnotations {
     return shape(
       'struct' => dict[
-        '\facebook\thrift\annotation\Structured' => \facebook\thrift\annotation\Structured::fromShape(
+        '\facebook\thrift\annotation\Struct' => \facebook\thrift\annotation\Struct::fromShape(
+          shape(
+          )
+        ),
+        '\facebook\thrift\annotation\Exception' => \facebook\thrift\annotation\Exception::fromShape(
           shape(
           )
         ),

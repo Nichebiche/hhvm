@@ -17,8 +17,10 @@
 package thrift
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/format"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 )
 
@@ -30,8 +32,8 @@ import (
 type protocolBuffer struct {
 	types.Decoder
 	types.Encoder
-	wbuf        *MemoryBuffer
-	rbuf        *MemoryBuffer
+	wbuf        *bytes.Buffer
+	rbuf        *bytes.Buffer
 	name        string
 	messageType types.MessageType
 	seqID       int32
@@ -39,22 +41,22 @@ type protocolBuffer struct {
 	respHeaders map[string]string
 }
 
-var _ types.Protocol = (*protocolBuffer)(nil)
+var _ Protocol = (*protocolBuffer)(nil)
 
 func newProtocolBuffer(respHeaders map[string]string, protoID types.ProtocolID, data []byte) (*protocolBuffer, error) {
 	p := &protocolBuffer{
 		respHeaders: respHeaders,
 		reqHeaders:  map[string]string{},
-		wbuf:        NewMemoryBuffer(),
-		rbuf:        NewMemoryBufferWithData(data),
+		wbuf:        new(bytes.Buffer),
+		rbuf:        bytes.NewBuffer(data),
 	}
 	switch protoID {
 	case types.ProtocolIDBinary:
-		p.Decoder = newBinaryDecoder(p.rbuf)
-		p.Encoder = newBinaryEncoder(p.wbuf)
+		p.Decoder = format.NewBinaryDecoder(p.rbuf)
+		p.Encoder = format.NewBinaryEncoder(p.wbuf)
 	case types.ProtocolIDCompact:
-		p.Decoder = newCompactDecoder(p.rbuf)
-		p.Encoder = newCompactEncoder(p.wbuf)
+		p.Decoder = format.NewCompactDecoder(p.rbuf)
+		p.Encoder = format.NewCompactEncoder(p.wbuf)
 	default:
 		return nil, types.NewProtocolException(fmt.Errorf("Unknown protocol id: %d", protoID))
 	}
@@ -88,14 +90,22 @@ func (b *protocolBuffer) Close() error {
 	return nil
 }
 
-func (b *protocolBuffer) GetResponseHeaders() map[string]string {
+func (b *protocolBuffer) getResponseHeaders() map[string]string {
 	return b.respHeaders
 }
 
-func (b *protocolBuffer) SetRequestHeader(key, value string) {
+func (b *protocolBuffer) setRequestHeader(key, value string) {
 	b.reqHeaders[key] = value
 }
 
 func (b *protocolBuffer) getRequestHeaders() map[string]string {
 	return b.reqHeaders
+}
+
+func (b *protocolBuffer) DO_NOT_USE_WrapChannel() RequestChannel {
+	return NewSerialChannel(b)
+}
+
+func (b *protocolBuffer) DO_NOT_USE_GetResponseHeaders() map[string]string {
+	return b.getResponseHeaders()
 }

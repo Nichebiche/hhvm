@@ -18,8 +18,8 @@ pub mod deterministic_accumulator;
 pub mod deterministic_protocol;
 pub mod hasher;
 use anyhow::Result;
-use fbthrift::protocol::ProtocolWriter;
 use fbthrift::Serialize;
+use fbthrift::protocol::ProtocolWriter;
 
 pub use crate::deterministic_accumulator::DeterministicAccumulator;
 pub use crate::deterministic_accumulator::DeterministicAccumulatorError;
@@ -35,6 +35,6 @@ pub fn deterministic_hash<
     hasher_generator: F,
 ) -> Result<H::Output> {
     let mut protocol_writer = DeterministicProtocolSerializer::new(hasher_generator);
-    data.write(&mut protocol_writer);
+    data.rs_thrift_write(&mut protocol_writer);
     protocol_writer.finish()
 }

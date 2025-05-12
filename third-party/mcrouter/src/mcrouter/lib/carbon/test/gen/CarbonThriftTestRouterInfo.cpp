@@ -28,6 +28,7 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BigValueRoute.h>
 #include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
@@ -80,6 +81,11 @@ RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& fac
 const folly::dynamic& json);
 
 extern template carbon::test::CarbonThriftTestRouterInfo::RouteHandlePtr
+makeBigValueRoute<carbon::test::CarbonThriftTestRouterInfo>(
+RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json);
+
+extern template carbon::test::CarbonThriftTestRouterInfo::RouteHandlePtr
 makeBlackholeRoute<carbon::test::CarbonThriftTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
@@ -91,11 +97,6 @@ const folly::dynamic& json);
 
 extern template carbon::test::CarbonThriftTestRouterInfo::RouteHandlePtr
 makeErrorRoute<carbon::test::CarbonThriftTestRouterInfo>(
-RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& factory,
-const folly::dynamic& json);
-
-extern template carbon::test::CarbonThriftTestRouterInfo::RouteHandlePtr
-makeHashRoute<carbon::test::CarbonThriftTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
@@ -149,6 +150,12 @@ makeRandomRoute<carbon::test::CarbonThriftTestRouterInfo>(
 RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& factory,
 const folly::dynamic& json);
 
+template carbon::test::CarbonThriftTestRouterInfo::RouteHandlePtr
+makeHashRoute<carbon::test::CarbonThriftTestRouterInfo>(
+RouteHandleFactory<carbon::test::CarbonThriftTestRouterInfo::RouteHandleIf>& factory,
+const folly::dynamic& json,
+ProxyBase& proxy);
+
 extern template class ExtraRouteHandleProviderIf<carbon::test::CarbonThriftTestRouterInfo>;
 
 } // namespace mcrouter
@@ -168,14 +175,10 @@ CarbonThriftTestRouterInfo::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<CarbonThriftTestRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<CarbonThriftTestRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<CarbonThriftTestRouterInfo>},
+      {"BigValueRoute", &makeBigValueRoute<CarbonThriftTestRouterInfo>},
       {"BlackholeRoute", &makeBlackholeRoute<CarbonThriftTestRouterInfo>},
       {"DevNullRoute", &makeDevNullRoute<CarbonThriftTestRouterInfo>},
       {"ErrorRoute", &makeErrorRoute<CarbonThriftTestRouterInfo>},
-      {"HashRoute",
-       [](RouteHandleFactory<RouteHandleIf>& factory,
-          const folly::dynamic& json) {
-         return makeHashRoute<CarbonThriftTestRouterInfo>(factory, json);
-       }},
       {"HostIdRoute", &makeHostIdRoute<CarbonThriftTestRouterInfo>},
       {"LatencyInjectionRoute",
        &makeLatencyInjectionRoute<CarbonThriftTestRouterInfo>},
@@ -195,8 +198,11 @@ CarbonThriftTestRouterInfo::buildRouteMap() {
 
 /* static */ CarbonThriftTestRouterInfo::RouteHandleFactoryMapWithProxy
 CarbonThriftTestRouterInfo::buildRouteMapWithProxy() {
-  return RouteHandleFactoryMapWithProxy();
-}
+  RouteHandleFactoryMapWithProxy map {
+      {"HashRoute", &makeHashRoute<CarbonThriftTestRouterInfo>},
+  };
+  return map;
+  }
 
 /* static */ CarbonThriftTestRouterInfo::RouteHandleFactoryMapForWrapper
 CarbonThriftTestRouterInfo::buildRouteMapForWrapper() {

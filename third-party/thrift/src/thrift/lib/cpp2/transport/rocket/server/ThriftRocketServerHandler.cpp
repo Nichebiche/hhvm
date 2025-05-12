@@ -41,7 +41,7 @@
 #include <thrift/lib/cpp2/transport/rocket/FdSocket.h>
 #include <thrift/lib/cpp2/transport/rocket/PayloadUtils.h>
 #include <thrift/lib/cpp2/transport/rocket/RocketException.h>
-#include <thrift/lib/cpp2/transport/rocket/compression/CompressionManager.h>
+#include <thrift/lib/cpp2/transport/rocket/compression/CustomCompressorRegistry.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/ErrorCode.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/Frames.h>
 #include <thrift/lib/cpp2/transport/rocket/server/InteractionOverload.h>
@@ -282,6 +282,26 @@ void ThriftRocketServerHandler::handleSetupFrame(
     serverMeta.set_setupResponse();
     serverMeta.setupResponse_ref()->version_ref() = version_;
     serverMeta.setupResponse_ref()->zstdSupported_ref() = true;
+
+    if (auto ref = meta.compressionSetupRequest()) {
+      auto compressionSetupRes =
+          handleSetupFrameCustomCompression(*ref, connection);
+      if (compressionSetupRes.hasError()) {
+        LOG(WARNING) << fmt::format(
+            "Error setting up custom compression: {}, fallback to not using custom compression.",
+            compressionSetupRes.error());
+      } else {
+        auto optResponse = std::move(compressionSetupRes.value());
+        if (optResponse) {
+          serverMeta.setupResponse_ref()
+              ->compressionSetupResponse()
+              .ensure()
+              .custom_ref() = std::move(*optResponse);
+        }
+        // otherwise, custom compression is simply not used
+      }
+    }
+
     connection.sendMetadataPush(
         PayloadSerializer::getInstance()->packCompact(serverMeta));
   } catch (const std::exception& e) {
@@ -293,6 +313,60 @@ void ThriftRocketServerHandler::handleSetupFrame(
   }
 
   invokeServiceInterceptorsOnConnection(connection);
+}
+
+folly::Expected<std::optional<CustomCompressionSetupResponse>, std::string>
+ThriftRocketServerHandler::handleSetupFrameCustomCompression(
+    CompressionSetupRequest const& setupRequest,
+    RocketServerConnection& connection) {
+  if (!setupRequest.custom_ref()) {
+    return folly::makeUnexpected(
+        "Cannot setup compression on server due to unrecognized request type");
+  }
+  const auto& customSetupRequest = *setupRequest.custom_ref();
+
+  auto factory =
+      CustomCompressorRegistry::get(*customSetupRequest.compressorName());
+  if (!factory) {
+    return folly::makeUnexpected(fmt::format(
+        "Custom compressor {} is not supported on server.",
+        *customSetupRequest.compressorName()));
+  }
+
+  std::optional<CustomCompressionSetupResponse> response;
+  try {
+    response =
+        factory->createCustomCompressorNegotiationResponse(customSetupRequest);
+  } catch (const std::exception& ex) {
+    return folly::makeUnexpected(fmt::format(
+        "Failed to make create negotiation response on server due to: {}",
+        ex.what()));
+  }
+
+  if (!response) {
+    // custom compression chooses not to be used for this connection
+    return folly::makeExpected<std::string>(response);
+  }
+
+  std::shared_ptr<CustomCompressor> compressor;
+  try {
+    compressor = factory->make(
+        customSetupRequest,
+        *response,
+        CustomCompressorFactory::CompressorLocation::SERVER);
+  } catch (const std::exception& ex) {
+    return folly::makeUnexpected(fmt::format(
+        "Failed to make create custom compressor on server due to: {}",
+        ex.what()));
+  }
+
+  if (!compressor) {
+    return folly::makeUnexpected(fmt::format(
+        "Failed to make create custom compressor on server due to unknown error."));
+  }
+
+  connection.applyCustomCompression(compressor);
+  return folly::makeExpected<std::string>(std::move(*response));
 }
 
 void ThriftRocketServerHandler::handleRequestResponseFrame(
@@ -322,7 +396,7 @@ void ThriftRocketServerHandler::handleRequestResponseFrame(
       std::move(frame.payload()),
       std::move(makeRequestResponse),
       RpcKind::SINGLE_REQUEST_SINGLE_RESPONSE,
-      context.connection().isDecodingMetadataUsingBinaryProtocol());
+      context.connection());
 }
 
 void ThriftRocketServerHandler::handleRequestFnfFrame(
@@ -349,7 +423,7 @@ void ThriftRocketServerHandler::handleRequestFnfFrame(
       std::move(frame.payload()),
       std::move(makeRequestFnf),
       RpcKind::SINGLE_REQUEST_NO_RESPONSE,
-      context.connection().isDecodingMetadataUsingBinaryProtocol());
+      context.connection());
 }
 
 void ThriftRocketServerHandler::handleRequestStreamFrame(
@@ -377,7 +451,7 @@ void ThriftRocketServerHandler::handleRequestStreamFrame(
       std::move(frame.payload()),
       std::move(makeRequestStream),
       RpcKind::SINGLE_REQUEST_STREAMING_RESPONSE,
-      context.connection().isDecodingMetadataUsingBinaryProtocol());
+      context.connection());
 }
 
 void ThriftRocketServerHandler::handleRequestChannelFrame(
@@ -405,7 +479,7 @@ void ThriftRocketServerHandler::handleRequestChannelFrame(
       std::move(frame.payload()),
       std::move(makeRequestSink),
       RpcKind::SINK,
-      context.connection().isDecodingMetadataUsingBinaryProtocol());
+      context.connection());
 }
 
 void ThriftRocketServerHandler::connectionClosing() {
@@ -420,16 +494,16 @@ void ThriftRocketServerHandler::handleRequestCommon(
     Payload&& payload,
     F&& makeRequest,
     RpcKind expectedKind,
-    bool decodeMetadataUsingBinary) {
+    RocketServerConnection& connection) {
   std::chrono::steady_clock::time_point readEnd{
       std::chrono::steady_clock::now()};
   auto wiredPayloadSize = payload.metadataAndDataSize();
 
   rocket::Payload debugPayload = payload.clone();
   auto requestPayloadTry =
-      rocket::PayloadSerializer::getInstance()
-          ->unpackAsCompressed<RequestPayload>(
-              std::move(payload), decodeMetadataUsingBinary);
+      connection.getPayloadSerializer()->unpackAsCompressed<RequestPayload>(
+          std::move(payload),
+          connection.isDecodingMetadataUsingBinaryProtocol());
 
   auto makeActiveRequest = [&](auto&& md, auto&& payload, auto&& reqCtx) {
     serverConfigs_->incActiveRequests();
@@ -455,8 +529,18 @@ void ThriftRocketServerHandler::handleRequestCommon(
   auto& metadata = requestPayloadTry->metadata;
 
   ChecksumAlgorithm checksumAlgorithm = ChecksumAlgorithm::NONE;
-  if (auto checksum = metadata.checksum()) {
-    checksumAlgorithm = *checksum->algorithm();
+  if (connection.getPayloadSerializer()->supportsChecksum()) {
+    if (auto checksum = metadata.checksum()) {
+      checksumAlgorithm = *checksum->algorithm();
+    }
+  } else if (
+      metadata.checksum().has_value() &&
+      metadata.checksum()->algorithm().value() != ChecksumAlgorithm::NONE) {
+    FB_LOG_ONCE(WARNING)
+        << "Checksum is not supported, but checksum on the client was set";
+    Checksum c;
+    c.algorithm() = ChecksumAlgorithm::NONE;
+    metadata.checksum() = c;
   }
 
   // Extract FDs as early as possible to avoid holding them open if the
@@ -525,7 +609,7 @@ void ThriftRocketServerHandler::handleRequestCommon(
   if (metadata.crc32c_ref()) {
     try {
       if (auto compression = metadata.compression_ref()) {
-        data = CompressionManager().uncompressBuffer(
+        data = connection.getPayloadSerializer()->uncompressBuffer(
             std::move(data), *compression);
       }
     } catch (...) {
@@ -704,7 +788,8 @@ void ThriftRocketServerHandler::handleRequestCommon(
       std::move(data),
       crc32Opt ? CompressionAlgorithm::NONE
                : compressionOpt.value_or(CompressionAlgorithm::NONE),
-      checksumAlgorithm);
+      checksumAlgorithm,
+      connection.getPayloadSerializer());
 
   const auto protocolId = request->getProtoId();
   Cpp2Worker::dispatchRequest(
@@ -747,10 +832,6 @@ void ThriftRocketServerHandler::handlePreprocessResult(
             std::move(request),
             kTenantQuotaExceededErrorCode,
             aqe.getMessage());
-      },
-      [&](AppTenantBlocklistedException& atb) {
-        handleQuotaExceededException(
-            std::move(request), kTenantBlocklistedErrorCode, atb.getMessage());
       },
       [](std::monostate&) { folly::assume_unreachable(); });
 }
@@ -933,18 +1014,18 @@ void ThriftRocketServerHandler::onBeforeHandleFrame() {
 void ThriftRocketServerHandler::invokeServiceInterceptorsOnConnection(
     RocketServerConnection& connection) noexcept {
 #if FOLLY_HAS_COROUTINES
-  const auto& serviceInterceptorsInfo =
-      worker_->getServer()->getServiceInterceptors();
+  auto* server = worker_->getServer();
+  const auto& serviceInterceptors = server->getServiceInterceptors();
   std::vector<std::pair<std::size_t, std::exception_ptr>> exceptions;
   didExecuteServiceInterceptorsOnConnection_ = true;
 
-  for (std::size_t i = 0; i < serviceInterceptorsInfo.size(); ++i) {
+  for (std::size_t i = 0; i < serviceInterceptors.size(); ++i) {
     ServiceInterceptorBase::ConnectionInfo connectionInfo{
         &connContext_,
         connContext_.getStorageForServiceInterceptorOnConnectionByIndex(i)};
     try {
-      serviceInterceptorsInfo[i].interceptor->internal_onConnection(
-          std::move(connectionInfo));
+      serviceInterceptors[i]->internal_onConnection(
+          std::move(connectionInfo), server->getInterceptorMetricCallback());
     } catch (...) {
       exceptions.emplace_back(i, folly::current_exception());
     }
@@ -952,12 +1033,12 @@ void ThriftRocketServerHandler::invokeServiceInterceptorsOnConnection(
   if (!exceptions.empty()) {
     std::string message = fmt::format(
         "ServiceInterceptor::onConnection threw exceptions:\n[{}] {}\n",
-        serviceInterceptorsInfo[exceptions[0].first].qualifiedName,
+        serviceInterceptors[exceptions[0].first]->getQualifiedName().get(),
         folly::exceptionStr(exceptions[0].second));
     for (std::size_t i = 1; i < exceptions.size(); ++i) {
       message += fmt::format(
           "[{}] {}\n",
-          serviceInterceptorsInfo[exceptions[i].first].qualifiedName,
+          serviceInterceptors[exceptions[i].first]->getQualifiedName().get(),
           folly::exceptionStr(exceptions[i].second));
     }
     return connection.close(folly::make_exception_wrapper<RocketException>(
@@ -970,14 +1051,15 @@ void ThriftRocketServerHandler::
     invokeServiceInterceptorsOnConnectionClosed() noexcept {
 #if FOLLY_HAS_COROUTINES
   if (didExecuteServiceInterceptorsOnConnection_) {
-    const auto& serviceInterceptorsInfo =
-        worker_->getServer()->getServiceInterceptors();
-    for (std::size_t i = 0; i < serviceInterceptorsInfo.size(); ++i) {
+    auto* server = worker_->getServer();
+    const auto& serviceInterceptors = server->getServiceInterceptors();
+    for (std::size_t i = 0; i < serviceInterceptors.size(); ++i) {
       ServiceInterceptorBase::ConnectionInfo connectionInfo{
           &connContext_,
           connContext_.getStorageForServiceInterceptorOnConnectionByIndex(i)};
-      serviceInterceptorsInfo[i].interceptor->internal_onConnectionClosed(
-          connectionInfo);
+
+      serviceInterceptors[i]->internal_onConnectionClosed(
+          connectionInfo, server->getInterceptorMetricCallback());
     }
   }
 #endif // FOLLY_HAS_COROUTINES

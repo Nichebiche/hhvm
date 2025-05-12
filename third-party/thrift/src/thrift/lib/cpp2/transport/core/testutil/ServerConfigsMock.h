@@ -85,14 +85,14 @@ class ServerConfigsMock : public ServerConfigs {
     return adaptiveConcurrencyController_;
   }
 
-  apache::thrift::CPUConcurrencyController& getCPUConcurrencyController()
+  apache::thrift::CPUConcurrencyController* getCPUConcurrencyController()
       override {
-    return cpuConcurrencyController_;
+    return &cpuConcurrencyController_;
   }
 
-  const apache::thrift::CPUConcurrencyController& getCPUConcurrencyController()
+  const apache::thrift::CPUConcurrencyController* getCPUConcurrencyController()
       const override {
-    return cpuConcurrencyController_;
+    return &cpuConcurrencyController_;
   }
 
   uint32_t getMaxRequests() const override {
@@ -105,6 +105,16 @@ class ServerConfigsMock : public ServerConfigs {
         AttributeSource::OVERRIDE);
   }
 
+  uint32_t getConcurrencyLimit() const override {
+    return thriftServerConfig_.getConcurrencyLimit().get();
+  }
+
+  void setConcurrencyLimit(uint32_t concurrencyLimit) override {
+    thriftServerConfig_.setConcurrencyLimit(
+        folly::observer::makeStaticObserver(std::optional{concurrencyLimit}),
+        AttributeSource::OVERRIDE);
+  }
+
   uint32_t getMaxQps() const override {
     return thriftServerConfig_.getMaxQps().get();
   }
@@ -112,6 +122,16 @@ class ServerConfigsMock : public ServerConfigs {
   void setMaxQps(uint32_t maxQps) override {
     thriftServerConfig_.setMaxQps(
         folly::observer::makeStaticObserver(std::optional{maxQps}),
+        AttributeSource::OVERRIDE);
+  }
+
+  uint32_t getExecutionRate() const override {
+    return thriftServerConfig_.getExecutionRate().get();
+  }
+
+  void setExecutionRate(uint32_t executionRate) override {
+    thriftServerConfig_.setExecutionRate(
+        folly::observer::makeStaticObserver(std::optional{executionRate}),
         AttributeSource::OVERRIDE);
   }
 
@@ -151,6 +171,10 @@ class ServerConfigsMock : public ServerConfigs {
     return taskTimeout_;
   }
 
+  InterceptorMetricCallback& getInterceptorMetricCallback() const override {
+    return *noopInterceptorMetricCallback_;
+  }
+
  public:
   uint64_t maxResponseSize_{0};
   std::chrono::milliseconds queueTimeout_{std::chrono::milliseconds(500)};
@@ -173,6 +197,8 @@ class ServerConfigsMock : public ServerConfigs {
       cConfig_{apache::thrift::CPUConcurrencyController::Config{}};
   apache::thrift::CPUConcurrencyController cpuConcurrencyController_{
       cConfig_.getObserver(), *this, thriftServerConfig_};
+  std::unique_ptr<NoopInterceptorMetricCallback> noopInterceptorMetricCallback_{
+      std::make_unique<NoopInterceptorMetricCallback>()};
 };
 
 } // namespace apache::thrift::server

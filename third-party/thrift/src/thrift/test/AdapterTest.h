@@ -23,13 +23,14 @@
 #include <stdexcept>
 #include <string>
 
+#include <gtest/gtest.h>
 #include <folly/Conv.h>
 #include <folly/FBString.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/container/FBVector.h>
 #include <folly/io/IOBuf.h>
-#include <folly/portability/GTest.h>
+#include <folly/lang/Ordering.h>
 #include <thrift/lib/cpp/Field.h>
 #include <thrift/lib/cpp2/Adapt.h>
 #include <thrift/lib/cpp2/Thrift.h>
@@ -142,6 +143,24 @@ struct AdaptedComparisonStringAdapter {
   }
 };
 
+struct Adapter3WayCompareStringAdapter {
+  std::string value;
+
+  static std::string fromThrift(std::string&& val) { return std::move(val); }
+
+  static const std::string& toThrift(const std::string& str) { return str; }
+
+  static folly::ordering compareThreeWay(
+      const std::string& lhs, const std::string& rhs) {
+    if (lhs < rhs) {
+      return folly::ordering::gt;
+    } else if (lhs > rhs) {
+      return folly::ordering::lt;
+    }
+    return folly::ordering::eq;
+  }
+};
+
 struct Num {
   int64_t val = 13;
 
@@ -186,6 +205,8 @@ struct CustomProtocolAdapter {
   static folly::IOBuf toThrift(const Num& num) {
     return folly::IOBuf::wrapBufferAsValue(&num.val, sizeof(int64_t));
   }
+
+  static bool isEmpty(const Num& num) { return num == Num{}; }
 };
 
 template <typename T, typename Struct, int16_t FieldId>
@@ -497,8 +518,8 @@ struct VariableWrapper {
       : value{v}, name{n}, uri{u} {}
 
   T value;
-  std::string name = "";
-  std::string uri = "";
+  std::string name;
+  std::string uri;
 };
 
 struct VariableAdapter {

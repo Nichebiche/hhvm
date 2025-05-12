@@ -46,6 +46,11 @@ type env = {
   in_expr_tree: expr_tree_env option;
       (** If set to Some(_), then we are performing type checking within a
           expression tree. *)
+  in_macro_splice: Typing_local_types.t option;
+      (**  If set to Some(local_env) then we are type checking within a splice that
+           contains nested expression trees with free variables. local_env contains
+           the bindings for those free variables
+      *)
   inside_constructor: bool;
   checked: Tast.check_status;
       (** Set to true when checking if a <<__SoundDynamicallyCallable>> method body
@@ -59,6 +64,8 @@ type env = {
       (** A set of constraints that are global to a given method *)
   log_levels: int SMap.t;
   inference_env: Typing_inference_env.t;
+  rank: int;
+      (** The rank at which fresh type variables and type parameters should be generated *)
   allow_wildcards: bool;
   big_envs: (Pos.t * env) list ref;
   fun_tast_info: Tast.fun_tast_info option;
@@ -101,6 +108,8 @@ and genv = {
       (** Is the definition that we are checking marked <<__SupportDynamicType>>? *)
   no_auto_likes: bool;
       (** Is the definition that we are checking marked <<__NoAutoLikes>>? *)
+  needs_concrete: bool;
+      (** Is the definition that we are checking marked <<__NeedsConcrete>>? *)
 }
 
 val empty :
@@ -120,13 +129,16 @@ val get_tpenv : env -> Type_parameter_env.t
 val get_pos_and_kind_of_generic :
   env -> string -> (Pos_or_decl.t * Typing_kinding_defs.kind) option
 
-val get_lower_bounds :
-  env -> string -> locl_ty list -> Type_parameter_env.tparam_bounds
+val get_lower_bounds : env -> string -> Type_parameter_env.tparam_bounds
 
-val get_upper_bounds :
-  env -> string -> locl_ty list -> Type_parameter_env.tparam_bounds
+val get_upper_bounds : env -> string -> Type_parameter_env.tparam_bounds
 
-val get_equal_bounds :
-  env -> string -> locl_ty list -> Type_parameter_env.tparam_bounds
+val get_equal_bounds : env -> string -> Type_parameter_env.tparam_bounds
 
 val get_tparams_in_ty_and_acc : env -> SSet.t -> locl_ty -> SSet.t
+
+val get_rank : env -> int
+
+val increment_rank : env -> env
+
+val decrement_rank : env -> env

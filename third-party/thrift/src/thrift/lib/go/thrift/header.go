@@ -27,7 +27,9 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/format"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/klauspost/compress/zstd"
 )
 
 // Header keys
@@ -154,7 +156,7 @@ var supportedTransforms = map[TransformID]bool{
 	TransformHMAC:   false,
 	TransformSnappy: false,
 	TransformQLZ:    false,
-	TransformZstd:   zstdTransformSupport,
+	TransformZstd:   true,
 }
 
 // Untransformer will find a transform function to wrap a reader with to transformed the data.
@@ -173,7 +175,13 @@ func (c TransformID) Untransformer() (func(byteReader) (byteReader, error), erro
 			return ensureByteReader(zlrd), nil
 		}, nil
 	case TransformZstd:
-		return zstdRead, nil
+		return func(rd byteReader) (byteReader, error) {
+			zlrd, err := zstd.NewReader(rd)
+			if err != nil {
+				return nil, err
+			}
+			return ensureByteReader(zlrd), nil
+		}, nil
 	default:
 		return nil, types.NewProtocolExceptionWithType(
 			types.NOT_IMPLEMENTED, fmt.Errorf("Header transform %s not supported", c.String()),
@@ -207,11 +215,11 @@ type byteReader interface {
 
 // ensureByteReader If a reader does not implement ReadByte, wrap it with a
 // buffer that can. Needed for most thrift interfaces.
-func ensureByteReader(rd io.Reader) byteReader {
-	if brr, ok := rd.(byteReader); ok {
+func ensureByteReader(reader io.Reader) byteReader {
+	if brr, ok := reader.(byteReader); ok {
 		return brr
 	}
-	return bufio.NewReader(rd)
+	return bufio.NewReader(reader)
 }
 
 // limitedByteReader Keep the ByteReader interface when wrapping with a limit
@@ -239,13 +247,13 @@ func (r *limitedByteReader) ReadByte() (byte, error) {
 func readVarString(buf byteReader) (string, error) {
 	strlen, err := binary.ReadUvarint(buf)
 	if err != nil {
-		return "", fmt.Errorf("tHeader: error reading len of kv string: %s", err.Error())
+		return "", fmt.Errorf("tHeader: error reading len of kv string: %w", err)
 	}
 
 	strbuf := make([]byte, strlen)
 	_, err = io.ReadFull(buf, strbuf)
 	if err != nil {
-		return "", fmt.Errorf("tHeader: error reading kv string: %s", err.Error())
+		return "", fmt.Errorf("tHeader: error reading kv string: %w", err)
 	}
 	return string(strbuf), nil
 }
@@ -255,17 +263,17 @@ func readInfoHeaderSet(buf byteReader) (map[string]string, error) {
 	headers := map[string]string{}
 	numkvs, err := binary.ReadUvarint(buf)
 	if err != nil {
-		return nil, fmt.Errorf("tHeader: error reading number of keyvalues: %s", err.Error())
+		return nil, fmt.Errorf("tHeader: error reading number of keyvalues: %w", err)
 	}
 
 	for i := uint64(0); i < numkvs; i++ {
 		key, err := readVarString(buf)
 		if err != nil {
-			return nil, fmt.Errorf("tHeader: error reading keyvalue key: %s", err.Error())
+			return nil, fmt.Errorf("tHeader: error reading keyvalue key: %w", err)
 		}
 		val, err := readVarString(buf)
 		if err != nil {
-			return nil, fmt.Errorf("tHeader: error reading keyvalue val: %s", err.Error())
+			return nil, fmt.Errorf("tHeader: error reading keyvalue val: %w", err)
 		}
 		headers[key] = val
 	}
@@ -280,7 +288,7 @@ func readTransforms(buf byteReader) ([]TransformID, error) {
 	numtransforms, err := binary.ReadUvarint(buf)
 	if err != nil {
 		return nil, types.NewTransportExceptionFromError(
-			fmt.Errorf("tHeader: error reading number of transforms: %s", err.Error()),
+			fmt.Errorf("tHeader: error reading number of transforms: %w", err),
 		)
 	}
 
@@ -289,7 +297,7 @@ func readTransforms(buf byteReader) ([]TransformID, error) {
 		transformID, err := binary.ReadUvarint(buf)
 		if err != nil {
 			return nil, types.NewTransportExceptionFromError(
-				fmt.Errorf("tHeader: error reading transforms: %s", err.Error()),
+				fmt.Errorf("tHeader: error reading transforms: %w", err),
 			)
 		}
 		tid := TransformID(transformID)
@@ -327,7 +335,7 @@ func readInfoHeaders(buf byteReader) (map[string]string, map[string]string, erro
 
 		if err != nil {
 			return nil, nil, types.NewTransportExceptionFromError(
-				fmt.Errorf("tHeader: error reading infoID: %s", err.Error()),
+				fmt.Errorf("tHeader: error reading infoID: %w", err),
 			)
 		}
 
@@ -365,7 +373,7 @@ func (hdr *tHeader) readVarHeader(buf byteReader) error {
 	protoID, err := binary.ReadUvarint(buf)
 	if err != nil {
 		return types.NewTransportExceptionFromError(
-			fmt.Errorf("tHeader: error reading protocol ID: %s", err.Error()),
+			fmt.Errorf("tHeader: error reading protocol ID: %w", err),
 		)
 	}
 	hdr.protoID = types.ProtocolID(protoID)
@@ -382,19 +390,11 @@ func (hdr *tHeader) readVarHeader(buf byteReader) error {
 	return nil
 }
 
-// isCompactFramed Check if the magic value corresponds to compact proto
-func isCompactFramed(magic uint32) bool {
-	protocolID := int8(magic >> 24)
-	protocolVersion := int8((magic >> 16) & uint32(COMPACT_VERSION_MASK))
-	return uint8(protocolID) == uint8(COMPACT_PROTOCOL_ID) && (protocolVersion == int8(COMPACT_VERSION) ||
-		protocolVersion == int8(COMPACT_VERSION_BE))
-}
-
 // analyzeFirst32Bit Guess client type from the first 4 bytes
 func analyzeFirst32Bit(word uint32) ClientType {
-	if (word & BinaryVersionMask) == BinaryVersion1 {
+	if format.IsBinaryFramed(word) {
 		return UnframedDeprecated
-	} else if isCompactFramed(word) {
+	} else if format.IsCompactFramed(word) {
 		return UnframedCompactDeprecated
 	} else if word == HTTPMagicCONNECT ||
 		word == HTTPMagicDELETE ||
@@ -413,10 +413,10 @@ func analyzeFirst32Bit(word uint32) ClientType {
 
 // analyzeSecond32Bit Find the header client type from the 4-8th bytes of header
 func analyzeSecond32Bit(word uint32) ClientType {
-	if (word & BinaryVersionMask) == BinaryVersion1 {
+	if format.IsBinaryFramed(word) {
 		return FramedDeprecated
 	}
-	if isCompactFramed(word) {
+	if format.IsCompactFramed(word) {
 		return FramedCompact
 	}
 	if (word & HeaderMask) == HeaderMagic {
@@ -548,9 +548,9 @@ func (hdr *tHeader) Read(buf *bufio.Reader) error {
 	return hdr.readVarHeader(limbuf)
 }
 
-func writeTransforms(transforms []TransformID, buf io.Writer) (int, error) {
+func writeTransforms(transforms []TransformID, writer io.Writer) (int, error) {
 	size := 0
-	n, err := writeUvarint(uint64(len(transforms)), buf)
+	n, err := writeUvarint(uint64(len(transforms)), writer)
 	size += n
 	if err != nil {
 		return size, err
@@ -562,7 +562,7 @@ func writeTransforms(transforms []TransformID, buf io.Writer) (int, error) {
 
 	for _, trans := range transforms {
 		// FIXME: We should only write supported xforms
-		n, err = writeUvarint(uint64(trans), buf)
+		n, err = writeUvarint(uint64(trans), writer)
 		size += n
 		if err != nil {
 			return size, err
@@ -571,48 +571,48 @@ func writeTransforms(transforms []TransformID, buf io.Writer) (int, error) {
 	return size, nil
 }
 
-func writeUvarint(v uint64, buf io.Writer) (int, error) {
+func writeUvarint(v uint64, writer io.Writer) (int, error) {
 	var b [10]byte
 	n := binary.PutUvarint(b[:], v)
-	return buf.Write(b[:n])
+	return writer.Write(b[:n])
 }
 
-func writeVarString(s string, buf io.Writer) (int, error) {
-	n, err := writeUvarint(uint64(len(s)), buf)
+func writeVarString(s string, writer io.Writer) (int, error) {
+	n, err := writeUvarint(uint64(len(s)), writer)
 	if err != nil {
 		return n, err
 	}
-	n2, err := buf.Write([]byte(s))
+	n2, err := writer.Write([]byte(s))
 	return n + n2, err
 }
 
-func writeInfoHeaders(headers map[string]string, infoidtype InfoIDType, buf io.Writer) (int, error) {
+func writeInfoHeaders(headers map[string]string, infoidtype InfoIDType, writer io.Writer) (int, error) {
 	cnt := len(headers)
 	size := 0
 	if cnt < 1 {
 		return 0, nil
 	}
 
-	n, err := writeUvarint(uint64(infoidtype), buf)
+	n, err := writeUvarint(uint64(infoidtype), writer)
 	size += n
 	if err != nil {
 		return 0, err
 	}
 
-	n, err = writeUvarint(uint64(cnt), buf)
+	n, err = writeUvarint(uint64(cnt), writer)
 	size += n
 	if err != nil {
 		return 0, err
 	}
 
 	for k, v := range headers {
-		n, err = writeVarString(k, buf)
+		n, err = writeVarString(k, writer)
 		size += n
 		if err != nil {
 			return 0, err
 		}
 
-		n, err = writeVarString(v, buf)
+		n, err = writeVarString(v, writer)
 		size += n
 		if err != nil {
 			return 0, err
@@ -622,27 +622,27 @@ func writeInfoHeaders(headers map[string]string, infoidtype InfoIDType, buf io.W
 	return size, nil
 }
 
-func (hdr *tHeader) writeVarHeader(buf io.Writer) (int, error) {
+func (hdr *tHeader) writeVarHeader(writer io.Writer) (int, error) {
 	size := 0
-	n, err := writeUvarint(uint64(hdr.protoID), buf)
+	n, err := writeUvarint(uint64(hdr.protoID), writer)
 	size += n
 	if err != nil {
 		return size, err
 	}
 
-	n, err = writeTransforms(hdr.transforms, buf)
+	n, err = writeTransforms(hdr.transforms, writer)
 	size += n
 	if err != nil {
 		return size, err
 	}
 
-	n, err = writeInfoHeaders(hdr.pHeaders, InfoIDPKeyValue, buf)
+	n, err = writeInfoHeaders(hdr.pHeaders, InfoIDPKeyValue, writer)
 	size += n
 	if err != nil {
 		return size, err
 	}
 
-	n, err = writeInfoHeaders(hdr.headers, InfoIDKeyValue, buf)
+	n, err = writeInfoHeaders(hdr.headers, InfoIDKeyValue, writer)
 	size += n
 	if err != nil {
 		return size, err
@@ -650,7 +650,7 @@ func (hdr *tHeader) writeVarHeader(buf io.Writer) (int, error) {
 
 	padding := 4 - size%4
 	for i := 0; i < padding; i++ {
-		buf.Write([]byte{byte(0)})
+		writer.Write([]byte{byte(0)})
 		size++
 	}
 
@@ -688,7 +688,7 @@ func (hdr *tHeader) calcLenFromPayload() error {
 }
 
 // Write Write out the header, requires payloadLen be set.
-func (hdr *tHeader) Write(buf io.Writer) error {
+func (hdr *tHeader) Write(writer io.Writer) error {
 	// Make a reasonably sized temp buffer for the variable header
 	hdrbuf := bytes.NewBuffer(nil)
 	_, err := hdr.writeVarHeader(hdrbuf)
@@ -714,12 +714,12 @@ func (hdr *tHeader) Write(buf io.Writer) error {
 	}
 
 	// FIXME: Bad assumption (no err check), but we should be writing to an in-memory buffer here
-	binary.Write(buf, binary.BigEndian, uint32(hdr.length))
-	binary.Write(buf, binary.BigEndian, uint16(HeaderMagic>>16))
-	binary.Write(buf, binary.BigEndian, hdr.flags)
-	binary.Write(buf, binary.BigEndian, hdr.seq)
-	binary.Write(buf, binary.BigEndian, hdr.headerLen)
-	hdrbuf.WriteTo(buf)
+	binary.Write(writer, binary.BigEndian, uint32(hdr.length))
+	binary.Write(writer, binary.BigEndian, uint16(HeaderMagic>>16))
+	binary.Write(writer, binary.BigEndian, hdr.flags)
+	binary.Write(writer, binary.BigEndian, hdr.seq)
+	binary.Write(writer, binary.BigEndian, hdr.headerLen)
+	hdrbuf.WriteTo(writer)
 
 	return nil
 }

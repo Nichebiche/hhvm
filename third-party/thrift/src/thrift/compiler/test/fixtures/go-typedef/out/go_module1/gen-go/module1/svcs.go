@@ -9,6 +9,7 @@ package module1
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     module0 "module0"
@@ -22,8 +23,9 @@ var _ = module2.GoUnusedProtection__
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type Finder interface {
@@ -33,8 +35,10 @@ type Finder interface {
 }
 
 type FinderClientInterface interface {
-    thrift.ClientInterface
-    Finder
+    io.Closer
+    ByPlate(ctx context.Context, plate Plate) (*Automobile, error)
+    AliasByPlate(ctx context.Context, plate Plate) (*Car, error)
+    PreviousPlate(ctx context.Context, plate Plate) (Plate, error)
 }
 
 type FinderClient struct {
@@ -49,8 +53,12 @@ func NewFinderChannelClient(channel thrift.RequestChannel) *FinderClient {
     }
 }
 
-func NewFinderClient(prot thrift.Protocol) *FinderClient {
-    return NewFinderChannelClient(thrift.NewSerialChannel(prot))
+func NewFinderClient(prot thrift.DO_NOT_USE_ChannelWrapper) *FinderClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewFinderChannelClient(channel)
 }
 
 func (c *FinderClient) Close() error {
@@ -58,46 +66,46 @@ func (c *FinderClient) Close() error {
 }
 
 func (c *FinderClient) ByPlate(ctx context.Context, plate Plate) (*Automobile, error) {
-    in := &reqFinderByPlate{
+    fbthriftReq := &reqFinderByPlate{
         Plate: plate,
     }
-    out := newRespFinderByPlate()
-    err := c.ch.Call(ctx, "byPlate", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespFinderByPlate()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "byPlate", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *FinderClient) AliasByPlate(ctx context.Context, plate Plate) (*Car, error) {
-    in := &reqFinderAliasByPlate{
+    fbthriftReq := &reqFinderAliasByPlate{
         Plate: plate,
     }
-    out := newRespFinderAliasByPlate()
-    err := c.ch.Call(ctx, "aliasByPlate", in, out)
-    if err != nil {
-        return nil, err
+    fbthriftResp := newRespFinderAliasByPlate()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "aliasByPlate", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return nil, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 func (c *FinderClient) PreviousPlate(ctx context.Context, plate Plate) (Plate, error) {
-    in := &reqFinderPreviousPlate{
+    fbthriftReq := &reqFinderPreviousPlate{
         Plate: plate,
     }
-    out := newRespFinderPreviousPlate()
-    err := c.ch.Call(ctx, "previousPlate", in, out)
-    if err != nil {
-        return "", err
+    fbthriftResp := newRespFinderPreviousPlate()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "previousPlate", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return "", fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
 type FinderProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            Finder
+    handler              Finder
 }
 
 func NewFinderProcessor(handler Finder) *FinderProcessor {
@@ -151,16 +159,16 @@ type procFuncFinderByPlate struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncFinderByPlate)(nil)
 
-func (p *procFuncFinderByPlate) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncFinderByPlate) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqFinderByPlate()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncFinderByPlate) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncFinderByPlate) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -168,16 +176,16 @@ func (p *procFuncFinderByPlate) Write(seqId int32, result thrift.WritableStruct,
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("byPlate", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("byPlate", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -203,16 +211,16 @@ type procFuncFinderAliasByPlate struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncFinderAliasByPlate)(nil)
 
-func (p *procFuncFinderAliasByPlate) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncFinderAliasByPlate) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqFinderAliasByPlate()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncFinderAliasByPlate) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncFinderAliasByPlate) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -220,16 +228,16 @@ func (p *procFuncFinderAliasByPlate) Write(seqId int32, result thrift.WritableSt
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("aliasByPlate", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("aliasByPlate", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err
@@ -255,16 +263,16 @@ type procFuncFinderPreviousPlate struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncFinderPreviousPlate)(nil)
 
-func (p *procFuncFinderPreviousPlate) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncFinderPreviousPlate) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqFinderPreviousPlate()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncFinderPreviousPlate) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncFinderPreviousPlate) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -272,16 +280,16 @@ func (p *procFuncFinderPreviousPlate) Write(seqId int32, result thrift.WritableS
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("previousPlate", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("previousPlate", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

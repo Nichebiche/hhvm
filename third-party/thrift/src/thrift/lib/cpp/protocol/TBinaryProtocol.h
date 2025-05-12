@@ -23,9 +23,7 @@
 
 #include <memory>
 
-namespace apache {
-namespace thrift {
-namespace protocol {
+namespace apache::thrift::protocol {
 
 /**
  * The default binary protocol for thrift. Writes all data in a very basic
@@ -213,7 +211,7 @@ class TBinaryProtocolT : public TVirtualProtocol<TBinaryProtocolT<Transport_>> {
   bool strict_write_;
 };
 
-typedef TBinaryProtocolT<transport::TTransport> TBinaryProtocol;
+using TBinaryProtocol = TBinaryProtocolT<transport::TTransport>;
 
 class TBinaryProtocolFactoryBase : public TProtocolFactory {};
 
@@ -281,11 +279,9 @@ class TBinaryProtocolFactoryT : public TBinaryProtocolFactoryBase {
   bool strict_write_;
 };
 
-typedef TBinaryProtocolFactoryT<transport::TTransport> TBinaryProtocolFactory;
+using TBinaryProtocolFactory = TBinaryProtocolFactoryT<transport::TTransport>;
 
-} // namespace protocol
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::protocol
 
 #include <thrift/lib/cpp/protocol/TBinaryProtocol-inl.h>
 

@@ -48,7 +48,7 @@
 
 namespace HPHP::jit::irlower {
 
-TRACE_SET_MOD(irlower);
+TRACE_SET_MOD(irlower)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -250,7 +250,7 @@ namespace {
 
 constexpr ptrdiff_t ar_rel(ptrdiff_t off) {
   return off - AFWH::arOff();
-};
+}
 
 /*
  * Check if obj is an Awaitable. Passes CC_BE on sf if it is.
@@ -270,7 +270,9 @@ void emitIsAwaitable(Vout& v, Vreg obj, Vreg sf) {
 }
 
 IMPL_OPCODE_CALL(CreateAFWH)
+IMPL_OPCODE_CALL(CreateAFWHL)
 IMPL_OPCODE_CALL(CreateAGWH)
+IMPL_OPCODE_CALL(CreateFSWH)
 IMPL_OPCODE_CALL(AFWHPrepareChild)
 
 void cgCreateSSWH(IRLS& env, const IRInstruction* inst) {

@@ -172,7 +172,7 @@ let get_class_parent_or_trait
     (parent_cache : Decl_store.class_entries SMap.t)
     ((parents, pass, decl_errors) :
       SSet.t * [ `Extends_pass | `Traits_pass | `Xhp_pass ] * decl_error list)
-    (ty : Typing_defs.decl_phase Typing_defs.ty) : SSet.t * 'a * decl_error list
+    (ty : Typing_defs.decl_phase Typing_defs.ty) : SSet.t * _ * decl_error list
     =
   let (_, (parent_pos, parent), _) = Decl_utils.unwrap_class_type ty in
   (* If we already had this exact trait, we need to flag trait reuse *)
@@ -191,10 +191,12 @@ let get_class_parent_or_trait
     let acc = (parents, pass, decl_errors) in
     add_grand_parents_or_traits parent_pos shallow_class acc parent_type
 
+(** The first set is the names of the `extend`ed parents, `use`d traits and XHP attributes.
+    It does not include the `implement`ed interfaces. *)
 let get_class_parents_and_traits
     (env : Decl_env.env)
     (shallow_class : Shallow_decl_defs.shallow_class)
-    parent_cache
+    ~parent_cache
     decl_errors : SSet.t * SSet.t * decl_error list =
   let parents = SSet.empty in
   (* extends parents *)
@@ -341,6 +343,10 @@ let visibility
     (match module_ with
     | Some m -> Vinternal (snd m)
     | None -> Vpublic)
+  | ProtectedInternal ->
+    (match module_ with
+    | Some m -> Vprotected_internal { class_id; module_ = snd m }
+    | None -> Vprotected class_id)
 
 let build_constructor_fun_elt
     ~(ctx : Provider_context.t)
@@ -373,7 +379,7 @@ let build_constructor
           ~synthesized:false
           ~superfluous_override:false
           ~dynamicallycallable:false
-          ~readonly_prop:false
+          ~readonly_prop_or_needs_concrete:false
           ~support_dynamic_type:false
           ~needs_init:false
           ~no_auto_likes:(sm_no_auto_likes method_)
@@ -439,22 +445,33 @@ let class_const_fold
 
 (* Every class, interface, and trait implicitly defines a ::class to
  * allow accessing its fully qualified name as a string *)
-let class_class_decl (ctx : Provider_context.t) (class_id : Typing_defs.pos_id)
-    : Typing_defs.class_const =
+let class_class_decl
+    (is_abstract : bool)
+    (ctx : Provider_context.t)
+    (class_id : Typing_defs.pos_id) : Typing_defs.class_const =
   let (pos, name) = class_id in
-  let reason = Reason.class_class (pos, name) in
   let tco = Provider_context.get_tcopt ctx in
-  let classname_ty =
-    if TypecheckerOptions.(class_class_type tco) then
-      mk (reason, Tclass_ptr (mk (reason, Tthis)))
+  (* Examples: classname<C>, class<C>, concrete<classname<C>> ... *)
+  let cc_type =
+    let reason = Reason.class_class (pos, name) in
+    let classname_or_class_ptr_ty =
+      if TypecheckerOptions.(class_class_type tco) then
+        mk (reason, Tclass_ptr (mk (reason, Tthis)))
+      else
+        mk (reason, Tapply ((pos, SN.Classes.cClassname), [mk (reason, Tthis)]))
+    in
+    if is_abstract || not (TypecheckerOptions.safe_abstract tco) then
+      classname_or_class_ptr_ty
     else
-      mk (reason, Tapply ((pos, SN.Classes.cClassname), [mk (reason, Tthis)]))
+      mk
+        ( reason,
+          Tapply ((pos, SN.Classes.cConcrete), [classname_or_class_ptr_ty]) )
   in
   {
     cc_abstract = CCConcrete;
     cc_pos = pos;
     cc_synthesized = true;
-    cc_type = classname_ty;
+    cc_type;
     cc_origin = name;
     cc_refs = [];
   }
@@ -503,7 +520,7 @@ let prop_decl_eager
           ~lateinit:(sp_lateinit sp)
           ~abstract:(sp_abstract sp)
           ~dynamicallycallable:false
-          ~readonly_prop:(sp_readonly sp)
+          ~readonly_prop_or_needs_concrete:(sp_readonly sp)
           ~support_dynamic_type:false
           ~needs_init:(sp_needs_init sp)
           ~safe_global_variable:false
@@ -542,7 +559,7 @@ let static_prop_decl_eager
           ~abstract:(sp_abstract sp)
           ~synthesized:false
           ~dynamicallycallable:false
-          ~readonly_prop:(sp_readonly sp)
+          ~readonly_prop_or_needs_concrete:(sp_readonly sp)
           ~support_dynamic_type:false
           ~needs_init:false
           ~no_auto_likes:false
@@ -691,6 +708,9 @@ let method_decl_eager
     | (Some ({ elt_visibility = Vprotected _ as parent_vis; _ }, _), Protected)
       ->
       parent_vis
+    | ( Some ({ elt_visibility = Vprotected_internal { class_id; _ }; _ }, _),
+        ProtectedInternal ) ->
+      visibility class_id c.sc_module m.sm_visibility
     | _ -> visibility (snd c.sc_name) c.sc_module m.sm_visibility
   in
   let support_dynamic_type = sm_support_dynamic_type m in
@@ -724,7 +744,7 @@ let method_decl_eager
           ~const:false
           ~lateinit:false
           ~dynamicallycallable:(sm_dynamicallycallable m)
-          ~readonly_prop:false
+          ~readonly_prop_or_needs_concrete:(sm_needs_concrete m)
           ~support_dynamic_type
           ~needs_init:false
           ~no_auto_likes
@@ -832,7 +852,7 @@ and class_decl
       ctx;
     }
   in
-  let inherited = Decl_inherit.make env c ~cache:parents in
+  let inherited = Decl_inherit.make c ~cache:parents in
   let props = inherited.Decl_inherit.ih_props in
   let props =
     List.fold_left ~f:(prop_decl_eager ~ctx c) ~init:props c.sc_props
@@ -849,7 +869,10 @@ and class_decl
     List.fold_left ~f:(class_const_fold c) ~init:consts c.sc_consts
   in
   let consts =
-    SMap.add SN.Members.mClass (class_class_decl ctx c.sc_name) consts
+    SMap.add
+      SN.Members.mClass
+      (class_class_decl is_abstract ctx c.sc_name)
+      consts
   in
   let typeconsts = inherited.Decl_inherit.ih_typeconsts in
   let (typeconsts, consts) =
@@ -936,7 +959,7 @@ and class_decl
       ~init:SMap.empty
   in
   let (extends, xhp_attr_deps, decl_errors) =
-    get_class_parents_and_traits env c parents decl_errors
+    get_class_parents_and_traits env c ~parent_cache:parents decl_errors
   in
   let {
     cr_req_ancestors;

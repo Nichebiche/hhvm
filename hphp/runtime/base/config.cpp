@@ -21,7 +21,6 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/erase.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "hphp/runtime/base/ini-setting.h"
@@ -93,7 +92,7 @@ Config::IniName(const Hdf& config, bool /*prepend_hhvm*/ /* = true */) {
 
 std::string Config::IniName(const std::string& config,
                             bool prepend_hhvm /* = true */) {
-  std::string out = "";
+  std::string out;
   if (prepend_hhvm) {
     out += "hhvm.";
   }
@@ -160,6 +159,9 @@ void Config::ParseConfigFile(const std::string &filename, IniSettingMap &ini,
     // TODO(#5151773): Have a non-invasive warning if HDF file does not end
     // .hdf
     Config::ParseHdfFile(filename, hdf);
+    // Store the filename in the hdf object.
+    const std::string node_name = "Metadata.ConfigFileName";
+    hdf.set(node_name, filename);
   }
 }
 
@@ -193,7 +195,7 @@ void Config::ReplaceIncludesWithIni(const std::string& original_ini_filename,
     // Anything that is not a syntactically correct #include "file" after
     // this pre-processing, will be treated as an ini comment and processed
     // as such in the ini parser
-    auto pos = line.find_first_not_of(" ");
+    auto pos = line.find_first_not_of(' ');
     if (pos == std::string::npos ||
         line.compare(pos, strlen("#include"), "#include") != 0) {
       // treat as normal ini line, including comment that doesn't start with
@@ -202,8 +204,8 @@ void Config::ReplaceIncludesWithIni(const std::string& original_ini_filename,
       continue;
     }
     pos += strlen("#include");
-    auto start = line.find_first_not_of(" ", pos);
-    auto end = line.find_last_not_of(" ");
+    auto start = line.find_first_not_of(' ', pos);
+    auto end = line.find_last_not_of(' ');
     if ((start == std::string::npos || line[start] != '"') ||
         (end == start || line[end] != '"')) {
       with_includes += line + "\n"; // treat as normal comment
@@ -386,7 +388,7 @@ CONTAINER_CONFIG_BODY(ConfigSetC, SetC)
 CONTAINER_CONFIG_BODY(ConfigFlatSet, FlatSet)
 CONTAINER_CONFIG_BODY(ConfigIMap, IMap)
 CONTAINER_CONFIG_BODY(ConfigIFastMap, IFastMap)
-CONTAINER_CONFIG_BODY(ConfigFastSet, FastSet);
+CONTAINER_CONFIG_BODY(ConfigFastSet, FastSet)
 
 // No `ini` binding yet. Hdf still takes precedence but will be removed
 // once we have made all options ini-aware. All new settings should

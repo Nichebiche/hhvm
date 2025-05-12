@@ -150,7 +150,6 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 - std::string Server.SSLTicketSeedFile = "", UNKNOWN
 - bool Server.TLSDisableTLS1_2 = false, UNKNOWN
 - std::string Server.TLSClientCipherSpec = "", UNKNOWN
-- bool Server.EnableSSLWithPlainText = false, UNKNOWN
 - int Server.SSLClientAuthLevel = 0, UNKNOWN, postprocess
 
   Level of TLS client auth. Valid values are
@@ -392,6 +391,7 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 - int ErrorHandling.MaxSerializedStringSize = 64 * 1024 * 1024, UNKNOWN
 - bool ErrorHandling.CallUserHandlerOnFatals = false, UNKNOWN
 - bool ErrorHandling.ThrowExceptionOnBadMethodCall = true, UNKNOWN
+- bool ErrorHandling.ThrowExceptionOnInlineTypeError = false, UNKNOWN
 - bool ErrorHandling.LogNativeStackOnOOM = false, UNKNOWN
 - int64_t ErrorHandling.NoticeFrequency = 1, UNKNOWN
 - int64_t ErrorHandling.WarningFrequency = 1, UNKNOWN
@@ -573,6 +573,10 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 - uint32_t Eval.InitialTypeTableSize = Eval.InitialTypeTableSize, UNKNOWN, globaldata(noload)|staticdefault(30000)|lookuppath(Eval.InitialNamedEntityTableSize)
 
 - uint32_t Eval.InitialFuncTableSize = Eval.InitialFuncTableSize, UNKNOWN, globaldata(noload)|staticdefault(3000)
+
+- uint32_t Eval.StaticStringsSampleRate = 0, UNKNOWN
+
+  Enables StructuredLog for static strings
 
 - bool Eval.HackArrCompatSerializeNotices = false, UNKNOWN, globaldata(onlyhhbbc)|compileroption(HackArrCompatSerializeNotices)|unitcacheflag
 
@@ -789,7 +793,7 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 
 - std::string Eval.ProfileHWEvents = "", UNKNOWN
 
-- bool Eval.ProfileHWExcludeKernel = false, UNKNOWN
+- bool Eval.ProfileHWExcludeKernel = true, UNKNOWN
 
 - bool Eval.ProfileHWFastReads = false, UNKNOWN
 
@@ -1380,10 +1384,15 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 
   Whether to remove the existence of the REQUEST superglobal
 
-- bool Eval.FastMethodIntercept = false, UNKNOWN, postprocess
+- bool Eval.FastMethodIntercept = false, fzn, postprocess
 
   Enables the non-surprise flag based implementation of
   fb_intercept2
+
+- bool Eval.FastMethodInterceptNoAsyncOpt = false, fzn, postprocess
+
+  Unconditionally disable the async scheduler optimization when
+  FastMethodIntercept is set.
 
 - bool Eval.LogHttpServerSignalSource = true, UNKNOWN
 
@@ -1395,6 +1404,29 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 
   Whether ReflectionClass::getConstants raises notice if it misses constants from
   enums/enum classes included via enum inclusion
+
+- bool Eval.EnableLowPriorityAwaitables = true, jtwarren
+
+  Whether or not to support low priority awaitables in the runtime. If disabled,
+  will turn AwaitLowPri instructions into noops.
+
+- int32_t Eval.CustomSrcKeyFilter = 1, rburks
+
+  Which version of the concurrent storage to use
+  for filtering SrcKeys in the async JIT
+  0 default (ConcurrentHashMap with 8 shard bits)
+  1 ConcurrentHashMap with 9 shard bits
+  2 ConcurrentHashMap with 10 shard bits
+  3 AtomicHashMap
+  4 tbb:concurrent_hash_map with const accessor
+
+- uint32_t Eval.AtomicSrcKeyFilterSize = 120000, rburks
+
+  Size hint to initialize the atomic SrcKey filter with for the async JIT
+
+- bool Eval.CheckValueBeforeEnqueue = true, rburks
+
+  Attempt to get whether or not a function has been enqueued for async JIT before attempting to write
 
 # Hack.Lang
 
@@ -1471,6 +1503,10 @@ The format can be found in hphp/tools/configs/generate_configs.rs
   Disables PHP's constant function
   Valid values are 0 => enabled (default), 1 => warning, 2 => error
 
+- bool Hack.Lang.CheckedUnsafeCast = false, UNKNOWN, repooptionsflag(Parser)|hackc(hhbc)
+
+  Semantics of UNSAFE_CAST. If set, warn when target type doesn't match runtime type.
+
 # GC (Eval.)
 
 - bool GC.Enabled, UNKNOWN, lookuppath(Eval.EnableGC)
@@ -1542,17 +1578,31 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 - bool HHIR.GenOpts = true, UNKNOWN
 - bool HHIR.RefcountOpts = true, UNKNOWN
 - bool HHIR.EnableGenTimeInlining = true, UNKNOWN
+- bool HHIR.EnableInliningPass = false, UNKNOWN
 - uint32_t HHIR.InliningCostFactorMain = 100, UNKNOWN
 - uint32_t HHIR.InliningCostFactorCold = 32, UNKNOWN
 - uint32_t HHIR.InliningCostFactorFrozen = 10, UNKNOWN
-- uint32_t HHIR.InliningVasmCostLimit = 80000, UNKNOWN
-- uint32_t HHIR.InliningMinVasmCostLimit = 6500, UNKNOWN
-- uint32_t HHIR.InliningMaxVasmCostLimit = 30000, UNKNOWN
-- uint32_t HHIR.AlwaysInlineVasmCostLimit = 4800, UNKNOWN
-- uint32_t HHIR.InliningMaxDepth = 5, UNKNOWN
+- uint32_t HHIR.InliningVasmCostLimit = 300000, UNKNOWN
+- uint32_t HHIR.InliningMinVasmCostLimit = 5000, UNKNOWN
+- uint32_t HHIR.InliningMaxVasmCostLimit = 25000, UNKNOWN
+- uint32_t HHIR.AlwaysInlineVasmCostLimit = 5000, UNKNOWN
+- uint32_t HHIR.InliningMaxDepth = 8, UNKNOWN
 - double HHIR.InliningVasmCallerExp = .5, UNKNOWN
 - double HHIR.InliningVasmCalleeExp = .5, UNKNOWN
-- double HHIR.InliningDepthExp = 0, UNKNOWN
+- double HHIR.InliningDepthExp = 1.5, UNKNOWN
+- double HHIR.InliningVasmCallsiteExp = 0.0, UNKNOWN
+
+  The higher the number of callsites, the lower the VASM cost limit
+  we allow for inlining.
+  Discount functions with high callsite counts using this formula:
+  (1 / numCallsites) ^ InliningVasmCallsiteExp.
+
+- double HHIR.InliningVasmMinCallsiteFactor = 1.0, UNKNOWN
+
+  Represents the lowest factor we multiply for calculating
+  the VASM cost limit. This is to prevent functions with high
+  number of callsites to be discounted too much.
+
 - uint32_t HHIR.InliningMaxReturnDecRefs = 24, UNKNOWN
 - uint32_t HHIR.InliningMaxReturnLocals = 40, UNKNOWN
 - uint32_t HHIR.InliningMaxInitObjProps = 12, UNKNOWN
@@ -1698,6 +1748,7 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 
 - int Jit.RetargetJumps = 1, UNKNOWN
 - bool Jit.ForceVMRegSync = false, UNKNOWN
+- bool Jit.StressEagerVMRegSync = false, UNKNOWN
 
   Sync VM reg state for all native calls.
 
@@ -1721,7 +1772,7 @@ The format can be found in hphp/tools/configs/generate_configs.rs
 - double Jit.PGODecRefNopDecPercentCOW, UNKNOWN
 - double Jit.PGODecRefNopDecPercent, UNKNOWN
 - bool Jit.PGOArrayGetStress = false, UNKNOWN
-- double Jit.PGOMinBlockCountPercent = 0.25, UNKNOWN
+- double Jit.PGOMinBlockCountPercent = 0.23, UNKNOWN
 
   Mininum weight of a tracelet to include it in HotCFG as a percentage
   of the weight of the first tracelet in the region. [0,100]
@@ -1731,8 +1782,8 @@ The format can be found in hphp/tools/configs/generate_configs.rs
   Minimum probability of an arc to include it in HotCFG. [0,1]
 
 - uint32_t Jit.PGORelaxPercent = 100, UNKNOWN
-- uint32_t Jit.PGOCalledFuncCheckNumSpeculations = 2, UNKNOWN
-- double Jit.PGOCalledFuncCheckThreshold = 25, UNKNOWN
+- uint32_t Jit.PGOCalledFuncCheckNumSpeculations = 6, UNKNOWN
+- double Jit.PGOCalledFuncCheckThreshold = 10, UNKNOWN
 - double Jit.PGOCalledFuncExitThreshold = 99.9, UNKNOWN
 - bool Jit.PGODumpCallGraph = false, UNKNOWN
 - bool Jit.PGOOptCodeCallGraph = true, UNKNOWN

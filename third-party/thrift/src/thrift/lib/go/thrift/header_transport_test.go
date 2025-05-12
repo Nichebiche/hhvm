@@ -23,7 +23,15 @@ import (
 	"testing"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/stretchr/testify/require"
 )
+
+func assertEq(t *testing.T, expected any, actual any) {
+	t.Helper()
+	if expected != actual {
+		t.Errorf("assertEq failed: actual=%+v expected=%+v", actual, expected)
+	}
+}
 
 func TestHeaderTransport(t *testing.T) {
 	trans := newHeaderTransport(newMockSocket(), types.ProtocolIDCompact)
@@ -99,24 +107,6 @@ func testHeaderToProto(t *testing.T, clientType ClientType, tmb *mockSocket, pro
 	assertEq(t, tTypeID, typeID)
 	assertEq(t, tID, seq)
 	assertEq(t, tData, data)
-}
-
-func TestHeaderFramedBinary(t *testing.T) {
-	tmb := newMockSocket()
-	testHeaderToProto(
-		t, FramedDeprecated, tmb,
-		NewBinaryFormatOptions(newFramedTransport(tmb), true, true),
-		newHeaderTransport(tmb, types.ProtocolIDCompact),
-	)
-}
-
-func TestHeaderFramedCompact(t *testing.T) {
-	tmb := newMockSocket()
-	testHeaderToProto(
-		t, FramedCompact, tmb,
-		NewCompactFormat(newFramedTransport(tmb)),
-		newHeaderTransport(tmb, types.ProtocolIDCompact),
-	)
 }
 
 func TestHeaderHeaders(t *testing.T) {
@@ -299,6 +289,35 @@ func TestHeaderZlib(t *testing.T) {
 	if len(frame) == uncompressedlen {
 		t.Fatalf("data sent was not compressed on frame %d", n)
 	}
+}
+
+func TestHeaderZstd(t *testing.T) {
+	tmb := newMockSocket()
+	trans := newHeaderTransport(tmb, types.ProtocolIDCompact)
+	data := []byte("ASDFASDFASDFASDFASDFASDFASDFASDFASDFASDFASDFASDFASDFASDFASDF")
+	uncompressedlen := 30
+
+	err := trans.AddTransform(TransformSnappy)
+	require.Error(t, err, "should have failed adding unsupported transform")
+
+	err = trans.AddTransform(TransformZstd)
+	require.NoError(t, err)
+
+	_, err = trans.Write(data)
+	require.NoError(t, err)
+
+	err = trans.Flush()
+	require.NoError(t, err)
+
+	err = trans.ResetProtocol()
+	require.NoError(t, err)
+
+	frame, err := io.ReadAll(trans)
+	require.NoError(t, err)
+	require.Equal(t, data, frame)
+	// This is a bit of a stupid test, but make sure that the data
+	// got changed somehow
+	require.NotEqual(t, uncompressedlen, len(frame))
 }
 
 func testRWOnce(t *testing.T, n int, data []byte, trans *headerTransport) {

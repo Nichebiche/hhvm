@@ -325,7 +325,7 @@ void t_java_deprecated_generator::print_const_value(
     out << name << " = " << render_const_value(out, name, type, value) << ";"
         << endl
         << endl;
-  } else if (type->is_struct() || type->is_exception()) {
+  } else if (type->is_struct_or_union() || type->is_exception()) {
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
     vector<t_field*>::const_iterator f_iter;
     const vector<pair<t_const_value*, t_const_value*>>& val = value->get_map();
@@ -570,7 +570,7 @@ void t_java_deprecated_generator::generate_java_union(
 
   generate_java_doc(f_struct, tstruct);
 
-  bool is_final = tstruct->has_annotation("final");
+  bool is_final = tstruct->has_unstructured_annotation("final");
 
   indent(f_struct) << java_suppress_warnings_union() << "public "
                    << (is_final ? "final " : "") << "class "
@@ -1208,7 +1208,7 @@ void t_java_deprecated_generator::generate_java_struct_definition(
     ofstream& out, const t_structured* tstruct, StructGenParams params) {
   generate_java_doc(out, tstruct);
 
-  bool is_final = tstruct->has_annotation("final");
+  bool is_final = tstruct->has_unstructured_annotation("final");
 
   indent(out) << (params.in_class ? string() : java_suppress_warnings_struct())
               << "public " << (is_final ? "final " : "")
@@ -1342,7 +1342,7 @@ void t_java_deprecated_generator::generate_java_struct_definition(
   }
 
   auto forceBuilderGeneration =
-      tstruct->has_annotation("android.generate_builder");
+      tstruct->has_unstructured_annotation("android.generate_builder");
 
   if (forceBuilderGeneration || params.gen_builder ||
       members.size() > MAX_NUM_JAVA_CONSTRUCTOR_PARAMS) {
@@ -2271,7 +2271,7 @@ std::string t_java_deprecated_generator::get_java_type_string(
     return "TType.MAP";
   } else if (type->is_set()) {
     return "TType.SET";
-  } else if (type->is_struct() || type->is_exception()) {
+  } else if (type->is_struct_or_union() || type->is_exception()) {
     return "TType.STRUCT";
   } else if (type->is_enum()) {
     return "TType.I32";
@@ -2316,7 +2316,7 @@ void t_java_deprecated_generator::generate_field_value_meta_data(
   out << endl;
   indent_up();
   indent_up();
-  if (type->is_struct()) {
+  if (type->is_struct_or_union()) {
     indent(out) << "new StructMetaData(TType.STRUCT, " << type_name(type)
                 << ".class";
   } else if (type->is_container()) {
@@ -2386,8 +2386,8 @@ void t_java_deprecated_generator::generate_service(const t_service* tservice) {
  */
 void t_java_deprecated_generator::generate_service_interface(
     const t_service* tservice) {
-  string extends = "";
-  string extends_iface = "";
+  string extends;
+  string extends_iface;
   if (tservice->get_extends() != nullptr) {
     extends = type_name(tservice->get_extends());
     extends_iface = " extends " + extends + ".Iface";
@@ -2416,8 +2416,8 @@ void t_java_deprecated_generator::generate_service_interface(
 
 void t_java_deprecated_generator::generate_service_async_interface(
     const t_service* tservice) {
-  string extends = "";
-  string extends_iface = "";
+  string extends;
+  string extends_iface;
   if (tservice->get_extends() != nullptr) {
     extends = type_name(tservice->get_extends());
     extends_iface = " extends " + extends + ".AsyncIface";
@@ -2471,8 +2471,8 @@ void t_java_deprecated_generator::generate_service_helpers(
  */
 void t_java_deprecated_generator::generate_service_client(
     const t_service* tservice) {
-  string extends = "";
-  string extends_client = "";
+  string extends;
+  string extends_client;
   if (tservice->get_extends() != nullptr) {
     extends = type_name(tservice->get_extends());
     extends_client = " extends " + extends + ".Client";
@@ -2707,7 +2707,7 @@ void t_java_deprecated_generator::generate_service_client(
 void t_java_deprecated_generator::generate_service_async_client(
     const t_service* tservice) {
   string extends = "TAsyncClient";
-  string extends_client = "";
+  string extends_client;
   if (tservice->get_extends() != nullptr) {
     extends = type_name(tservice->get_extends()) + ".AsyncClient";
   }
@@ -2907,8 +2907,8 @@ void t_java_deprecated_generator::generate_service_server(
   vector<t_function*>::iterator f_iter;
 
   // Extends stuff
-  string extends = "";
-  string extends_processor = "";
+  string extends;
+  string extends_processor;
   if (tservice->get_extends() != nullptr) {
     extends = type_name(tservice->get_extends());
     extends_processor = " extends " + extends + ".Processor";
@@ -3240,7 +3240,7 @@ void t_java_deprecated_generator::generate_deserialize_field(
 
   string name = prefix + tfield->get_name();
 
-  if (type->is_struct() || type->is_exception()) {
+  if (type->is_struct_or_union() || type->is_exception()) {
     generate_deserialize_struct(out, (t_struct*)type, name);
   } else if (type->is_container()) {
     generate_deserialize_container(out, type, name);
@@ -3458,7 +3458,7 @@ void t_java_deprecated_generator::generate_serialize_field(
         tfield->get_name());
   }
 
-  if (type->is_struct() || type->is_exception()) {
+  if (type->is_struct_or_union() || type->is_exception()) {
     generate_serialize_struct(
         out, (t_struct*)type, prefix + tfield->get_name());
   } else if (type->is_container()) {
@@ -3817,7 +3817,7 @@ string t_java_deprecated_generator::async_function_call_arglist(
     string result_handler_symbol,
     bool /*use_base_method*/,
     bool include_types) {
-  std::string arglist = "";
+  std::string arglist;
   if (tfunc->params().get_members().size() > 0) {
     arglist = argument_list(tfunc->params(), include_types) + ", ";
   }
@@ -3835,7 +3835,7 @@ string t_java_deprecated_generator::async_function_call_arglist(
  */
 string t_java_deprecated_generator::argument_list(
     const t_paramlist& tparamlist, bool include_types) {
-  string result = "";
+  string result;
 
   const vector<t_field*>& fields = tparamlist.get_members();
   vector<t_field*>::const_iterator f_iter;
@@ -3859,7 +3859,7 @@ string t_java_deprecated_generator::async_argument_list(
     const t_paramlist& tparamlist,
     string result_handler_symbol,
     bool include_types) {
-  string result = "";
+  string result;
   const vector<t_field*>& fields = tparamlist.get_members();
   vector<t_field*>::const_iterator f_iter;
   bool first = true;
@@ -3916,7 +3916,7 @@ string t_java_deprecated_generator::type_to_enum(const t_type* type) {
     }
   } else if (type->is_enum()) {
     return "TType.I32";
-  } else if (type->is_struct() || type->is_exception()) {
+  } else if (type->is_struct_or_union() || type->is_exception()) {
     return "TType.STRUCT";
   } else if (type->is_map()) {
     return "TType.MAP";
@@ -4040,7 +4040,7 @@ void t_java_deprecated_generator::generate_isset_set(
 
 std::string t_java_deprecated_generator::get_enum_class_name(
     const t_type* type) {
-  string package = "";
+  string package;
   const t_program* program = type->program();
   if (program != nullptr && program != program_) {
     package = program->get_namespace(namespace_key_);
@@ -4096,7 +4096,7 @@ bool t_java_deprecated_generator::is_comparable(
     return true;
   } else if (type->is_enum()) {
     return true;
-  } else if (type->is_struct()) {
+  } else if (type->is_struct_or_union()) {
     vector<const t_type*> enclosing2;
     enclosing = enclosing ? enclosing : &enclosing2;
     for (auto iter = enclosing->begin(); iter != enclosing->end(); iter++) {
@@ -4149,7 +4149,7 @@ bool t_java_deprecated_generator::type_has_naked_binary(const t_type* type) {
     return type->is_binary();
   } else if (type->is_enum()) {
     return false;
-  } else if (type->is_struct() || type->is_exception()) {
+  } else if (type->is_struct_or_union() || type->is_exception()) {
     return false;
   } else if (type->is_map()) {
     return type_has_naked_binary(((t_map*)type)->get_key_type()) ||

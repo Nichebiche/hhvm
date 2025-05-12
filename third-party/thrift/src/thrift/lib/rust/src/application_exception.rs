@@ -16,6 +16,7 @@
 
 use std::any::Any;
 
+use crate::Result;
 use crate::deserialize::Deserialize;
 use crate::exceptions::ExceptionInfo;
 use crate::exceptions::ResultInfo;
@@ -26,7 +27,6 @@ use crate::protocol::ProtocolWriter;
 use crate::serialize::Serialize;
 use crate::thrift_protocol::ProtocolID;
 use crate::ttype::TType;
-use crate::Result;
 
 // Reference is thrift/lib/cpp/TApplicationException.h
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
@@ -50,6 +50,30 @@ pub enum ApplicationExceptionErrorCode {
     ChecksumMismatch = 14,
     Interruption = 15,
     TenantQuotaExceeded = 16,
+}
+
+impl ApplicationExceptionErrorCode {
+    pub fn from_i32(value: i32) -> Self {
+        match value {
+            1 => ApplicationExceptionErrorCode::UnknownMethod,
+            2 => ApplicationExceptionErrorCode::InvalidMessageType,
+            3 => ApplicationExceptionErrorCode::WrongMethodName,
+            4 => ApplicationExceptionErrorCode::BadSequenceID,
+            5 => ApplicationExceptionErrorCode::MissingResult,
+            6 => ApplicationExceptionErrorCode::InternalError,
+            7 => ApplicationExceptionErrorCode::ProtocolError,
+            8 => ApplicationExceptionErrorCode::InvalidTransform,
+            9 => ApplicationExceptionErrorCode::InvalidProtocol,
+            10 => ApplicationExceptionErrorCode::UnsupportedClientType,
+            11 => ApplicationExceptionErrorCode::Loadshedding,
+            12 => ApplicationExceptionErrorCode::Timeout,
+            13 => ApplicationExceptionErrorCode::InjectedFailure,
+            14 => ApplicationExceptionErrorCode::ChecksumMismatch,
+            15 => ApplicationExceptionErrorCode::Interruption,
+            16 => ApplicationExceptionErrorCode::TenantQuotaExceeded,
+            _ => ApplicationExceptionErrorCode::Unknown,
+        }
+    }
 }
 
 const TAPPLICATION_EXCEPTION_ERROR_CODE: &str = "ApplicationExceptionErrorCode";
@@ -178,7 +202,7 @@ where
     P: ProtocolReader,
 {
     /// Decodes a ApplicationException message from a Protocol stream
-    fn read(iprot: &mut P) -> Result<Self> {
+    fn rs_thrift_read(iprot: &mut P) -> Result<Self> {
         iprot.read_struct_begin(|_| ())?;
 
         let mut message = String::from("");
@@ -196,26 +220,7 @@ where
                 (TType::Stop, _) => break,
                 (TType::String, 1) => message = iprot.read_string()?,
                 (TType::I32, 2) => {
-                    type_ = match iprot.read_i32()? {
-                        1 => ApplicationExceptionErrorCode::UnknownMethod,
-                        2 => ApplicationExceptionErrorCode::InvalidMessageType,
-                        3 => ApplicationExceptionErrorCode::WrongMethodName,
-                        4 => ApplicationExceptionErrorCode::BadSequenceID,
-                        5 => ApplicationExceptionErrorCode::MissingResult,
-                        6 => ApplicationExceptionErrorCode::InternalError,
-                        7 => ApplicationExceptionErrorCode::ProtocolError,
-                        8 => ApplicationExceptionErrorCode::InvalidTransform,
-                        9 => ApplicationExceptionErrorCode::InvalidProtocol,
-                        10 => ApplicationExceptionErrorCode::UnsupportedClientType,
-                        11 => ApplicationExceptionErrorCode::Loadshedding,
-                        12 => ApplicationExceptionErrorCode::Timeout,
-                        13 => ApplicationExceptionErrorCode::InjectedFailure,
-                        14 => ApplicationExceptionErrorCode::ChecksumMismatch,
-                        15 => ApplicationExceptionErrorCode::Interruption,
-                        16 => ApplicationExceptionErrorCode::TenantQuotaExceeded,
-
-                        _ => ApplicationExceptionErrorCode::Unknown,
-                    }
+                    type_ = ApplicationExceptionErrorCode::from_i32(iprot.read_i32()?)
                 }
                 (ttype, _) => iprot.skip(ttype)?,
             };
@@ -233,7 +238,7 @@ where
     P: ProtocolWriter,
 {
     /// Writes an application exception to the Protocol stream
-    fn write(&self, oprot: &mut P) {
+    fn rs_thrift_write(&self, oprot: &mut P) {
         oprot.write_struct_begin(TAPPLICATION_EXCEPTION_ERROR_CODE);
 
         if !self.message.is_empty() {

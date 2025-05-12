@@ -15,11 +15,10 @@
  */
 
 #include <random>
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <folly/Conv.h>
 #include <folly/MapUtil.h>
-#include <folly/hash/Hash.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/test/gen-cpp2/FrozenTypes_types.h>
 

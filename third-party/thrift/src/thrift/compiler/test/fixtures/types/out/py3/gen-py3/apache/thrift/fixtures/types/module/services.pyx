@@ -30,8 +30,13 @@ from thrift.python.exceptions cimport (
     cTApplicationException,
     cTApplicationExceptionType__UNKNOWN,
 )
-from thrift.py3.server cimport ServiceInterface, RequestContext, Cpp2RequestContext
-from thrift.py3.server import RequestContext
+from thrift.py3.server cimport ServiceInterface
+from thrift.python.server_impl.request_context cimport (
+    Cpp2RequestContext,
+    RequestContext,
+    THRIFT_REQUEST_CONTEXT as __THRIFT_REQUEST_CONTEXT,
+)
+from thrift.python.server_impl.request_context import RequestContext
 from folly cimport (
   cFollyPromise,
   cFollyUnit,
@@ -43,7 +48,6 @@ from thrift.python.common cimport (
     MetadataBox as __MetadataBox,
 )
 
-from thrift.py3.server cimport THRIFT_REQUEST_CONTEXT as __THRIFT_REQUEST_CONTEXT
 from thrift.py3.types cimport make_unique
 
 cimport folly.futures

@@ -3,6 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 
+use ir::Requirement;
+use ir::SymbolRefs;
 use ir::func::DefaultValue;
 use ir::func::ExFrame;
 use ir::instr::BaseOp;
@@ -14,20 +16,18 @@ use ir::instr::MemberKey;
 use ir::instr::MemberOp;
 use ir::instr::Special;
 use ir::instr::Terminator;
-use ir::Requirement;
-use ir::SymbolRefs;
 // This is reasonable because if we compare everything then we'll end up pulling
 // in everything...
 use ir::*;
 
-use crate::cmp_eq;
-use crate::cmp_map_t;
-use crate::cmp_option;
-use crate::cmp_slice;
 use crate::CmpContext;
 use crate::CmpError;
 use crate::MapName;
 use crate::Result;
+use crate::cmp_eq;
+use crate::cmp_map_t;
+use crate::cmp_option;
+use crate::cmp_slice;
 
 pub fn cmp_ir(a: &Unit, b: &Unit) -> Result {
     cmp_unit(a, b).with_raw(|| "unit".to_string())
@@ -766,6 +766,7 @@ fn cmp_instr_hhbc((a, a_func): (&Hhbc, &Func), (b, b_func): (&Hhbc, &Func)) -> R
         | (Hhbc::ArrayUnmarkLegacy(_, _), _)
         | (Hhbc::Await(_, _), _)
         | (Hhbc::AwaitAll(_, _), _)
+        | (Hhbc::AwaitLowPri(_), _)
         | (Hhbc::BitAnd(_, _), _)
         | (Hhbc::BitNot(_, _), _)
         | (Hhbc::BitOr(_, _), _)
@@ -787,6 +788,7 @@ fn cmp_instr_hhbc((a, a_func): (&Hhbc, &Func), (b, b_func): (&Hhbc, &Func)) -> R
         | (Hhbc::CheckThis(_), _)
         | (Hhbc::ClassGetC(_, _, _), _)
         | (Hhbc::ClassGetTS(_, _), _)
+        | (Hhbc::ClassGetTSWithGenerics(_, _), _)
         | (Hhbc::ClassHasReifiedGenerics(_, _), _)
         | (Hhbc::ClassName(_, _), _)
         | (Hhbc::Clone(_, _), _)
@@ -833,6 +835,7 @@ fn cmp_instr_hhbc((a, a_func): (&Hhbc, &Func), (b, b_func): (&Hhbc, &Func)) -> R
         | (Hhbc::Print(_, _), _)
         | (Hhbc::RaiseClassStringConversionNotice(_), _)
         | (Hhbc::RecordReifiedGeneric(_, _), _)
+        | (Hhbc::ReifiedInit(_, _, _), _)
         | (Hhbc::SelfCls(_), _)
         | (Hhbc::SetG(_, _), _)
         | (Hhbc::SetImplicitContextByValue(_, _), _)
@@ -849,6 +852,7 @@ fn cmp_instr_hhbc((a, a_func): (&Hhbc, &Func), (b, b_func): (&Hhbc, &Func)) -> R
         | (Hhbc::VerifyParamTypeTS(_, _, _), _)
         | (Hhbc::VerifyRetTypeC(_, _), _)
         | (Hhbc::VerifyRetTypeTS(_, _), _)
+        | (Hhbc::VerifyTypeTS(_, _), _)
         | (Hhbc::WHResult(_, _), _)
         | (Hhbc::Yield(_, _), _)
         | (Hhbc::YieldK(_, _), _) => {}

@@ -13,7 +13,7 @@ import (
 )
 
 // (needed to ensure safety because of naive import list construction)
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = maps.Copy[map[int]int, map[int]int]
 var _ = metadata.GoUnusedProtection__
 
@@ -21,7 +21,7 @@ var _ = metadata.GoUnusedProtection__
 var (
     premadeThriftType_string = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE),
         )
     }()
     premadeThriftType_go_Name = func() *metadata.ThriftType {
@@ -34,6 +34,18 @@ var (
         return metadata.NewThriftType().SetTStruct(
             metadata.NewThriftStructType().
                 SetName("go.Tag"),
+        )
+    }()
+    premadeThriftType_go_MinimizePadding = func() *metadata.ThriftType {
+        return metadata.NewThriftType().SetTStruct(
+            metadata.NewThriftStructType().
+                SetName("go.MinimizePadding"),
+        )
+    }()
+    premadeThriftType_go_UseReflectCodec = func() *metadata.ThriftType {
+        return metadata.NewThriftType().SetTStruct(
+            metadata.NewThriftStructType().
+                SetName("go.UseReflectCodec"),
         )
     }()
 )
@@ -51,6 +63,8 @@ var premadeThriftTypesMap = func() map[string]*metadata.ThriftType {
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "string", premadeThriftType_string })
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "go.Name", premadeThriftType_go_Name })
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "go.Tag", premadeThriftType_go_Tag })
+    thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "go.MinimizePadding", premadeThriftType_go_MinimizePadding })
+    thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "go.UseReflectCodec", premadeThriftType_go_UseReflectCodec })
 
     fbthriftThriftTypesMap := make(map[string]*metadata.ThriftType, len(thriftTypesWithFullName))
     for _, value := range thriftTypesWithFullName {
@@ -184,7 +198,7 @@ func getMetadataThriftPrimitiveType(s *thrift.CodecPrimitiveSpec) *metadata.Thri
 		value = metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE
 	}
 
-	return value.Ptr()
+	return thrift.Pointerize(value)
 }
 
 func getMetadataThriftEnumType(s *thrift.CodecEnumSpec) *metadata.ThriftEnumType {

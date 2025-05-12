@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<c0812cd2d1206e4b9bc28e4e385e5d01>>
+// @generated SignedSource<<fec5d39f75a2e73d20f148ecf71785fa>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -216,8 +216,6 @@ pub struct GlobalOptions {
     pub tco_enable_function_references: bool,
     pub tco_allowed_expression_tree_visitors: Vec<String>,
     pub tco_typeconst_concrete_concrete_error: bool,
-    pub tco_enable_strict_const_semantics: isize,
-    pub tco_strict_wellformedness: isize,
     pub tco_meth_caller_only_public_visibility: bool,
     pub tco_require_extends_implements_ancestors: bool,
     pub tco_strict_value_equality: bool,
@@ -228,6 +226,7 @@ pub struct GlobalOptions {
     pub tco_type_printer_fuel: isize,
     pub tco_specify_manifold_api_key: bool,
     pub tco_profile_top_level_definitions: bool,
+    pub tco_typecheck_if_name_matches_regexp: Option<String>,
     pub tco_allow_all_files_for_module_declarations: bool,
     pub tco_allowed_files_for_module_declarations: Vec<String>,
     pub tco_record_fine_grained_dependencies: bool,
@@ -239,16 +238,21 @@ pub struct GlobalOptions {
     pub tco_log_exhaustivity_check: bool,
     pub tco_sticky_quarantine: bool,
     pub tco_lsp_invalidation: bool,
-    pub invalidate_all_folded_decls_upon_file_change: bool,
     pub tco_autocomplete_sort_text: bool,
     pub tco_extended_reasons: Option<ExtendedReasonsConfig>,
     pub tco_disable_physical_equality: bool,
     pub hack_warnings: NoneOrAllExcept<isize>,
     pub warnings_default_all: bool,
+    pub warnings_in_sandcastle: bool,
     pub tco_strict_switch: bool,
     pub tco_allowed_files_for_ignore_readonly: Vec<String>,
     pub tco_package_v2_exclude_patterns: Vec<String>,
-    pub tco_package_v2_bypass_package_check_for_class_const: bool,
+    pub tco_package_v2_allow_typedef_violations: bool,
+    pub tco_package_v2_allow_classconst_violations: bool,
+    pub tco_package_v2_allow_reifiable_tconst_violations: bool,
+    pub tco_package_v2_allow_all_tconst_violations: bool,
+    pub tco_package_v2_allow_reified_generics_violations: bool,
+    pub tco_package_v2_allow_all_generics_violations: bool,
     pub re_no_cache: bool,
     pub hh_distc_should_disable_trace_store: bool,
     pub hh_distc_exponential_backoff_num_retries: isize,
@@ -256,4 +260,7 @@ pub struct GlobalOptions {
     pub recursive_case_types: bool,
     pub class_sub_classname: bool,
     pub class_class_type: bool,
+    pub safe_abstract: bool,
+    pub needs_concrete: bool,
+    pub allow_class_string_cast: bool,
 }

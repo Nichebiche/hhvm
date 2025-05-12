@@ -14,5 +14,7 @@ import typing as _typing
 
 import sys
 import itertools
+import empty.thrift_types
+
 
 

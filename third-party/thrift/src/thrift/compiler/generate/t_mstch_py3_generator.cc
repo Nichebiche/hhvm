@@ -92,9 +92,31 @@ const t_type* get_map_val_type(const t_type& type) {
   return dynamic_cast<const t_map&>(type).get_val_type();
 }
 
+bool type_needs_convert(const t_type* type) {
+  // NB: float32 has to be rounded by cython to maintain old py3 behavior
+  return type->is_struct_or_union() || type->is_exception() ||
+      type->is_container() || type->is_float();
+}
+
+bool container_needs_convert(const t_type* type) {
+  const t_type* true_type = type->get_true_type();
+
+  if (const t_map* map_type = dynamic_cast<const t_map*>(true_type)) {
+    return container_needs_convert(map_type->get_key_type()) ||
+        container_needs_convert(map_type->get_val_type());
+  } else if (const t_list* list_type = dynamic_cast<const t_list*>(true_type)) {
+    return container_needs_convert(list_type->get_elem_type());
+  } else if (const t_set* set_type = dynamic_cast<const t_set*>(true_type)) {
+    return container_needs_convert(set_type->get_elem_type());
+  } else if (true_type->is_struct_or_union() || true_type->is_exception()) {
+    return true;
+  }
+  return false;
+}
+
 std::string get_cpp_template(const t_type& type) {
-  if (const auto* val =
-          type.find_annotation_or_null({"cpp.template", "cpp2.template"})) {
+  if (const auto* val = type.find_unstructured_annotation_or_null(
+          {"cpp.template", "cpp2.template"})) {
     return *val;
   }
   if (type.is_list()) {
@@ -111,17 +133,17 @@ std::string get_cpp_template(const t_type& type) {
 }
 
 bool is_hidden(const t_named& node) {
-  return node.has_annotation("py3.hidden") ||
-      node.find_structured_annotation_or_null(kPythonPy3HiddenUri);
+  return node.has_unstructured_annotation("py3.hidden") ||
+      node.has_structured_annotation(kPythonPy3HiddenUri);
 }
 bool is_hidden(const t_typedef& node) {
-  return node.generated() || node.has_annotation("py3.hidden") ||
-      node.find_structured_annotation_or_null(kPythonPy3HiddenUri) ||
+  return node.generated() || node.has_unstructured_annotation("py3.hidden") ||
+      node.has_structured_annotation(kPythonPy3HiddenUri) ||
       is_hidden(*node.get_true_type());
 }
 bool is_hidden(const t_type& node) {
-  return node.generated() || node.has_annotation("py3.hidden") ||
-      node.find_structured_annotation_or_null(kPythonPy3HiddenUri) ||
+  return node.generated() || node.has_unstructured_annotation("py3.hidden") ||
+      node.has_structured_annotation(kPythonPy3HiddenUri) ||
       cpp_name_resolver::is_directly_adapted(node);
 }
 
@@ -148,6 +170,8 @@ class py3_mstch_program : public mstch_program {
             {"program:unique_functions_by_return_type",
              &py3_mstch_program::unique_functions_by_return_type},
             {"program:has_types?", &py3_mstch_program::program_has_types},
+            {"program:needs_container_converters?",
+             &py3_mstch_program::needs_container_converters},
             {"program:cppNamespaces", &py3_mstch_program::getCpp2Namespace},
             {"program:py3Namespaces", &py3_mstch_program::getPy3Namespace},
             {"program:includeNamespaces",
@@ -158,11 +182,14 @@ class py3_mstch_program : public mstch_program {
             {"program:hasContainerTypes",
              &py3_mstch_program::hasContainerTypes},
             {"program:hasEnumTypes", &py3_mstch_program::hasEnumTypes},
+            {"program:hasUnionTypes", &py3_mstch_program::hasUnionTypes},
             {"program:customTemplates", &py3_mstch_program::getCustomTemplates},
             {"program:customTypes", &py3_mstch_program::getCustomTypes},
             {"program:has_stream?", &py3_mstch_program::hasStream},
             {"program:python_capi_converter?",
              &py3_mstch_program::capi_converter},
+            {"program:capi_module_prefix",
+             &py3_mstch_program::capi_module_prefix},
             {"program:intercompatible?", &py3_mstch_program::intercompatible},
             {"program:auto_migrate?", &py3_mstch_program::auto_migrate},
             {"program:gen_legacy_container_converters?",
@@ -178,6 +205,8 @@ class py3_mstch_program : public mstch_program {
             {"program:filtered_structs", &py3_mstch_program::filtered_objects},
             {"program:filtered_typedefs",
              &py3_mstch_program::filtered_typedefs},
+            {"program:inplace_migrate?", &py3_mstch_program::inplace_migrate},
+            {"program:gen_py3_cython?", &py3_mstch_program::gen_py3_cython},
         });
     gather_included_program_namespaces();
     visit_types_for_services_and_interactions();
@@ -202,6 +231,10 @@ class py3_mstch_program : public mstch_program {
 
   mstch::node hasContainerTypes() { return !containers_.empty(); }
 
+  mstch::node needs_container_converters() {
+    return !containers_.empty() && !program_->services().empty();
+  }
+
   mstch::node hasConstants() {
     for (auto constant : program_->consts()) {
       if (!is_hidden(*constant)) {
@@ -211,10 +244,9 @@ class py3_mstch_program : public mstch_program {
     return false;
   }
 
-  mstch::node hasEnumTypes() {
-    if (!program_->enums().empty()) {
-      return true;
-    }
+  mstch::node hasEnumTypes() { return !program_->enums().empty(); }
+
+  mstch::node hasUnionTypes() {
     for (const auto* ttype : objects_) {
       if (ttype->is_union()) {
         return true;
@@ -298,9 +330,21 @@ class py3_mstch_program : public mstch_program {
 
   mstch::node capi_converter() { return has_option("python_capi_converter"); }
 
+  mstch::node capi_module_prefix() {
+    return python::gen_capi_module_prefix_impl(program_);
+  }
+
   mstch::node intercompatible() { return has_option("intercompatible"); }
 
   mstch::node auto_migrate() { return has_option("auto_migrate"); }
+
+  mstch::node gen_py3_cython() {
+    return !(has_option("auto_migrate") || has_option("inplace_migrate"));
+  }
+
+  // this option triggers generation of py3 structs as wrappers around
+  // thrift-python structs
+  mstch::node inplace_migrate() { return has_option("inplace_migrate"); }
 
   mstch::node legacy_container_converters() {
     return has_option("gen_legacy_container_converters");
@@ -571,12 +615,10 @@ class py3_mstch_function : public mstch_function {
   mstch::node cppName() { return cppName_; }
 
   mstch::node event_based() {
-    return function_->get_annotation("thread") == "eb" ||
-        function_->find_structured_annotation_or_null(
-            kCppProcessInEbThreadUri) ||
-        interface_->find_annotation_or_null("process_in_event_base") ||
-        interface_->find_structured_annotation_or_null(
-            kCppProcessInEbThreadUri);
+    return function_->get_unstructured_annotation("thread") == "eb" ||
+        function_->has_structured_annotation(kCppProcessInEbThreadUri) ||
+        interface_->has_unstructured_annotation("process_in_event_base") ||
+        interface_->has_structured_annotation(kCppProcessInEbThreadUri);
   }
 
   mstch::node stack_arguments() {
@@ -642,6 +684,14 @@ class py3_mstch_type : public mstch_type {
             {"type:flexibleBinary?", &py3_mstch_type::isFlexibleBinary},
             {"type:customBinaryType?", &py3_mstch_type::isCustomBinaryType},
             {"type:simple?", &py3_mstch_type::isSimple},
+            {"type:needs_convert?", &py3_mstch_type::needs_convert},
+            {"type:is_container_of_struct?",
+             &py3_mstch_type::is_container_of_struct},
+            {"type:elem_needs_convert?",
+             &py3_mstch_type::element_needs_convert},
+            {"type:key_needs_convert?", &py3_mstch_type::map_key_needs_convert},
+            {"type:val_needs_convert?",
+             &py3_mstch_type::map_value_needs_convert},
             {"type:resolves_to_complex_return?",
              &py3_mstch_type::resolves_to_complex_return},
 
@@ -718,7 +768,9 @@ class py3_mstch_type : public mstch_type {
     return is_list_of_string() || is_set_of_string();
   }
 
-  mstch::node cythonTypeNoneable() { return !is_number() && has_cython_type(); }
+  mstch::node cythonTypeNoneable() {
+    return !(is_number() || type_->is_container());
+  }
 
   mstch::node hasCythonType() { return has_cython_type(); }
 
@@ -732,16 +784,51 @@ class py3_mstch_type : public mstch_type {
 
   mstch::node isCustomBinaryType() { return is_custom_binary_type(); }
 
+  // types that don't have an underlying C++ type
+  // i.e., structs, unions, exceptions all enclose a C++ type
   mstch::node isSimple() {
     return (type_->is_primitive_type() || type_->is_enum() ||
             type_->is_container()) &&
         !is_custom_binary_type();
   }
 
+  // types that need conversion to py3 if accessed from thrift-python struct
+  // fields
+  mstch::node needs_convert() { return type_needs_convert(type_); }
+
+  mstch::node is_container_of_struct() {
+    return type_->is_container() && container_needs_convert(type_);
+  }
+
+  // type:list_elem_type etc. is defined in mstch_objects, so the returned
+  // type node doesn't define type:needs_convert
+  mstch::node element_needs_convert() {
+    if (type_->is_list()) {
+      return type_needs_convert(get_list_elem_type(*type_));
+    } else if (type_->is_set()) {
+      return type_needs_convert(get_set_elem_type(*type_));
+    }
+    return false;
+  }
+
+  mstch::node map_key_needs_convert() {
+    if (type_->is_map()) {
+      return type_needs_convert(get_map_key_type(*type_));
+    }
+    return false;
+  }
+
+  mstch::node map_value_needs_convert() {
+    if (type_->is_map()) {
+      return type_needs_convert(get_map_val_type(*type_));
+    }
+    return false;
+  }
+
   mstch::node resolves_to_complex_return() {
     return resolved_type_->is_container() ||
-        resolved_type_->is_string_or_binary() || resolved_type_->is_struct() ||
-        resolved_type_->is_exception();
+        resolved_type_->is_string_or_binary() ||
+        resolved_type_->is_struct_or_union() || resolved_type_->is_exception();
   }
 
   const std::string& get_flat_name() const { return cached_props_.flat_name(); }
@@ -804,7 +891,11 @@ class py3_mstch_type : public mstch_type {
     return get_set_elem_type(*type_)->is_string_or_binary();
   }
 
-  bool has_cython_type() const { return !type_->is_container(); }
+  bool has_cython_type() const {
+    return has_option("inplace_migrate")
+        ? !(type_->is_container() || type_->is_struct_or_union())
+        : !type_->is_container();
+  }
 
   bool is_iobuf() const { return cached_props_.cpp_type() == "folly::IOBuf"; }
 
@@ -869,6 +960,7 @@ class py3_mstch_struct : public mstch_struct {
             {"struct:has_hidden_fields?", &py3_mstch_struct::has_hidden_fields},
             {"struct:has_defaulted_field?",
              &py3_mstch_struct::has_defaulted_field},
+            {"struct:allow_inheritance?", &py3_mstch_struct::allow_inheritance},
         });
     py3_fields_ = struct_->fields().copy();
     py3_fields_.erase(
@@ -876,9 +968,8 @@ class py3_mstch_struct : public mstch_struct {
             py3_fields_.begin(),
             py3_fields_.end(),
             [this](const t_field* field) {
-              bool hidden = field->has_annotation("py3.hidden") ||
-                  field->find_structured_annotation_or_null(
-                      kPythonPy3HiddenUri);
+              bool hidden = field->has_unstructured_annotation("py3.hidden") ||
+                  field->has_structured_annotation(kPythonPy3HiddenUri);
               this->hidden_fields |= hidden;
               return hidden;
             }),
@@ -887,17 +978,27 @@ class py3_mstch_struct : public mstch_struct {
 
   mstch::node getSize() { return py3_fields_.size(); }
 
+  mstch::node allow_inheritance() {
+    return struct_->has_structured_annotation(
+        kPythonMigrationBlockingAllowInheritanceUri);
+  }
+
   mstch::node isStructOrderable() {
-    return cpp2::is_orderable(*struct_) &&
-        !struct_->has_annotation("no_default_comparators");
+    return cpp2::is_orderable(
+               *struct_,
+               !context_.options.count(
+                   "disable_custom_type_ordering_if_structure_has_uri")) &&
+        !struct_->has_unstructured_annotation("no_default_comparators");
   }
 
   mstch::node cppNonComparable() {
-    return struct_->has_annotation({"cpp.noncomparable", "cpp2.noncomparable"});
+    return struct_->has_unstructured_annotation(
+        {"cpp.noncomparable", "cpp2.noncomparable"});
   }
 
   mstch::node cppNonCopyable() {
-    return struct_->has_annotation({"cpp.noncopyable", "cpp2.noncopyable"});
+    return struct_->has_unstructured_annotation(
+        {"cpp.noncopyable", "cpp2.noncopyable"});
   }
 
   mstch::node hasExceptionMessage() {
@@ -970,6 +1071,9 @@ class py3_mstch_field : public mstch_field {
             {"field:iobuf_ref?", &py3_mstch_field::isIOBufRef},
             {"field:has_ref_accessor?", &py3_mstch_field::hasRefAccessor},
             {"field:hasDefaultValue?", &py3_mstch_field::hasDefaultValue},
+            {"field:optional_default?",
+             &py3_mstch_field::has_optional_default_value},
+            {"field:user_default_value", &py3_mstch_field::user_default_value},
             {"field:PEP484Optional?", &py3_mstch_field::isPEP484Optional},
             {"field:isset?", &py3_mstch_field::isSet},
             {"field:cppName", &py3_mstch_field::cppName},
@@ -1014,6 +1118,29 @@ class py3_mstch_field : public mstch_field {
 
   bool has_default_value() {
     return !is_ref() && (field_->get_value() != nullptr || !is_optional_());
+  }
+
+  bool has_optional_default_value() {
+    return is_optional_() && field_->get_value() != nullptr;
+  }
+
+  mstch::node user_default_value() {
+    const t_const_value* value = field_->get_value();
+    if (!value) {
+      return mstch::node();
+    }
+    if (value->is_empty()) {
+      auto true_type = field_->get_type()->get_true_type();
+      if ((true_type->is_list() || true_type->is_set()) &&
+          value->kind() != t_const_value::CV_LIST) {
+        const_cast<t_const_value*>(value)->convert_empty_map_to_list();
+      }
+      if (true_type->is_map() && value->kind() != t_const_value::CV_MAP) {
+        const_cast<t_const_value*>(value)->convert_empty_list_to_map();
+      }
+    }
+    return context_.const_value_factory->make_mstch_object(
+        value, context_, pos_, nullptr, nullptr);
   }
 
   mstch::node boxed_ref() {
@@ -1088,9 +1215,10 @@ class py3_mstch_enum : public mstch_enum {
   }
 
   mstch::node hasFlags() {
-    return enum_->has_annotation("py3.flags") ||
-        enum_->find_structured_annotation_or_null(kPythonFlagsUri);
+    return enum_->has_unstructured_annotation("py3.flags") ||
+        enum_->has_structured_annotation(kPythonFlagsUri);
   }
+
   mstch::node cpp_name() { return cpp2::get_name(enum_); }
 };
 
@@ -1166,8 +1294,8 @@ class py3_mstch_const_value : public mstch_const_value {
   /*
    * Use this function (instead of the version used by C++) to render unicode
    * strings, i.e., normal python strings "".
-   * For binary bytes b"", use string_value, which has octal escapes for unicode
-   * characters.
+   * For binary bytes b"", use string_value, which has octal escapes for
+   * unicode characters.
    */
   mstch::node unicode_value() {
     if (type_ != cv::CV_STRING) {
@@ -1242,8 +1370,7 @@ class py3_mstch_deprecated_annotation : public mstch_deprecated_annotation {
 std::string py3_mstch_program::visit_type_impl(
     const t_type* orig_type, bool fromTypeDef) {
   bool hasPy3EnableCppAdapterAnnot =
-      orig_type->find_structured_annotation_or_null(
-          kPythonPy3EnableCppAdapterUri);
+      orig_type->has_structured_annotation(kPythonPy3EnableCppAdapterUri);
   auto trueType = orig_type->get_true_type();
   auto baseType = context_.type_factory->make_mstch_object(orig_type, context_);
   py3_mstch_type* type = dynamic_cast<py3_mstch_type*>(baseType.get());
@@ -1332,7 +1459,7 @@ void validate_no_reserved_key_in_namespace(
 // as enum member or union field names (thrift-py3).
 namespace enum_member_union_field_names_validator {
 void validate(const t_named& node, const std::string& name, sema_context& ctx) {
-  auto pyname = node.get_annotation("py3.name", &name);
+  auto pyname = node.get_unstructured_annotation("py3.name", &name);
   if (const t_const* annot =
           node.find_structured_annotation_or_null(kPythonNameUri)) {
     if (auto annotation_name =
@@ -1473,7 +1600,7 @@ py3_mstch_type::cached_properties& py3_mstch_type::get_cached_props(
   // @python.Py3EnableCppAdapter treats C++ Adapter on typedef as a custom
   // cpp.type.
   auto true_type = type->get_true_type();
-  if (type->find_structured_annotation_or_null(kPythonPy3EnableCppAdapterUri)) {
+  if (type->has_structured_annotation(kPythonPy3EnableCppAdapterUri)) {
     return c.cache
         ->emplace(
             type,
@@ -1560,6 +1687,7 @@ void t_mstch_py3_generator::generate_file(
 void t_mstch_py3_generator::generate_types() {
   std::vector<std::string> autoMigrateFilesWithTypeContext{
       "types.py",
+      "types_auto_FBTHRIFT_ONLY_DO_NOT_USE.py",
   };
 
   std::vector<std::string> autoMigrateFilesNoTypeContext{
@@ -1604,6 +1732,12 @@ void t_mstch_py3_generator::generate_types() {
 
   if (has_option("enable_container_pickling_DO_NOT_USE")) {
     generate_file("__init__.py", FileType::TypesFile, generateRootPath_);
+  }
+  if (has_option("inplace_migrate")) {
+    generate_file(
+        "types_inplace_FBTHRIFT_ONLY_DO_NOT_USE.py",
+        FileType::TypesFile,
+        generateRootPath_);
   }
   for (const auto& file : converterFiles) {
     generate_file(file, FileType::NotTypesFile, generateRootPath_);

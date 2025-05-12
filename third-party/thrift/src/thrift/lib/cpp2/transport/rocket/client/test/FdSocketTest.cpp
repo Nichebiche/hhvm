@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <folly/testing/TestUtil.h>
 
 #include <thrift/lib/cpp2/test/gen-cpp2/TestServiceAsyncClient.h>
@@ -53,7 +53,7 @@ struct FdClientBatchingTest : public testing::Test {
 
   void init() {
     folly::SocketAddress sockAddr;
-    sockAddr.setFromPath((tempDir_.path() / "fd-test-socket").string());
+    sockAddr.setFromPath((tempDir_.path() / "sock").string());
 
     runner_ = std::make_unique<ScopedServerInterfaceThread>(
         std::make_shared<EchoInterface>(), sockAddr);

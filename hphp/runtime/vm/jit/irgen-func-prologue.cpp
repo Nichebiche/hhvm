@@ -17,19 +17,14 @@
 #include "hphp/runtime/vm/jit/irgen-func-prologue.h"
 
 #include "hphp/runtime/base/array-iterator.h"
-#include "hphp/runtime/base/attr.h"
 #include "hphp/runtime/base/coeffects-config.h"
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
-#include "hphp/runtime/ext/asio/ext_resumable-wait-handle.h"
 #include "hphp/runtime/vm/bytecode.h"
 #include "hphp/runtime/vm/func.h"
-#include "hphp/runtime/vm/hhbc.h"
 #include "hphp/runtime/vm/reified-generics-info.h"
-#include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/srckey.h"
 
 #include "hphp/runtime/vm/jit/extra-data.h"
-#include "hphp/runtime/vm/jit/fixup.h"
 #include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/irgen.h"
@@ -615,8 +610,7 @@ void emitInitClosureLocals(IRGS& env, const Func* callee) {
     auto const slot = index + (cls->hasClosureCoeffectsProp() ? 1 : 0);
     auto const type =
       typeFromRAT(cls->declPropRepoAuthType(slot), callee->cls()) & TCell;
-    auto const addr = ldPropAddr(env, closure, nullptr, cls, slot, type);
-    return gen(env, LdMem, type, addr);
+    return ldClosureArg(env, closure, cls, slot, type);
   };
 
   // Move props and skip incref when closure refcount is 1 and going to be

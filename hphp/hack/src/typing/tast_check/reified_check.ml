@@ -51,7 +51,7 @@ let valid_newable_hint env (tp_pos, tp_name) (pos, hint) =
 let verify_has_consistent_bound env (tparam : Tast.tparam) =
   let upper_bounds =
     (* a newable type parameter cannot be higher-kinded/require arguments *)
-    Typing_set.elements (Env.get_upper_bounds env (snd tparam.tp_name) [])
+    Typing_set.elements (Env.get_upper_bounds env (snd tparam.tp_name))
   in
   let bound_classes =
     List.filter_map upper_bounds ~f:(fun ty ->
@@ -97,7 +97,7 @@ let verify_has_consistent_bound env (tparam : Tast.tparam) =
  *
  * where Tf does not exist at runtime.
  *)
-let verify_targ_valid env reification tparam targ =
+let verify_targ_valid ?special_code env reification tparam targ =
   (* There is some subtlety here. If a type *parameter* is declared reified,
    * even if it is soft, we require that the argument be concrete or reified, not soft
    * reified or erased *)
@@ -107,13 +107,22 @@ let verify_targ_valid env reification tparam targ =
     | Nast.SoftReified ->
       let (decl_pos, param_name) = tparam.tp_name in
       let emit_error pos arg_info =
-        Typing_error_utils.add_typing_error
-          ~env:(Tast_env.tast_env_as_typing_env env)
+        let err =
           Typing_error.(
             primary
             @@ Primary.Invalid_reified_arg
                  { pos; param_name; decl_pos; arg_info })
+        in
+        let err =
+          match special_code with
+          | Some code -> Typing_error.with_code ~code err
+          | None -> err
+        in
+        Typing_error_utils.add_typing_error
+          ~env:(Tast_env.tast_env_as_typing_env env)
+          err
       in
+
       validator#validate_hint
         (Tast_env.tast_env_as_typing_env env)
         (snd targ)
@@ -137,7 +146,7 @@ let verify_targ_valid env reification tparam targ =
   if Attributes.mem UA.uaNewable tparam.tp_user_attributes then
     valid_newable_hint env tparam.tp_name (snd targ)
 
-let verify_call_targs env expr_pos decl_pos tparams targs =
+let verify_call_targs ?special_code env expr_pos decl_pos tparams targs =
   (if tparams_has_reified tparams then
     let tparams_length = List.length tparams in
     let targs_length = List.length targs in
@@ -161,18 +170,18 @@ let verify_call_targs env expr_pos decl_pos tparams targs =
         primary @@ Primary.Require_args_reify { decl_pos; pos = expr_pos })
   else
     (* Unequal_lengths case handled elsewhere *)
-    List.iter2 tparams targs ~f:(verify_targ_valid env Type_validator.Resolved)
+    List.iter2
+      tparams
+      targs
+      ~f:(verify_targ_valid ?special_code env Type_validator.Resolved)
     |> ignore
 
-let rec get_ft_tparams env fun_ty =
+let get_ft_tparams env fun_ty =
   let fun_ty = Tast_env.strip_dynamic env fun_ty in
-  match get_node fun_ty with
-  | Tnewtype (name, _, ty1)
-    when String.equal name SN.Classes.cSupportDyn
-         || String.equal name SN.Classes.cFunctionRef ->
-    get_ft_tparams env ty1
-  | Tfun ({ ft_tparams; _ } as fun_ty) -> Some (ft_tparams, fun_ty)
-  | _ -> None
+  match Tast_env.get_underlying_function_type env fun_ty with
+  | None -> None
+  | Some (_, fun_ty) ->
+    Some (fun_ty.ft_tparams, get_ft_is_function_pointer fun_ty)
 
 let handler =
   object
@@ -202,7 +211,7 @@ let handler =
         begin
           match get_node ty with
           (* If we get Tgeneric here, the underlying type was reified *)
-          | Tgeneric (ci, _) when String.equal ci class_id ->
+          | Tgeneric ci when String.equal ci class_id ->
             Typing_error_utils.add_typing_error
               ~env:(Tast_env.tast_env_as_typing_env env)
               Typing_error.(
@@ -216,16 +225,33 @@ let handler =
           verify_call_targs env pos (get_pos fun_ty) ft_tparams targs
         | None -> ()
       end
-      | (_, pos, Call { func = (fun_ty, _, _); targs; _ }) ->
+      | (_, pos, Call { func = (fun_ty, _, expr); targs; _ }) ->
+        let special_code =
+          (* If need be, we can extend this special casing to all
+           * HH\ReifiedGenerics functions. *)
+          Typing_error.(
+            match expr with
+            | Id (_, id)
+              when String.(id = SN.StdlibFunctions.get_class_from_type) ->
+              Some Error_code.InvalidReifiedArgumentFIXMEable
+            | _ -> None)
+        in
         let (env, efun_ty) = Env.expand_type env fun_ty in
         (match get_ft_tparams env efun_ty with
-        | Some (ft_tparams, ty) when not @@ get_ft_is_function_pointer ty ->
-          verify_call_targs env pos (get_pos efun_ty) ft_tparams targs
+        | Some (ft_tparams, is_function_pointer) when not @@ is_function_pointer
+          ->
+          verify_call_targs
+            ?special_code
+            env
+            pos
+            (get_pos efun_ty)
+            ft_tparams
+            targs
         | _ -> ())
       | (_, pos, New ((ty, _, CI (_, class_id)), targs, _, _, _)) ->
         let (env, ty) = Env.expand_type env ty in
         (match get_node ty with
-        | Tgeneric (ci, _tyargs) when String.equal ci class_id ->
+        | Tgeneric ci when String.equal ci class_id ->
           (* ignoring type arguments here: If we get a Tgeneric here, the underlying type
              parameter must have been newable and reified, neither of which his allowed for
              higher-kinded type-parameters *)

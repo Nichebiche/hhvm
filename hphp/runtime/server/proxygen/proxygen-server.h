@@ -158,8 +158,7 @@ struct ProxygenServer : Server, folly::AsyncTimeout {
   int getLibEventConnectionCount() override;
   uint32_t getPendingTransportsCount();
   bool enableSSL(int port) override;
-  bool enableSSLWithPlainText() override;
-
+  
   void setMaxThreadCount(int max) {
     return m_dispatcher.setMaxThreadCount(max);
   }
@@ -193,7 +192,7 @@ struct ProxygenServer : Server, folly::AsyncTimeout {
 
      uint32_t getSampleRate() const override {
        return m_sample_rate_;
-     };
+     }
 
      void loopSample(int64_t busytime /* usec */, int64_t idletime) override;
 

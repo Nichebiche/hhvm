@@ -14,8 +14,10 @@
    | license@php.net so we can mail you a copy immediately.               |
    +----------------------------------------------------------------------+
 */
-#ifndef VARIANTCONTROLLER_H
-#define VARIANTCONTROLLER_H
+
+#pragma once
+
+#ifndef HPHP_OSS
 
 #include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/array-iterator.h"
@@ -250,6 +252,13 @@ struct VariantControllerImpl {
                      VariantType&& v) {
     map.setIntishCast(idx, k, std::move(v));
   }
+
+  // this function is only added to keep the FBObject decoder buildable it cannot be
+  // called.
+  static void mapSet(StructDictInit& /* map */, int64_t /* k */,
+                     VariantType&& /* v */) {
+    throw std::runtime_error("mapSet for StructDictInit with int key is not supported");
+  }
   static int64_t mapSize(const MapType& map) { return map.size(); }
   static int64_t mapSize(const_variant_ref map) { return map.toArray().size(); }
   static ArrayIter mapIterator(const MapType& map) {
@@ -272,6 +281,17 @@ struct VariantControllerImpl {
         return empty_vec_array();
       case VariantControllerHackArraysMode::OFF:
         return empty_dict_array();
+    }
+  }
+  static VectorType createVector(size_t size) {
+    switch (HackArraysMode) {
+      case VariantControllerHackArraysMode::ON:
+      case VariantControllerHackArraysMode::ON_AND_KEYSET:
+      case VariantControllerHackArraysMode::MIGRATORY:
+      case VariantControllerHackArraysMode::POST_MIGRATION:
+          return Array::attach(VanillaVec::MakeReserveVec(size));
+      case VariantControllerHackArraysMode::OFF:
+          return Array::attach(VanillaDict::MakeReserveDict(size));
     }
   }
   static int64_t vectorSize(const VectorType& vec) {
@@ -299,6 +319,9 @@ struct VariantControllerImpl {
   // set methods
   static SetType createSet() {
     return empty_keyset();
+  }
+  static SetType createSet(size_t size) {
+    return Array::attach(VanillaKeyset::MakeReserveSet(size));
   }
   static int64_t setSize(const SetType& set) {
     return set.size();
@@ -373,4 +396,4 @@ using VariantControllerPostHackArrayMigration =
 }
 
 
-#endif
+#endif // HPHP_OSS

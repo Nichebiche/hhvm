@@ -127,10 +127,8 @@ module ExprDepTy = struct
             (env, mk (r_dep_ty, Tclass (c, Exact, tyl)))
           | _ -> apply env ty
         )
-      | (_, Tgeneric (s, _tyargs)) when DependentKind.is_generic_dep_ty s ->
-        (* TODO(T69551141) handle type arguments *)
-        (env, ty)
-      | (_, Tgeneric (name, _)) ->
+      | (_, Tgeneric s) when DependentKind.is_generic_dep_ty s -> (env, ty)
+      | (_, Tgeneric name) ->
         if SSet.mem name seen then
           (env, ty)
         else
@@ -148,8 +146,6 @@ module ExprDepTy = struct
       | (r, Toption ty) ->
         let (env, ty) = make ~seen env ty in
         (env, mk (r, Toption ty))
-      | (_, Tunapplied_alias _) ->
-        Typing_defs.error_Tunapplied_alias_in_illegal_context ()
       | (r, Tnewtype (n, p, ty)) ->
         let (env, ty) = make ~seen env ty in
         (env, mk (r, Tnewtype (n, p, ty)))

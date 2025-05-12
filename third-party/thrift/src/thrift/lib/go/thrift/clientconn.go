@@ -25,12 +25,12 @@ import (
 
 // ClientConn holds all the connection information for a thrift client
 type ClientConn struct {
-	proto types.Protocol
+	proto Protocol
 	seqID int32
 }
 
 // NewClientConn creates a new ClientConn object using a protocol
-func NewClientConn(proto types.Protocol) ClientConn {
+func NewClientConn(proto Protocol) ClientConn {
 	return ClientConn{
 		proto: proto,
 	}
@@ -42,10 +42,10 @@ func (cc *ClientConn) Close() error {
 }
 
 // SendMsg sends a request to a given thrift endpoint
-func (cc *ClientConn) SendMsg(ctx context.Context, method string, req types.IRequest, msgType types.MessageType) error {
+func (cc *ClientConn) SendMsg(ctx context.Context, method string, req types.WritableStruct, msgType types.MessageType) error {
 	cc.seqID++
 
-	if err := setRequestHeaders(ctx, cc.proto); err != nil {
+	if err := SetRequestHeaders(ctx, cc.proto); err != nil {
 		return fmt.Errorf("Failed to set request headers: %w", err)
 	}
 
@@ -65,7 +65,7 @@ func (cc *ClientConn) SendMsg(ctx context.Context, method string, req types.IReq
 }
 
 // RecvMsg receives the response from a call to a thrift endpoint
-func (cc *ClientConn) RecvMsg(ctx context.Context, method string, res types.IResponse) error {
+func (cc *ClientConn) RecvMsg(ctx context.Context, method string, res types.ReadableStruct) error {
 	recvMethod, mTypeID, seqID, err := cc.proto.ReadMessageBegin()
 
 	if err != nil {
@@ -85,21 +85,16 @@ func (cc *ClientConn) RecvMsg(ctx context.Context, method string, res types.IRes
 		if err := res.Read(cc.proto); err != nil {
 			return fmt.Errorf("Failed to read message body: %w", err)
 		}
-
 		return cc.proto.ReadMessageEnd()
 	case types.EXCEPTION:
-		err := types.NewApplicationException(types.UNKNOWN_APPLICATION_EXCEPTION, "Unknown exception")
-
-		recvdErr, readErr := err.Read(cc.proto)
-
-		if readErr != nil {
-			return readErr
+		appException := types.NewApplicationException(types.UNKNOWN_APPLICATION_EXCEPTION, "Unknown exception")
+		if err := appException.Read(cc.proto); err != nil {
+			return err
 		}
-
-		if msgEndErr := cc.proto.ReadMessageEnd(); msgEndErr != nil {
-			return msgEndErr
+		if err := cc.proto.ReadMessageEnd(); err != nil {
+			return err
 		}
-		return recvdErr
+		return appException
 	default:
 		return types.NewApplicationException(types.INVALID_MESSAGE_TYPE_EXCEPTION, fmt.Sprintf("%s failed: invalid message type", method))
 	}

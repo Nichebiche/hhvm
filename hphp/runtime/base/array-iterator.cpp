@@ -15,18 +15,16 @@
 */
 #include "hphp/runtime/base/array-iterator.h"
 
-#include <algorithm>
 
 #include <folly/Likely.h>
 
 #include "hphp/runtime/base/array-data.h"
 #include "hphp/runtime/base/collections.h"
 #include "hphp/runtime/base/builtin-functions.h"
-#include "hphp/runtime/base/tv-refcount.h"
 
 namespace HPHP {
 
-TRACE_SET_MOD(runtime);
+TRACE_SET_MOD(runtime)
 
 //////////////////////////////////////////////////////////////////////
 

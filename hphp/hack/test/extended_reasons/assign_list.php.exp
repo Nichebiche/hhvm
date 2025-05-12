@@ -109,20 +109,7 @@ File assign_list.php, line 9, character 22 - line 9, character 25:
 
 as the type of the local variable
 
-which itself flows into this type variable
-
-File assign_list.php, line 9, character 12 - line 9, character 13:
-
- 6 | function foo(Sub $_): void {}
- 7 | 
- 8 | function bar_1((string,Super,bool) $xyz): void {
- 9 |   list($_, »$y«, $_) = $xyz;
-10 |   foo($y);
-11 | }
-
-via an assignment
-
-which I solved to this hint
+which itself flows into this hint
 
 File assign_list.php, line 8, character 24 - line 8, character 28:
 
@@ -132,6 +119,8 @@ File assign_list.php, line 8, character 24 - line 8, character 28:
  9 |   list($_, $y, $_) = $xyz;
 10 |   foo($y);
 11 | }
+
+via an assignment
 
 which is defined here
 

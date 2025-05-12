@@ -9,6 +9,7 @@ package test
 import (
     "context"
     "fmt"
+    "io"
     "reflect"
 
     thrift "github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
@@ -18,8 +19,9 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = context.Background
 var _ = fmt.Printf
+var _ = io.EOF
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = metadata.GoUnusedProtection__
 
 type HsTestService interface {
@@ -27,8 +29,8 @@ type HsTestService interface {
 }
 
 type HsTestServiceClientInterface interface {
-    thrift.ClientInterface
-    HsTestService
+    io.Closer
+    Init(ctx context.Context, int1 int64) (int64, error)
 }
 
 type HsTestServiceClient struct {
@@ -43,8 +45,12 @@ func NewHsTestServiceChannelClient(channel thrift.RequestChannel) *HsTestService
     }
 }
 
-func NewHsTestServiceClient(prot thrift.Protocol) *HsTestServiceClient {
-    return NewHsTestServiceChannelClient(thrift.NewSerialChannel(prot))
+func NewHsTestServiceClient(prot thrift.DO_NOT_USE_ChannelWrapper) *HsTestServiceClient {
+    var channel thrift.RequestChannel
+    if prot != nil {
+        channel = prot.DO_NOT_USE_WrapChannel()
+    }
+    return NewHsTestServiceChannelClient(channel)
 }
 
 func (c *HsTestServiceClient) Close() error {
@@ -52,22 +58,22 @@ func (c *HsTestServiceClient) Close() error {
 }
 
 func (c *HsTestServiceClient) Init(ctx context.Context, int1 int64) (int64, error) {
-    in := &reqHsTestServiceInit{
+    fbthriftReq := &reqHsTestServiceInit{
         Int1: int1,
     }
-    out := newRespHsTestServiceInit()
-    err := c.ch.Call(ctx, "init", in, out)
-    if err != nil {
-        return 0, err
+    fbthriftResp := newRespHsTestServiceInit()
+    fbthriftErr := c.ch.SendRequestResponse(ctx, "init", fbthriftReq, fbthriftResp)
+    if fbthriftErr != nil {
+        return 0, fbthriftErr
     }
-    return out.GetSuccess(), nil
+    return fbthriftResp.GetSuccess(), nil
 }
 
 
 type HsTestServiceProcessor struct {
     processorFunctionMap map[string]thrift.ProcessorFunction
     functionServiceMap   map[string]string
-    handler            HsTestService
+    handler              HsTestService
 }
 
 func NewHsTestServiceProcessor(handler HsTestService) *HsTestServiceProcessor {
@@ -117,16 +123,16 @@ type procFuncHsTestServiceInit struct {
 // Compile time interface enforcer
 var _ thrift.ProcessorFunction = (*procFuncHsTestServiceInit)(nil)
 
-func (p *procFuncHsTestServiceInit) Read(iprot thrift.Decoder) (thrift.Struct, thrift.Exception) {
+func (p *procFuncHsTestServiceInit) Read(decoder thrift.Decoder) (thrift.Struct, error) {
     args := newReqHsTestServiceInit()
-    if err := args.Read(iprot); err != nil {
+    if err := args.Read(decoder); err != nil {
         return nil, err
     }
-    iprot.ReadMessageEnd()
+    decoder.ReadMessageEnd()
     return args, nil
 }
 
-func (p *procFuncHsTestServiceInit) Write(seqId int32, result thrift.WritableStruct, oprot thrift.Encoder) (err thrift.Exception) {
+func (p *procFuncHsTestServiceInit) Write(seqId int32, result thrift.WritableStruct, encoder thrift.Encoder) (err error) {
     var err2 error
     messageType := thrift.REPLY
     switch result.(type) {
@@ -134,16 +140,16 @@ func (p *procFuncHsTestServiceInit) Write(seqId int32, result thrift.WritableStr
         messageType = thrift.EXCEPTION
     }
 
-    if err2 = oprot.WriteMessageBegin("init", messageType, seqId); err2 != nil {
+    if err2 = encoder.WriteMessageBegin("init", messageType, seqId); err2 != nil {
         err = err2
     }
-    if err2 = result.Write(oprot); err == nil && err2 != nil {
+    if err2 = result.Write(encoder); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    if err2 = encoder.WriteMessageEnd(); err == nil && err2 != nil {
         err = err2
     }
-    if err2 = oprot.Flush(); err == nil && err2 != nil {
+    if err2 = encoder.Flush(); err == nil && err2 != nil {
         err = err2
     }
     return err

@@ -16,17 +16,8 @@
 
 #include "hphp/runtime/vm/jit/mcgen.h"
 
-#include "hphp/runtime/vm/jit/mcgen-async.h"
-#include "hphp/runtime/vm/jit/mcgen-prologue.h"
-#include "hphp/runtime/vm/jit/mcgen-translate.h"
-
-#include "hphp/runtime/vm/jit/prof-data.h"
 #include "hphp/runtime/vm/jit/tc.h"
-#include "hphp/runtime/vm/jit/trans-db.h"
-#include "hphp/runtime/vm/jit/unique-stubs.h"
 #include "hphp/runtime/vm/jit/unwind-itanium.h"
-#include "hphp/runtime/vm/jit/vtune-jit.h"
-#include "hphp/runtime/vm/jit/write-lease.h"
 
 #include "hphp/runtime/vm/debug/debug.h"
 
@@ -35,7 +26,7 @@
 #include "hphp/util/timer.h"
 #include "hphp/util/trace.h"
 
-TRACE_SET_MOD(mcg);
+TRACE_SET_MOD(mcg)
 
 namespace HPHP::jit {
 

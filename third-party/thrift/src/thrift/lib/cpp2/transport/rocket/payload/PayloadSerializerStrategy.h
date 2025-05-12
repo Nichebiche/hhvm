@@ -31,6 +31,8 @@ namespace apache::thrift::rocket {
 template <typename Child>
 class PayloadSerializerStrategy {
  public:
+  bool supportsChecksum() { return child_.supportsChecksum(); }
+
   template <class T>
   FOLLY_ALWAYS_INLINE folly::Try<T> unpackAsCompressed(
       Payload&& payload, bool decodeMetadataUsingBinary) {
@@ -97,6 +99,18 @@ class PayloadSerializerStrategy {
   FOLLY_ALWAYS_INLINE size_t
   unpackBinary(T& output, folly::io::Cursor& cursor) {
     return child_.unpackBinary(output, cursor);
+  }
+
+  FOLLY_ALWAYS_INLINE std::unique_ptr<folly::IOBuf> compressBuffer(
+      std::unique_ptr<folly::IOBuf>&& buffer,
+      CompressionAlgorithm compressionAlgorithm) {
+    return child_.compressBuffer(std::move(buffer), compressionAlgorithm);
+  }
+
+  FOLLY_ALWAYS_INLINE std::unique_ptr<folly::IOBuf> uncompressBuffer(
+      std::unique_ptr<folly::IOBuf>&& buffer,
+      CompressionAlgorithm compressionAlgorithm) {
+    return child_.uncompressBuffer(std::move(buffer), compressionAlgorithm);
   }
 
   virtual ~PayloadSerializerStrategy() = default;

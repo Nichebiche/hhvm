@@ -24,23 +24,68 @@ type t = {
   kernelspec: Hh_json.json;
 }
 
+(* Normalize the "source" field (string list) into a single string.
+   * Note that Jupyter docs don't specify whether such source lines should
+   * end in "\n" or not and we receive notebooks in either format,
+   * so we allow either and try to do the right thing.
+   * https://ipython.org/ipython-doc/3/notebook/nbformat.html
+*)
+let cell_contents_of_source_lines (source_lines : string list) : string =
+  source_lines
+  |> List.map ~f:(fun s ->
+         if String.is_suffix ~suffix:"\n" s then
+           String.sub s ~pos:0 ~len:(String.length s - 1)
+         else
+           s)
+  |> String.concat ~sep:"\n"
+
+let is_most_likely_hack
+    (cell_bento_metadata : Hh_json.json option)
+    ~(contents : string)
+    ~(cell_type : string) : bool =
+  (* we try not to make hard assumptions about the metadata: assume it's hack *)
+  let bad_or_missing_metadata_value = true in
+  String.equal cell_type "code"
+  && (not (String.is_prefix contents ~prefix:"%%"))
+  &&
+  match cell_bento_metadata with
+  | None -> bad_or_missing_metadata_value
+  | Some cell_bento_metadata -> begin
+    try
+      let obj = Hh_json.get_object_exn cell_bento_metadata in
+      let language =
+        List.Assoc.find_exn obj "language" ~equal:String.equal
+        |> Hh_json.get_string_exn
+      in
+      String.equal language "hack"
+    with
+    | _ -> bad_or_missing_metadata_value
+  end
+
 let ipynb_of_json (ipynb_json : Hh_json.json) : (t, string) Result.t =
   let cell_of_json_exn (cell_json : Hh_json.json) : cell =
     let find_exn = List.Assoc.find_exn ~equal:String.equal in
     let obj = Hh_json.get_object_exn cell_json in
-    let source_json = find_exn obj "source" in
-    let source_lines_json = Hh_json.get_array_exn source_json in
-    let source_lines = List.map source_lines_json ~f:Hh_json.get_string_exn in
     let type_json = find_exn obj "cell_type" in
-    let contents = String.concat ~sep:"" source_lines in
+    let contents =
+      let source_json = find_exn obj "source" in
+      let source_lines_json = Hh_json.get_array_exn source_json in
+      let source_lines = List.map source_lines_json ~f:Hh_json.get_string_exn in
+      cell_contents_of_source_lines source_lines
+    in
     let cell_bento_metadata =
       List.Assoc.find obj "metadata" ~equal:String.equal
     in
-    match Hh_json.get_string_exn type_json with
-    | "code" when String.is_prefix contents ~prefix:"%%" ->
-      Non_hack { cell_type = "unknown"; contents; cell_bento_metadata }
-    | "code" -> Hack { contents; cell_bento_metadata }
-    | cell_type -> Non_hack { cell_type; contents; cell_bento_metadata }
+    let cell_type =
+      match type_json with
+      | JSON_String s -> s
+      | _ -> "unknown"
+    in
+    if is_most_likely_hack cell_bento_metadata ~contents ~cell_type then
+      Hack { contents; cell_bento_metadata }
+    else
+      (* Python cells start with `%%`. In future, other cells might, too, so have cell_type be unknown *)
+      Non_hack { cell_type; contents; cell_bento_metadata }
   in
   try
     let find_exn = List.Assoc.find_exn ~equal:String.equal in
@@ -54,15 +99,42 @@ let ipynb_of_json (ipynb_json : Hh_json.json) : (t, string) Result.t =
   with
   | e -> Error (Exn.to_string e)
 
+(** Software we work with that consumes notebooks
+* expects that:
+* - Every string in the "source" array (except possibly the last one) ends in "\n".
+* - There are no empty strings (`""`) in the "source" array
+* Note that, afaict, these requirements are not officially specified:
+* https://ipython.org/ipython-doc/3/notebook/nbformat.html
+*)
+let normalize_output_lines_in_source_array (source : string list) : string list
+    =
+  let length = List.length source in
+  let is_last index = index = length - 1 in
+  List.filter_mapi source ~f:(fun i s ->
+      if String.is_empty s then
+        None
+      else if String.is_suffix ~suffix:"\n" s || is_last i then
+        Some s
+      else
+        (* The thing that consumes notebooks expects that every line in the "source" array
+         * (except possibly the last line) ends in "\n".
+         *)
+        Some (s ^ "\n"))
+
 let make_ipynb_cell
     ~(cell_type : string)
     ~(source : string list)
     ~(cell_bento_metadata : Hh_json.json option) =
+  let source =
+    source
+    |> normalize_output_lines_in_source_array
+    |> List.map ~f:Hh_json.string_
+  in
   Hh_json.(
     JSON_Object
       [
         ("cell_type", JSON_String cell_type);
-        ("source", JSON_Array (List.map source ~f:Hh_json.string_));
+        ("source", JSON_Array source);
         ("outputs", JSON_Array []);
         ("execution_count", JSON_Null);
         ( "metadata",
@@ -100,7 +172,7 @@ let cell_of_chunk
     Notebook_chunk.{ id = _; chunk_kind; contents; cell_bento_metadata } : cell
     =
   match chunk_kind with
-  | Notebook_chunk.(Top_level | Stmt) -> Hack { contents; cell_bento_metadata }
+  | Notebook_chunk.Hack -> Hack { contents; cell_bento_metadata }
   | Notebook_chunk.(Non_hack { cell_type }) ->
     Non_hack { cell_type; contents; cell_bento_metadata }
 
@@ -178,6 +250,15 @@ let ipynb_of_chunks
           |> List.map ~f:cell_of_chunk
           (* reduce_exn is safe because groups created by sort_and_group are non-empty *)
           |> List.reduce_exn ~f:combine_cells_exn)
+    in
+    let cells =
+      (* Our Jupyter notebooks implementation cannot handle an empty cell list,
+       * so we add an empty cell if the user's notebook has no cells.
+       *)
+      if List.is_empty cells then
+        [Hack { contents = ""; cell_bento_metadata = None }]
+      else
+        cells
     in
     Ok { cells; kernelspec }
   with

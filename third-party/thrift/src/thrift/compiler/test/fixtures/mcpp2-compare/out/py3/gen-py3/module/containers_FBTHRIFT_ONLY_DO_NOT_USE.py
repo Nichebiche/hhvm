@@ -20,6 +20,7 @@ _fbthrift__module_name__ = "module.types"
 
 import module.types as _module_types
 import includes.types as _includes_types
+from thrift.py3.types import _ensure_py3_or_raise
 
 def get_types_reflection():
     return importlib.import_module(
@@ -127,6 +128,20 @@ class Map__Empty_MyStruct(thrift.py3.types.Map):
     def __get_reflection__():
         return get_types_reflection().get_reflection__Map__Empty_MyStruct()
 
+    @staticmethod
+    def from_python(python_map: thrift.python.types.Map) -> "Map__Empty_MyStruct":
+        _keys = (
+            _ensure_py3_or_raise(key, "key", _module_types.Empty)
+            for key in python_map.keys()
+        )
+        _values = (
+            _ensure_py3_or_raise(value, "value", _module_types.MyStruct)
+            for value in python_map.values()
+        )
+        return Map__Empty_MyStruct(
+            items=dict(zip(_keys, _values)),
+            private_ctor_token=thrift.py3.types._fbthrift_map_private_ctor,
+        )
 
 Mapping.register(Map__Empty_MyStruct)
 __all__.append('Map__Empty_MyStruct')
@@ -172,6 +187,16 @@ class List__Map__Empty_MyStruct(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__Map__Empty_MyStruct()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__Map__Empty_MyStruct":
+        _items = [
+            _module_types.Map__Empty_MyStruct.from_python(item)
+            for item in python_list
+        ]
+        return List__Map__Empty_MyStruct(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__Map__Empty_MyStruct)
 
@@ -218,6 +243,16 @@ class List__List__Map__Empty_MyStruct(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__List__Map__Empty_MyStruct()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__List__Map__Empty_MyStruct":
+        _items = [
+            _module_types.List__Map__Empty_MyStruct.from_python(item)
+            for item in python_list
+        ]
+        return List__List__Map__Empty_MyStruct(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__List__Map__Empty_MyStruct)
 
@@ -264,6 +299,16 @@ class List__List__List__Map__Empty_MyStruct(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__List__List__Map__Empty_MyStruct()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__List__List__Map__Empty_MyStruct":
+        _items = [
+            _module_types.List__List__Map__Empty_MyStruct.from_python(item)
+            for item in python_list
+        ]
+        return List__List__List__Map__Empty_MyStruct(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__List__List__Map__Empty_MyStruct)
 
@@ -349,6 +394,16 @@ class Set__MyStruct(thrift.py3.types.Set):
     def __get_reflection__():
         return get_types_reflection().get_reflection__Set__MyStruct()
 
+    @staticmethod
+    def from_python(python_set: thrift.python.types.Set) -> "Set__MyStruct":
+        _items = frozenset(
+            _ensure_py3_or_raise(item, "item", _module_types.MyStruct)
+            for item in python_set
+        )
+        return Set__MyStruct(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_set_private_ctor,
+        )
 
 Set.register(Set__MyStruct)
 
@@ -391,6 +446,16 @@ class List__ComplexUnion(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__ComplexUnion()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__ComplexUnion":
+        _items = [
+            _ensure_py3_or_raise(item, "item", _module_types.ComplexUnion)
+            for item in python_list
+        ]
+        return List__ComplexUnion(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__ComplexUnion)
 
@@ -527,6 +592,16 @@ class Set__List__List__Map__Empty_MyStruct(thrift.py3.types.Set):
     def __get_reflection__():
         return get_types_reflection().get_reflection__Set__List__List__Map__Empty_MyStruct()
 
+    @staticmethod
+    def from_python(python_set: thrift.python.types.Set) -> "Set__List__List__Map__Empty_MyStruct":
+        _items = frozenset(
+            _module_types.List__List__Map__Empty_MyStruct.from_python(item)
+            for item in python_set
+        )
+        return Set__List__List__Map__Empty_MyStruct(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_set_private_ctor,
+        )
 
 Set.register(Set__List__List__Map__Empty_MyStruct)
 
@@ -1282,6 +1357,16 @@ class List__SimpleUnion(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__SimpleUnion()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__SimpleUnion":
+        _items = [
+            _ensure_py3_or_raise(item, "item", _module_types.SimpleUnion)
+            for item in python_list
+        ]
+        return List__SimpleUnion(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__SimpleUnion)
 
@@ -1324,6 +1409,16 @@ class Set__SimpleUnion(thrift.py3.types.Set):
     def __get_reflection__():
         return get_types_reflection().get_reflection__Set__SimpleUnion()
 
+    @staticmethod
+    def from_python(python_set: thrift.python.types.Set) -> "Set__SimpleUnion":
+        _items = frozenset(
+            _ensure_py3_or_raise(item, "item", _module_types.SimpleUnion)
+            for item in python_set
+        )
+        return Set__SimpleUnion(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_set_private_ctor,
+        )
 
 Set.register(Set__SimpleUnion)
 
@@ -1370,6 +1465,16 @@ class List__Set__SimpleUnion(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__Set__SimpleUnion()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__Set__SimpleUnion":
+        _items = [
+            _module_types.Set__SimpleUnion.from_python(item)
+            for item in python_list
+        ]
+        return List__Set__SimpleUnion(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__Set__SimpleUnion)
 
@@ -1806,58 +1911,6 @@ Set.register(Set__Set__Set__bool)
 __all__.append('Set__Set__Set__bool')
 
 
-class Map__Bar__double_Baz__i32(thrift.py3.types.Map):
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    _FBTHRIFT_USE_SORTED_REPR = True
-
-    def __init__(self, items=None, private_ctor_token=None) -> None:
-        if private_ctor_token is thrift.py3.types._fbthrift_map_private_ctor:
-            _py_obj = items
-        elif isinstance(items, Map__Bar__double_Baz__i32):
-            _py_obj = dict(items)
-        elif items is None:
-            _py_obj = dict()
-        else:
-            check_key = Map__Bar__double_Baz__i32._check_key_type_or_raise
-            check_val = Map__Bar__double_Baz__i32._check_val_type_or_raise
-            _py_obj = {check_key(k) : check_val(v) for k, v in items.items()}
-
-        super().__init__(_py_obj, Map__Bar__double_Baz__i32)
-
-    @staticmethod
-    def _check_key_type_or_raise(key):
-        if not (
-            isinstance(key, (float, int))
-        ):
-            raise TypeError(f"{key!r} is not of type float")
-        return key
-
-    @staticmethod
-    def _check_key_type_or_none(key):
-        if key is None:
-            return None
-        if isinstance(key, float):
-            return key
-
-    @staticmethod
-    def _check_val_type_or_raise(item):
-        if not (
-            isinstance(item, int)
-        ):
-            raise TypeError(f"{item!r} is not of type int")
-        return item
-
-    @staticmethod
-    def __get_reflection__():
-        return get_types_reflection().get_reflection__Map__Bar__double_Baz__i32()
-
-
-Mapping.register(Map__Bar__double_Baz__i32)
-__all__.append('Map__Bar__double_Baz__i32')
-
-
 class folly_small_vector_int64_t_8__List__i64(thrift.py3.types.List):
     __module__ = _fbthrift__module_name__
     __slots__ = ()
@@ -2043,6 +2096,17 @@ class std_unordered_map_std_string_containerStruct__Map__string_containerStruct(
     def __get_reflection__():
         return get_types_reflection().get_reflection__std_unordered_map_std_string_containerStruct__Map__string_containerStruct()
 
+    @staticmethod
+    def from_python(python_map: thrift.python.types.Map) -> "std_unordered_map_std_string_containerStruct__Map__string_containerStruct":
+        _keys = python_map.keys()
+        _values = (
+            _ensure_py3_or_raise(value, "value", _module_types.containerStruct)
+            for value in python_map.values()
+        )
+        return std_unordered_map_std_string_containerStruct__Map__string_containerStruct(
+            items=dict(zip(_keys, _values)),
+            private_ctor_token=thrift.py3.types._fbthrift_map_private_ctor,
+        )
 
 Mapping.register(std_unordered_map_std_string_containerStruct__Map__string_containerStruct)
 __all__.append('std_unordered_map_std_string_containerStruct__Map__string_containerStruct')
@@ -2228,90 +2292,6 @@ class folly_sorted_vector_map__Map__i64_string(thrift.py3.types.Map):
 
 Mapping.register(folly_sorted_vector_map__Map__i64_string)
 __all__.append('folly_sorted_vector_map__Map__i64_string')
-
-
-class List__Bar__double(thrift.py3.types.List):
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    def __init__(self, items=None, private_ctor_token=None) -> None:
-        if private_ctor_token is thrift.py3.types._fbthrift_list_private_ctor:
-            _py_obj = items
-        elif isinstance(items, List__Bar__double):
-            _py_obj = list(items)
-        elif items is None:
-            _py_obj = []
-        else:
-            check_method = List__Bar__double._check_item_type_or_raise
-            _py_obj = [check_method(item) for item in items]
-
-        super().__init__(_py_obj, List__Bar__double)
-
-    @staticmethod
-    def _check_item_type_or_raise(item):
-        if not (
-            isinstance(item, (float, int))
-        ):
-            raise TypeError(f"{item!r} is not of type float")
-        return item
-
-    @staticmethod
-    def _check_item_type_or_none(item):
-        if item is None:
-            return None
-        if isinstance(item, float):
-            return item
-
-    @staticmethod
-    def __get_reflection__():
-        return get_types_reflection().get_reflection__List__Bar__double()
-
-
-Sequence.register(List__Bar__double)
-
-__all__.append('List__Bar__double')
-
-
-class Set__Baz__i32(thrift.py3.types.Set):
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    def __init__(self, items=None, private_ctor_token=None) -> None:
-        if private_ctor_token is thrift.py3.types._fbthrift_set_private_ctor:
-            _py_obj = items
-        elif isinstance(items, Set__Baz__i32):
-            _py_obj = frozenset(items)
-        elif items is None:
-            _py_obj = frozenset()
-        else:
-            check_method = Set__Baz__i32._check_item_type_or_raise
-            _py_obj = frozenset(check_method(item) for item in items)
-
-        super().__init__(_py_obj, Set__Baz__i32)
-
-    @staticmethod
-    def _check_item_type_or_raise(item):
-        if not (
-            isinstance(item, int)
-        ):
-            raise TypeError(f"{item!r} is not of type int")
-        return item
-
-    @staticmethod
-    def _check_item_type_or_none(item):
-        if item is None:
-            return None
-        if isinstance(item, int):
-            return item
-
-    @staticmethod
-    def __get_reflection__():
-        return get_types_reflection().get_reflection__Set__Baz__i32()
-
-
-Set.register(Set__Baz__i32)
-
-__all__.append('Set__Baz__i32')
 
 
 class Map__string_folly_IOBuf__binary(thrift.py3.types.Map):
@@ -2650,6 +2630,16 @@ class List__MyStruct(thrift.py3.types.List):
     def __get_reflection__():
         return get_types_reflection().get_reflection__List__MyStruct()
 
+    @staticmethod
+    def from_python(python_list: thrift.python.types.List) -> "List__MyStruct":
+        _items = [
+            _ensure_py3_or_raise(item, "item", _module_types.MyStruct)
+            for item in python_list
+        ]
+        return List__MyStruct(
+            items=_items,
+            private_ctor_token=thrift.py3.types._fbthrift_list_private_ctor,
+        )
 
 Sequence.register(List__MyStruct)
 

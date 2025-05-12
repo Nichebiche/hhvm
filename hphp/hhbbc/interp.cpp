@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <vector>
 #include <string>
-#include <iterator>
 
 #include <folly/gen/Base.h>
 #include <folly/gen/String.h>
@@ -26,10 +25,7 @@
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/hash-set.h"
 #include "hphp/util/trace.h"
-#include "hphp/runtime/base/array-init.h"
-#include "hphp/runtime/base/array-iterator.h"
 #include "hphp/runtime/base/collections.h"
-#include "hphp/runtime/base/implicit-context.h"
 #include "hphp/runtime/base/static-string-table.h"
 #include "hphp/runtime/base/tv-arith.h"
 #include "hphp/runtime/base/tv-comparisons.h"
@@ -38,7 +34,6 @@
 #include "hphp/runtime/base/type-structure-helpers.h"
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
 #include "hphp/runtime/vm/runtime.h"
-#include "hphp/runtime/vm/unit-util.h"
 
 #include "hphp/runtime/ext/hh/ext_hh.h"
 
@@ -51,14 +46,10 @@
 #include "hphp/hhbbc/interp-state.h"
 #include "hphp/hhbbc/optimize.h"
 #include "hphp/hhbbc/representation.h"
-#include "hphp/hhbbc/type-builtins.h"
 #include "hphp/hhbbc/type-ops.h"
 #include "hphp/hhbbc/type-structure.h"
 #include "hphp/hhbbc/type-system.h"
-#include "hphp/hhbbc/unit-util.h"
 #include "hphp/hhbbc/wide-func.h"
-
-#include "hphp/hhbbc/stats.h"
 
 #include "hphp/hhbbc/interp-internal.h"
 
@@ -78,6 +69,8 @@ const StaticString s_IMemoizeParam("HH\\IMemoizeParam");
 const StaticString s_getInstanceKey("getInstanceKey");
 const StaticString s_Closure("Closure");
 const StaticString s_this(annotTypeName(AnnotType::This));
+const StaticString s_AsyncGenerator("HH\\AsyncGenerator");
+const StaticString s_Generator("Generator");
 
 bool poppable(Op op) {
   switch (op) {
@@ -1018,8 +1011,8 @@ void in(ISS& env, const bc::File&) {
     return push(env, TSStr);
   }
 
-  auto filename = env.ctx.func->originalFilename
-    ? env.ctx.func->originalFilename
+  auto filename = env.ctx.func->originalUnit
+    ? env.ctx.func->originalUnit
     : env.ctx.func->unit;
   if (!FileUtil::isAbsolutePath(filename->slice())) {
     filename = makeStaticString(
@@ -1036,8 +1029,8 @@ void in(ISS& env, const bc::Dir&) {
     return push(env, TSStr);
   }
 
-  auto filename = env.ctx.func->originalFilename
-    ? env.ctx.func->originalFilename
+  auto filename = env.ctx.func->originalUnit
+    ? env.ctx.func->originalUnit
     : env.ctx.func->unit;
   if (!FileUtil::isAbsolutePath(filename->slice())) {
     filename = makeStaticString(
@@ -2129,12 +2122,19 @@ void in(ISS& env, const bc::ChainFaults&) {
 }
 
 void in(ISS& env, const bc::NativeImpl&) {
-  killLocals(env);
+  auto const& func = env.ctx.func;
+  assertx(func->isNative);
 
-  if (env.ctx.func->isNative) {
-    return doRet(env, native_function_return_type(env.ctx.func), true);
-  }
-  doRet(env, TInitCell, true);
+  killLocals(env);
+  return doRet(
+    env,
+    return_type_from_constraints(
+      *func,
+      [&] (SString name) { return env.index.resolve_class(name); },
+      [&] () { return selfCls(env.index, env.ctx); }
+    ),
+    true
+  );
 }
 
 void in(ISS& env, const bc::CGetL& op) {
@@ -2360,6 +2360,16 @@ bool module_check_always_passes(ISS& env, const DCls& dcls) {
 
 void in(ISS& env, const bc::ClassGetC& op) {
   auto const kind = static_cast<ClassGetCMode>(op.subop1);
+  /**
+    * If this is triggered, HH\classname_to_class($foo, "cause_a_sev") was
+    * committed to a path that was included in a repo build, which is not
+    * allowed. This API is not exposed to Hack and requires HH_FIXME[4105]
+    * to suppress the "Too many arguments" error.
+    */
+  always_assert_flog(
+    kind != ClassGetCMode::UnsafeBackdoor,
+    "HH\\classname_to_class() unsafe backdoor is not allowed in repo builds"
+  );
   auto const t = topC(env);
 
   if (t.subtypeOf(BCls)) return reduce(env);
@@ -2378,6 +2388,7 @@ void in(ISS& env, const bc::ClassGetC& op) {
         push(env, objcls(t));
         return;
       case ClassGetCMode::ExplicitConversion:
+      case ClassGetCMode::UnsafeBackdoor:
         unreachable(env);
         push(env, TBottom);
         return;
@@ -2391,6 +2402,7 @@ void in(ISS& env, const bc::ClassGetC& op) {
           case ClassGetCMode::Normal:
             return Cfg::Eval::RaiseStrToClsConversionNoticeSampleRate > 0;
           case ClassGetCMode::ExplicitConversion:
+          case ClassGetCMode::UnsafeBackdoor:
             return rcls->mightCareAboutDynamicallyReferenced();
         }
       }();
@@ -2410,17 +2422,43 @@ void in(ISS& env, const bc::ClassGetC& op) {
   push(env, TCls);
 }
 
-void in(ISS& env, const bc::ClassGetTS& op) {
-  // TODO(T31677864): implement real optimizations
+void classGetTSImpl(ISS& env, bool pushGenerics) {
   auto const ts = popC(env);
   if (!ts.couldBe(BDict)) {
     push(env, TBottom);
-    push(env, TBottom);
+    if (pushGenerics) push(env, TBottom);
     return;
   }
 
+  auto const a = tv(ts);
+  if (a && isValidTSType(*a, false)) {
+    // HackC emits CombineAndResolveTypeStruct before this so assume resolved
+    auto const ts_arr = a->m_data.parr;
+    if (auto const name = type_structure_name(ts_arr)) {
+      if (auto const rcls = env.index.resolve_class(name)) {
+        push(env, clsExact(*rcls, true));
+        if (pushGenerics) {
+          if (auto const rg = get_ts_generic_types_opt(ts_arr)) {
+            push(env, vec_val(rg));
+          } else {
+            push(env, vec_empty());
+          }
+        }
+        return;
+      }
+    }
+  }
+
   push(env, TCls);
-  push(env, TOptVec);
+  if (pushGenerics) push(env, TVec);
+}
+
+void in(ISS& env, const bc::ClassGetTS&) {
+  classGetTSImpl(env, false);
+}
+
+void in(ISS& env, const bc::ClassGetTSWithGenerics&) {
+  classGetTSImpl(env, true);
 }
 
 void in(ISS& env, const bc::AKExists&) {
@@ -2488,16 +2526,23 @@ void in(ISS& env, const bc::GetMemoKeyL& op) {
   // memo key is a parameter, then we can possibly using the type constraint to
   // infer a more efficient memo key mode.
   using MK = MemoKeyConstraint;
-  Optional<Type> resolvedClsTy;
+  bool isMemoizeParam = false;
   auto const mkc = [&] {
     if (op.nloc1.id >= env.ctx.func->params.size()) return MK::None;
-    auto const& tc = env.ctx.func->params[op.nloc1.id].typeConstraints.main();
-    if (tc.isSubObject()) {
+    auto const& tcs = env.ctx.func->params[op.nloc1.id].typeConstraints;
+    auto isTCMemoizeParam = [&](auto const& tc) -> bool {
+      if (!tc.isSubObject()) return false;
+      if (tc.isSoft()) return false;
       auto const rcls = env.index.resolve_class(tc.clsName());
       assertx(rcls.has_value());
-      resolvedClsTy = subObj(*rcls);
-    }
-    return memoKeyConstraintFromTC(tc);
+      return subObj(*rcls).subtypeOf(tyIMemoizeParam);
+    };
+    isMemoizeParam = std::any_of(
+      tcs.range().begin(),
+      tcs.range().end(),
+      isTCMemoizeParam
+    );
+    return tcs.getMemoKeyConstraint();
   }();
 
   // Use the type-constraint to reduce this operation to a more efficient memo
@@ -2589,8 +2634,7 @@ void in(ISS& env, const bc::GetMemoKeyL& op) {
       // a string (which is what the generic mode does). If not, it will use the
       // generic mode, which can handle collections or classes which don't
       // implement getInstanceKey.
-      if (resolvedClsTy &&
-          resolvedClsTy->subtypeOf(tyIMemoizeParam) &&
+      if (isMemoizeParam &&
           inTy.subtypeOf(tyIMemoizeParam)) {
         return reduce(
           env,
@@ -2611,8 +2655,7 @@ void in(ISS& env, const bc::GetMemoKeyL& op) {
       // when invoking getInstanceKey and then select from the result of that,
       // or the integer 0. This might seem wasteful, but the JIT does a good job
       // inlining away the call in the null case.
-      if (resolvedClsTy &&
-          resolvedClsTy->subtypeOf(tyIMemoizeParam) &&
+      if (isMemoizeParam &&
           inTy.subtypeOf(opt(tyIMemoizeParam))) {
         return reduce(
           env,
@@ -2631,7 +2674,7 @@ void in(ISS& env, const bc::GetMemoKeyL& op) {
         );
       }
       break;
-    case MK::None:
+    default:
       break;
   }
 
@@ -3228,6 +3271,56 @@ void in(ISS& env, const bc::CheckClsRGSoft& op) {
   if (!dcls.cls().couldHaveReifiedGenerics()) {
     unreachable(env);
   }
+}
+
+void in(ISS& env, const bc::ReifiedInit& op) {
+  auto const cls = topC(env);
+  mayReadLocal(env, op.loc1);
+  if (!cls.couldBe(BCls | BLazyCls)) {
+    return reduce(env, bc::PopC {}, bc::PopC {});
+  }
+  if (cls.subtypeOf(BCls) &&
+      is_specialized_cls(cls) &&
+      dcls_of(cls).isExact()) {
+    auto const& dcls = dcls_of(cls);
+    if (!dcls.cls().couldHaveReifiedGenerics() &&
+        !dcls.cls().couldHaveReifiedParent()) {
+      // ReifiedInit is a no-op if the class isn't reified
+      // and doesn't have a reified parent.
+      return reduce(env, bc::PopC {}, bc::PopC {});
+    }
+
+    // if the class has reified generics, and if generics
+    // were not specified at instantiation, then we must emit
+    // CheckClsRgSoft to raise a warning or fatal.
+    auto const cell = locAsCell(env, op.loc1);
+    if (dcls.cls().mustHaveReifiedGenerics() && cell.subtypeOf(BVecE)) {
+      return reduce(
+        env,
+        bc::CheckClsRGSoft {},
+        bc::PopC {}
+      );
+    }
+
+    if (dcls.cls().mustHaveReifiedGenerics() ||
+        dcls.cls().mustHaveReifiedParent()) {
+      return reduce(
+        env,
+        bc::PopC {}, // pop the class off the stack
+        bc::NullUninit {},
+        bc::CGetQuietL { op.loc1 }, // push generics onto stack
+        bc::FCallObjMethodD {
+          FCallArgs(1),
+          staticEmptyString(),
+          ObjMethodOp::NullThrows,
+          s_86reifiedinit.get()
+        },
+        bc::PopC {}
+      );
+    }
+  }
+  popC(env);
+  popC(env);
 }
 
 namespace {
@@ -3902,6 +3995,11 @@ void fcallKnownImpl(
     return;
   }
 
+  // For dynamic methods such as $c::$foo(), $o->$foo(), and similar,
+  // numExtraInputs describes the number of stack values representing the callee
+  // that need to be discarded e.g. when folding by emitting PopC or just for
+  // type analysis.
+  // See also: extraInput bools, extraStk in the interpreter
   for (auto i = uint32_t{0}; i < numExtraInputs; ++i) popC(env);
   if (fca.hasGenerics()) popC(env);
   if (fca.hasUnpack()) popC(env);
@@ -4855,7 +4953,7 @@ void in(ISS& env, const bc::IterBase&) {
 
 void in(ISS& env, const bc::IterGetKey& op) {
   assertx(!iterIsDead(env, op.ita.iterId));
-  auto const& li = boost::get<LiveIter>(env.state.iters[op.ita.iterId]);
+  auto const& li = std::get<LiveIter>(env.state.iters[op.ita.iterId]);
   if (!li.types.mayThrowOnGetOrNext) effect_free(env);
   mayReadLocal(env, op.loc2);
   push(env, li.types.key);
@@ -4864,7 +4962,7 @@ void in(ISS& env, const bc::IterGetKey& op) {
 
 void in(ISS& env, const bc::IterGetValue& op) {
   assertx(!iterIsDead(env, op.ita.iterId));
-  auto const& li = boost::get<LiveIter>(env.state.iters[op.ita.iterId]);
+  auto const& li = std::get<LiveIter>(env.state.iters[op.ita.iterId]);
   if (!li.types.mayThrowOnGetOrNext) effect_free(env);
   mayReadLocal(env, op.loc2);
   push(env, li.types.value);
@@ -4872,7 +4970,7 @@ void in(ISS& env, const bc::IterGetValue& op) {
 
 void in(ISS& env, const bc::IterSetValue& op) {
   assertx(!iterIsDead(env, op.ita.iterId));
-  auto const& li = boost::get<LiveIter>(env.state.iters[op.ita.iterId]);
+  auto const& li = std::get<LiveIter>(env.state.iters[op.ita.iterId]);
   auto const base = locAsCell(env, op.loc2);
   auto const key = intersection_of(li.types.key, TArrKey);
   auto const set = array_like_set(base, key, popC(env));
@@ -5125,7 +5223,10 @@ bool couldBeMocked(const Type& t) {
   return true;
 }
 
-bool couldHaveReifiedType(const ISS& env, const TypeConstraint& tc) {
+bool couldHaveReifiedType(
+    const ISS& env,
+    const TypeIntersectionConstraint& tcs
+) {
   if (env.ctx.func->isClosureBody) {
     for (auto i = env.ctx.func->params.size();
          i < env.ctx.func->locals.size();
@@ -5136,11 +5237,17 @@ bool couldHaveReifiedType(const ISS& env, const TypeConstraint& tc) {
     }
     return false;
   }
-  if (tc.isAnyObject()) return true;
-  if (!tc.isSubObject()) return false;
-  auto const cls = env.index.resolve_class(tc.clsName());
-  assertx(cls.has_value());
-  return cls->couldHaveReifiedGenerics();
+  auto couldHaveReifiedGenerics = [&](const TypeConstraint& tc) {
+    if (!tc.isSubObject()) return false;
+    auto const cls = env.index.resolve_class(tc.clsName());
+    assertx(cls.has_value());
+    return cls->couldHaveReifiedGenerics();
+  };
+  return std::any_of(
+    tcs.range().begin(),
+    tcs.range().end(),
+    couldHaveReifiedGenerics
+  );
 }
 
 }
@@ -5168,11 +5275,11 @@ void in(ISS& env, const bc::VerifyParamTypeTS& op) {
     popC(env);
     return;
   }
-  auto const constraint = env.ctx.func->params[op.loc1].typeConstraints.main();
+  auto const& constraints = env.ctx.func->params[op.loc1].typeConstraints;
   // TODO(T31677864): We are being extremely pessimistic here, relax it
   if (!env.ctx.func->isReified &&
       (!env.ctx.cls || !env.ctx.cls->hasReifiedGenerics) &&
-      !couldHaveReifiedType(env, constraint)) {
+      !couldHaveReifiedType(env, constraints)) {
     return reduce(env, bc::PopC {});
   }
 
@@ -5320,12 +5427,12 @@ void in(ISS& env, const bc::VerifyRetTypeTS& /*op*/) {
     popC(env);
     return;
   }
-  auto const& retTypeConstraint = env.ctx.func->retTypeConstraints.main();
+  auto const& retTypeConstraints = env.ctx.func->retTypeConstraints;
 
   // TODO(T31677864): We are being extremely pessimistic here, relax it
   if (!env.ctx.func->isReified &&
       (!env.ctx.cls || !env.ctx.cls->hasReifiedGenerics) &&
-      !couldHaveReifiedType(env, retTypeConstraint)) {
+      !couldHaveReifiedType(env, retTypeConstraints)) {
     return reduce(env, bc::PopC {}, bc::VerifyRetTypeC {});
   }
   if (auto const inputTS = tv(a)) {
@@ -5359,16 +5466,61 @@ void in(ISS& env, const bc::VerifyRetTypeTS& /*op*/) {
   verifyRetImpl(env, env.ctx.func->retTypeConstraints, true, true);
 }
 
-void in(ISS& env, const bc::VerifyRetNonNullC&) {
-  auto const& constraint = env.ctx.func->retTypeConstraints.main();
-  if (constraint.isSoft()) return;
+void in(ISS& env, const bc::VerifyTypeTS& /*op*/) {
+  auto const a = topC(env);
+  if (!a.couldBe(BDict)) {
+    unreachable(env);
+    popC(env);
+    return;
+  }
 
+  if (auto const inputTS = tv(a)) {
+    if (!isValidTSType(*inputTS, false)) {
+      unreachable(env);
+      popC(env);
+      return;
+    }
+    auto const resolvedTS =
+      resolve_type_structure(env, inputTS->m_data.parr).sarray();
+    if (resolvedTS && resolvedTS != inputTS->m_data.parr) {
+      reduce(env, bc::PopC {});
+      reduce(env, bc::Dict { resolvedTS });
+      reduce(env, bc::VerifyTypeTS {});
+      return;
+    }
+  }
+  auto stackT = topC(env, 1);
+  auto const stackEquiv = topStkEquiv(env, 1);
+  popC(env);
+  popC(env);
+  push(env, std::move(stackT), stackEquiv);
+}
+
+void in(ISS& env, const bc::VerifyRetNonNullC&) {
   auto stackT = topC(env);
   if (!stackT.couldBe(BInitNull)) return reduce(env);
+
+  auto const& constraints = env.ctx.func->retTypeConstraints;
   if (stackT.subtypeOf(BInitNull)) {
-    popC(env);
-    push(env, TBottom);
-    return unreachable(env);
+    if (std::any_of(
+        constraints.range().begin(),
+        constraints.range().end(),
+        [&](const TypeConstraint& tc) {
+          return !tc.isSoft() && !tc.isNullable();
+        })) {
+      popC(env);
+      push(env, TBottom);
+      return unreachable(env);
+    }
+    return;
+  }
+
+  if (std::all_of(
+      constraints.range().begin(),
+      constraints.range().end(),
+      [](auto const& tc) { return tc.isNullable() || tc.isSoft();}
+    )) {
+    return;
   }
   popC(env);
   push(env, unopt(std::move(stackT)));
@@ -5451,8 +5603,32 @@ void in(ISS& env, const bc::CreateCont& /*op*/) {
   push(env, TInitNull);
 }
 
-void in(ISS& env, const bc::ContEnter&) { popC(env); push(env, TInitCell); }
-void in(ISS& env, const bc::ContRaise&) { popC(env); push(env, TInitCell); }
+namespace {
+void contEnterImpl(ISS& env) {
+  popC(env);
+  auto const cls = env.ctx.func->cls;
+  assertx(
+    cls && (
+      cls->name->tsame(s_AsyncGenerator.get()) ||
+      cls->name->tsame(s_Generator.get())
+    )
+  );
+  push(
+    env,
+    cls->name == s_AsyncGenerator.get()
+      ? wait_handle(TInitCell)
+      : TInitNull
+  );
+}
+}
+
+void in(ISS& env, const bc::ContEnter&) {
+  contEnterImpl(env);
+}
+
+void in(ISS& env, const bc::ContRaise&) {
+  contEnterImpl(env);
+}
 
 void in(ISS& env, const bc::Yield&) {
   popC(env);
@@ -5499,6 +5675,10 @@ void in(ISS& env, const bc::AwaitAll& op) {
     mayReadLocal(env, op.locrange.first + i);
   }
 
+  push(env, TInitNull);
+}
+
+void in(ISS& env, const bc::AwaitLowPri& /*op*/) {
   push(env, TInitNull);
 }
 
@@ -5693,15 +5873,16 @@ void in(ISS& env, const bc::InitProp& op) {
     };
 
     auto const [refined, effectFree] = [&] () -> std::pair<Type, bool> {
-      auto [refined, effectFree] = refine(prop.typeConstraints.main());
-      for (auto const& tc : prop.typeConstraints.ubs()) {
-        if (!effectFree) break;
+      auto refined1 = TCell;
+      auto effectFree1 = true;
+      for (auto const& tc : prop.typeConstraints.range()) {
+        if (!effectFree1) break;
         auto [refined2, effectFree2] = refine(tc);
-        refined &= refined2;
-        if (refined.is(BBottom)) effectFree = false;
-        effectFree &= effectFree2;
+        refined1 &= refined2;
+        if (refined1.is(BBottom)) effectFree1 = false;
+        effectFree1 &= effectFree2;
       }
-      return { std::move(refined), effectFree };
+      return {std::move(refined1), effectFree1};
     }();
 
     auto const val = [effectFree = effectFree] (const Type& t) {

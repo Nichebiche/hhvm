@@ -350,7 +350,7 @@ class ListTypeInfo {
         typeinfo_{
             protocol::TType::T_LIST,
             getStruct,
-            reinterpret_cast<detail::VoidFuncPtr>(setContainer),
+            reinterpret_cast<detail::VoidPtrFuncPtr>(setContainer),
             &ext_,
         } {}
   inline const detail::TypeInfo* get() const { return &typeinfo_; }
@@ -402,7 +402,7 @@ class MutableListTypeInfo {
         typeinfo_{
             protocol::TType::T_LIST,
             getStruct,
-            reinterpret_cast<detail::VoidFuncPtr>(setList),
+            reinterpret_cast<detail::VoidPtrFuncPtr>(setList),
             &ext_,
         } {}
 
@@ -451,7 +451,7 @@ class SetTypeInfoTemplate {
         typeinfo_{
             protocol::TType::T_SET,
             getStruct,
-            reinterpret_cast<detail::VoidFuncPtr>(T::clear),
+            reinterpret_cast<detail::VoidPtrFuncPtr>(T::clear),
             &ext_,
         } {}
   const detail::TypeInfo* get() const { return &typeinfo_; }
@@ -514,11 +514,6 @@ size_t SetTypeInfoTemplate<T>::write(
   return written;
 }
 
-// keep until python3.9, where Py_SET_REFCNT is available officially
-inline void _fbthrift_Py_SET_REFCNT(PyObject* ob, Py_ssize_t refcnt) {
-  ob->ob_refcnt = refcnt;
-}
-
 template <typename T>
 void SetTypeInfoTemplate<T>::consumeElem(
     const void* context,
@@ -532,13 +527,13 @@ void SetTypeInfoTemplate<T>::consumeElem(
   // This is nasty hack since Cython generated code will incr the refcnt
   // so PySet_Add will fail. Need to temporarily decrref.
   const Py_ssize_t currentRefCnt = Py_REFCNT(*pyObjPtr);
-  _fbthrift_Py_SET_REFCNT(*pyObjPtr, 1);
+  Py_SET_REFCNT(*pyObjPtr, 1);
   if (PySet_Add(*pyObjPtr, elem) == -1) {
-    _fbthrift_Py_SET_REFCNT(*pyObjPtr, currentRefCnt);
+    Py_SET_REFCNT(*pyObjPtr, currentRefCnt);
     THRIFT_PY3_CHECK_ERROR();
   }
   Py_DECREF(elem);
-  _fbthrift_Py_SET_REFCNT(*pyObjPtr, currentRefCnt);
+  Py_SET_REFCNT(*pyObjPtr, currentRefCnt);
 }
 
 /**
@@ -615,7 +610,7 @@ class MapTypeInfo {
         typeinfo_{
             protocol::TType::T_MAP,
             getStruct,
-            reinterpret_cast<detail::VoidFuncPtr>(setContainer),
+            reinterpret_cast<detail::VoidPtrFuncPtr>(setContainer),
             &ext_,
         } {}
   const detail::TypeInfo* get() const { return &typeinfo_; }
@@ -708,7 +703,7 @@ class MutableMapTypeInfo {
         tableBasedSerializerTypeinfo_{
             protocol::TType::T_MAP,
             getStruct,
-            reinterpret_cast<detail::VoidFuncPtr>(setMutableMap),
+            reinterpret_cast<detail::VoidPtrFuncPtr>(setMutableMap),
             &tableBasedSerializerMapFieldExt_,
         } {}
   const detail::TypeInfo* get() const { return &tableBasedSerializerTypeinfo_; }

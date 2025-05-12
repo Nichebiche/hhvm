@@ -86,16 +86,12 @@ class InteractLocally_SharedInteraction extends \ThriftClientBase {
    *   init();
    */
   public async function init(): Awaitable<int> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? new \RpcOptions();
     $rpc_options = $rpc_options->setInteractionId($this->interactionId);
     $args = InteractLocally_SharedInteraction_init_args::withDefaultValues();
     await $this->asyncHandler_->genBefore("InteractLocally", "SharedInteraction.init", $args);
     $currentseqid = $this->sendImpl_init();
-    return await $this->genAwaitResponse(InteractLocally_SharedInteraction_init_result::class, "init", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(InteractLocally_SharedInteraction_init_result::class, "init", false, $currentseqid, $rpc_options))[0];
   }
 
   protected function sendImpl_init(): int {
@@ -142,16 +138,12 @@ class InteractLocally_SharedInteraction extends \ThriftClientBase {
    *   do_something();
    */
   public async function do_something(): Awaitable<DoSomethingResult> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? new \RpcOptions();
     $rpc_options = $rpc_options->setInteractionId($this->interactionId);
     $args = InteractLocally_SharedInteraction_do_something_args::withDefaultValues();
     await $this->asyncHandler_->genBefore("InteractLocally", "SharedInteraction.do_something", $args);
     $currentseqid = $this->sendImpl_do_something();
-    return await $this->genAwaitResponse(InteractLocally_SharedInteraction_do_something_result::class, "do_something", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(InteractLocally_SharedInteraction_do_something_result::class, "do_something", false, $currentseqid, $rpc_options))[0];
   }
 
   protected function sendImpl_do_something(): int {
@@ -198,10 +190,6 @@ class InteractLocally_SharedInteraction extends \ThriftClientBase {
    *   tear_down();
    */
   public async function tear_down(): Awaitable<void> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? new \RpcOptions();
     $rpc_options = $rpc_options->setInteractionId($this->interactionId);
     $args = InteractLocally_SharedInteraction_tear_down_args::withDefaultValues();

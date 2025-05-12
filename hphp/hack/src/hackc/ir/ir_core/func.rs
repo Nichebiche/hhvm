@@ -3,11 +3,9 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 
-use newtype::newtype_int;
 use newtype::IdVec;
+use newtype::newtype_int;
 
-use crate::block::BlockIdIterator;
-use crate::instr::Terminator;
 use crate::Block;
 use crate::BlockId;
 use crate::BlockIdMap;
@@ -25,6 +23,8 @@ use crate::Param;
 use crate::SrcLoc;
 use crate::ValueId;
 use crate::ValueIdMap;
+use crate::block::BlockIdIterator;
+use crate::instr::Terminator;
 
 pub type Function = FunctionImpl<IrRepr>;
 pub type Method = MethodImpl<IrRepr>;
@@ -139,8 +139,8 @@ pub type Func = crate::BodyImpl<IrRepr>;
 ///
 /// Funcs also contain some amount of storage for data associated with the code
 /// - such as immediate constants or locations - so they can referred to with
-/// indices instead of having to deal with refereces and ownerhip (and to make
-/// them smaller).
+///   indices instead of having to deal with references and ownership (and to make
+///   them smaller).
 ///
 /// Exception frames are tracked as a separate tree structure made up of Blocks.
 /// Each exception frame says where to jump in the case of a thrown exception.
@@ -315,8 +315,7 @@ impl IrRepr {
     }
 
     pub fn is_terminal(&self, vid: ValueId) -> bool {
-        vid.instr()
-            .map_or(false, |iid| self.instr(iid).is_terminal())
+        vid.instr().is_some_and(|iid| self.instr(iid).is_terminal())
     }
 
     pub fn loc(&self, loc: LocId) -> &SrcLoc {

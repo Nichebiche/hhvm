@@ -125,7 +125,7 @@ let concrete_cls_name_from_ty enclosing_class_name ty : string option =
   in
   match Typing_defs_core.get_node ty with
   | Tclass ((_, cls_name), _, _) -> Some cls_name
-  | Tgeneric ("this", _) -> enclosing_class_name
+  | Tgeneric "this" -> enclosing_class_name
   | _ -> None
 
 let get_callee enclosing_class_name (recv : Tast.expr) : receiver option =
@@ -290,6 +290,16 @@ let process_class class_ =
          ~kind:`Method
   | None -> acc
 
+let possibly_remove_unknown_classes classes =
+  let is_class_name = function
+    | ClassName _ -> true
+    | UnknownClass -> false
+  in
+  if List.exists classes ~f:is_class_name then
+    List.filter classes ~f:is_class_name
+  else
+    classes
+
 let typed_member_id env receiver_ty mid ~kind =
   Tast_env.get_receiver_ids env receiver_ty
   |> List.map ~f:(function
@@ -298,6 +308,7 @@ let typed_member_id env receiver_ty mid ~kind =
          | Tast_env.RIerr
          | Tast_env.RIany ->
            UnknownClass)
+  |> possibly_remove_unknown_classes
   |> List.map ~f:(fun rid -> process_member rid mid ~kind)
   |> List.fold ~init:Result_set.empty ~f:Result_set.union
 
@@ -422,8 +433,8 @@ let visitor =
       in
       acc + super#on_expr env expr
 
-    method! on_expression_tree env (Aast.{ et_class; et_runtime_expr } as expr)
-        =
+    method! on_expression_tree
+        env (Aast.{ et_class; et_runtime_expr; et_free_vars = _ } as expr) =
       (* We only want to consider completion from the hint and the
          virtualized expression, not the visitor expression. The
          visitor expression is unityped, so we can't do much.*)
@@ -889,6 +900,7 @@ type keyword_context =
   | TypeConst
   | AsyncBlockHeader
   | ModuleDecl of module_decl_kind
+  | ClassType
 
 let trivia_pos (t : Full_fidelity_positioned_trivia.t) : Pos.t =
   let open Full_fidelity_positioned_trivia in
@@ -951,6 +963,14 @@ let keywords (tree : FFP.t) : Result_set.elt list =
           {
             name = "enum class";
             type_ = Keyword EnumClass;
+            is_declaration = None;
+            pos = token_pos t;
+          }
+      | Some ClassType ->
+        Some
+          {
+            name = "class pointer";
+            type_ = BuiltInType BIclass_ptr;
             is_declaration = None;
             pos = token_pos t;
           }
@@ -1303,6 +1323,8 @@ let keywords (tree : FFP.t) : Result_set.elt list =
       (match elt_of_token ctx t with
       | Some elt -> elt :: acc
       | None -> acc)
+    | ClassPtrTypeSpecifier _ ->
+      List.fold (children s) ~init:acc ~f:(aux (Some ClassType))
     | _ -> List.fold (children s) ~init:acc ~f:(aux ctx)
   in
 

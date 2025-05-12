@@ -16,59 +16,44 @@
 
 #include "hphp/runtime/vm/jit/translator.h"
 
-#include <cinttypes>
-#include <assert.h>
 #include <stdint.h>
 
-#include <algorithm>
-#include <memory>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include <folly/Conv.h>
-#include <folly/MapUtil.h>
 
-#include "hphp/util/arch.h"
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/ringbuffer.h"
-#include "hphp/util/timer.h"
 #include "hphp/util/trace.h"
 
 #include "hphp/runtime/base/repo-auth-type.h"
 #include "hphp/runtime/base/stats.h"
 #include "hphp/runtime/base/unit-cache.h"
-#include "hphp/runtime/ext/generator/ext_generator.h"
 #include "hphp/runtime/vm/bc-pattern.h"
 #include "hphp/runtime/vm/bytecode.h"
 #include "hphp/runtime/vm/hhbc-codec.h"
 #include "hphp/runtime/vm/hhbc.h"
 #include "hphp/runtime/vm/method-lookup.h"
-#include "hphp/runtime/vm/runtime.h"
 #include "hphp/runtime/vm/treadmill.h"
-#include "hphp/runtime/vm/type-profile.h"
 
 #include "hphp/runtime/vm/jit/inlining-decider.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/irgen-basic.h"
 #include "hphp/runtime/vm/jit/irgen-bespoke.h"
 #include "hphp/runtime/vm/jit/irgen-control.h"
-#include "hphp/runtime/vm/jit/irgen-exit.h"
 #include "hphp/runtime/vm/jit/irgen-func-prologue.h"
 #include "hphp/runtime/vm/jit/irgen-internal.h"
 #include "hphp/runtime/vm/jit/irgen-interpone.h"
 #include "hphp/runtime/vm/jit/irgen.h"
 #include "hphp/runtime/vm/jit/normalized-instruction.h"
-#include "hphp/runtime/vm/jit/print.h"
 #include "hphp/runtime/vm/jit/prof-data.h"
 #include "hphp/runtime/vm/jit/punt.h"
 #include "hphp/runtime/vm/jit/region-selection.h"
 #include "hphp/runtime/vm/jit/translate-region.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/jit/type.h"
 
 
-TRACE_SET_MOD(trans);
+TRACE_SET_MOD(trans)
 
 namespace HPHP { namespace jit {
 ///////////////////////////////////////////////////////////////////////////////
@@ -227,7 +212,9 @@ static const struct {
   { OpCGetG,       {Stack1,           Stack1,       OutUnknown      }},
   { OpCGetS,       {StackTop2,        Stack1,       OutUnknown      }},
   { OpClassGetC,   {Stack1,           Stack1,       OutClass        }},
-  { OpClassGetTS,  {Stack1,           StackTop2,    OutUnknown      }},
+  { OpClassGetTS,  {Stack1,           Stack1,       OutClass       }},
+  { OpClassGetTSWithGenerics,
+                   {Stack1,           StackTop2,    OutUnknown      }},
 
   /*** 6. Isset, Empty, and type querying instructions ***/
 
@@ -329,6 +316,8 @@ static const struct {
                    {Stack1,           Stack1,       OutUnknown      }},
   { OpVerifyRetTypeTS,
                    {StackTop2,        Stack1,       OutUnknown      }},
+  { OpVerifyTypeTS,
+                   {StackTop2,        Stack1,       OutSameAsInput2 }},
   { OpVerifyRetNonNullC,
                    {Stack1,           Stack1,       OutSameAsInput1  }},
   { OpVerifyOutType,
@@ -389,6 +378,7 @@ static const struct {
                    {Stack1,           Stack1,       OutUnknown      }},
   { OpGetMemoAgnosticImplicitContext,
                    {None,             Stack1,       OutUnknown      }},
+  { OpReifiedInit, {Local|StackTop2,  None,         OutNone         }},
 
   /*** 14. Generator instructions ***/
 
@@ -409,6 +399,7 @@ static const struct {
   { OpWHResult,    {Stack1,           Stack1,       OutUnknown      }},
   { OpAwait,       {Stack1,           Stack1,       OutUnknown      }},
   { OpAwaitAll,    {LocalRange,       Stack1,       OutNull         }},
+  { OpAwaitLowPri, {None,             Stack1,       OutNull         }},
 
   /*** 16. Member instructions ***/
 
@@ -896,8 +887,7 @@ bool instrBreaksProfileBB(const NormalizedInstruction& inst) {
   if (isFCall(op)) return true;
 
   if (instrIsNonCallControlFlow(op) ||
-      op == OpAwait || // may branch to scheduler and suspend execution
-      op == OpAwaitAll || // similar to Await
+      isAwait(op) || // may branch to scheduler and suspend execution
       op == OpClsCnsD || // side exits if misses in the RDS
       op == OpThrowNonExhaustiveSwitch || // control flow breaks bb
       op == OpVerifyParamTypeTS) { // avoids combinatorial explosion

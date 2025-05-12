@@ -408,6 +408,7 @@ struct interpolation {
 struct let_statement {
   source_range loc;
 
+  bool exported;
   identifier id;
   expression value;
 };
@@ -484,7 +485,7 @@ struct conditional_block {
 };
 
 /**
- * A Whisker construct for "de-structuring" a map-like object.
+ * A Whisker construct for "de-structuring" a map object.
  * This matches Handlebars:
  *   https://handlebarsjs.com/guide/builtin-helpers.html#with
  */
@@ -529,6 +530,8 @@ struct each_block {
  */
 struct partial_block {
   source_range loc;
+
+  bool exported;
   identifier name;
   std::set<identifier, identifier::compare_by_name> arguments;
   std::set<identifier, identifier::compare_by_name> captures;

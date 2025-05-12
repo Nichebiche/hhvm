@@ -348,11 +348,7 @@ let rec array_get
     Typing_solver.expand_type_and_narrow
       env
       ~description_of_expected:"an array or collection"
-      (fun env ty ->
-        let (env, ty) =
-          widen_for_array_get ~lhs_of_null_coalesce ~expr_pos e2 env ty
-        in
-        ((env, None), ty))
+      (widen_for_array_get ~lhs_of_null_coalesce ~expr_pos e2)
       array_pos
       ty1
   in
@@ -907,8 +903,6 @@ let rec array_get
           in
           (env, (res_ty, Error (ty1, ty_keyedcontainer), Ok ty2))
       end
-      | Tunapplied_alias _ ->
-        Typing_defs.error_Tunapplied_alias_in_illegal_context ()
       | Tnonnull
       | Tprim _
       | Tfun _
@@ -962,7 +956,7 @@ let rec array_get
 let widen_for_assign_array_append ~expr_pos env ty =
   match deref ty with
   (* dynamic is valid for array append *)
-  | (_, Tdynamic) -> ((env, None), Some ty)
+  | (_, Tdynamic) -> (env, Some ty)
   | (r, Tclass (((_, cn) as id), _, tyl))
     when String.equal cn SN.Collections.cVec
          || String.equal cn SN.Collections.cKeyset
@@ -973,8 +967,8 @@ let widen_for_assign_array_append ~expr_pos env ty =
           Env.fresh_type_invariant env expr_pos)
     in
     let ty = mk (r, Tclass (id, nonexact, params)) in
-    ((env, None), Some ty)
-  | _ -> ((env, None), None)
+    (env, Some ty)
+  | _ -> (env, None)
 
 let assign_array_append ~array_pos ~expr_pos ur env ty1 ty2 =
   let ((env, ty_err1), ty1) =
@@ -1100,8 +1094,6 @@ let assign_array_append ~array_pos ~expr_pos ur env ty1 ty2 =
                TypecheckerOptions.enable_sound_dynamic env.genv.tcopt) ->
         got_dynamic ()
       | (_, Tdynamic) -> (env, (ty1, Ok ty1, Ok ty2))
-      | (_, Tunapplied_alias _) ->
-        Typing_defs.error_Tunapplied_alias_in_illegal_context ()
       | (_, Tprim Tnull)
         when Tast.is_under_dynamic_assumptions env.Typing_env_types.checked ->
         got_dynamic ()
@@ -1132,7 +1124,7 @@ let widen_for_assign_array_get ~expr_pos index_expr env ty =
           [Log_head ("widen_for_assign_array_get", [Log_type ("ty", ty)])]));
   match deref ty with
   (* dynamic is valid for assign array get *)
-  | (_, Tdynamic) -> ((env, None), Some ty)
+  | (_, Tdynamic) -> (env, Some ty)
   | (r, Ttuple { t_required; t_extra = Textra { t_optional; t_variadic } }) ->
   begin
     (* requires integer literal *)
@@ -1147,16 +1139,16 @@ let widen_for_assign_array_get ~expr_pos index_expr env ty =
         List.map_env env t_optional ~f:(fun env _ty ->
             Env.fresh_type_invariant env expr_pos)
       in
-      ( (env, None),
+      ( env,
         Some
           (mk
              ( r,
                Ttuple
                  { t_required; t_extra = Textra { t_optional; t_variadic } } ))
       )
-    | _ -> ((env, None), None)
+    | _ -> (env, None)
   end
-  | _ -> ((env, None), None)
+  | _ -> (env, None)
 
 (* Used for typing an assignment e1[key] = e2
  * where e1 has type ty1, key has type tkey and e2 has type ty2.
@@ -1534,8 +1526,6 @@ let assign_array_get ~array_pos ~expr_pos ur env ty1 (key : Nast.expr) tkey ty2
            we applied an implicit upcast to dynamic
         *)
         (env, (ety1, Ok ety1, Ok tkey, Ok ty2))
-      | Tunapplied_alias _ ->
-        Typing_defs.error_Tunapplied_alias_in_illegal_context ()
       | Toption _
       | Tnonnull
       | Tprim _

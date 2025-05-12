@@ -39,6 +39,20 @@ inline void reset_field<::facebook::thrift::annotation::go::Tag>(
 }
 
 template<>
+inline void reset_field<::facebook::thrift::annotation::go::MinimizePadding>(
+    ::facebook::thrift::annotation::go::MinimizePadding& obj, uint16_t index) {
+  switch (index) {
+  }
+}
+
+template<>
+inline void reset_field<::facebook::thrift::annotation::go::UseReflectCodec>(
+    ::facebook::thrift::annotation::go::UseReflectCodec& obj, uint16_t index) {
+  switch (index) {
+  }
+}
+
+template<>
 inline const std::unordered_map<std::string_view, std::string_view>& PyStructTraits<
     ::facebook::thrift::annotation::go::Name>::namesmap() {
   static const folly::Indestructible<NamesMap> map {
@@ -51,6 +65,26 @@ inline const std::unordered_map<std::string_view, std::string_view>& PyStructTra
 template<>
 inline const std::unordered_map<std::string_view, std::string_view>& PyStructTraits<
     ::facebook::thrift::annotation::go::Tag>::namesmap() {
+  static const folly::Indestructible<NamesMap> map {
+    {
+    }
+  };
+  return *map;
+}
+
+template<>
+inline const std::unordered_map<std::string_view, std::string_view>& PyStructTraits<
+    ::facebook::thrift::annotation::go::MinimizePadding>::namesmap() {
+  static const folly::Indestructible<NamesMap> map {
+    {
+    }
+  };
+  return *map;
+}
+
+template<>
+inline const std::unordered_map<std::string_view, std::string_view>& PyStructTraits<
+    ::facebook::thrift::annotation::go::UseReflectCodec>::namesmap() {
   static const folly::Indestructible<NamesMap> map {
     {
     }

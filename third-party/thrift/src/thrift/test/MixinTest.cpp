@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <thrift/test/gen-cpp2/MixinTestStrict_types.h>
 #include <thrift/test/gen-cpp2/MixinTest_types.h>
 
@@ -109,5 +109,5 @@ TEST(Mixin, Type) {
                 apache::thrift::field_ref<std::string&&>>);
   static_assert(std::is_same_v<
                 decltype(std::move(std::as_const(foo)).field1()),
-                apache::thrift::field_ref<const std::string&&>>);
+                apache::thrift::field_ref<const std::string&>>);
 }

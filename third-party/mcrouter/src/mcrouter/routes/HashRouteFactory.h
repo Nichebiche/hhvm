@@ -15,7 +15,7 @@
 #include "mcrouter/lib/RendezvousHashFunc.h"
 #include "mcrouter/lib/SelectionRouteFactory.h"
 #include "mcrouter/lib/WeightedCh3HashFunc.h"
-#include "mcrouter/lib/WeightedCh4HashFunc.h"
+#include "mcrouter/lib/WeightedCh3RvHashFunc.h"
 #include "mcrouter/lib/WeightedRendezvousHashFunc.h"
 #include "mcrouter/lib/config/RouteHandleFactory.h"
 #include "mcrouter/lib/routes/NullRoute.h"
@@ -77,7 +77,8 @@ typename std::
         HashFunc func,
         bool bucketized = false,
         bool clientFanout = false) {
-  if (folly::IsOneOf<HashFunc, WeightedCh3HashFunc>::value) {
+  if (folly::IsOneOf<HashFunc, WeightedCh3HashFunc, WeightedCh3RvHashFunc>::
+          value) {
     if (bucketized) {
       return createSelectionRoute<
           RouterInfo,
@@ -106,7 +107,8 @@ template <class RouterInfo>
 std::shared_ptr<typename RouterInfo::RouteHandleIf> createHashRoute(
     const folly::dynamic& json,
     std::vector<std::shared_ptr<typename RouterInfo::RouteHandleIf>> rh,
-    size_t threadId) {
+    size_t threadId,
+    ProxyBase& proxy) {
   std::string salt;
   folly::StringPiece funcType = Ch3HashFunc::type();
   auto bucketize = false;
@@ -165,10 +167,14 @@ std::shared_ptr<typename RouterInfo::RouteHandleIf> createHashRoute(
         std::move(func),
         bucketize,
         clientFanout);
-  } else if (funcType == WeightedCh4HashFunc::type()) {
-    WeightedCh4HashFunc func{json, n};
-    return createHashRoute<RouterInfo, WeightedCh4HashFunc>(
-        std::move(rh), std::move(salt), std::move(func));
+  } else if (funcType == WeightedCh3RvHashFunc::type()) {
+    WeightedCh3RvHashFunc func{json, n, proxy.router().rtVarsDataWeak().lock()};
+    return createHashRoute<RouterInfo, WeightedCh3RvHashFunc>(
+        std::move(rh),
+        std::move(salt),
+        std::move(func),
+        bucketize,
+        clientFanout);
   } else if (funcType == ConstShardHashFunc::type()) {
     return createHashRoute<RouterInfo, ConstShardHashFunc>(
         std::move(rh), std::move(salt), ConstShardHashFunc(n));
@@ -198,7 +204,8 @@ std::shared_ptr<typename RouterInfo::RouteHandleIf> createHashRoute(
 template <class RouterInfo>
 std::shared_ptr<typename RouterInfo::RouteHandleIf> makeHashRoute(
     RouteHandleFactory<typename RouterInfo::RouteHandleIf>& factory,
-    const folly::dynamic& json) {
+    const folly::dynamic& json,
+    ProxyBase& proxy) {
   std::vector<std::shared_ptr<typename RouterInfo::RouteHandleIf>> children;
   if (json.isObject()) {
     if (auto jchildren = json.get_ptr("children")) {
@@ -208,7 +215,7 @@ std::shared_ptr<typename RouterInfo::RouteHandleIf> makeHashRoute(
     children = factory.createList(json);
   }
   return createHashRoute<RouterInfo>(
-      json, std::move(children), factory.getThreadId());
+      json, std::move(children), factory.getThreadId(), proxy);
 }
 
 } // namespace mcrouter

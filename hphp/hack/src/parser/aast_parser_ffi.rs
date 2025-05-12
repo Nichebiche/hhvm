@@ -6,15 +6,15 @@
 
 use std::collections::HashSet;
 
-use aast_parser::rust_aast_parser_types::Env;
 use aast_parser::AastParser;
+use aast_parser::rust_aast_parser_types::Env;
 use ocamlrep::FromOcamlRep;
 use ocamlrep_ocamlpool::to_ocaml;
 use parser_core_types::indexed_source_text::IndexedSourceText;
 use parser_core_types::source_text::SourceText;
 
 /// This is the entrypoint to the parser from ocaml.
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn from_text(env: usize, source_text: usize) -> usize {
     // XXX why this catch_unwind
     ocamlrep_ocamlpool::catch_unwind(|| {

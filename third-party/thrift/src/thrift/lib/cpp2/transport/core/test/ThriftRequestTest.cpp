@@ -16,7 +16,7 @@
 
 #include <thrift/lib/cpp2/transport/core/ThriftRequest.h>
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/PluggableFunction.h>
 #include <thrift/lib/cpp2/transport/core/testutil/FakeChannel.h>
 #include <thrift/lib/cpp2/transport/core/testutil/ServerConfigsMock.h>
@@ -27,7 +27,8 @@ namespace apache::thrift::detail {
 THRIFT_PLUGGABLE_FUNC_SET(
     void,
     handleFrameworkMetadata,
-    std::unique_ptr<folly::IOBuf>&& frameworkMetadata) {
+    std::unique_ptr<folly::IOBuf>&& frameworkMetadata,
+    Cpp2RequestContext*) {
   const auto& buf = *frameworkMetadata;
   std::string content(reinterpret_cast<const char*>(buf.data()), buf.length());
   EXPECT_EQ(content, "abc");

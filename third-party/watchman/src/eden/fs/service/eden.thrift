@@ -22,7 +22,7 @@ namespace hack edenfs.service
  * API style guide.
  * ----------------
  *
- * These guides are to ensure we use consitent pratices to make
+ * These guides are to ensure we use consistent pratices to make
  * our interface easy to use.
  * 1. Wrap the endpoint arguments in a struct. The name of this argument
  * struct should be the endpointname + "Request". This is Thrift's recommended
@@ -36,6 +36,21 @@ namespace hack edenfs.service
  * the first value in your arguments struct. Use the MountId struct as the type.
  * This allows us to evolve the identifiers we use for mountpoints in the future
  * without rewriting your new endpoint.
+ */
+
+/**
+ * To support testing of the EdenFS client library, we need to be able to
+ * mock the EdenFS Thrift APIs. This is done by defining a mock service,
+ * using `mockall::mock!`, that implements the EdenFS Thrift APIs.
+ *
+ * The mock definitions will require updates whenever the EdenFS Thrift API
+ * changes. Not all changes will require an update, only those that either:
+ *   1. Add/Rename a new method to the interface
+ *   2. Change the parameters or return type of a method
+ *   3. Introduce a breaking Thrift API changes (e.g. rename a method)
+ *
+ * For reference, the EdenFS client library mocks are defined here:
+ *   https://www.internalfb.com/code/fbsource/fbcode/eden/fs/cli_rs/edenfs-client/src/client/mock_service.rs
  */
 
 /** Thrift doesn't really do unsigned numbers, but we can sort of fake it.
@@ -96,7 +111,7 @@ typedef unsigned64 DataFetchOriginSet
 
 /**
  * A customizable type to be returned with an EdenError, helpful for catching
- * and having custom client logic to handle specfic error cases
+ * and having custom client logic to handle specific error cases
  */
 enum EdenErrorType {
   /** The errorCode property is a posix errno value */
@@ -116,7 +131,7 @@ enum EdenErrorType {
   /** The journal has been truncated. errorCode will be set to EDOM */
   JOURNAL_TRUNCATED = 6,
   /**
-   * The thrift funtion that receives this in an error is being called while
+   * The thrift function that receives this in an error is being called while
    * a checkout is in progress. errorCode will not be set.
    */
   CHECKOUT_IN_PROGRESS = 7,
@@ -701,7 +716,7 @@ struct ScmStatus {
   /**
    * A map of { path -> error message }
    *
-   * If any errors occured while computing the diff they will be reported here.
+   * If any errors occurred while computing the diff they will be reported here.
    * The results listed in the entries field may not be accurate for any paths
    * listed in this error field.
    *
@@ -1382,9 +1397,9 @@ enum Dtype {
 struct PredictiveFetch {
   // Number of directories to glob. If not specified, a default value (predictivePrefetchProfileSize in EdenConfig.h) is used.
   1: optional i32 numTopDirectories;
-  // Fetch the most accessed diectories by user specified. If not specified, user is derived from the server state.
+  // Fetch the most accessed directories by user specified. If not specified, user is derived from the server state.
   2: optional string user;
-  // Fetch the most accessed diectories in repository specified. If not specified, repo is derived from the mount.
+  // Fetch the most accessed directories in repository specified. If not specified, repo is derived from the mount.
   3: optional string repo;
   // Optional query parameter: fetch top most accessed directories with specified Operating System
   4: optional string os;
@@ -1438,7 +1453,7 @@ struct GlobParams {
   // If eden moves away from commit hashes this may become the tree hash
   // for the root tree agains which this glob should be evaluated.
   // There should be no duplicates in this list. If there are then
-  // there maybe duplicate machingFile and originHash pairs in the coresponding
+  // there maybe duplicate machingFile and originHash pairs in the corresponding
   // output Glob.
   7: list<ThriftRootId> revisions;
   // This has no effect.
@@ -1495,8 +1510,8 @@ struct MountAccesses {
 struct GetAccessCountsResult {
   1: map<pid_t, binary> cmdsByPid;
   2: map<PathString, MountAccesses> accessesByMount;
-// TODO: Count the number of thrift requests
-// 3: map<pid_t, AccessCount> thriftAccesses
+  // TODO: Count the number of thrift requests
+  // 3: map<pid_t, AccessCount> thriftAccesses
 }
 
 enum TracePointEvent {
@@ -1515,7 +1530,7 @@ struct TracePoint {
   // Opaque identifier for this "block" where a block is some logical
   // piece of work with a well-defined start and stop point
   3: i64 blockId;
-  // Opaque identifer for the parent block from which the current
+  // Opaque identifier for the parent block from which the current
   // block was constructed - used to create causal relationships
   // between blocks
   4: i64 parentBlockId;
@@ -1629,7 +1644,7 @@ struct SetPathObjectIdObject {
 
 // Any new use case should try to avoid using path, objectId and type, they will be deprecated.
 // Please use objects instead which would batch requests. If both path/objectId/type and objects
-// both present, the singlular will be added to the objects.
+// both present, the singular will be added to the objects.
 struct SetPathObjectIdParams {
   1: PathString mountPoint;
   // TODO: deprecate path, objectId and type
@@ -1637,7 +1652,7 @@ struct SetPathObjectIdParams {
   3: ThriftObjectId objectId;
   4: ObjectType type;
   5: CheckoutMode mode;
-  // Extra request infomation. i.e. build uuid, cache session id.
+  // Extra request information. i.e. build uuid, cache session id.
   6: optional map<string, string> requestInfo;
   7: list<SetPathObjectIdObject> objects;
 }
@@ -1869,7 +1884,7 @@ struct CommitTransition {
 /*
  * Large change notification returned when invoking changesSinceV2.
  * Indicates that EdenfS was unable to track changes within the given
- * mount point since the provided journal poistion. Callers should
+ * mount point since the provided journal position. Callers should
  * treat all filesystem entries as changed.
  */
 enum LostChangesReason {
@@ -1904,7 +1919,7 @@ union LargeChangeNotification {
 
 /*
  * Changed returned when invoking changesSinceV2.
- * Contains a change that occured within the given mount point
+ * Contains a change that occurred within the given mount point
  * since the provided journal position.
  */
 union ChangeNotification {
@@ -1915,11 +1930,11 @@ union ChangeNotification {
 /**
  * Return value of the changesSinceV2 API
  *
- * toPosition - a new journal poistion that indicates the next change
+ * toPosition - a new journal position that indicates the next change
  *   that will occur in the future. Should be used in the next call to
  *   changesSinceV2 go get the next list of changes.
  *
- * changes -  a list of all change notifications that have ocurred in
+ * changes -  a list of all change notifications that have occurred in
  *   within the given mount point since the provided journal position.
  */
 struct ChangesSinceV2Result {
@@ -1966,6 +1981,8 @@ struct ChangesSinceV2Params {
   5: optional list<PathString> excludedRoots;
   6: optional list<string> includedSuffixes;
   7: optional list<string> excludedSuffixes;
+  8: optional PathString root;
+  9: SyncBehavior sync;
 }
 
 /*
@@ -2019,6 +2036,54 @@ struct SendNotificationResponse {}
 struct SendNotificationRequest {
   1: string title;
   2: string description;
+}
+
+enum RedirectionType {
+  BIND = 0,
+  SYMLINK = 1,
+  UNKNOWN = 2,
+}
+
+enum RedirectionState {
+  // Matches the expectations of our configuration as far as we can tell
+  MATCHES_CONFIGURATION = 0,
+  // Something is mounted that we don't have a configuration for
+  UNKNOWN_MOUNT = 1,
+  // We expected the redirect to be mounted, but it isn't
+  NOT_MOUNTED = 2,
+  // We expected the redirect be a symlink, but it is not present
+  SYMLINK_MISSING = 3,
+  // The symlink is present, but it points to the wrong place
+  SYMLINK_INCORRECT = 4,
+}
+
+struct Redirection {
+  1: PathString repoPath;
+  2: RedirectionType redirType;
+  3: PathString source;
+  4: RedirectionState state;
+  /**
+    * TODO: when is this not set (state == UNKNOWN)
+    */
+  5: optional PathString target;
+}
+
+struct ListRedirectionsRequest {
+  1: MountId mount;
+}
+
+struct ListRedirectionsResponse {
+  1: list<Redirection> redirections;
+}
+
+struct GetFileContentRequest {
+  1: MountId mount;
+  2: PathString filePath;
+  3: SyncBehavior sync;
+}
+
+struct GetFileContentResponse {
+  1: ScmBlobOrError blob;
 }
 
 service EdenService extends fb303_core.BaseService {
@@ -2110,7 +2175,7 @@ service EdenService extends fb303_core.BaseService {
    * As an alternative, applications may also set the SyncBehavior of a Thrift
    * method to a non-zero value to achieve the same result.
    *
-   * Some Thrift methods are implicitely synchronizing, their documentation
+   * Some Thrift methods are implicitly synchronizing, their documentation
    * will state it.
    */
   void synchronizeWorkingCopy(
@@ -2307,7 +2372,7 @@ service EdenService extends fb303_core.BaseService {
    *
    * Returns the requested file attributes for the provided list of files.
    *
-   * This API assumes all the given paths corespond to regular files.
+   * This API assumes all the given paths correspond to regular files.
    * We return EdenErrors instead of attributes for paths that correspond to
    * directories or symlinks.
    *
@@ -2465,7 +2530,7 @@ service EdenService extends fb303_core.BaseService {
   DaemonInfo getDaemonInfo() throws (1: EdenError ex);
 
   /**
-  * Returns information about the privhelper process, including accesibility.
+  * Returns information about the privhelper process, including accessibility.
   */
   PrivHelperInfo checkPrivHelper() throws (1: EdenError ex);
 
@@ -2881,12 +2946,22 @@ service EdenService extends fb303_core.BaseService {
   *
   * Note that only Windows has a Notifier implementation. This is a no-op on other platforms.
   */
-  /**
-  * Ask the server to send a notification to the user via the Notifier.
-  *
-  * Note that only Windows has a Notifier implementation. This is a no-op on other platforms.
-  */
   SendNotificationResponse sendNotification(
     1: SendNotificationRequest request,
+  ) throws (1: EdenError ex);
+
+  ListRedirectionsResponse listRedirections(
+    1: ListRedirectionsRequest request,
+  ) throws (1: EdenError ex);
+
+  /**
+   * Returns a blobOrError for the given path.
+   * Caller needs to ensure the path goes to a valid file.
+   *
+   * Note that the non-streaming API CANNOT get blobs larger than 2GB,
+   * due to thrift size limits.
+   */
+  GetFileContentResponse getFileContent(
+    1: GetFileContentRequest request,
   ) throws (1: EdenError ex);
 }

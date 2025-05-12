@@ -109,10 +109,13 @@ WebTransportImpl::StreamReadHandle* WebTransportImpl::onWebTransportUniStream(
 
 folly::Expected<WebTransportImpl::WebTransport::FCState,
                 WebTransport::ErrorCode>
-WebTransportImpl::sendWebTransportStreamData(HTTPCodec::StreamID id,
-                                             std::unique_ptr<folly::IOBuf> data,
-                                             bool eof) {
-  auto res = tp_.sendWebTransportStreamData(id, std::move(data), eof);
+WebTransportImpl::sendWebTransportStreamData(
+    HTTPCodec::StreamID id,
+    std::unique_ptr<folly::IOBuf> data,
+    bool eof,
+    ByteEventCallback* deliveryCallback) {
+  auto res = tp_.sendWebTransportStreamData(
+      id, std::move(data), eof, deliveryCallback);
   if (eof || res.hasError()) {
     wtEgressStreams_.erase(id);
   }
@@ -130,8 +133,8 @@ WebTransportImpl::resetWebTransportEgress(HTTPCodec::StreamID id,
 }
 
 folly::Expected<folly::Unit, WebTransport::ErrorCode>
-WebTransportImpl::stopReadingWebTransportIngress(HTTPCodec::StreamID id,
-                                                 uint32_t errorCode) {
+WebTransportImpl::stopReadingWebTransportIngress(
+    HTTPCodec::StreamID id, folly::Optional<uint32_t> errorCode) {
   auto res = tp_.stopReadingWebTransportIngress(id, errorCode);
   wtIngressStreams_.erase(id);
   sp_.refreshTimeout();
@@ -140,12 +143,15 @@ WebTransportImpl::stopReadingWebTransportIngress(HTTPCodec::StreamID id,
 
 folly::Expected<WebTransport::FCState, WebTransport::ErrorCode>
 WebTransportImpl::StreamWriteHandle::writeStreamData(
-    std::unique_ptr<folly::IOBuf> data, bool fin) {
+    std::unique_ptr<folly::IOBuf> data,
+    bool fin,
+    ByteEventCallback* deliveryCallback) {
   if (stopSendingErrorCode_) {
     return folly::makeUnexpected(WebTransport::ErrorCode::STOP_SENDING);
   }
   impl_.sp_.refreshTimeout();
-  auto fcState = impl_.sendWebTransportStreamData(id_, std::move(data), fin);
+  auto fcState = impl_.sendWebTransportStreamData(
+      id_, std::move(data), fin, deliveryCallback);
   if (fcState.hasError()) {
     return folly::makeUnexpected(fcState.error());
   }
@@ -229,7 +235,8 @@ WebTransportImpl::StreamReadHandle::readStreamData() {
     auto bufLen = buf_.chainLength();
     WebTransport::StreamData streamData({buf_.move(), eof_});
     if (eof_) {
-      impl_.wtIngressStreams_.erase(getID());
+      // unregister the read callback, but don't send STOP_SENDING
+      impl_.stopReadingWebTransportIngress(id_, folly::none);
     } else if (bufLen >= kMaxWTIngressBuf) {
       VLOG(4) << __func__ << " resuming reads";
       impl_.tp_.resumeWebTransportIngress(getID());
@@ -250,7 +257,7 @@ void WebTransportImpl::StreamReadHandle::readAvailable(
     impl_.wtIngressStreams_.erase(getID());
     return;
   }
-  quic::Buf data = std::move(readRes.value().first);
+  quic::BufPtr data = std::move(readRes.value().first);
   bool eof = readRes.value().second;
   // deliver data, eof
   auto state = dataAvailable(std::move(data), eof);
@@ -269,7 +276,8 @@ WebTransport::FCState WebTransportImpl::StreamReadHandle::dataAvailable(
     readPromise_->setValue(WebTransport::StreamData({std::move(data), eof}));
     readPromise_.reset();
     if (eof) {
-      impl_.wtIngressStreams_.erase(getID());
+      // unregister the read callback, but don't send STOP_SENDING
+      impl_.stopReadingWebTransportIngress(getID(), folly::none);
       return WebTransport::FCState::UNBLOCKED;
     }
   } else {

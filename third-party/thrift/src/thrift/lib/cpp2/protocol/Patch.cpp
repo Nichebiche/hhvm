@@ -29,11 +29,11 @@
 #include <thrift/lib/cpp/util/SaturatingMath.h>
 #include <thrift/lib/cpp/util/VarintUtils.h>
 #include <thrift/lib/cpp2/op/Get.h>
-#include <thrift/lib/cpp2/patch/detail/Scuba.h>
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/CompactProtocol.h>
 #include <thrift/lib/cpp2/protocol/FieldMask.h>
 #include <thrift/lib/cpp2/protocol/Object.h>
+#include <thrift/lib/cpp2/protocol/detail/Patch.h>
 #include <thrift/lib/cpp2/type/Id.h>
 #include <thrift/lib/cpp2/type/NativeType.h>
 #include <thrift/lib/cpp2/type/Tag.h>
@@ -52,7 +52,8 @@ using value_field_id =
     type::field_id_tag<static_cast<FieldId>(type::base_type_v<Tag>)>;
 
 template <typename Tag>
-using value_native_type = op::get_native_type<Value, value_field_id<Tag>>;
+using value_native_type =
+    op::get_native_type<detail::Value, value_field_id<Tag>>;
 
 constexpr FieldId kSafePatchVersionId = FieldId{1};
 constexpr FieldId kSafePatchDataId = FieldId{2};
@@ -78,7 +79,7 @@ PatchOp toOp(FieldId id) {
 void checkOps(
     const Object& patch,
     Value::Type valueType,
-    folly::F14FastSet<PatchOp> supportedOps) {
+    folly::F14VectorSet<PatchOp> supportedOps) {
   checkNotSafePatch(patch);
   for (const auto& field : patch) {
     auto op = toOp(FieldId{field.first});
@@ -110,7 +111,7 @@ decltype(auto) argAs(V&& value) {
         util::enumNameSafe<Value::Type>(expected),
         util::enumNameSafe<Value::Type>(value.getType())));
   }
-  return *op::get<Id, Value>(std::forward<V>(value));
+  return *op::get<Id, Value::ThriftValue>(std::forward<V>(value).toThrift());
 }
 
 template <typename Tag>
@@ -287,7 +288,7 @@ void ApplyPatch::operator()(
 }
 
 void ApplyPatch::operator()(
-    const Object& patch, folly::F14FastSet<Value>& value) const {
+    const Object& patch, folly::F14VectorSet<Value>& value) const {
   checkOps(
       patch,
       Value::Type::setValue,
@@ -331,7 +332,6 @@ void ApplyPatch::operator()(
 
   if (auto* put = findOp(patch, PatchOp::Put)) {
     auto msg = "SetPatch::Put should be migrated to SetPatch::Add";
-    patch::detail::logDeprecatedOperation("SetPatch::Put", "[dynamic]", msg);
     XLOG(DFATAL) << msg;
     insert_set(*validate_if_set(put, "put"));
   }
@@ -505,8 +505,6 @@ void impl(Patch&& patch, Object& value) {
     if (const auto* p_set = to_remove->if_set()) {
       // TODO: Remove this after migrating to List
       auto msg = "StructPatch::Remove should be migrated from `set` to `list`";
-      patch::detail::logDeprecatedOperation(
-          "StructPatch::Remove (set)", "[dynamic]", msg);
       XLOG(DFATAL) << msg;
       remove(*p_set);
     } else if (const auto* p_list = to_remove->if_list()) {
@@ -617,127 +615,15 @@ void ApplyPatch::operator()(Object&& patch, Object& value) const {
   impl(std::move(patch), value);
 }
 
-// Inserts the next mask with union operator to getIncludesRef(mask)[id].
-// Skips if mask is allMask (already includes all fields), or next is noneMask.
-template <typename Id, typename F>
-void insertMaskUnion(
-    Mask& mask, Id id, const Mask& next, const F& getIncludesRef) {
-  if (mask != allMask() && next != noneMask()) {
-    Mask& current = getIncludesRef(mask)
-                        .ensure()
-                        .emplace(std::move(id), noneMask())
-                        .first->second;
-    current = current | next;
-  }
-}
-
 // Insert allMask to getIncludesRef(mask)[id] if id does not exist.
 template <typename Id, typename F>
 void tryInsertAllMask(Mask& mask, Id id, const F& getIncludesRef) {
   getIncludesRef(mask).ensure().emplace(std::move(id), allMask());
 }
 
-template <typename Id, typename F>
-void insertNextMask(
-    ExtractedMasksFromPatch& masks,
-    const Value& nextPatch,
-    Id readId,
-    Id writeId,
-    bool view,
-    const F& getIncludesRef) {
-  auto nextMasks = view
-      ? protocol::extractMaskViewFromPatch(nextPatch.as_object())
-      : protocol::extractMaskFromPatch(nextPatch.as_object());
-  insertMaskUnion(
-      masks.read, std::move(readId), nextMasks.read, getIncludesRef);
-  insertMaskUnion(
-      masks.write, std::move(writeId), nextMasks.write, getIncludesRef);
-}
-
-// Ensure requires reading existing value to know whether the field is set or
-// not. Insert allMask() if the field was never included in read mask
-// before.
-void insertEnsureFieldsToMask(Mask& mask, const Value& ensureStruct) {
-  const auto& obj = ensureStruct.as_object();
-  for (const auto& [id, value] : obj) {
-    mask.includes_ref().ensure().emplace(id, allMask());
-  }
-}
-
-void insertEnsureFieldsToMaskIfNotAllMask(
-    Mask& mask, const Value& ensureStruct) {
-  if (isAllMask(mask)) {
-    return;
-  }
-  insertEnsureFieldsToMask(mask, ensureStruct);
-}
-
-void insertTypeToMask(Mask& mask, const type::Type& type) {
-  if (mask == allMask()) {
-    return;
-  }
-  mask.includes_type_ref().ensure().emplace(type, allMask());
-}
-
-template <typename T>
-const T& getKeyOrElem(const T& value) {
-  return value;
-}
-template <typename K, typename V>
-const K& getKeyOrElem(const std::pair<const K, V>& value) {
-  return value.first;
-}
-
-// Put allMask() if the key was never included in the mask before. `view`
-// specifies whether to use address of Value to populate map mask (deprecated).
-template <typename Container>
-void insertKeysToMask(Mask& mask, const Container& c, bool view) {
-  if (view) {
-    auto writeValueIndex = buildValueIndex(mask);
-    for (const auto& elem : c) {
-      const auto& v = getKeyOrElem(elem);
-      auto id = static_cast<int64_t>(
-          getMapIdValueAddressFromIndex(writeValueIndex, v));
-      mask.includes_map_ref().ensure().emplace(id, allMask());
-    }
-    return;
-  }
-
-  for (const auto& elem : c) {
-    const auto& v = getKeyOrElem(elem);
-
-    if (getArrayKeyFromValue(v) == ArrayKey::Integer) {
-      mask.includes_map_ref().ensure().emplace(
-          static_cast<int64_t>(getMapIdFromValue(v)), allMask());
-    } else {
-      mask.includes_string_map_ref().ensure().emplace(
-          getStringFromValue(v), allMask());
-    }
-  }
-}
-
-template <typename Container>
-void insertKeysToMaskIfNotAllMask(Mask& mask, const Container& c, bool view) {
-  if (isAllMask(mask)) {
-    return;
-  }
-  insertKeysToMask(mask, c, view);
-}
-
-// Put allMask() iff current mask is not allMask and the key was never included
-// in the mask before.
-void insertFieldsToMask(Mask& mask, const std::vector<Value>& ids) {
-  if (mask == allMask()) {
-    return;
-  }
-  for (const Value& id : ids) {
-    mask.includes_ref().ensure().emplace(id.as_i16(), allMask());
-  }
-}
-
 // Constructs the field mask from the patch object for the field.
 void insertNextFieldsToMask(
-    ExtractedMasksFromPatch& masks, const Object& patch, bool view) {
+    ExtractedMasksFromPatch& masks, const Object& patch) {
   auto getIncludesObjRef = [&](Mask& mask) { return mask.includes_ref(); };
   for (const auto& [id, value] : patch) {
     // Object patch can get here only StructPatch::Patch(Prior|After)
@@ -745,18 +631,17 @@ void insertNextFieldsToMask(
     // operations can/should be applied. Generate allMask() read mask for them
     // if the recursively extracted masks from patch does not include the
     // field.
-    insertNextMask(masks, value, id, id, view, getIncludesObjRef);
-    tryInsertAllMask(masks.read, id, getIncludesObjRef);
+    auto nextMasks = extractMaskFromPatch(value.as_object());
+    insertNextMask(masks, nextMasks, id, id, getIncludesObjRef);
+    insertFieldsToMask(masks.read, FieldId{id});
   }
 }
 
-// Constructs the map mask from the patch object for the map. If view, it uses
-// address of Value to populate map mask. If not view, it uses the appropriate
-// integer map mask and string map mask after parsing from Value.
+// Constructs the map mask from the patch object for the map. It uses the
+// appropriate integer map mask and string map mask after parsing from Value.
 void insertNextMapItemsToMask(
     ExtractedMasksFromPatch& masks,
-    const folly::F14FastMap<protocol::Value, protocol::Value>& patch,
-    bool view) {
+    const folly::F14FastMap<protocol::Value, protocol::Value>& patch) {
   auto getIncludesMapRef = [&](Mask& mask) { return mask.includes_map_ref(); };
   auto getIncludesStringMapRef = [&](Mask& mask) {
     return mask.includes_string_map_ref();
@@ -765,34 +650,22 @@ void insertNextMapItemsToMask(
   // which require reading existing value to know if/how given operations
   // can/should be applied. Generate allMask() read map mask if the
   // recursively extracted masks from patch do not include the key.
-  if (view) {
-    auto readValueIndex = buildValueIndex(masks.read);
-    auto writeValueIndex = buildValueIndex(masks.write);
-    for (const auto& [key, value] : patch) {
-      auto readId = static_cast<int64_t>(
-          getMapIdValueAddressFromIndex(readValueIndex, key));
-      auto writeId = static_cast<int64_t>(
-          getMapIdValueAddressFromIndex(writeValueIndex, key));
-      insertNextMask(masks, value, readId, writeId, view, getIncludesMapRef);
-      tryInsertAllMask(masks.read, readId, getIncludesMapRef);
-    }
-    return;
-  }
   for (const auto& [key, value] : patch) {
+    auto nextMasks = extractMaskFromPatch(value.as_object());
     if (getArrayKeyFromValue(key) == ArrayKey::Integer) {
       auto id = static_cast<int64_t>(getMapIdFromValue(key));
-      insertNextMask(masks, value, id, id, view, getIncludesMapRef);
-      tryInsertAllMask(masks.read, id, getIncludesMapRef);
+      insertNextMask(masks, nextMasks, id, id, getIncludesMapRef);
+      insertKeysToMask(masks.read, id);
     } else {
       auto id = getStringFromValue(key);
-      insertNextMask(masks, value, id, id, view, getIncludesStringMapRef);
-      tryInsertAllMask(masks.read, id, getIncludesStringMapRef);
+      insertNextMask(masks, nextMasks, id, id, getIncludesStringMapRef);
+      insertKeysToMask(masks.read, id);
     }
   }
 }
 
 void insertNextTypesToMask(
-    ExtractedMasksFromPatch& masks, const Value& patchTypes, bool view) {
+    ExtractedMasksFromPatch& masks, const Value& patchTypes) {
   auto getIncludesTypeRef = [&](Mask& mask) {
     return mask.includes_type_ref();
   };
@@ -809,14 +682,14 @@ void insertNextTypesToMask(
     }
     auto dynPatch =
         protocol::detail::parseValueFromAny(type_to_patch.patch().value());
+    auto nextMasks = extractMaskFromPatch(dynPatch.as_object());
     insertNextMask(
         masks,
-        dynPatch,
+        nextMasks,
         type_to_patch.type().value(),
         type_to_patch.type().value(),
-        view,
         getIncludesTypeRef);
-    insertTypeToMask(masks.read, type_to_patch.type().value());
+    insertTypeToMaskIfNotAllMask(masks.read, type_to_patch.type().value());
   }
 }
 
@@ -824,7 +697,7 @@ void insertNextTypesToMask(
 // additional schema information. However, we can disambiguate if the same
 // patch contains other map operations which is tracked by `isMap`.
 ExtractedMasksFromPatch extractMaskFromPatch(
-    const protocol::Object& patch, bool view, bool isMap = false) {
+    const protocol::Object& patch, bool isMap = false) {
   ExtractedMasksFromPatch masks = {noneMask(), noneMask()};
 
   // If Assign, it is a write operation
@@ -849,7 +722,7 @@ ExtractedMasksFromPatch extractMaskFromPatch(
   if (auto* value = findOp(patch, PatchOp::Put)) {
     if (value->is_map()) {
       isMap = true;
-      insertKeysToMaskIfNotAllMask(masks.write, value->as_map(), view);
+      insertKeysToMaskIfNotAllMask(masks.write, value->as_map());
     } else if (!isIntrinsicDefault(*value)) {
       return {allMask(), allMask()};
     }
@@ -860,10 +733,10 @@ ExtractedMasksFromPatch extractMaskFromPatch(
   for (auto op : {PatchOp::PatchPrior, PatchOp::PatchAfter}) {
     if (auto* subpatch = findOp(patch, op)) {
       if (subpatch->is_object()) {
-        insertNextFieldsToMask(masks, subpatch->as_object(), view);
+        insertNextFieldsToMask(masks, subpatch->as_object());
       } else if (subpatch->is_map()) {
         isMap = true;
-        insertNextMapItemsToMask(masks, subpatch->as_map(), view);
+        insertNextMapItemsToMask(masks, subpatch->as_map());
       }
     }
   }
@@ -871,39 +744,44 @@ ExtractedMasksFromPatch extractMaskFromPatch(
   // If EnsureStruct, add fields/keys to mask.
   if (auto* ensureStruct = findOp(patch, PatchOp::EnsureStruct)) {
     if (ensureStruct->is_object()) {
-      insertEnsureFieldsToMask(masks.read, *ensureStruct);
-      insertEnsureFieldsToMaskIfNotAllMask(masks.write, *ensureStruct);
+      // Ensure requires reading existing value to know whether the field is set
+      // or not. Insert allMask() if the field was never included in read mask
+      // before.
+      insertFieldsToMask(masks.read, ensureStruct->as_object());
+      insertFieldsToMaskIfNotAllMask(masks.write, ensureStruct->as_object());
     } else if (ensureStruct->is_map()) {
       isMap = true;
-      insertKeysToMask(masks.read, ensureStruct->as_map(), view);
-      insertKeysToMaskIfNotAllMask(masks.write, ensureStruct->as_map(), view);
+      insertKeysToMask(masks.read, ensureStruct->as_map());
+      insertKeysToMaskIfNotAllMask(masks.write, ensureStruct->as_map());
     }
   }
 
   // If EnsureUnion, add fields to mask for read mask and all mask for write
   // mask.
   if (auto* ensureUnion = findOp(patch, PatchOp::EnsureUnion)) {
-    insertEnsureFieldsToMask(masks.read, *ensureUnion);
+    // Ensure requires reading existing value to know whether the field is set
+    // or not. Insert allMask() if the field was never included in read mask
+    // before.
+    insertFieldsToMask(masks.read, ensureUnion->as_object());
     masks.write = allMask();
   }
 
   // We can only distinguish struct. For struct, add removed fields to write
   // mask. Both set and map use a set for Remove, so they are indistinguishable.
-  // For view, we always add removed keys to write map mask. For non-view, if
-  // any of map operations is used we can correctly distinguish between map and
-  // set, then we add removed keys to write map mask. For set or any of map
+  // If any of map operations is used we can correctly distinguish between map
+  // and set, then we add removed keys to write map mask. For set or any of map
   // operations is not used, it is a read-write operation if not intristic
   // default.
   if (auto* value = findOp(patch, PatchOp::Remove)) {
     if (value->is_list()) {
       // struct patch
-      insertFieldsToMask(masks.write, value->as_list());
+      insertFieldsToMaskIfNotAllMask(masks.write, value->as_list());
     } else if (!isIntrinsicDefault(*value)) {
-      if (!view && !isMap) {
+      if (!isMap) {
         // cannot distinguish between set/map patch
         return {allMask(), allMask()};
       }
-      insertKeysToMaskIfNotAllMask(masks.write, value->as_set(), view);
+      insertKeysToMaskIfNotAllMask(masks.write, value->as_set());
     }
   }
 
@@ -911,7 +789,7 @@ ExtractedMasksFromPatch extractMaskFromPatch(
   // mask each type patch.
   for (auto op : {PatchOp::PatchIfTypeIsPrior, PatchOp::PatchIfTypeIsAfter}) {
     if (auto* patchTypes = findOp(patch, op)) {
-      insertNextTypesToMask(masks, *patchTypes, view);
+      insertNextTypesToMask(masks, *patchTypes);
     }
   }
 
@@ -925,16 +803,11 @@ ExtractedMasksFromPatch extractMaskFromPatch(
     if (!type::AnyData::isValid(anyStruct)) {
       throw std::runtime_error("Invalid AnyStruct");
     }
-    insertTypeToMask(masks.read, anyStruct.type().value());
+    insertTypeToMaskIfNotAllMask(masks.read, anyStruct.type().value());
     masks.write = allMask();
   }
 
-  // Read mask should be always subset of write mask. If not, make read mask
-  // equal to write mask. This can happen for struct or map fields with patch
-  // operations that returns noneMask for read mask (i.e. assign).
-  if ((masks.read | masks.write) != masks.write) {
-    masks.read = masks.write;
-  }
+  ensureRWMaskInvariant(masks);
 
   return masks;
 }
@@ -1046,7 +919,7 @@ ExtractedMasksFromPatch extractMapMaskFromPatchMapImpl(
 ExtractedMasksFromPatch extractMapMaskFromPatchImpl(
     const protocol::Object& patch, const Mask& mask) {
   if (isAllMask(mask)) {
-    return extractMaskFromPatch(patch, false, true);
+    return extractMaskFromPatch(patch, true);
   }
 
   // If there is an assign or clear, we can short-circut the logic.
@@ -1109,12 +982,6 @@ ExtractedMasksFromPatch extractMapMaskFromPatchImpl(
 
 } // namespace detail
 
-ExtractedMasksFromPatch extractMaskViewFromPatch(
-    const protocol::Object& patch) {
-  detail::checkNotSafePatch(patch);
-  return detail::extractMaskFromPatch(patch, true);
-}
-
 ExtractedMasksFromPatch extractMaskFromPatch(const protocol::Object& patch) {
   detail::checkNotSafePatch(patch);
   return detail::extractMaskFromPatch(patch, false);
@@ -1143,7 +1010,7 @@ std::unique_ptr<folly::IOBuf> applyPatchToSerializedData(
       Protocol == type::StandardProtocol::Binary,
       BinaryProtocolWriter,
       CompactProtocolWriter>;
-  auto masks = protocol::extractMaskViewFromPatch(patch);
+  auto masks = protocol::extractMaskFromPatch(patch);
   MaskedDecodeResult result =
       parseObject<ProtocolReader>(buf, masks.read, masks.write);
   applyPatch(patch, result.included);

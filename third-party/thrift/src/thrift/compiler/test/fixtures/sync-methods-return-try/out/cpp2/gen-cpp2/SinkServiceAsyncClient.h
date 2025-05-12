@@ -25,6 +25,7 @@ namespace apache::thrift {
 
 template <>
 class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::SinkService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
  public:
   using apache::thrift::GeneratedAsyncClient::GeneratedAsyncClient;
 
@@ -55,7 +56,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_method(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_method(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_method(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
  protected:
@@ -80,7 +81,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_methodAndReponse(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_methodAndReponse(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_methodAndReponse(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodAndReponseCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
  protected:
@@ -105,7 +106,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_methodThrow(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_methodThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_methodThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodThrowCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
  protected:
@@ -130,7 +131,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_methodSinkThrow(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_methodSinkThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_methodSinkThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodSinkThrowCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
  protected:
@@ -155,7 +156,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_methodFinalThrow(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_methodFinalThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_methodFinalThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodFinalThrowCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
  protected:
@@ -180,7 +181,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_methodBothThrow(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_methodBothThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_methodBothThrow(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodBothThrowCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
  protected:
@@ -205,7 +206,7 @@ class Client<::cpp2::SinkService> : public apache::thrift::GeneratedAsyncClient 
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_methodFast(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_methodFast(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback);
+  void fbthrift_send_methodFast(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::SinkClientCallback* callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> methodFastCtx(apache::thrift::RpcOptions* rpcOptions);
  public:
 };

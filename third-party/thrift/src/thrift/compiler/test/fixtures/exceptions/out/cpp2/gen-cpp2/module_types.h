@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct message;
 struct sonnet;
@@ -66,11 +64,9 @@ APACHE_THRIFT_DEFINE_ACCESSOR(message_field);
 APACHE_THRIFT_DEFINE_ACCESSOR(error_code);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace cpp2 {
@@ -113,32 +109,16 @@ class FOLLY_EXPORT Fiery : public virtual apache::thrift::TException {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 1;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::message
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::string_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 1;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -186,68 +166,56 @@ class FOLLY_EXPORT Fiery : public virtual apache::thrift::TException {
   bool operator<(const Fiery&) const;
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> message_ref() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_message};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> message_ref() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_message};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> message_ref() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_message)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> message_ref() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_message};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> message_ref() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_message};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> message_ref() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_message)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> message_ref() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_message)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<const fbthrift_T&> message() const& {
+    return ::apache::thrift::required_field_ref<const fbthrift_T&>{this->__fbthrift_field_message};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&> message() const& {
-    return ::apache::thrift::required_field_ref<const T&>{this->__fbthrift_field_message};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&> message() & {
+    return ::apache::thrift::required_field_ref<fbthrift_T&>{this->__fbthrift_field_message};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<const T&&> message() const&& {
-    return ::apache::thrift::required_field_ref<const T&&>{static_cast<const T&&>(this->__fbthrift_field_message)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::required_field_ref<fbthrift_T&&> message() && {
+    return ::apache::thrift::required_field_ref<fbthrift_T&&>{static_cast<fbthrift_T&&>(this->__fbthrift_field_message)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&> message() & {
-    return ::apache::thrift::required_field_ref<T&>{this->__fbthrift_field_message};
-  }
-
-  /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::required_field_ref<T&&> message() && {
-    return ::apache::thrift::required_field_ref<T&&>{static_cast<T&&>(this->__fbthrift_field_message)};
-  }
-
-  /** Glean { "field": "message" } */
-  [[deprecated("Use `FOO.message().value();` instead of `FOO.get_message();`")]]
+  [[deprecated("Use `FOO.message().value()` instead of `FOO.get_message()`")]]
   const ::std::string& get_message() const& {
     return __fbthrift_field_message;
   }
 
   /** Glean { "field": "message" } */
-  [[deprecated("Use `FOO.message().value();` instead of `FOO.get_message();`")]]
+  [[deprecated("Use `FOO.message().value()` instead of `FOO.get_message()`")]]
   ::std::string get_message() && {
     return static_cast<::std::string&&>(__fbthrift_field_message);
   }
 
   /** Glean { "field": "message" } */
   template <typename T_Fiery_message_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.message() = BAR;` instead of `FOO.set_message(BAR);`")]]
+  [[deprecated("Use `FOO.message() = BAR` instead of `FOO.set_message(BAR)`")]]
   ::std::string& set_message(T_Fiery_message_struct_setter&& message_) {
     message_ref() = std::forward<T_Fiery_message_struct_setter>(message_);
     return __fbthrift_field_message;
@@ -297,32 +265,16 @@ class FOLLY_EXPORT Serious : public virtual apache::thrift::TException {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 1;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::sonnet
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::string_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 1;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -372,66 +324,54 @@ class FOLLY_EXPORT Serious : public virtual apache::thrift::TException {
   bool operator<(const Serious&) const;
 
   /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> sonnet_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> sonnet_ref() const& {
     return {this->__fbthrift_field_sonnet, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> sonnet_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_sonnet), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> sonnet_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> sonnet_ref() & {
     return {this->__fbthrift_field_sonnet, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> sonnet_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_sonnet), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> sonnet_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_sonnet), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&> sonnet() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<const fbthrift_T&> sonnet() const& {
     return {this->__fbthrift_field_sonnet, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<const T&&> sonnet() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_sonnet), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&> sonnet() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&> sonnet() & {
     return {this->__fbthrift_field_sonnet, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "sonnet" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::optional_field_ref<T&&> sonnet() && {
-    return {static_cast<T&&>(this->__fbthrift_field_sonnet), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::optional_field_ref<fbthrift_T&&> sonnet() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_sonnet), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "sonnet" } */
-  [[deprecated("Use `FOO.sonnet().value();` instead of `FOO.get_sonnet();`")]]
+  [[deprecated("Use `FOO.sonnet().value()` instead of `FOO.get_sonnet()`")]]
   const ::std::string* get_sonnet() const&;
 
   /** Glean { "field": "sonnet" } */
-  [[deprecated("Use `FOO.sonnet().value();` instead of `FOO.get_sonnet();`")]]
+  [[deprecated("Use `FOO.sonnet().value()` instead of `FOO.get_sonnet()`")]]
   ::std::string* get_sonnet() &;
 
   ::std::string* get_sonnet() && = delete;
 
   /** Glean { "field": "sonnet" } */
   template <typename T_Serious_sonnet_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.sonnet() = BAR;` instead of `FOO.set_sonnet(BAR);`")]]
+  [[deprecated("Use `FOO.sonnet() = BAR` instead of `FOO.set_sonnet(BAR)`")]]
   ::std::string& set_sonnet(T_Serious_sonnet_struct_setter&& sonnet_) {
     sonnet_ref() = std::forward<T_Serious_sonnet_struct_setter>(sonnet_);
     return __fbthrift_field_sonnet;
@@ -481,34 +421,18 @@ class FOLLY_EXPORT ComplexFieldNames : public virtual apache::thrift::TException
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 2;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::error_message,
     ::apache::thrift::ident::internal_error_message
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::string_t,
     ::apache::thrift::type::string_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 2;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -560,136 +484,112 @@ class FOLLY_EXPORT ComplexFieldNames : public virtual apache::thrift::TException
   bool operator<(const ComplexFieldNames&) const;
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_message_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_message_ref() const& {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_message_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_message_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_message_ref() & {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_message_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_message_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_message() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_message() const& {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_message() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_message() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_message() & {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_message() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_message() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> internal_error_message_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> internal_error_message_ref() const& {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> internal_error_message_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> internal_error_message_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> internal_error_message_ref() & {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> internal_error_message_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> internal_error_message_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> internal_error_message() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> internal_error_message() const& {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> internal_error_message() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> internal_error_message() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> internal_error_message() & {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> internal_error_message() && {
-    return {static_cast<T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> internal_error_message() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_message" } */
-  [[deprecated("Use `FOO.error_message().value();` instead of `FOO.get_error_message();`")]]
+  [[deprecated("Use `FOO.error_message().value()` instead of `FOO.get_error_message()`")]]
   const ::std::string& get_error_message() const& {
     return __fbthrift_field_error_message;
   }
 
   /** Glean { "field": "error_message" } */
-  [[deprecated("Use `FOO.error_message().value();` instead of `FOO.get_error_message();`")]]
+  [[deprecated("Use `FOO.error_message().value()` instead of `FOO.get_error_message()`")]]
   ::std::string get_error_message() && {
     return static_cast<::std::string&&>(__fbthrift_field_error_message);
   }
 
   /** Glean { "field": "error_message" } */
   template <typename T_ComplexFieldNames_error_message_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.error_message() = BAR;` instead of `FOO.set_error_message(BAR);`")]]
+  [[deprecated("Use `FOO.error_message() = BAR` instead of `FOO.set_error_message(BAR)`")]]
   ::std::string& set_error_message(T_ComplexFieldNames_error_message_struct_setter&& error_message_) {
     error_message_ref() = std::forward<T_ComplexFieldNames_error_message_struct_setter>(error_message_);
     return __fbthrift_field_error_message;
   }
 
   /** Glean { "field": "internal_error_message" } */
-  [[deprecated("Use `FOO.internal_error_message().value();` instead of `FOO.get_internal_error_message();`")]]
+  [[deprecated("Use `FOO.internal_error_message().value()` instead of `FOO.get_internal_error_message()`")]]
   const ::std::string& get_internal_error_message() const& {
     return __fbthrift_field_internal_error_message;
   }
 
   /** Glean { "field": "internal_error_message" } */
-  [[deprecated("Use `FOO.internal_error_message().value();` instead of `FOO.get_internal_error_message();`")]]
+  [[deprecated("Use `FOO.internal_error_message().value()` instead of `FOO.get_internal_error_message()`")]]
   ::std::string get_internal_error_message() && {
     return static_cast<::std::string&&>(__fbthrift_field_internal_error_message);
   }
 
   /** Glean { "field": "internal_error_message" } */
   template <typename T_ComplexFieldNames_internal_error_message_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.internal_error_message() = BAR;` instead of `FOO.set_internal_error_message(BAR);`")]]
+  [[deprecated("Use `FOO.internal_error_message() = BAR` instead of `FOO.set_internal_error_message(BAR)`")]]
   ::std::string& set_internal_error_message(T_ComplexFieldNames_internal_error_message_struct_setter&& internal_error_message_) {
     internal_error_message_ref() = std::forward<T_ComplexFieldNames_internal_error_message_struct_setter>(internal_error_message_);
     return __fbthrift_field_internal_error_message;
@@ -739,34 +639,18 @@ class FOLLY_EXPORT CustomFieldNames : public virtual apache::thrift::TException 
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 2;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::error_message,
     ::apache::thrift::ident::internal_error_message
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::string_t,
     ::apache::thrift::type::string_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 2;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -818,136 +702,112 @@ class FOLLY_EXPORT CustomFieldNames : public virtual apache::thrift::TException 
   bool operator<(const CustomFieldNames&) const;
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_message_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_message_ref() const& {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_message_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_message_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_message_ref() & {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_message_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_message_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_message() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_message() const& {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_message() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_message() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_message() & {
     return {this->__fbthrift_field_error_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_message() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_message() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_message), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> internal_error_message_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> internal_error_message_ref() const& {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> internal_error_message_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> internal_error_message_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> internal_error_message_ref() & {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> internal_error_message_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> internal_error_message_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> internal_error_message() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> internal_error_message() const& {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> internal_error_message() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> internal_error_message() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> internal_error_message() & {
     return {this->__fbthrift_field_internal_error_message, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "internal_error_message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> internal_error_message() && {
-    return {static_cast<T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> internal_error_message() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_internal_error_message), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_message" } */
-  [[deprecated("Use `FOO.error_message().value();` instead of `FOO.get_error_message();`")]]
+  [[deprecated("Use `FOO.error_message().value()` instead of `FOO.get_error_message()`")]]
   const ::std::string& get_error_message() const& {
     return __fbthrift_field_error_message;
   }
 
   /** Glean { "field": "error_message" } */
-  [[deprecated("Use `FOO.error_message().value();` instead of `FOO.get_error_message();`")]]
+  [[deprecated("Use `FOO.error_message().value()` instead of `FOO.get_error_message()`")]]
   ::std::string get_error_message() && {
     return static_cast<::std::string&&>(__fbthrift_field_error_message);
   }
 
   /** Glean { "field": "error_message" } */
   template <typename T_CustomFieldNames_error_message_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.error_message() = BAR;` instead of `FOO.set_error_message(BAR);`")]]
+  [[deprecated("Use `FOO.error_message() = BAR` instead of `FOO.set_error_message(BAR)`")]]
   ::std::string& set_error_message(T_CustomFieldNames_error_message_struct_setter&& error_message_) {
     error_message_ref() = std::forward<T_CustomFieldNames_error_message_struct_setter>(error_message_);
     return __fbthrift_field_error_message;
   }
 
   /** Glean { "field": "internal_error_message" } */
-  [[deprecated("Use `FOO.internal_error_message().value();` instead of `FOO.get_internal_error_message();`")]]
+  [[deprecated("Use `FOO.internal_error_message().value()` instead of `FOO.get_internal_error_message()`")]]
   const ::std::string& get_internal_error_message() const& {
     return __fbthrift_field_internal_error_message;
   }
 
   /** Glean { "field": "internal_error_message" } */
-  [[deprecated("Use `FOO.internal_error_message().value();` instead of `FOO.get_internal_error_message();`")]]
+  [[deprecated("Use `FOO.internal_error_message().value()` instead of `FOO.get_internal_error_message()`")]]
   ::std::string get_internal_error_message() && {
     return static_cast<::std::string&&>(__fbthrift_field_internal_error_message);
   }
 
   /** Glean { "field": "internal_error_message" } */
   template <typename T_CustomFieldNames_internal_error_message_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.internal_error_message() = BAR;` instead of `FOO.set_internal_error_message(BAR);`")]]
+  [[deprecated("Use `FOO.internal_error_message() = BAR` instead of `FOO.set_internal_error_message(BAR)`")]]
   ::std::string& set_internal_error_message(T_CustomFieldNames_internal_error_message_struct_setter&& internal_error_message_) {
     internal_error_message_ref() = std::forward<T_CustomFieldNames_internal_error_message_struct_setter>(internal_error_message_);
     return __fbthrift_field_internal_error_message;
@@ -997,34 +857,18 @@ class FOLLY_EXPORT ExceptionWithPrimitiveField : public virtual apache::thrift::
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 2;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::message,
     ::apache::thrift::ident::error_code
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::string_t,
     ::apache::thrift::type::i32_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 2;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -1076,127 +920,103 @@ class FOLLY_EXPORT ExceptionWithPrimitiveField : public virtual apache::thrift::
   bool operator<(const ExceptionWithPrimitiveField&) const;
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> message_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> message_ref() const& {
     return {this->__fbthrift_field_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> message_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_message), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> message_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> message_ref() & {
     return {this->__fbthrift_field_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> message_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_message), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> message_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_message), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> message() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> message() const& {
     return {this->__fbthrift_field_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> message() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_message), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> message() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> message() & {
     return {this->__fbthrift_field_message, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> message() && {
-    return {static_cast<T&&>(this->__fbthrift_field_message), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> message() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_message), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_code_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_code_ref() const& {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_code_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_code_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_code_ref() & {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_code_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_code_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_code() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_code() const& {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_code() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_code() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_code() & {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_code() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_code() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "message" } */
-  [[deprecated("Use `FOO.message().value();` instead of `FOO.get_message();`")]]
+  [[deprecated("Use `FOO.message().value()` instead of `FOO.get_message()`")]]
   const ::std::string& get_message() const& {
     return __fbthrift_field_message;
   }
 
   /** Glean { "field": "message" } */
-  [[deprecated("Use `FOO.message().value();` instead of `FOO.get_message();`")]]
+  [[deprecated("Use `FOO.message().value()` instead of `FOO.get_message()`")]]
   ::std::string get_message() && {
     return static_cast<::std::string&&>(__fbthrift_field_message);
   }
 
   /** Glean { "field": "message" } */
   template <typename T_ExceptionWithPrimitiveField_message_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.message() = BAR;` instead of `FOO.set_message(BAR);`")]]
+  [[deprecated("Use `FOO.message() = BAR` instead of `FOO.set_message(BAR)`")]]
   ::std::string& set_message(T_ExceptionWithPrimitiveField_message_struct_setter&& message_) {
     message_ref() = std::forward<T_ExceptionWithPrimitiveField_message_struct_setter>(message_);
     return __fbthrift_field_message;
   }
 
   /** Glean { "field": "error_code" } */
-  [[deprecated("Use `FOO.error_code().value();` instead of `FOO.get_error_code();`")]]
+  [[deprecated("Use `FOO.error_code().value()` instead of `FOO.get_error_code()`")]]
   ::std::int32_t get_error_code() const;
 
   /** Glean { "field": "error_code" } */
-  [[deprecated("Use `FOO.error_code() = BAR;` instead of `FOO.set_error_code(BAR);`")]]
+  [[deprecated("Use `FOO.error_code() = BAR` instead of `FOO.set_error_code(BAR)`")]]
   ::std::int32_t& set_error_code(::std::int32_t error_code_);
 
   template <class Protocol_>
@@ -1243,34 +1063,18 @@ class FOLLY_EXPORT ExceptionWithStructuredAnnotation : public virtual apache::th
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 2;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1,2};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::message_field,
     ::apache::thrift::ident::error_code
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1,2};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::string_t,
     ::apache::thrift::type::i32_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 2;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -1322,127 +1126,103 @@ class FOLLY_EXPORT ExceptionWithStructuredAnnotation : public virtual apache::th
   bool operator<(const ExceptionWithStructuredAnnotation&) const;
 
   /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> message_field_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> message_field_ref() const& {
     return {this->__fbthrift_field_message_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> message_field_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_message_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> message_field_ref() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> message_field_ref() & {
     return {this->__fbthrift_field_message_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> message_field_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_message_field), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> message_field_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_message_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> message_field() const& {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> message_field() const& {
     return {this->__fbthrift_field_message_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> message_field() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_message_field), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> message_field() & {
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> message_field() & {
     return {this->__fbthrift_field_message_field, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "message_field" } */
-  template <typename..., typename T = ::std::string>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> message_field() && {
-    return {static_cast<T&&>(this->__fbthrift_field_message_field), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::string>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> message_field() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_message_field), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_code_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_code_ref() const& {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_code_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_code_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_code_ref() & {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_code_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_code_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> error_code() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> error_code() const& {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> error_code() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
-  }
-
-  /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> error_code() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> error_code() & {
     return {this->__fbthrift_field_error_code, __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "error_code" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> error_code() && {
-    return {static_cast<T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> error_code() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_error_code), __isset.at(1), __isset.bit(1)};
   }
 
   /** Glean { "field": "message_field" } */
-  [[deprecated("Use `FOO.message_field().value();` instead of `FOO.get_message_field();`")]]
+  [[deprecated("Use `FOO.message_field().value()` instead of `FOO.get_message_field()`")]]
   const ::std::string& get_message_field() const& {
     return __fbthrift_field_message_field;
   }
 
   /** Glean { "field": "message_field" } */
-  [[deprecated("Use `FOO.message_field().value();` instead of `FOO.get_message_field();`")]]
+  [[deprecated("Use `FOO.message_field().value()` instead of `FOO.get_message_field()`")]]
   ::std::string get_message_field() && {
     return static_cast<::std::string&&>(__fbthrift_field_message_field);
   }
 
   /** Glean { "field": "message_field" } */
   template <typename T_ExceptionWithStructuredAnnotation_message_field_struct_setter = ::std::string>
-  [[deprecated("Use `FOO.message_field() = BAR;` instead of `FOO.set_message_field(BAR);`")]]
+  [[deprecated("Use `FOO.message_field() = BAR` instead of `FOO.set_message_field(BAR)`")]]
   ::std::string& set_message_field(T_ExceptionWithStructuredAnnotation_message_field_struct_setter&& message_field_) {
     message_field_ref() = std::forward<T_ExceptionWithStructuredAnnotation_message_field_struct_setter>(message_field_);
     return __fbthrift_field_message_field;
   }
 
   /** Glean { "field": "error_code" } */
-  [[deprecated("Use `FOO.error_code().value();` instead of `FOO.get_error_code();`")]]
+  [[deprecated("Use `FOO.error_code().value()` instead of `FOO.get_error_code()`")]]
   ::std::int32_t get_error_code() const;
 
   /** Glean { "field": "error_code" } */
-  [[deprecated("Use `FOO.error_code() = BAR;` instead of `FOO.set_error_code(BAR);`")]]
+  [[deprecated("Use `FOO.error_code() = BAR` instead of `FOO.set_error_code(BAR)`")]]
   ::std::int32_t& set_error_code(::std::int32_t error_code_);
 
   template <class Protocol_>
@@ -1489,30 +1269,14 @@ class FOLLY_EXPORT Banal : public virtual apache::thrift::TException {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 0;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0};
   using __fbthrift_reflection_type_tags = folly::tag_t<
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 0;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -1586,3 +1350,41 @@ unsigned long Banal::read(Protocol_* iprot) {
 
 
 } // namespace cpp2
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::cpp2::Fiery, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\x99\x45\x1d\x4e\x07\x4f\x66\x2c\x10\x39\xb7\xfe\x08\xb1\xd2\xb4", 16};
+};
+template <> struct TSchemaAssociation<::cpp2::Serious, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\x3a\xcb\xf0\x43\x70\xe4\xca\x8a\xd8\x17\x63\xf0\xfa\x66\x81\x88", 16};
+};
+template <> struct TSchemaAssociation<::cpp2::ComplexFieldNames, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\xa8\xd8\x10\x64\x03\x41\x94\x6f\x9b\xf3\x66\x4a\xf8\x5a\x76\xa9", 16};
+};
+template <> struct TSchemaAssociation<::cpp2::CustomFieldNames, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\xbe\x52\xb4\xd1\x6c\x46\x20\x88\x87\x4a\xb6\xf4\x84\xc7\x34\x2d", 16};
+};
+template <> struct TSchemaAssociation<::cpp2::ExceptionWithPrimitiveField, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\x48\xac\x33\x3a\x35\x8c\x09\xb6\xe2\xcc\x72\xcf\x3c\xd4\xcf\x14", 16};
+};
+template <> struct TSchemaAssociation<::cpp2::ExceptionWithStructuredAnnotation, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\x6d\x71\x83\xae\xc8\x4f\x94\x51\x56\x0b\xd8\x89\x63\xab\x30\x64", 16};
+};
+template <> struct TSchemaAssociation<::cpp2::Banal, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4294775116102366513;
+  static constexpr ::std::string_view definitionKey = {"\x7a\x19\x77\x51\xc3\xeb\xe1\x68\x87\x8f\x1b\x03\xc5\x78\xfb\xc4", 16};
+};
+} // namespace apache::thrift::detail

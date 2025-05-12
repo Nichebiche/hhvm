@@ -37,18 +37,7 @@ Here's why:
 
 I started by checking this subtype relationship.
 
-The subtype comes from this type variable
-
-File instance_prop.php, line 8, character 8 - line 8, character 14:
-
- 5 | }
- 6 | 
- 7 | function bar(C $c): int {
- 8 |   $x = »$c->foo«;
- 9 |   return $x;
-10 | }
-
-which I solved to this hint
+The subtype comes from this hint
 
 File instance_prop.php, line 4, character 10 - line 4, character 13:
 

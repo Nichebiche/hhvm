@@ -16,6 +16,7 @@
 #include <contextprop/if/gen-cpp2/ContextpropConstants_constants.h>
 #endif
 
+#include "mcrouter/lib/network/RemoteConnection.h"
 #include "mcrouter/lib/network/Utils.h"
 
 namespace facebook {
@@ -23,11 +24,24 @@ namespace memcache {
 
 template <class ThriftClient>
 std::optional<ThriftClient> ThriftTransportBase::createThriftClient() {
-  std::optional<ThriftClient> client;
+  // Connect to remote proxy service
+  if (auto serviceName = connectionOptions_.accessPoint->getServiceName();
+      !serviceName.empty()) {
+    if (hasServiceRouter()) {
+      return getServiceRouterClient<ThriftClient>(serviceName);
+    } else {
+      return std::nullopt; // not supported
+    }
+  }
+  // Plain Rocket channel
   channel_ = createChannel();
   if (!channel_) {
     return std::nullopt;
   }
+  if (flushList_) {
+    channel_->setFlushList(flushList_);
+  }
+  std::optional<ThriftClient> client;
   client = ThriftClient(channel_);
   // Avoid any static default-registered event handlers.
   client->clearEventHandlers();

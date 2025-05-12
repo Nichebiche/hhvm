@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct MyInt;
 } // namespace ident
@@ -21,11 +19,9 @@ namespace detail {
 APACHE_THRIFT_DEFINE_ACCESSOR(MyInt);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
-
 // END declare_enums
 // BEGIN forward_declare
 namespace test::namespace_from_package::module {
@@ -63,32 +59,16 @@ class Foo final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "module";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 1;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::MyInt
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i64_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 1;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -130,59 +110,47 @@ class Foo final  {
   bool operator<(const Foo&) const;
 
   /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> MyInt_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> MyInt_ref() const& {
     return {this->__fbthrift_field_MyInt, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> MyInt_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_MyInt), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> MyInt_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> MyInt_ref() & {
     return {this->__fbthrift_field_MyInt, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> MyInt_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_MyInt), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> MyInt_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_MyInt), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> MyInt() const& {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> MyInt() const& {
     return {this->__fbthrift_field_MyInt, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> MyInt() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_MyInt), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> MyInt() & {
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> MyInt() & {
     return {this->__fbthrift_field_MyInt, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "MyInt" } */
-  template <typename..., typename T = ::std::int64_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> MyInt() && {
-    return {static_cast<T&&>(this->__fbthrift_field_MyInt), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int64_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> MyInt() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_MyInt), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "MyInt" } */
-  [[deprecated("Use `FOO.MyInt().value();` instead of `FOO.get_MyInt();`")]]
+  [[deprecated("Use `FOO.MyInt().value()` instead of `FOO.get_MyInt()`")]]
   ::std::int64_t get_MyInt() const;
 
   /** Glean { "field": "MyInt" } */
-  [[deprecated("Use `FOO.MyInt() = BAR;` instead of `FOO.set_MyInt(BAR);`")]]
+  [[deprecated("Use `FOO.MyInt() = BAR` instead of `FOO.set_MyInt(BAR)`")]]
   ::std::int64_t& set_MyInt(::std::int64_t MyInt_);
 
   template <class Protocol_>
@@ -211,3 +179,11 @@ unsigned long Foo::read(Protocol_* iprot) {
 
 
 } // namespace test::namespace_from_package::module
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::test::namespace_from_package::module::Foo, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -329397207201317601;
+  static constexpr ::std::string_view definitionKey = {"\x2b\x9e\x89\xe3\xff\xdf\x9d\x1a\x84\xe6\xd4\xcd\x8d\x46\x54\x4d", 16};
+};
+} // namespace apache::thrift::detail

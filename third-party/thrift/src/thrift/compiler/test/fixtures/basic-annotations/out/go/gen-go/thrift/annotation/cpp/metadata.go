@@ -13,7 +13,7 @@ import (
 )
 
 // (needed to ensure safety because of naive import list construction)
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = maps.Copy[map[int]int, map[int]int]
 var _ = metadata.GoUnusedProtection__
 
@@ -33,7 +33,7 @@ var (
     }()
     premadeThriftType_string = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE),
         )
     }()
     premadeThriftType_cpp_Name = func() *metadata.ThriftType {
@@ -56,7 +56,7 @@ var (
     }()
     premadeThriftType_bool = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_BOOL_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_BOOL_TYPE),
         )
     }()
     premadeThriftType_cpp_Lazy = func() *metadata.ThriftType {
@@ -167,6 +167,18 @@ var (
                 SetName("cpp.AllowLegacyDeprecatedTerseWritesRef"),
         )
     }()
+    premadeThriftType_cpp_EnableCustomTypeOrdering = func() *metadata.ThriftType {
+        return metadata.NewThriftType().SetTStruct(
+            metadata.NewThriftStructType().
+                SetName("cpp.EnableCustomTypeOrdering"),
+        )
+    }()
+    premadeThriftType_cpp_GenerateServiceMethodDecorator = func() *metadata.ThriftType {
+        return metadata.NewThriftType().SetTStruct(
+            metadata.NewThriftStructType().
+                SetName("cpp.GenerateServiceMethodDecorator"),
+        )
+    }()
 )
 
 // Helper type to allow us to store Thrift types in a slice at compile time,
@@ -204,6 +216,8 @@ var premadeThriftTypesMap = func() map[string]*metadata.ThriftType {
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "cpp.AllowLegacyNonOptionalRef", premadeThriftType_cpp_AllowLegacyNonOptionalRef })
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "cpp.DeprecatedTerseWrite", premadeThriftType_cpp_DeprecatedTerseWrite })
     thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "cpp.AllowLegacyDeprecatedTerseWritesRef", premadeThriftType_cpp_AllowLegacyDeprecatedTerseWritesRef })
+    thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "cpp.EnableCustomTypeOrdering", premadeThriftType_cpp_EnableCustomTypeOrdering })
+    thriftTypesWithFullName = append(thriftTypesWithFullName, thriftTypeWithFullName{ "cpp.GenerateServiceMethodDecorator", premadeThriftType_cpp_GenerateServiceMethodDecorator })
 
     fbthriftThriftTypesMap := make(map[string]*metadata.ThriftType, len(thriftTypesWithFullName))
     for _, value := range thriftTypesWithFullName {
@@ -357,7 +371,7 @@ func getMetadataThriftPrimitiveType(s *thrift.CodecPrimitiveSpec) *metadata.Thri
 		value = metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE
 	}
 
-	return value.Ptr()
+	return thrift.Pointerize(value)
 }
 
 func getMetadataThriftEnumType(s *thrift.CodecEnumSpec) *metadata.ThriftEnumType {

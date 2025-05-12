@@ -14,14 +14,17 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <folly/Utility.h>
 
+#include <thrift/lib/cpp2/runtime/SchemaRegistry.h>
 #include <thrift/lib/cpp2/schema/SyntaxGraph.h>
 
+#include <thrift/annotation/gen-cpp2/thrift_types.h>
 #include <thrift/lib/cpp2/schema/test/gen-cpp2/syntax_graph_2_handlers.h>
+#include <thrift/lib/cpp2/schema/test/gen-cpp2/syntax_graph_3_types.h>
 #include <thrift/lib/cpp2/schema/test/gen-cpp2/syntax_graph_handlers.h>
 #include <thrift/lib/cpp2/schema/test/gen-cpp2/syntax_graph_types.h>
 
@@ -43,6 +46,14 @@ class ServiceSchemaTest : public testing::Test {
         .getServiceSchema()
         .value()
         .schema;
+  }
+
+  template <typename ServiceTag>
+  std::vector<type::DefinitionKey> definitionKeysFor() {
+    return apache::thrift::ServiceHandler<ServiceTag>()
+        .getServiceSchema()
+        .value()
+        .definitions;
   }
 
   static folly::not_null<const ProgramNode*> findProgramByName(
@@ -69,8 +80,7 @@ TEST_F(ServiceSchemaTest, Programs) {
   EXPECT_EQ(programs.size(), 3);
 
   auto mainProgram = findProgramByName(syntaxGraph, "syntax_graph");
-  EXPECT_EQ(mainProgram->definitions().size(), 11);
-  EXPECT_EQ(&mainProgram->syntaxGraph(), &syntaxGraph);
+  EXPECT_EQ(mainProgram->definitionsByName().size(), 13);
   {
     ProgramNode::IncludesList includes = mainProgram->includes();
     EXPECT_EQ(includes.size(), 2);
@@ -101,8 +111,7 @@ TEST_F(ServiceSchemaTest, TransitivePrograms) {
   }
 
   auto secondProgram = findProgramByName(syntaxGraph, "syntax_graph_2");
-  EXPECT_EQ(secondProgram->definitions().size(), 1);
-  EXPECT_EQ(&secondProgram->syntaxGraph(), &syntaxGraph);
+  EXPECT_EQ(secondProgram->definitionsByName().size(), 1);
   {
     ProgramNode::IncludesList includes = secondProgram->includes();
     EXPECT_EQ(includes.size(), 1);
@@ -140,7 +149,7 @@ TEST_F(ServiceSchemaTest, Enum) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testEnum =
-      program->definitions().at("TestEnum");
+      program->definitionsByName().at("TestEnum");
   EXPECT_EQ(&testEnum->program(), program.unwrap());
   EXPECT_EQ(testEnum->kind(), DefinitionNode::Kind::ENUM);
   EXPECT_EQ(testEnum->name(), "TestEnum");
@@ -154,6 +163,13 @@ TEST_F(ServiceSchemaTest, Enum) {
       {"VALUE_2", 2},
   };
   EXPECT_THAT(e.values(), testing::ElementsAreArray(expected));
+
+  EXPECT_EQ(
+      e.toDebugString(),
+      "EnumNode 'TestEnum'\n"
+      "├─ 'UNSET' → 0\n"
+      "├─ 'VALUE_1' → 1\n"
+      "╰─ 'VALUE_2' → 2\n");
 }
 
 TEST_F(ServiceSchemaTest, Struct) {
@@ -161,10 +177,11 @@ TEST_F(ServiceSchemaTest, Struct) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testStruct =
-      program->definitions().at("TestStruct");
+      program->definitionsByName().at("TestStruct");
   EXPECT_EQ(&testStruct->program(), program.unwrap());
   EXPECT_EQ(testStruct->kind(), DefinitionNode::Kind::STRUCT);
   EXPECT_EQ(testStruct->name(), "TestStruct");
+  EXPECT_STREQ(testStruct->name().data(), "TestStruct");
   const StructNode& s = testStruct->asStruct();
   EXPECT_EQ(&s.definition(), testStruct.unwrap());
   EXPECT_EQ(s.uri(), "");
@@ -176,15 +193,29 @@ TEST_F(ServiceSchemaTest, Struct) {
       s.fields()[0].presence(), FieldNode::PresenceQualifier::UNQUALIFIED);
   EXPECT_EQ(s.fields()[0].type().asPrimitive(), Primitive::I32);
   EXPECT_EQ(s.fields()[0].name(), "field1");
+  EXPECT_STREQ(s.fields()[0].name().data(), "field1");
   EXPECT_EQ(s.fields()[0].customDefault()->as_i32(), 10);
 
   EXPECT_EQ(s.fields()[1].id(), FieldId{2});
-  EXPECT_EQ(s.fields()[1].presence(), FieldNode::PresenceQualifier::OPTIONAL);
+  EXPECT_EQ(s.fields()[1].presence(), FieldNode::PresenceQualifier::OPTIONAL_);
   EXPECT_EQ(
       &s.fields()[1].type().asEnum(),
-      &program->definitions().at("TestEnum")->asEnum());
+      &program->definitionsByName().at("TestEnum")->asEnum());
   EXPECT_EQ(s.fields()[1].name(), "field2");
+  EXPECT_STREQ(s.fields()[1].name().data(), "field2");
   EXPECT_EQ(s.fields()[1].customDefault(), nullptr);
+
+  EXPECT_EQ(
+      s.toDebugString(),
+      "StructNode 'TestStruct'\n"
+      "├─ FieldNode (id=1, presence=UNQUALIFIED, name='field1')\n"
+      "│  ├─ type = I32\n"
+      "│  ╰─ customDefault = ...\n"
+      "╰─ FieldNode (id=2, presence=OPTIONAL, name='field2')\n"
+      "   ╰─ type = EnumNode 'TestEnum'\n"
+      "      ├─ 'UNSET' → 0\n"
+      "      ├─ 'VALUE_1' → 1\n"
+      "      ╰─ 'VALUE_2' → 2\n");
 }
 
 TEST_F(ServiceSchemaTest, Union) {
@@ -192,10 +223,11 @@ TEST_F(ServiceSchemaTest, Union) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testUnion =
-      program->definitions().at("TestUnion");
+      program->definitionsByName().at("TestUnion");
   EXPECT_EQ(&testUnion->program(), program.unwrap());
   EXPECT_EQ(testUnion->kind(), DefinitionNode::Kind::UNION);
   EXPECT_EQ(testUnion->name(), "TestUnion");
+  EXPECT_STREQ(testUnion->name().data(), "TestUnion");
   const UnionNode& u = testUnion->asUnion();
 
   EXPECT_EQ(u.fields().size(), 2);
@@ -204,13 +236,29 @@ TEST_F(ServiceSchemaTest, Union) {
   EXPECT_EQ(u.fields()[0].name(), "s");
   EXPECT_EQ(
       &u.fields()[0].type().asStruct(),
-      &program->definitions().at("TestStruct")->asStruct());
+      &program->definitionsByName().at("TestStruct")->asStruct());
 
   EXPECT_EQ(u.fields()[1].id(), FieldId{2});
   EXPECT_EQ(u.fields()[1].name(), "e");
   EXPECT_EQ(
       &u.fields()[1].type().asEnum(),
-      &program->definitions().at("TestEnum")->asEnum());
+      &program->definitionsByName().at("TestEnum")->asEnum());
+
+  EXPECT_EQ(
+      u.toDebugString(),
+      "UnionNode 'TestUnion'\n"
+      "├─ FieldNode (id=1, presence=UNQUALIFIED, name='s')\n"
+      "│  ╰─ type = StructNode 'TestStruct'\n"
+      "│     ├─ FieldNode (id=1, presence=UNQUALIFIED, name='field1')\n"
+      "│     │  ├─ type = I32\n"
+      "│     │  ╰─ customDefault = ...\n"
+      "│     ╰─ FieldNode (id=2, presence=OPTIONAL, name='field2')\n"
+      "│        ╰─ type = EnumNode 'TestEnum'\n"
+      "│           ├─ 'UNSET' → 0\n"
+      "│           ├─ 'VALUE_1' → 1\n"
+      "│           ╰─ 'VALUE_2' → 2\n"
+      "╰─ FieldNode (id=2, presence=UNQUALIFIED, name='e')\n"
+      "   ╰─ type = EnumNode 'TestEnum'\n");
 }
 
 TEST_F(ServiceSchemaTest, Typedefs) {
@@ -218,7 +266,7 @@ TEST_F(ServiceSchemaTest, Typedefs) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> listOfTestStructTypedef =
-      program->definitions().at("ListOfTestStruct");
+      program->definitionsByName().at("ListOfTestStruct");
   EXPECT_EQ(&listOfTestStructTypedef->program(), program.unwrap());
   EXPECT_EQ(listOfTestStructTypedef->kind(), DefinitionNode::Kind::TYPEDEF);
   EXPECT_EQ(listOfTestStructTypedef->name(), "ListOfTestStruct");
@@ -226,10 +274,10 @@ TEST_F(ServiceSchemaTest, Typedefs) {
 
   EXPECT_EQ(
       &t.targetType().asList().elementType().asStruct(),
-      &program->definitions().at("TestStruct")->asStruct());
+      &program->definitionsByName().at("TestStruct")->asStruct());
 
   folly::not_null<const DefinitionNode*> typedefToListOfTestStructTypedef =
-      program->definitions().at("TypedefToListOfTestStruct");
+      program->definitionsByName().at("TypedefToListOfTestStruct");
   EXPECT_EQ(&typedefToListOfTestStructTypedef->program(), program.unwrap());
   EXPECT_EQ(
       typedefToListOfTestStructTypedef->kind(), DefinitionNode::Kind::TYPEDEF);
@@ -240,6 +288,35 @@ TEST_F(ServiceSchemaTest, Typedefs) {
 
   EXPECT_EQ(t2.targetType(), *listOfTestStructTypedef);
   EXPECT_EQ(t2.targetType().trueType(), t.targetType());
+
+  EXPECT_EQ(
+      t.toDebugString(),
+      "TypedefNode 'ListOfTestStruct'\n"
+      "╰─ targetType = List\n"
+      "   ╰─ elementType = StructNode 'TestStruct'\n"
+      "      ├─ FieldNode (id=1, presence=UNQUALIFIED, name='field1')\n"
+      "      │  ├─ type = I32\n"
+      "      │  ╰─ customDefault = ...\n"
+      "      ╰─ FieldNode (id=2, presence=OPTIONAL, name='field2')\n"
+      "         ╰─ type = EnumNode 'TestEnum'\n"
+      "            ├─ 'UNSET' → 0\n"
+      "            ├─ 'VALUE_1' → 1\n"
+      "            ╰─ 'VALUE_2' → 2\n");
+
+  EXPECT_EQ(
+      t2.toDebugString(),
+      "TypedefNode 'TypedefToListOfTestStruct'\n"
+      "╰─ targetType = TypedefNode 'ListOfTestStruct'\n"
+      "   ╰─ targetType = List\n"
+      "      ╰─ elementType = StructNode 'TestStruct'\n"
+      "         ├─ FieldNode (id=1, presence=UNQUALIFIED, name='field1')\n"
+      "         │  ├─ type = I32\n"
+      "         │  ╰─ customDefault = ...\n"
+      "         ╰─ FieldNode (id=2, presence=OPTIONAL, name='field2')\n"
+      "            ╰─ type = EnumNode 'TestEnum'\n"
+      "               ├─ 'UNSET' → 0\n"
+      "               ├─ 'VALUE_1' → 1\n"
+      "               ╰─ 'VALUE_2' → 2\n");
 }
 
 TEST_F(ServiceSchemaTest, Exception) {
@@ -247,7 +324,7 @@ TEST_F(ServiceSchemaTest, Exception) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testException =
-      program->definitions().at("TestException");
+      program->definitionsByName().at("TestException");
   EXPECT_EQ(&testException->program(), program.unwrap());
   EXPECT_EQ(testException->kind(), DefinitionNode::Kind::EXCEPTION);
   EXPECT_EQ(testException->name(), "TestException");
@@ -258,6 +335,12 @@ TEST_F(ServiceSchemaTest, Exception) {
   EXPECT_EQ(e.fields()[0].id(), FieldId{1});
   EXPECT_EQ(e.fields()[0].name(), "blob");
   EXPECT_EQ(e.fields()[0].type().asPrimitive(), Primitive::BINARY);
+
+  EXPECT_EQ(
+      e.toDebugString(),
+      "ExceptionNode 'TestException'\n"
+      "╰─ FieldNode (id=1, presence=UNQUALIFIED, name='blob')\n"
+      "   ╰─ type = BINARY\n");
 }
 
 TEST_F(ServiceSchemaTest, Constant) {
@@ -265,7 +348,7 @@ TEST_F(ServiceSchemaTest, Constant) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testConst =
-      program->definitions().at("testConst");
+      program->definitionsByName().at("testConst");
   EXPECT_EQ(&testConst->program(), program.unwrap());
   EXPECT_EQ(testConst->kind(), DefinitionNode::Kind::CONSTANT);
   EXPECT_EQ(testConst->name(), "testConst");
@@ -273,9 +356,23 @@ TEST_F(ServiceSchemaTest, Constant) {
 
   EXPECT_EQ(
       &c.type().asStruct(),
-      &program->definitions().at("TestStruct")->asStruct());
+      &program->definitionsByName().at("TestStruct")->asStruct());
   const auto& value = c.value().as_object();
   EXPECT_EQ(value.at(FieldId{1}).as_i32(), 2);
+
+  EXPECT_EQ(
+      c.toDebugString(),
+      "ConstantNode 'testConst'\n"
+      "├─ type = StructNode 'TestStruct'\n"
+      "│  ├─ FieldNode (id=1, presence=UNQUALIFIED, name='field1')\n"
+      "│  │  ├─ type = I32\n"
+      "│  │  ╰─ customDefault = ...\n"
+      "│  ╰─ FieldNode (id=2, presence=OPTIONAL, name='field2')\n"
+      "│     ╰─ type = EnumNode 'TestEnum'\n"
+      "│        ├─ 'UNSET' → 0\n"
+      "│        ├─ 'VALUE_1' → 1\n"
+      "│        ╰─ 'VALUE_2' → 2\n"
+      "╰─ value = ...\n");
 }
 
 TEST_F(ServiceSchemaTest, Service) {
@@ -284,7 +381,7 @@ TEST_F(ServiceSchemaTest, Service) {
   auto program2 = findProgramByName(syntaxGraph, "syntax_graph_2");
 
   folly::not_null<const DefinitionNode*> testService =
-      program->definitions().at("TestService");
+      program->definitionsByName().at("TestService");
   EXPECT_EQ(&testService->program(), program.unwrap());
   EXPECT_EQ(testService->kind(), DefinitionNode::Kind::SERVICE);
   EXPECT_EQ(testService->name(), "TestService");
@@ -306,7 +403,7 @@ TEST_F(ServiceSchemaTest, Service) {
   EXPECT_EQ(s.functions()[0].params()[0].type(), TypeRef::of(Primitive::I32));
 
   const InteractionNode& i =
-      program->definitions().at("TestInteraction")->asInteraction();
+      program->definitionsByName().at("TestInteraction")->asInteraction();
 
   EXPECT_EQ(s.functions()[1].name(), "createInteraction");
   EXPECT_EQ(s.functions()[1].response().type(), nullptr);
@@ -329,7 +426,7 @@ TEST_F(ServiceSchemaTest, Service) {
   EXPECT_EQ(s.functions()[3].response().sink(), nullptr);
 
   folly::not_null<const DefinitionNode*> testService2 =
-      program2->definitions().at("TestService2");
+      program2->definitionsByName().at("TestService2");
   EXPECT_EQ(&testService2->program(), program2.unwrap());
   EXPECT_EQ(testService2->kind(), DefinitionNode::Kind::SERVICE);
   EXPECT_EQ(testService2->name(), "TestService2");
@@ -337,6 +434,55 @@ TEST_F(ServiceSchemaTest, Service) {
 
   EXPECT_EQ(s2.functions().size(), 0);
   EXPECT_EQ(s2.baseService(), &s);
+
+  EXPECT_EQ(
+      s2.toDebugString(),
+      "ServiceNode (name='TestService2')\n"
+      "╰─ baseService = ServiceNode (name='TestService')\n"
+      "   ╰─ functions\n"
+      "      ├─ FunctionNode (name='foo')\n"
+      "      │  ├─ FunctionNode::Response\n"
+      "      │  │  ╰─ returnType = StructNode 'TestStruct'\n"
+      "      │  │     ├─ FieldNode (id=1, presence=UNQUALIFIED, name='field1')\n"
+      "      │  │     │  ├─ type = I32\n"
+      "      │  │     │  ╰─ customDefault = ...\n"
+      "      │  │     ╰─ FieldNode (id=2, presence=OPTIONAL, name='field2')\n"
+      "      │  │        ╰─ type = EnumNode 'TestEnum'\n"
+      "      │  │           ├─ 'UNSET' → 0\n"
+      "      │  │           ├─ 'VALUE_1' → 1\n"
+      "      │  │           ╰─ 'VALUE_2' → 2\n"
+      "      │  ╰─ params\n"
+      "      │     ╰─ FunctionNode::Param (id=1, name='input')\n"
+      "      │        ╰─ type = I32\n"
+      "      ├─ FunctionNode (name='createInteraction')\n"
+      "      │  ╰─ FunctionNode::Response\n"
+      "      │     ├─ returnType = void\n"
+      "      │     ╰─ InteractionNode (name='TestInteraction')\n"
+      "      │        ╰─ functions\n"
+      "      │           ╰─ FunctionNode (name='foo')\n"
+      "      │              ├─ FunctionNode::Response\n"
+      "      │              │  ╰─ returnType = I32\n"
+      "      │              ├─ params\n"
+      "      │              │  ╰─ FunctionNode::Param (id=1, name='input')\n"
+      "      │              │     ╰─ type = StructNode 'TestRecursiveStruct'\n"
+      "      │              │        ╰─ FieldNode (id=1, presence=OPTIONAL, name='myself')\n"
+      "      │              │           ╰─ type = StructNode 'TestRecursiveStruct'\n"
+      "      │              ╰─ exceptions\n"
+      "      │                 ╰─ FunctionNode::Exception (id=1, name='ex')\n"
+      "      │                    ╰─ type = ExceptionNode 'TestException'\n"
+      "      │                       ╰─ FieldNode (id=1, presence=UNQUALIFIED, name='blob')\n"
+      "      │                          ╰─ type = BINARY\n"
+      "      ├─ FunctionNode (name='createStream')\n"
+      "      │  ╰─ FunctionNode::Response\n"
+      "      │     ├─ returnType = I32\n"
+      "      │     ╰─ FunctionNode::Stream\n"
+      "      │        ╰─ payloadType = I32\n"
+      "      ╰─ FunctionNode (name='createInteractionAndStream')\n"
+      "         ╰─ FunctionNode::Response\n"
+      "            ├─ returnType = I32\n"
+      "            ├─ InteractionNode (name='TestInteraction')\n"
+      "            ╰─ FunctionNode::Stream\n"
+      "               ╰─ payloadType = I32\n");
 }
 
 TEST_F(ServiceSchemaTest, Interaction) {
@@ -344,7 +490,7 @@ TEST_F(ServiceSchemaTest, Interaction) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testInteraction =
-      program->definitions().at("TestInteraction");
+      program->definitionsByName().at("TestInteraction");
   EXPECT_EQ(&testInteraction->program(), program.unwrap());
   EXPECT_EQ(testInteraction->kind(), DefinitionNode::Kind::INTERACTION);
   EXPECT_EQ(testInteraction->name(), "TestInteraction");
@@ -358,12 +504,30 @@ TEST_F(ServiceSchemaTest, Interaction) {
   EXPECT_EQ(i.functions()[0].response().interaction(), nullptr);
 
   const StructNode& testRecursiveStruct =
-      program->definitions().at("TestRecursiveStruct")->asStruct();
+      program->definitionsByName().at("TestRecursiveStruct")->asStruct();
   EXPECT_EQ(i.functions()[0].params().size(), 1);
   EXPECT_EQ(i.functions()[0].params()[0].id(), FieldId{1});
   EXPECT_EQ(i.functions()[0].params()[0].name(), "input");
   EXPECT_EQ(
       i.functions()[0].params()[0].type(), TypeRef::of(testRecursiveStruct));
+
+  EXPECT_EQ(
+      i.toDebugString(),
+      "InteractionNode (name='TestInteraction')\n"
+      "╰─ functions\n"
+      "   ╰─ FunctionNode (name='foo')\n"
+      "      ├─ FunctionNode::Response\n"
+      "      │  ╰─ returnType = I32\n"
+      "      ├─ params\n"
+      "      │  ╰─ FunctionNode::Param (id=1, name='input')\n"
+      "      │     ╰─ type = StructNode 'TestRecursiveStruct'\n"
+      "      │        ╰─ FieldNode (id=1, presence=OPTIONAL, name='myself')\n"
+      "      │           ╰─ type = StructNode 'TestRecursiveStruct'\n"
+      "      ╰─ exceptions\n"
+      "         ╰─ FunctionNode::Exception (id=1, name='ex')\n"
+      "            ╰─ type = ExceptionNode 'TestException'\n"
+      "               ╰─ FieldNode (id=1, presence=UNQUALIFIED, name='blob')\n"
+      "                  ╰─ type = BINARY\n");
 }
 
 TEST_F(ServiceSchemaTest, StructuredAnnotation) {
@@ -371,15 +535,57 @@ TEST_F(ServiceSchemaTest, StructuredAnnotation) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testUnion =
-      program->definitions().at("TestUnion");
+      program->definitionsByName().at("TestUnion");
 
   const auto& annotations = testUnion->annotations();
   EXPECT_EQ(annotations.size(), 1);
   EXPECT_EQ(
       &annotations[0].type().asStruct(),
-      &program->definitions().at("TestStructuredAnnotation")->asStruct());
+      &program->definitionsByName().at("TestStructuredAnnotation")->asStruct());
   EXPECT_EQ(annotations[0].fields().size(), 1);
   EXPECT_EQ(annotations[0].fields().at("field1").as_i64(), 3);
+}
+
+TEST_F(ServiceSchemaTest, StructuredAnnotationWithoutUri) {
+  auto syntaxGraph = SyntaxGraph::fromSchema(schemaFor<test::TestService>());
+  auto program = findProgramByName(syntaxGraph, "syntax_graph");
+
+  folly::not_null<const DefinitionNode*> testException =
+      program->definitionsByName().at("TestException");
+
+  const auto& annotations = testException->annotations();
+  EXPECT_EQ(annotations.size(), 1);
+  EXPECT_EQ(
+      &annotations[0].type().asStruct(),
+      &program->definitionsByName()
+           .at("TestStructuredAnnotationWithoutUri")
+           ->asStruct());
+  EXPECT_EQ(annotations[0].fields().size(), 1);
+  EXPECT_EQ(annotations[0].fields().at("field1").as_i64(), 3);
+}
+
+TEST_F(ServiceSchemaTest, StructuredAnnotationWhichIsATypedef) {
+  auto syntaxGraph = SyntaxGraph::fromSchema(schemaFor<test::TestService>());
+  auto program = findProgramByName(syntaxGraph, "syntax_graph");
+
+  const ServiceNode& testService =
+      program->definitionsByName().at("TestService")->asService();
+  folly::span<const FunctionNode> functions = testService.functions();
+  const FunctionNode& foo = *std::find_if(
+      functions.begin(), functions.end(), [](const FunctionNode& f) {
+        return f.name() == "foo";
+      });
+
+  const auto& annotations = foo.annotations();
+  EXPECT_EQ(annotations.size(), 1);
+  EXPECT_EQ(
+      &annotations[0].type().asTypedef(),
+      &program->definitionsByName()
+           .at("TypedefToTestStructuredAnnotation")
+           ->asTypedef());
+  EXPECT_EQ(
+      &annotations[0].type().trueType().asStruct(),
+      &program->definitionsByName().at("TestStructuredAnnotation")->asStruct());
 }
 
 TEST_F(ServiceSchemaTest, RecursiveStruct) {
@@ -387,11 +593,101 @@ TEST_F(ServiceSchemaTest, RecursiveStruct) {
   auto program = findProgramByName(syntaxGraph, "syntax_graph");
 
   folly::not_null<const DefinitionNode*> testRecursiveStruct =
-      program->definitions().at("TestRecursiveStruct");
+      program->definitionsByName().at("TestRecursiveStruct");
   const StructNode& s = testRecursiveStruct->asStruct();
 
   EXPECT_EQ(s.fields().size(), 1);
   EXPECT_EQ(s.fields()[0].type(), TypeRef::of(s));
+
+  EXPECT_EQ(
+      s.toDebugString(),
+      "StructNode 'TestRecursiveStruct'\n"
+      "╰─ FieldNode (id=1, presence=OPTIONAL, name='myself')\n"
+      "   ╰─ type = StructNode 'TestRecursiveStruct'\n");
+}
+
+TEST_F(ServiceSchemaTest, LookupByDefinitionKeys) {
+  auto syntaxGraph = SyntaxGraph::fromSchema(schemaFor<test::TestService>());
+  std::vector<type::DefinitionKey> serviceDefinitionKeys =
+      definitionKeysFor<test::TestService>();
+
+  // Otherwise, the test is not meaningful
+  ASSERT_FALSE(serviceDefinitionKeys.empty());
+
+  for (const auto& definitionKey : serviceDefinitionKeys) {
+    const DefinitionNode& definition =
+        detail::lookUpDefinition(syntaxGraph, definitionKey);
+    EXPECT_TRUE(definition.isService());
+  }
+}
+
+TEST_F(ServiceSchemaTest, getServiceSchemaNodes) {
+  auto syntaxGraph = SyntaxGraph::fromSchema(schemaFor<test::TestService>());
+  std::vector<type::DefinitionKey> serviceDefinitionKeys =
+      definitionKeysFor<test::TestService>();
+
+  ASSERT_EQ(serviceDefinitionKeys.size(), 1);
+
+  const auto* dynamicService =
+      &detail::lookUpDefinition(syntaxGraph, serviceDefinitionKeys.back())
+           .asService();
+
+  const auto staticServiceNodes =
+      apache::thrift::ServiceHandler<test::TestService>()
+          .getServiceSchemaNodes();
+  ASSERT_EQ(staticServiceNodes.size(), 1);
+
+  const auto* staticService = staticServiceNodes.back().unwrap();
+
+  // static service uses the global registry while dynamic service has its own
+  // SyntaxGraph instance.
+  EXPECT_NE(dynamicService, staticService);
+
+  EXPECT_EQ(
+      dynamicService->definition().name(), staticService->definition().name());
+}
+
+TEST(SyntaxGraphTest, getDefinitionNode) {
+  auto& registry = SchemaRegistry::get();
+
+  const DefinitionNode& testStruct =
+      registry.getDefinitionNode<test::TestStruct>();
+  const StructNode& stct = testStruct.asStruct();
+  EXPECT_EQ(stct.definition().name(), "TestStruct");
+
+  const DefinitionNode& testEnum = registry.getDefinitionNode<test::TestEnum>();
+  const EnumNode& enm = testEnum.asEnum();
+  EXPECT_EQ(enm.definition().name(), "TestEnum");
+
+  const DefinitionNode& testService =
+      registry.getDefinitionNode<test::TestService>();
+  const ServiceNode& serv = testService.asService();
+  EXPECT_EQ(serv.definition().name(), "TestService");
+
+  EXPECT_THROW(
+      registry.getDefinitionNode<facebook::thrift::annotation::Experimental>(),
+      std::out_of_range);
+
+  // Adding to the SyntaxGraph should not invalidate old nodes
+  registry.getDefinitionNode<test::OtherTestStruct>();
+  EXPECT_EQ(serv.definition().name(), "TestService");
+}
+
+TEST(SyntaxGraphTest, getNode) {
+  auto& registry = SchemaRegistry::get();
+
+  const StructNode& stct = registry.getNode<test::TestStruct>();
+  EXPECT_EQ(stct.definition().name(), "TestStruct");
+
+  const EnumNode& enm = registry.getNode<test::TestEnum>();
+  EXPECT_EQ(enm.definition().name(), "TestEnum");
+
+  const ServiceNode& serv = registry.getNode<test::TestService>();
+  EXPECT_EQ(serv.definition().name(), "TestService");
+
+  EXPECT_THROW(
+      registry.getNode<facebook::thrift::annotation::Experimental>(),
+      std::out_of_range);
 }
 
 } // namespace apache::thrift::schema

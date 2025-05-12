@@ -21,8 +21,6 @@
 #include "hphp/runtime/base/datatype.h"
 #include "hphp/runtime/base/header-kind.h"
 #include "hphp/runtime/base/rds-header.h"
-#include "hphp/runtime/base/tv-mutate.h"
-#include "hphp/runtime/base/tv-variant.h"
 #include "hphp/runtime/vm/class.h"
 
 #include "hphp/runtime/vm/jit/abi.h"
@@ -30,26 +28,23 @@
 #include "hphp/runtime/vm/jit/code-gen-cf.h"
 #include "hphp/runtime/vm/jit/ssa-tmp.h"
 #include "hphp/runtime/vm/jit/translator-inline.h"
-#include "hphp/runtime/vm/jit/trans-db.h"
 #include "hphp/runtime/vm/jit/type.h"
 #include "hphp/runtime/vm/jit/vasm-gen.h"
 #include "hphp/runtime/vm/jit/vasm-instr.h"
 #include "hphp/runtime/vm/jit/vasm-reg.h"
 
 #include "hphp/util/asm-x64.h"
-#include "hphp/util/abi-cxx.h"
 #include "hphp/util/configs/hhir.h"
 #include "hphp/util/immed.h"
 #include "hphp/util/low-ptr.h"
 #include "hphp/util/ringbuffer.h"
-#include "hphp/util/thread-local.h"
 #include "hphp/util/trace.h"
 
 namespace HPHP::jit {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 namespace {
 
@@ -422,9 +417,14 @@ void emitCall(Vout& v, CallSpec target, RegSet args) {
 
   switch (target.kind()) {
     case K::Direct:
+      // When using ROAR, we emit all native calls as smashable ones via the
+      // fallthru below, so that ROAR can patch them when it re-JITs native
+      // functions.
+#ifndef __roar__
       v << call{static_cast<TCA>(target.address()), args};
       return;
-
+#endif
+      // fallthru
     case K::Smashable:
       v << calls{static_cast<TCA>(target.address()), args};
       return;

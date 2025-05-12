@@ -84,9 +84,9 @@ let join env tpenv1 tpenv2 =
       | (_, Some (pos, info)) -> (env, Some (pos, info))
       | (_, _) -> (env, None))
 
-let get_tpenv_equal_bounds env name tyargs =
-  let lower = TPEnv.get_lower_bounds env name tyargs in
-  let upper = TPEnv.get_upper_bounds env name tyargs in
+let get_tpenv_equal_bounds env name =
+  let lower = TPEnv.get_lower_bounds env name in
+  let upper = TPEnv.get_upper_bounds env name in
   TySet.inter lower upper
 
 (** Given a list of type parameter names, attempt to simplify away those
@@ -95,12 +95,6 @@ If such a type exists, remove the type parameter from the tpenv.
 Returns a set of substitutions mapping each type parameter name to the type
 to which it is equal if found, otherwise to itself. *)
 let simplify_tpenv env (tparams : ((_ * string) option * locl_ty) list) r =
-  (* TODO(T70068435)
-     TODO(T70087549)
-     This currently assumes that [tparams] only contains non-HK type paramters.
-     (as seen in the Tgenerics created within and their arguments ignored)
-     Once Type_parameter_env know about kinds, we can at least check here
-     that this precondition is satisfied. *)
   let old_env = env in
   let tpenv = Env.get_tpenv env in
   (* For each tparam, "solve" it if it falls in any of those categories:
@@ -118,9 +112,9 @@ let simplify_tpenv env (tparams : ((_ * string) option * locl_ty) list) r =
         match p_opt with
         | None -> (env, tpenv, substs)
         | Some (tp, tparam_name) ->
-          let equal_bounds = get_tpenv_equal_bounds tpenv tparam_name [] in
-          let lower_bounds = TPEnv.get_lower_bounds tpenv tparam_name [] in
-          let upper_bounds = TPEnv.get_upper_bounds tpenv tparam_name [] in
+          let equal_bounds = get_tpenv_equal_bounds tpenv tparam_name in
+          let lower_bounds = TPEnv.get_lower_bounds tpenv tparam_name in
+          let upper_bounds = TPEnv.get_upper_bounds tpenv tparam_name in
           let (env, lower_bound) = union_lower_bounds env reason lower_bounds in
           let (env, upper_bound) =
             intersect_upper_bounds env reason upper_bounds
@@ -148,7 +142,7 @@ let simplify_tpenv env (tparams : ((_ * string) option * locl_ty) list) r =
               (tpenv, substs)
             | _ ->
               (* TODO see comment at beginning of function *)
-              let tparam_ty = mk (r, Tgeneric (tparam_name, [])) in
+              let tparam_ty = mk (r, Tgeneric tparam_name) in
               let substs = SMap.add tparam_name tparam_ty substs in
               (tpenv, substs)
           in
@@ -168,7 +162,7 @@ let simplify_tpenv env (tparams : ((_ * string) option * locl_ty) list) r =
     | None -> (substs, None)
     | Some subst ->
       (match get_node subst with
-      | Tgeneric (tparam', []) when String.( <> ) tparam' tparam ->
+      | Tgeneric tparam' when String.( <> ) tparam' tparam ->
         (* TODO see comment at beginning of function *)
         let (substs, new_subst_opt) = reduce substs tparam' in
         begin

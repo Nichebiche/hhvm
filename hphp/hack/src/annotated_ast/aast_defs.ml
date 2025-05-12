@@ -27,6 +27,7 @@ type visibility = Ast_defs.visibility =
   | Public
   | Protected
   | Internal
+  | ProtectedInternal
 [@@deriving eq, hash, ord, show { with_path = false }] [@@transform.opaque]
 
 type tprim = Ast_defs.tprim =
@@ -350,6 +351,9 @@ and ('ex, 'en) expression_tree = {
       (** The expression that's executed at runtime.
        *
        *     Foo::makeTree($v ==> $v->visitBinOp(...)) *)
+  et_free_vars: lid list option;
+      (** For nested expression trees, what variables they use that should
+       * be defined in the the enclosing environment. *)
 }
 
 and ('ex, 'en) as_ = {
@@ -366,10 +370,14 @@ and ('ex, 'en) et_splice = {
   contains_await: bool;
       (** Does the spliced_expr contain an await expression *)
   macro_variables: lid list option;
-      (** Should the splice be interpreted as a "macro". That is, if spliced_expr has type
+      (** Some if the splice be interpreted as a "macro". That is, if spliced_expr has type
           Spliceable<t1, t2, t3>, in an enviroment with the macro variables bound to types
           Spliceable<t1, t2, u1>,..,Spliceable<t1, t2, un> then the splice should have
-          type Spliceable<t1, t2, (function (u1, .., un): t3)> *)
+          type Spliceable<t1, t2, (function (u1, .., un): t3)>.
+          None is the splice is not a macro. *)
+  temp_lid: local_id;
+      (** Splices are hoisted out and assigned to a temporary variable. This
+          records the name of the temporary *)
   spliced_expr: ('ex, 'en) expr;
 }
 
@@ -861,6 +869,11 @@ and ('ex, 'en) efun = {
   ef_fun: ('ex, 'en) fun_;
   ef_use: 'ex capture_lid list;
   ef_closure_class_name: string option;
+  ef_is_expr_tree_virtual_expr: bool;
+      (** An expression tree desugars into an expression containing an efun for
+      the virtualized expression. We need some special type checking support for
+      this case.
+      *)
 }
 
 (**
@@ -1238,6 +1251,7 @@ and hf_param_info = {
 
 and hint_fun = {
   hf_is_readonly: Ast_defs.readonly_kind option; [@transform.opaque]
+  hf_tparams: hint_tparam list;
   hf_param_tys: hint list;
   (* hf_param_info is None when all three are none, for perf optimization reasons.
      It is not semantically incorrect for the record to appear with 3 None values,
@@ -1247,6 +1261,14 @@ and hint_fun = {
   hf_ctxs: contexts option;
   hf_return_ty: hint; [@transform.explicit]
   hf_is_readonly_return: Ast_defs.readonly_kind option; [@transform.opaque]
+}
+
+and hint_tparam = {
+  htp_name: sid;
+  htp_user_attributes: sid list;
+  (* We don't currently allow user attributes on type parameters inside function hints
+     to have parameters *)
+  htp_constraints: ((Ast_defs.constraint_kind[@transform.opaque]) * hint) list;
 }
 
 and class_ptr_kind =
@@ -1425,8 +1447,20 @@ let string_of_visibility vis =
   | Public -> "public"
   | Protected -> "protected"
   | Internal -> "internal"
+  | ProtectedInternal -> "protected internal"
 
 let is_wildcard_hint h =
   match h with
   | (_, Hwildcard) -> true
   | _ -> false
+
+let tparam_of_hint_tparam { htp_name; htp_user_attributes; htp_constraints } =
+  {
+    tp_variance = Ast_defs.Invariant;
+    tp_name = htp_name;
+    tp_parameters = [];
+    tp_constraints = htp_constraints;
+    tp_reified = Erased;
+    tp_user_attributes =
+      List.map (fun ua_name -> { ua_name; ua_params = [] }) htp_user_attributes;
+  }

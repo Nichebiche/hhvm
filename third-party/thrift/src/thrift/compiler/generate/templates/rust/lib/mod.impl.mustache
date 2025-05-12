@@ -23,21 +23,21 @@
     pub(crate) struct LocalImpl<T>(T);
 
     #[allow(unused)]
-    pub(crate) fn write<T, P>(value: &T, p: &mut P)
+    pub(crate) fn rs_thrift_write<T, P>(value: &T, p: &mut P)
     where
         LocalImpl<T>: ::fbthrift::Serialize<P>,
         P: ::fbthrift::ProtocolWriter,
     {
-        ::fbthrift::Serialize::write(LocalImpl::ref_cast(value), p);
+        ::fbthrift::Serialize::rs_thrift_write(LocalImpl::ref_cast(value), p);
     }
 
     #[allow(unused)]
-    pub(crate) fn read<T, P>(p: &mut P) -> ::anyhow::Result<T>
+    pub(crate) fn rs_thrift_read<T, P>(p: &mut P) -> ::anyhow::Result<T>
     where
         LocalImpl<T>: ::fbthrift::Deserialize<P>,
         P: ::fbthrift::ProtocolReader,
     {
-        let value: LocalImpl<T> = ::fbthrift::Deserialize::read(p)?;
+        let value: LocalImpl<T> = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         ::std::result::Result::Ok(value.0)
     }{{!
 
@@ -49,7 +49,7 @@
         P: ::fbthrift::ProtocolWriter,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
+        fn rs_thrift_write(&self, p: &mut P) {
             p.write_set_begin(
                 <{{#type:set_elem_type}}{{> lib/type}}{{/type:set_elem_type}} as ::fbthrift::GetTType>::TTYPE,
                 self.0.len(),
@@ -67,9 +67,9 @@
         P: ::fbthrift::ProtocolReader,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
-            let (_elem_ty, len) = p.read_set_begin()?;
-            let mut set = <{{> lib/type}}>::with_capacity(len.unwrap_or_default());
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
+            let (_elem_ty, len) = p.read_set_begin(P::min_size::<{{#type:set_elem_type}}{{> lib/type}}{{/type:set_elem_type}}>())?;
+            let mut set = <{{> lib/type}}>::with_capacity(len.unwrap_or(0));
 
             if let ::std::option::Option::Some(0) = len {
                 return ::std::result::Result::Ok(LocalImpl(set));
@@ -103,7 +103,7 @@
         P: ::fbthrift::ProtocolWriter,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
+        fn rs_thrift_write(&self, p: &mut P) {
             p.write_map_begin(
                 <{{#type:key_type}}{{> lib/type}}{{/type:key_type}} as ::fbthrift::GetTType>::TTYPE,
                 <{{#type:value_type}}{{> lib/type}}{{/type:value_type}} as ::fbthrift::GetTType>::TTYPE,
@@ -124,9 +124,9 @@
         P: ::fbthrift::ProtocolReader,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
-            let (_key_ty, _val_ty, len) = p.read_map_begin()?;
-            let mut map = <{{> lib/type}}>::with_capacity(len.unwrap_or_default());
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
+            let (_key_ty, _val_ty, len) = p.read_map_begin(P::min_size::<{{#type:key_type}}{{> lib/type}}{{/type:key_type}}>() + P::min_size::<{{#type:value_type}}{{> lib/type}}{{/type:value_type}}>())?;
+            let mut map = <{{> lib/type}}>::with_capacity(len.unwrap_or(0));
 
             if let ::std::option::Option::Some(0) = len {
                 return ::std::result::Result::Ok(LocalImpl(map));
@@ -162,8 +162,8 @@
         P: ::fbthrift::ProtocolWriter,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
-            self.0.as_slice().write(p)
+        fn rs_thrift_write(&self, p: &mut P) {
+            self.0.as_slice().rs_thrift_write(p)
         }
     }
 
@@ -172,13 +172,13 @@
         P: ::fbthrift::ProtocolReader,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
             p.read_binary()
         }
     }
 
     impl ::fbthrift::binary_type::BinaryType for LocalImpl<{{> lib/rawtype}}> {
-        fn with_capacity(capacity: usize) -> Self {
+        fn with_safe_capacity(capacity: usize) -> Self {
             LocalImpl(<{{> lib/rawtype}}>::with_capacity(capacity))
         }
         fn extend_from_slice(&mut self, other: &[::std::primitive::u8]) {
@@ -198,8 +198,8 @@
         {{> lib/type}}: ::fbthrift::Serialize<P>,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
-            self.0.write(p)
+        fn rs_thrift_write(&self, p: &mut P) {
+            self.0.rs_thrift_write(p)
         }
     }
 
@@ -209,8 +209,8 @@
         {{> lib/type}}: ::fbthrift::Deserialize<P>,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
-            ::std::result::Result::Ok(LocalImpl({{> lib/type}}::read(p)?))
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
+            ::std::result::Result::Ok(LocalImpl({{> lib/type}}::rs_thrift_read(p)?))
         }
     }{{!
     }}{{/type:i64?}}{{/typedef:newtype?}}{{!
@@ -224,7 +224,7 @@
         P: ::fbthrift::ProtocolWriter,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
+        fn rs_thrift_write(&self, p: &mut P) {
             p.write_set_begin(
                 <{{#type:set_elem_type}}{{> lib/type}}{{/type:set_elem_type}} as ::fbthrift::GetTType>::TTYPE,
                 self.0.len(),
@@ -242,9 +242,9 @@
         P: ::fbthrift::ProtocolReader,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
-            let (_elem_ty, len) = p.read_set_begin()?;
-            let mut set = <{{> lib/annfieldtype}}>::with_capacity(len.unwrap_or_default());
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
+            let (_elem_ty, len) = p.read_set_begin(P::min_size::<{{#type:set_elem_type}}{{> lib/type}}{{/type:set_elem_type}}>())?;
+            let mut set = <{{> lib/annfieldtype}}>::with_capacity(len.unwrap_or(0));
 
             if let ::std::option::Option::Some(0) = len {
                 return ::std::result::Result::Ok(LocalImpl(set));
@@ -278,7 +278,7 @@
         P: ::fbthrift::ProtocolWriter,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
+        fn rs_thrift_write(&self, p: &mut P) {
             p.write_map_begin(
                 <{{#type:key_type}}{{> lib/type}}{{/type:key_type}} as ::fbthrift::GetTType>::TTYPE,
                 <{{#type:value_type}}{{> lib/type}}{{/type:value_type}} as ::fbthrift::GetTType>::TTYPE,
@@ -299,9 +299,9 @@
         P: ::fbthrift::ProtocolReader,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
-            let (_key_ty, _val_ty, len) = p.read_map_begin()?;
-            let mut map = <{{> lib/annfieldtype}}>::with_capacity(len.unwrap_or_default());
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
+            let (_key_ty, _val_ty, len) = p.read_map_begin(P::min_size::<{{#type:key_type}}{{> lib/type}}{{/type:key_type}}>() + P::min_size::<{{#type:value_type}}{{> lib/type}}{{/type:value_type}}>())?;
+            let mut map = <{{> lib/annfieldtype}}>::with_capacity(len.unwrap_or(0));
 
             if let ::std::option::Option::Some(0) = len {
                 return ::std::result::Result::Ok(LocalImpl(map));
@@ -337,8 +337,8 @@
         P: ::fbthrift::ProtocolWriter,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
-            self.0.as_slice().write(p)
+        fn rs_thrift_write(&self, p: &mut P) {
+            self.0.as_slice().rs_thrift_write(p)
         }
     }
 
@@ -347,13 +347,13 @@
         P: ::fbthrift::ProtocolReader,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
             p.read_binary()
         }
     }
 
     impl ::fbthrift::binary_type::BinaryType for LocalImpl<{{> lib/annfieldtype}}> {
-        fn with_capacity(capacity: usize) -> Self {
+        fn with_safe_capacity(capacity: usize) -> Self {
             LocalImpl(<{{> lib/annfieldtype}}>::with_capacity(capacity))
         }
         fn extend_from_slice(&mut self, other: &[::std::primitive::u8]) {
@@ -373,8 +373,8 @@
         {{> lib/annfieldtype}}: ::fbthrift::Serialize<P>,
     {
         #[inline]
-        fn write(&self, p: &mut P) {
-            self.0.write(p)
+        fn rs_thrift_write(&self, p: &mut P) {
+            self.0.rs_thrift_write(p)
         }
     }
 
@@ -384,8 +384,8 @@
         {{> lib/annfieldtype}}: ::fbthrift::Deserialize<P>,
     {
         #[inline]
-        fn read(p: &mut P) -> ::anyhow::Result<Self> {
-            ::std::result::Result::Ok(LocalImpl({{> lib/annfieldtype}}::read(p)?))
+        fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
+            ::std::result::Result::Ok(LocalImpl({{> lib/annfieldtype}}::rs_thrift_read(p)?))
         }
     }{{!
 

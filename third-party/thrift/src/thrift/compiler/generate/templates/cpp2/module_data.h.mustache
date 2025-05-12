@@ -25,12 +25,12 @@
 namespace apache { namespace thrift {
 {{#program:enums}}
 
-template <> struct TEnumDataStorage<::{{program:qualified_namespace}}::{{enum:cpp_name}}> {
-  using type = ::{{program:qualified_namespace}}::{{enum:cpp_name}};
-  static constexpr const std::size_t size = {{enum:size}};
+template <> struct TEnumDataStorage<::{{program:qualified_namespace}}::{{enum:self.cpp_name}}> {
+  using type = ::{{program:qualified_namespace}}::{{enum:self.cpp_name}};
+  static constexpr const std::size_t size = {{(array.len enum:self.values)}};
   static constexpr std::array<type, size> values = { {
 {{#enum:values}}{{!
-}}      type::{{enum_value:cpp_name}},
+}}      type::{{enum_value:self.cpp_name}},
 {{/enum:values}}
   }};
   static constexpr std::array<std::string_view, size> names = { {
@@ -62,7 +62,7 @@ template <> struct TEnumDataStorage<{{struct:cpp_fullname}}::Type> {
 {{#program:structs}}
 
 template <> struct TStructDataStorage<{{struct:cpp_fullname}}> {
-  static constexpr const std::size_t fields_size = {{struct:fields_size}};
+  static constexpr const std::size_t fields_size = {{struct:num_fields}};
   static const std::string_view name;
   static const std::array<std::string_view, fields_size> fields_names;
   static const std::array<int16_t, fields_size> fields_ids;
@@ -72,7 +72,6 @@ template <> struct TStructDataStorage<{{struct:cpp_fullname}}> {
   // The following fields describe internal storage metadata, and are private to
   // prevent user logic from accessing them, but they can be inspected by
   // debuggers.
-  static const std::array<std::string_view, fields_size> storage_names;
   // -1 if the field has no isset.
   static const std::array<int, fields_size> isset_indexes;
 };

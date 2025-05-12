@@ -4,14 +4,12 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated @nocommit
  */
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
 
-
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 struct fieldA;
 } // namespace ident
@@ -21,8 +19,7 @@ namespace detail {
 APACHE_THRIFT_DEFINE_ACCESSOR(fieldA);
 #endif
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 // BEGIN declare_enums
 namespace facebook::ns::qwerty {
@@ -32,56 +29,41 @@ enum class AnEnumA {
   FIELDA = 0,
 };
 
-
-
 /** Glean {"file": "thrift/compiler/test/fixtures/mcpp2-compare/src/enums.thrift", "name": "AnEnumB", "kind": "enum" } */
 enum class AnEnumB {
   FIELDA = 0,
   FIELDB = 2,
 };
 
-
-
 /** Glean {"file": "thrift/compiler/test/fixtures/mcpp2-compare/src/enums.thrift", "name": "AnEnumC", "kind": "enum" } */
 enum class AnEnumC {
   FIELDC = 0,
 };
-
-
 
 /** Glean {"file": "thrift/compiler/test/fixtures/mcpp2-compare/src/enums.thrift", "name": "AnEnumD", "kind": "enum" } */
 enum class AnEnumD {
   FIELDD = 0,
 };
 
-
-
 /** Glean {"file": "thrift/compiler/test/fixtures/mcpp2-compare/src/enums.thrift", "name": "AnEnumE", "kind": "enum" } */
 enum class AnEnumE {
   FIELDA = 0,
 };
 
-
-
 } // namespace facebook::ns::qwerty
 
-namespace std {
-template<> struct hash<::facebook::ns::qwerty::AnEnumA> :
+template<> struct std::hash<::facebook::ns::qwerty::AnEnumA> :
   ::apache::thrift::detail::enum_hash<::facebook::ns::qwerty::AnEnumA> {};
-template<> struct hash<::facebook::ns::qwerty::AnEnumB> :
+template<> struct std::hash<::facebook::ns::qwerty::AnEnumB> :
   ::apache::thrift::detail::enum_hash<::facebook::ns::qwerty::AnEnumB> {};
-template<> struct hash<::facebook::ns::qwerty::AnEnumC> :
+template<> struct std::hash<::facebook::ns::qwerty::AnEnumC> :
   ::apache::thrift::detail::enum_hash<::facebook::ns::qwerty::AnEnumC> {};
-template<> struct hash<::facebook::ns::qwerty::AnEnumD> :
+template<> struct std::hash<::facebook::ns::qwerty::AnEnumD> :
   ::apache::thrift::detail::enum_hash<::facebook::ns::qwerty::AnEnumD> {};
-template<> struct hash<::facebook::ns::qwerty::AnEnumE> :
+template<> struct std::hash<::facebook::ns::qwerty::AnEnumE> :
   ::apache::thrift::detail::enum_hash<::facebook::ns::qwerty::AnEnumE> {};
-} // std
 
-namespace apache { namespace thrift {
-
-
-template <> struct TEnumDataStorage<::facebook::ns::qwerty::AnEnumA>;
+namespace apache::thrift {
 
 template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumA> {
   using type = ::facebook::ns::qwerty::AnEnumA;
@@ -111,9 +93,6 @@ template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumA> {
   static constexpr type max() { return type::FIELDA; }
 };
 
-
-template <> struct TEnumDataStorage<::facebook::ns::qwerty::AnEnumB>;
-
 template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumB> {
   using type = ::facebook::ns::qwerty::AnEnumB;
 
@@ -141,9 +120,6 @@ template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumB> {
   static constexpr type min() { return type::FIELDA; }
   static constexpr type max() { return type::FIELDB; }
 };
-
-
-template <> struct TEnumDataStorage<::facebook::ns::qwerty::AnEnumC>;
 
 template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumC> {
   using type = ::facebook::ns::qwerty::AnEnumC;
@@ -173,9 +149,6 @@ template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumC> {
   static constexpr type max() { return type::FIELDC; }
 };
 
-
-template <> struct TEnumDataStorage<::facebook::ns::qwerty::AnEnumD>;
-
 template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumD> {
   using type = ::facebook::ns::qwerty::AnEnumD;
 
@@ -203,9 +176,6 @@ template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumD> {
   static constexpr type min() { return type::FIELDD; }
   static constexpr type max() { return type::FIELDD; }
 };
-
-
-template <> struct TEnumDataStorage<::facebook::ns::qwerty::AnEnumE>;
 
 template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumE> {
   using type = ::facebook::ns::qwerty::AnEnumE;
@@ -235,10 +205,7 @@ template <> struct TEnumTraits<::facebook::ns::qwerty::AnEnumE> {
   static constexpr type max() { return type::FIELDA; }
 };
 
-
-}} // apache::thrift
-
-
+} // namespace apache::thrift
 // END declare_enums
 // BEGIN forward_declare
 namespace facebook::ns::qwerty {
@@ -275,32 +242,16 @@ class SomeStruct final  {
   FOLLY_ERASE static constexpr std::string_view __fbthrift_get_module_name() noexcept {
     return "enums";
   }
-  using __fbthrift_reflection_ident_list = folly::tag_t<
+  static constexpr std::size_t __fbthrift_num_fields = 1;
+
+  static constexpr const int16_t __fbthrift_reflection_field_ids[] = {0,1};
+
+  using __fbthrift_reflection_idents = folly::tag_t<
     ::apache::thrift::ident::fieldA
   >;
 
-  static constexpr std::int16_t __fbthrift_reflection_field_id_list[] = {0,1};
   using __fbthrift_reflection_type_tags = folly::tag_t<
     ::apache::thrift::type::i32_t
-  >;
-
-  static constexpr std::size_t __fbthrift_field_size_v = 1;
-
-  template<class T>
-  using __fbthrift_id = ::apache::thrift::type::field_id<__fbthrift_reflection_field_id_list[folly::to_underlying(T::value)]>;
-
-  template<class T>
-  using __fbthrift_type_tag = ::apache::thrift::detail::at<__fbthrift_reflection_type_tags, T::value>;
-
-  template<class T>
-  using __fbthrift_ident = ::apache::thrift::detail::at<__fbthrift_reflection_ident_list, T::value>;
-
-  template<class T> using __fbthrift_ordinal = ::apache::thrift::type::ordinal_tag<
-    ::apache::thrift::detail::getFieldOrdinal<T,
-                                              __fbthrift_reflection_ident_list,
-                                              __fbthrift_reflection_type_tags>(
-      __fbthrift_reflection_field_id_list
-    )
   >;
   void __fbthrift_clear();
   void __fbthrift_clear_terse_fields();
@@ -342,59 +293,47 @@ class SomeStruct final  {
   bool operator<(const SomeStruct&) const;
 
   /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> fieldA_ref() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> fieldA_ref() const& {
     return {this->__fbthrift_field_fieldA, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> fieldA_ref() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_fieldA), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> fieldA_ref() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> fieldA_ref() & {
     return {this->__fbthrift_field_fieldA, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> fieldA_ref() && {
-    return {static_cast<T&&>(this->__fbthrift_field_fieldA), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> fieldA_ref() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_fieldA), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&> fieldA() const& {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<const fbthrift_T&> fieldA() const& {
     return {this->__fbthrift_field_fieldA, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<const T&&> fieldA() const&& {
-    return {static_cast<const T&&>(this->__fbthrift_field_fieldA), __isset.at(0), __isset.bit(0)};
-  }
-
-  /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&> fieldA() & {
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&> fieldA() & {
     return {this->__fbthrift_field_fieldA, __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "fieldA" } */
-  template <typename..., typename T = ::std::int32_t>
-  FOLLY_ERASE ::apache::thrift::field_ref<T&&> fieldA() && {
-    return {static_cast<T&&>(this->__fbthrift_field_fieldA), __isset.at(0), __isset.bit(0)};
+  template <typename..., typename fbthrift_T = ::std::int32_t>
+  FOLLY_ERASE ::apache::thrift::field_ref<fbthrift_T&&> fieldA() && {
+    return {static_cast<fbthrift_T&&>(this->__fbthrift_field_fieldA), __isset.at(0), __isset.bit(0)};
   }
 
   /** Glean { "field": "fieldA" } */
-  [[deprecated("Use `FOO.fieldA().value();` instead of `FOO.get_fieldA();`")]]
+  [[deprecated("Use `FOO.fieldA().value()` instead of `FOO.get_fieldA()`")]]
   ::std::int32_t get_fieldA() const;
 
   /** Glean { "field": "fieldA" } */
-  [[deprecated("Use `FOO.fieldA() = BAR;` instead of `FOO.set_fieldA(BAR);`")]]
+  [[deprecated("Use `FOO.fieldA() = BAR` instead of `FOO.set_fieldA(BAR)`")]]
   ::std::int32_t& set_fieldA(::std::int32_t fieldA_);
 
   template <class Protocol_>
@@ -423,3 +362,36 @@ unsigned long SomeStruct::read(Protocol_* iprot) {
 
 
 } // namespace facebook::ns::qwerty
+
+namespace apache::thrift::detail {
+template <> struct TSchemaAssociation<::facebook::ns::qwerty::SomeStruct, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 1436773696680278925;
+  static constexpr ::std::string_view definitionKey = {"\xdb\xbf\xe6\xfd\x5d\xdc\x87\x76\x44\x56\xb8\xf1\xdf\x9e\x07\x9e", 16};
+};
+template <> struct TSchemaAssociation<::facebook::ns::qwerty::AnEnumA, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 1436773696680278925;
+  static constexpr ::std::string_view definitionKey = {"\x0a\xbb\x7a\xc8\x42\xc1\xdd\xd5\x52\x23\x9a\xc6\x4b\x78\x3d\xcd", 16};
+};
+template <> struct TSchemaAssociation<::facebook::ns::qwerty::AnEnumB, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 1436773696680278925;
+  static constexpr ::std::string_view definitionKey = {"\xc0\xf0\x84\x13\x61\x49\xba\x4d\x3a\x67\xc2\xe6\xa7\xd2\x11\xff", 16};
+};
+template <> struct TSchemaAssociation<::facebook::ns::qwerty::AnEnumC, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 1436773696680278925;
+  static constexpr ::std::string_view definitionKey = {"\x34\x84\xc0\x6d\x0e\xf8\x40\xad\x3a\x68\x32\x51\xd9\xa0\x63\x31", 16};
+};
+template <> struct TSchemaAssociation<::facebook::ns::qwerty::AnEnumD, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 1436773696680278925;
+  static constexpr ::std::string_view definitionKey = {"\x3c\x90\x27\x0e\xc3\xd4\x1f\x7d\xef\xde\xf6\x8a\xbd\x66\xbe\xee", 16};
+};
+template <> struct TSchemaAssociation<::facebook::ns::qwerty::AnEnumE, true> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 1436773696680278925;
+  static constexpr ::std::string_view definitionKey = {"\xac\xec\x69\x0f\x45\xda\xc0\x6a\xa7\x88\x90\xe5\xb9\xce\x90\xd5", 16};
+};
+} // namespace apache::thrift::detail

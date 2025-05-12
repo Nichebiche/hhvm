@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<327a9543170008c9f6d5e2f5fca34c23>>
+// @generated SignedSource<<607cc506fd7b8645d1fd9a7dc899b89e>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -589,6 +589,21 @@ impl<'a> Node<'a> for FunType<'a> {
         }
     }
 }
+impl<'a> Node<'a> for Ty<'a> {
+    fn accept(&'a self, v: &mut dyn Visitor<'a>) {
+        v.visit_ty(self)
+    }
+    fn recurse(&'a self, v: &mut dyn Visitor<'a>) {
+        match self {
+            Ty(ref __binding_0, ref __binding_1) => {
+                {
+                    __binding_0.accept(v)
+                }
+                { __binding_1.accept(v) }
+            }
+        }
+    }
+}
 impl<'a> Node<'a> for TypeTag<'a> {
     fn accept(&'a self, v: &mut dyn Visitor<'a>) {
         v.visit_type_tag(self)
@@ -670,21 +685,6 @@ impl<'a> Node<'a> for TypePredicate<'a> {
         }
     }
 }
-impl<'a> Node<'a> for Ty<'a> {
-    fn accept(&'a self, v: &mut dyn Visitor<'a>) {
-        v.visit_ty(self)
-    }
-    fn recurse(&'a self, v: &mut dyn Visitor<'a>) {
-        match self {
-            Ty(ref __binding_0, ref __binding_1) => {
-                {
-                    __binding_0.accept(v)
-                }
-                { __binding_1.accept(v) }
-            }
-        }
-    }
-}
 impl<'a> Node<'a> for ShapeFieldType<'a> {
     fn accept(&'a self, v: &mut dyn Visitor<'a>) {
         v.visit_shape_field_type(self)
@@ -731,7 +731,6 @@ impl<'a> Node<'a> for Ty_<'a> {
             Ty_::TclassPtr(ref __binding_0) => __binding_0.accept(v),
             Ty_::Tvar(ref __binding_0) => __binding_0.accept(v),
             Ty_::Tnewtype(ref __binding_0) => __binding_0.accept(v),
-            Ty_::TunappliedAlias(ref __binding_0) => __binding_0.accept(v),
             Ty_::Tdependent(ref __binding_0) => __binding_0.accept(v),
             Ty_::Tclass(ref __binding_0) => __binding_0.accept(v),
             Ty_::Tneg(ref __binding_0) => __binding_0.accept(v),
@@ -1314,6 +1313,7 @@ impl<'a> Node<'a> for WitnessDecl<'a> {
             WitnessDecl::PessimisedThis(ref __binding_0) => __binding_0.accept(v),
             WitnessDecl::IllegalRecursiveType(ref __binding_0) => __binding_0.accept(v),
             WitnessDecl::SupportDynamicTypeAssume(ref __binding_0) => __binding_0.accept(v),
+            WitnessDecl::PolymorphicTypeParam(ref __binding_0) => __binding_0.accept(v),
         }
     }
 }
@@ -1518,6 +1518,7 @@ impl<'a> Node<'a> for Visibility {
             Visibility::Public => {}
             Visibility::Protected => {}
             Visibility::Internal => {}
+            Visibility::ProtectedInternal => {}
         }
     }
 }
@@ -1671,7 +1672,7 @@ impl<'a> Node<'a> for PrjAsymm {
             PrjAsymm::PrjAsymmNullable => {}
             PrjAsymm::PrjAsymmArraykey => {}
             PrjAsymm::PrjAsymmNum => {}
-            PrjAsymm::PrjRewriteClassname => {}
+            PrjAsymm::PrjAsymmContains => {}
         }
     }
 }

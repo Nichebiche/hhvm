@@ -17,12 +17,11 @@
 
 import asyncio
 import socket
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import cast as typing_cast, Iterable, Optional, Sequence
 
 from derived.clients import DerivedTestingService
 from derived.services import DerivedTestingServiceInterface
@@ -35,14 +34,14 @@ from testing.services import (
     ClientMetadataTestingServiceInterface,
     TestingServiceInterface,
 )
-from testing.thrift_types import easy as Python_easy
 from testing.types import Color, easy, HardError
-from thrift.lib.py3.test.auto_migrate.auto_migrate_util import brokenInAutoMigrate
+
 from thrift.py3.client import ClientType, get_client
 from thrift.py3.common import Priority, Protocol, RpcOptions
 from thrift.py3.exceptions import ApplicationError
 from thrift.py3.server import get_context, ServiceInterface, SocketAddress, ThriftServer
 from thrift.py3.test.cpp_handler import CppHandler
+from thrift.python.server import ServiceInterface as PythonServiceInterface
 
 
 class Handler(TestingServiceInterface):
@@ -110,29 +109,24 @@ class DerivedHandler(Handler, DerivedTestingServiceInterface):
 
 class TestServer:
     server: ThriftServer
-    serve_task: asyncio.Task
+    serve_task: Optional[asyncio.Task]
 
     def __init__(
         self,
         ip: Optional[str] = None,
         path: Optional["Path"] = None,
-        handler: ServiceInterface = Handler(),  # noqa: B008
+        handler: ServiceInterface | PythonServiceInterface = Handler(),  # noqa: B008
     ) -> None:
+        self.serve_task: Optional[asyncio.Task] = None
         self.server = ThriftServer(handler, ip=ip, path=path)
-        # pyre-fixme[4, 8]: The initialization below eliminates
-        #                   the pyre[13] error, but results in
-        #                   pyre[4] and pyre[8] errors.
-        #                   __aenter__ sets the required value.
-        self.serve_task = None
 
     async def __aenter__(self) -> SocketAddress:
         self.serve_task = asyncio.get_event_loop().create_task(self.server.serve())
         return await self.server.get_address()
 
-    # pyre-fixme[2]: Parameter must be annotated.
-    async def __aexit__(self, *exc_info) -> None:
+    async def __aexit__(self, *exc_info: Iterable[object]) -> None:
         self.server.stop()
-        await self.serve_task
+        await typing_cast(asyncio.Task, self.serve_task)
 
 
 # These tests do not cleanly convert to unittest.IsolateAsyncioTestCase
@@ -141,10 +135,6 @@ class ClientServerTests(unittest.TestCase):
     These are tests where a client and server talk to each other
     """
 
-    @brokenInAutoMigrate()
-    # pyre-fixme[56]: Argument `sys.version_info[slice(None, 2, None)] < (3, 7)` to
-    #  decorator factory `unittest.skipIf` could not be resolved in a global scope.
-    @unittest.skipIf(sys.version_info[:2] < (3, 7), "Requires py3.7")
     def test_get_context(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -183,7 +173,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(outside_context_test())
 
-    @brokenInAutoMigrate()
     def test_rpc_headers(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -199,7 +188,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_client_resolve(self) -> None:
         loop = asyncio.get_event_loop()
         hostname = socket.gethostname()
@@ -217,7 +205,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_unframed_binary(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -237,7 +224,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_framed_deprecated(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -256,7 +242,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_framed_compact(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -275,7 +260,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_server_localhost(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -289,7 +273,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_unix_socket(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -303,7 +286,6 @@ class ClientServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tdir:
             loop.run_until_complete(inner_test(Path(tdir)))
 
-    @brokenInAutoMigrate()
     def test_no_client_aexit(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -320,7 +302,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_client_aexit_no_await(self) -> None:
         """
         This actually handles the case if __aexit__ is not awaited
@@ -342,7 +323,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_no_client_no_aenter(self) -> None:
         """
         This covers if aenter was canceled since those two are the same really
@@ -359,7 +339,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_derived_service(self) -> None:
         """
         This tests calling methods from a derived service
@@ -380,7 +359,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_renamed_func(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -393,7 +371,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_queue_timeout(self) -> None:
         """
         This tests whether queue timeout functions properly.
@@ -436,7 +413,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(clients_run(testing))
 
-    @brokenInAutoMigrate()
     def test_cancelled_task(self) -> None:
         """
         This tests whether cancelled tasks are handled properly.
@@ -465,7 +441,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_request_with_default_rpc_options(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -481,7 +456,6 @@ class ClientServerTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_request_with_specified_rpc_options(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -502,11 +476,7 @@ class ClientServerTests(unittest.TestCase):
 
 
 class Utf8Test(unittest.IsolatedAsyncioTestCase):
-    @brokenInAutoMigrate()
     async def test_non_utf8_exception_message(self) -> None:
-        # something about non-utf8 exceptions seems extra broken, I need to skip the test entirely
-        if Python_easy is easy:
-            self.assertTrue(False)
         async with TestServer(handler=CppHandler()) as sa:
             ip, port = sa.ip, sa.port
             assert ip and port
@@ -552,7 +522,6 @@ class ClientStackServerTests(unittest.TestCase):
     These are tests where a client and server(stack_arguments) talk to each other
     """
 
-    @brokenInAutoMigrate()
     def test_server_localhost(self) -> None:
         loop = asyncio.get_event_loop()
 
@@ -597,7 +566,6 @@ class ClientMetadataTestingServiceHandler(ClientMetadataTestingServiceInterface)
 
 
 class ClientMetadataTestingServiceTests(unittest.TestCase):
-    @brokenInAutoMigrate()
     def test_client_metadata(self) -> None:
         loop = asyncio.get_event_loop()
         hostname: str = socket.gethostname()
@@ -628,7 +596,6 @@ class ClientMetadataTestingServiceTests(unittest.TestCase):
 
         loop.run_until_complete(inner_test())
 
-    @brokenInAutoMigrate()
     def test_call_get_metadata_field_with_invalid_key_should_return_empty_field(
         self,
     ) -> None:

@@ -24,9 +24,7 @@
 
 #include "hphp/vixl/a64/assembler-a64.h"
 
-#include <boost/dynamic_bitset.hpp>
-
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 namespace HPHP::jit {
 

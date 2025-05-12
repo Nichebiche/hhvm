@@ -11,11 +11,9 @@ import apache.thrift.metadata.thrift_types as _fbthrift_metadata
 import thrift.python.types as _fbthrift_python_types
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_MyEnum:
-    pass
 
 
-class MyEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_MyEnum):
+class MyEnum(_fbthrift_python_types.Enum, int):
     MyValue1 = 0
     MyValue2 = 1
     MyValue3 = 3
@@ -36,10 +34,8 @@ class MyEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_MyEnum)
     def _to_python(self) -> "MyEnum":
         return self
 
-    def _to_py3(self) -> "module.types.MyEnum": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.MyEnum(self.value)
+    def _to_py3(self) -> "MyEnum":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value

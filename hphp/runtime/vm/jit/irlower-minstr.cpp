@@ -18,7 +18,6 @@
 
 #include "hphp/runtime/base/array-data.h"
 #include "hphp/runtime/base/header-kind.h"
-#include "hphp/runtime/base/rds.h"
 #include "hphp/runtime/base/str-key-table.h"
 #include "hphp/runtime/base/typed-value.h"
 #include "hphp/runtime/base/unaligned-typed-value.h"
@@ -27,7 +26,6 @@
 #include "hphp/runtime/base/vanilla-vec.h"
 #include "hphp/runtime/vm/member-operations.h"
 #include "hphp/runtime/vm/property-profile.h"
-#include "hphp/runtime/vm/unit.h"
 
 #include "hphp/runtime/vm/jit/abi.h"
 #include "hphp/runtime/vm/jit/arg-group.h"
@@ -40,12 +38,9 @@
 #include "hphp/runtime/vm/jit/ir-instruction.h"
 #include "hphp/runtime/vm/jit/irlower-bespoke.h"
 #include "hphp/runtime/vm/jit/minstr-helpers.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/jit/translator-runtime.h"
 
 #include "hphp/util/immed.h"
-#include "hphp/util/stack-trace.h"
-#include "hphp/util/struct-log.h"
 #include "hphp/util/trace.h"
 
 // This file does ugly things with macros so include last.
@@ -53,7 +48,7 @@
 
 namespace HPHP::jit::irlower {
 
-TRACE_SET_MOD(irlower);
+TRACE_SET_MOD(irlower)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -847,12 +842,12 @@ void cgCheckPtrIterTombstone(IRLS& env, const IRInstruction* inst) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-IMPL_OPCODE_CALL(SetNewElem);
-IMPL_OPCODE_CALL(SetNewElemVec);
-IMPL_OPCODE_CALL(SetNewElemDict);
+IMPL_OPCODE_CALL(SetNewElem)
+IMPL_OPCODE_CALL(SetNewElemVec)
+IMPL_OPCODE_CALL(SetNewElemDict)
 
-IMPL_OPCODE_CALL(AddNewElemVec);
-IMPL_OPCODE_CALL(AddNewElemKeyset);
+IMPL_OPCODE_CALL(AddNewElemVec)
+IMPL_OPCODE_CALL(AddNewElemKeyset)
 
 template <TypedValue (*f)(ArrayData*)>
 void containerFirstLastHelper(IRLS& env, const IRInstruction* inst) {
@@ -1160,8 +1155,8 @@ void cgKeysetIdx(IRLS& env, const IRInstruction* inst) {
 ///////////////////////////////////////////////////////////////////////////////
 // Collections.
 
-IMPL_OPCODE_CALL(PairIsset);
-IMPL_OPCODE_CALL(VectorIsset);
+IMPL_OPCODE_CALL(PairIsset)
+IMPL_OPCODE_CALL(VectorIsset)
 
 void cgVectorSet(IRLS& env, const IRInstruction* inst) {
   auto const target = inst->src(1)->isA(TInt)

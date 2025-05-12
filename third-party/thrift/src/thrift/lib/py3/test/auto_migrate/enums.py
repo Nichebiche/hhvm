@@ -19,11 +19,9 @@ import pickle
 import unittest
 from typing import cast, Type, TypeVar
 
+from testing.thrift_types import Color as python_Color, Kind as python_Kind
+
 from testing.types import BadMembers, Color, ColorGroups, File, Kind, Perm
-from thrift.lib.py3.test.auto_migrate.auto_migrate_util import (
-    brokenInAutoMigrate,
-    is_auto_migrated,
-)
 from thrift.py3.common import Protocol
 from thrift.py3.serializer import deserialize, serialize
 from thrift.py3.types import BadEnum, Enum, Flag
@@ -68,6 +66,20 @@ class EnumTests(unittest.TestCase):
         self.assertEqual(Protocol.DEPRECATED_VERBOSE_JSON.value, 1)
         self.assertEqual(Protocol.COMPACT.value, 2)
         self.assertEqual(Protocol.JSON.value, 5)
+
+    def test_python_py3_equivalence(self) -> None:
+        self.assertIs(Color, python_Color)
+        self.assertIs(Color.red, python_Color.red)
+
+        self.assertEqual(Color.red, python_Color.red)
+        self.assertNotEqual(Color.blue, python_Color.red)
+
+        # basic validation that pyre doesn't complain
+        cg = ColorGroups(
+            color_list=[python_Color.red, python_Color.blue, python_Color.green]
+        )
+        self.assertEqual(cg.color_list, [Color.red, Color.blue, Color.green])
+        self.assertEqual(File(type=python_Kind.CHAR).type, Kind.CHAR)
 
     def test_bad_enum_hash_same(self) -> None:
         x = deserialize(File, b'{"name": "something", "type": 64}', Protocol.JSON)
@@ -148,8 +160,15 @@ class EnumTests(unittest.TestCase):
         self.assertBadEnum(cast(BadEnum, lst[1]), Color, 8)
 
     def test_bad_enum_in_map_items(self) -> None:
-        json = b'{"color_map": {"1": 2, "0": 5, "6": 1, "7": 8}}'
+        json = b'{"color_map": {"0": 5, "1": 2, "6": 1, "7": 8}}'
         x = deserialize(ColorGroups, json, Protocol.JSON)
+        self.assertEqual(
+            str(x.color_map),
+            "i{<Color.red: 0>: <Color.#INVALID#: 5>,"
+            " <Color.blue: 1>: <Color.green: 2>,"
+            " <Color.#INVALID#: 6>: <Color.blue: 1>,"
+            " <Color.#INVALID#: 7>: <Color.#INVALID#: 8>}",
+        )
         for k, v in x.color_map.items():
             if k == Color.blue:
                 self.assertEqual(v, Color.green)
@@ -229,8 +248,8 @@ class EnumTests(unittest.TestCase):
             self.assertEqual(repr(e), f"<Color.{color}: {i}>")
 
     def test_enum_module(self) -> None:
-        module = "thrift_enums" if is_auto_migrated() else "types"
-        self.assertEqual(Color.__module__, f"testing.{module}")
+        # py3 enums are now the same as thrift-python enums
+        self.assertEqual(Color.__module__, "testing.thrift_enums")
 
     def test_enum_print(self) -> None:
         for i, color in enumerate("red blue green".split(), 0):
@@ -303,24 +322,14 @@ class EnumMetaTests(unittest.TestCase):
     def test_sortable(self) -> None:
         colors = [Color(i) for i in range(2, -1, -1)]
         sorted_colors = [Color(i) for i in range(3)]
-        # pyre-ignore[6]: Color is not SuppertsDunderLT
-        # this will be resolved by making Color an int subclass
         self.assertEqual(sorted(colors), sorted_colors)
 
         colors.append(Color(0))
-        # pyre-ignore[6]: Color is not SuppertsDunderLT
-        # this will be resolved by making Color an int subclass
         self.assertEqual(sorted(colors), [Color(0)] + sorted_colors)
 
-    # won't implement this in auto-migrate
-    @brokenInAutoMigrate()
     def test_sortable_error(self) -> None:
-        with self.assertRaisesRegex(
-            NotImplementedError, "'<' only implemented for comparisons with Color"
-        ):
-            # pyre-ignore[6]: Color is not SuppertsDunderLT
-            # this will be resolved by making Color an int subclass
-            sorted([1, Color(2), Color(0)])
+        sorted_colors = [Color(i) for i in range(3)]
+        self.assertEqual(sorted([1, Color(2), Color(0)]), sorted_colors)
 
 
 class FlagTests(unittest.TestCase):

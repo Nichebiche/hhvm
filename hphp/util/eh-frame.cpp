@@ -19,8 +19,6 @@
 #include "hphp/util/assertions.h"
 #include "hphp/util/trace.h"
 
-#include <folly/ScopeGuard.h>
-
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -36,7 +34,7 @@ extern "C" void __deregister_frame(const void*);
 
 namespace HPHP {
 
-TRACE_SET_MOD(ehframe);
+TRACE_SET_MOD(ehframe)
 
 ///////////////////////////////////////////////////////////////////////////////
 

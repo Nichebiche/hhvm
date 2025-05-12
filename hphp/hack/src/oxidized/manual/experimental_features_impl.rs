@@ -43,15 +43,18 @@ impl FeatureName {
             ClassType => OngoingRelease,
             FunctionReferences => Unstable,
             FunctionTypeOptionalParams => OngoingRelease,
-            ExpressionTreeNest => OngoingRelease,
             SealedMethods => Unstable,
             AwaitInSplice => OngoingRelease,
             OpenTuples => Preview,
             TypeSplat => Preview,
-            ExpressionTreeNestedBindings => Unstable,
+            ExpressionTreeNestedBindings => Preview,
             LikeTypeHints => Unstable,
             ShapeDestructure => Unstable,
-            ExpressionTreeShapeCreation => Preview,
+            ExpressionTreeShapeCreation => OngoingRelease,
+            NoDisjointUnion => OngoingRelease,
+            SimpliHack => Preview,
+            PolymorphicFunctionHints => Preview,
+            ProtectedInternal => Unstable,
         }
     }
 

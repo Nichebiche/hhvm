@@ -37,6 +37,8 @@ class PubSubStreamingServiceServiceInfoHolder : public apache::thrift::ServiceIn
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::PubSubStreamingService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::PubSubStreamingService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "PubSubStreamingService"; }
 
@@ -133,6 +135,13 @@ class ServiceHandler<::cpp2::PubSubStreamingService> : public apache::thrift::Se
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_responseandstreamboththrows{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::PubSubStreamingService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -1919409225605397371;
+  static constexpr ::std::string_view definitionKey = {"\x75\x57\x18\xb2\xff\x13\x49\xec\xe9\x98\x34\xbf\xeb\xa0\xe7\x29", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

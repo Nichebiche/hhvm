@@ -26,7 +26,7 @@ import (
 	"runtime/debug"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/stats"
-	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/facebook/fbthrift/thrift/lib/thrift/rocket_upgrade"
 	"github.com/rsocket/rsocket-go/core/transport"
 )
 
@@ -36,11 +36,20 @@ type rocketServerTransport struct {
 	acceptor    transport.ServerTransportAcceptor
 	transportID TransportID
 	connContext ConnContextFunc
-	log         func(format string, args ...interface{})
+	log         func(format string, args ...any)
 	stats       *stats.ServerStats
+	pstats      map[string]*stats.TimingSeries
 }
 
-func newRocketServerTransport(listener net.Listener, connContext ConnContextFunc, processor Processor, transportID TransportID, log func(format string, args ...interface{}), stats *stats.ServerStats) transport.ServerTransport {
+func newRocketServerTransport(
+	listener net.Listener,
+	connContext ConnContextFunc,
+	processor Processor,
+	transportID TransportID,
+	log func(format string, args ...any),
+	stats *stats.ServerStats,
+	pstats map[string]*stats.TimingSeries,
+) transport.ServerTransport {
 	return &rocketServerTransport{
 		listener:    listener,
 		processor:   processor,
@@ -48,6 +57,7 @@ func newRocketServerTransport(listener net.Listener, connContext ConnContextFunc
 		connContext: connContext,
 		log:         log,
 		stats:       stats,
+		pstats:      pstats,
 	}
 }
 
@@ -114,7 +124,7 @@ func (r *rocketServerTransport) acceptLoop(ctx context.Context) error {
 	}
 }
 
-func (r *rocketServerTransport) Close() (err error) {
+func (r *rocketServerTransport) Close() error {
 	return r.listener.Close()
 }
 
@@ -145,20 +155,25 @@ func (r *rocketServerTransport) processRequests(ctx context.Context, conn net.Co
 	case TransportIDRocket:
 		r.processRocketRequests(ctx, conn)
 	case TransportIDUpgradeToRocket:
-		processor := newRocketUpgradeProcessor(r.processor)
+		ruHandler := newRocketUpgradeHandler()
+		ruProcessor := rocket_upgrade.NewRocketUpgradeProcessor(ruHandler)
+		ruCompProcessor := NewCompositeProcessor()
+		ruCompProcessor.Include(r.processor)
+		ruCompProcessor.Include(ruProcessor)
+
 		headerProtocol, err := NewHeaderProtocol(conn)
 		if err != nil {
 			r.log("thrift: error constructing header protocol from %s: %s\n", conn.RemoteAddr(), err)
 			return
 		}
-		if err := r.processHeaderRequest(ctx, headerProtocol, processor); err != nil {
+		if err := r.processHeaderRequest(ctx, headerProtocol, ruCompProcessor); err != nil {
 			r.log("thrift: error processing first header request from %s: %s\n", conn.RemoteAddr(), err)
 			return
 		}
-		if processor.upgraded {
+		if ruHandler.upgradeInvoked {
 			r.processRocketRequests(ctx, conn)
 		} else {
-			if err := r.processHeaderRequests(ctx, headerProtocol, processor); err != nil {
+			if err := r.processHeaderRequests(ctx, headerProtocol, ruCompProcessor); err != nil {
 				r.log("thrift: error processing additional header request from %s: %s\n", conn.RemoteAddr(), err)
 			}
 		}
@@ -178,8 +193,8 @@ func (r *rocketServerTransport) processRocketRequests(ctx context.Context, conn 
 	r.acceptor(ctx, transport.NewTransport(transport.NewTCPConn(conn)), func(*transport.Transport) {})
 }
 
-func (r *rocketServerTransport) processHeaderRequest(ctx context.Context, protocol types.Protocol, processor Processor) error {
-	exc := process(ctx, processor, protocol)
+func (r *rocketServerTransport) processHeaderRequest(ctx context.Context, protocol Protocol, processor Processor) error {
+	exc := process(ctx, processor, protocol, r.pstats)
 	if isEOF(exc) {
 		return exc
 	}
@@ -190,7 +205,7 @@ func (r *rocketServerTransport) processHeaderRequest(ctx context.Context, protoc
 	return nil
 }
 
-func (r *rocketServerTransport) processHeaderRequests(ctx context.Context, protocol types.Protocol, processor Processor) error {
+func (r *rocketServerTransport) processHeaderRequests(ctx context.Context, protocol Protocol, processor Processor) error {
 	defer func() {
 		if err := recover(); err != nil {
 			r.log("panic in processor: %v: %s", err, debug.Stack())

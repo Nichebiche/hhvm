@@ -104,7 +104,7 @@ class SerializableDynamic {
           if (ftype == protocol::T_STRING) {
             std::string value;
             xfer += iprot->readString(value);
-            value_ = value;
+            value_ = std::move(value);
           } else {
             xfer += iprot->skip(ftype);
           }
@@ -191,7 +191,7 @@ class SerializableDynamic {
 
       case folly::dynamic::Type::STRING:
         xfer += p->writeFieldBegin("str", protocol::T_STRING, 4);
-        xfer += p->writeString(value_.asString());
+        xfer += p->writeString(value_.getString());
         xfer += p->writeFieldEnd();
         break;
 
@@ -273,7 +273,7 @@ class Cpp2Ops<SerializableDynamic> {
 
       case folly::dynamic::Type::STRING:
         xfer += p->serializedFieldSize("str", protocol::T_STRING, 4);
-        xfer += p->serializedSizeString(obj->value_.asString());
+        xfer += p->serializedSizeString(obj->value_.getString());
         break;
 
       case folly::dynamic::Type::ARRAY:
@@ -355,7 +355,7 @@ class Cpp2Ops<SerializableDynamic> {
           if (ftype == protocol::T_STRING) {
             std::string value;
             iprot->readString(value);
-            obj->value_ = value;
+            obj->value_ = std::move(value);
           } else {
             iprot->skip(ftype);
           }
@@ -367,6 +367,7 @@ class Cpp2Ops<SerializableDynamic> {
             uint32_t size;
             protocol::TType etype;
             iprot->readListBegin(etype, size);
+            obj->value_.reserve(size);
             for (uint32_t i = 0; i < size; ++i) {
               SerializableDynamic item;
               Cpp2Ops<SerializableDynamic>::read(iprot, &item);

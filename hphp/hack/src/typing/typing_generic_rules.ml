@@ -23,7 +23,7 @@ let get_transitive_upper_bounds env ty =
     | ty :: tyl ->
       let (env, ety) = Env.expand_type env ty in
       (match get_node ety with
-      | Tgeneric (n, tyargs) ->
+      | Tgeneric n ->
         if SSet.mem n seen then
           iter seen env acc tyl
         else
@@ -31,7 +31,7 @@ let get_transitive_upper_bounds env ty =
             (SSet.add n seen)
             env
             acc
-            (TySet.elements (Env.get_upper_bounds env n tyargs) @ tyl)
+            (TySet.elements (Env.get_upper_bounds env n) @ tyl)
       | _ -> iter seen env (TySet.add ty acc) tyl)
   in
   let (env, resl) = iter SSet.empty env TySet.empty [ty] in
@@ -188,7 +188,7 @@ let apply_rules_with_array_index_value_ty_mismatches
         let (env, ty) = Typing_intersection.intersect_list env r tyl in
         let (env, ty) =
           if is_nonnull then
-            Typing_solver.non_null env (get_pos ty) ty
+            Typing_intersection.intersect_with_nonnull env (get_pos ty) ty
           else
             (env, ty)
         in

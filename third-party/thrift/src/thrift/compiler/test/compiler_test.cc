@@ -23,17 +23,6 @@
 using apache::thrift::compiler::test::check_compile;
 using apache::thrift::compiler::test::check_compile_options;
 
-namespace {
-
-// Change the current directory to a subdirectory to avoid relative annotations
-// being found via relative includes. The exact directory doesn't matter so
-// pick "thrift" since we know it exists.
-void disable_relative_includes() {
-  std::filesystem::current_path("thrift");
-}
-
-} // namespace
-
 // Note: To see a reference on the expected lint message format: see the regex
 // in thrift/compiler/test/compiler.cc
 TEST(CompilerTest, diagnostic_in_last_line) {
@@ -61,7 +50,7 @@ TEST(CompilerTest, missing_type_definition) {
   check_compile(R"(
     struct S {
       1: i32 i;
-      2: MyStruct ms; # expected-error: Type `test.MyStruct` not defined.
+      2: MyStruct ms; # expected-error: Type `MyStruct` not defined.
     }
   )");
 }
@@ -638,7 +627,7 @@ TEST(CompilerTest, undefined_type) {
 
 TEST(CompilerTest, undefined_const) {
   check_compile(R"(
-    const Type c = 42; # expected-error: Type `test.Type` not defined.
+    const Type c = 42; # expected-error: Type `Type` not defined.
   )");
 }
 
@@ -650,7 +639,7 @@ TEST(CompilerTest, undefined_const_external) {
 
 TEST(CompilerTest, undefined_annotation) {
   check_compile(R"(
-    @BadAnnotation # expected-error: Type `test.BadAnnotation` not defined.
+    @BadAnnotation # expected-error: Type `BadAnnotation` not defined.
     struct S {}
   )");
 }
@@ -771,7 +760,9 @@ TEST(CompilerTest, interactions_as_first_response_type) {
 
 TEST(CompilerTest, deprecated_annotations) {
   check_compile(R"(
+    include "thrift/annotation/cpp.thrift"
     include "thrift/annotation/hack.thrift"
+    include "thrift/annotation/thrift.thrift"
 
     @hack.Attributes{attributes=[]} # expected-error: Duplicate annotations hack.attributes and @hack.Attributes.
     struct A {
@@ -779,6 +770,46 @@ TEST(CompilerTest, deprecated_annotations) {
         2: i64 with (py3.name = "w", go.name = "w") # expected-warning: The annotation py3.name is deprecated. Please use @python.Name instead.
         # expected-warning@-1: The annotation go.name is deprecated. Please use @go.Name instead.
     } (hack.attributes = "")
+
+    typedef i64 (cpp.type = "std::uint64_t") T # expected-warning: The annotation cpp.type is deprecated. Please use @cpp.Type instead.
+
+    # This should not produce a warning even though the annotation is currently lowered.
+    @cpp.Type{name = "std::uint64_t"}
+    typedef i64 T2
+  )");
+}
+
+TEST(CompilerTest, removed_annotations) {
+  check_compile(R"(
+    include "thrift/annotation/thrift.thrift"
+
+    enum E1 {} (cpp2.declare_bitwise_ops)
+    # expected-error@-1: The annotation cpp2.declare_bitwise_ops has been removed. Please use @thrift.BitmaskEnum instead.
+
+    @thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp2.declare_bitwise_ops": "1"}}
+    enum E2 {}
+    # expected-error@-2: The annotation cpp2.declare_bitwise_ops has been removed. Please use @thrift.BitmaskEnum instead.
+
+    enum E3 {} (cpp2.deprecated_enum_unscoped)
+    # expected-error@-1: invalid annotation cpp2.deprecated_enum_unscoped
+
+    struct A {
+      1: i64 removed_unstructured (rust.foo)
+      # expected-error@-1: The annotation rust.foo has been removed. Please use a structured annotation from thrift/annotation/rust.thrift instead.
+      @thrift.DeprecatedUnvalidatedAnnotations{items = {"rust.foo": "1"}}
+      2: i64 removed_catchall
+      # expected-error@-2: The annotation rust.foo has been removed. Please use a structured annotation from thrift/annotation/rust.thrift instead.
+    }
+
+    typedef map<string, string> (rust.type = "HashMap") HashMap
+    # expected-error@-1: The annotation rust.type has been removed. Please use a structured annotation from thrift/annotation/rust.thrift instead.
+
+    struct S {} (cpp.type = "foo") # expected-warning: The annotation cpp.type is deprecated. Please use @cpp.Type instead.
+    typedef S T
+
+    service J {
+      i64 foo(1: i64 arg (rust.name = "bar")) # expected-error: The annotation rust.name has been removed. Please use a structured annotation from thrift/annotation/rust.thrift instead.
+    }
   )");
 }
 
@@ -810,7 +841,7 @@ TEST(CompilerTest, cpp_type_compatibility) {
 
     struct B {
       @cpp.Adapter{name="Adapter"} # expected-warning: At most one of @cpp.Type/@cpp.Adapter/cpp.type/cpp.template can be specified on a definition.
-      1: i32 (cpp.type = "std::uint32_t") field; # expected-warning@-1: The cpp.type/cpp.template annotations are deprecated, use @cpp.Type instead
+      1: i32 (cpp.type = "std::uint32_t") field;
       # expected-error@-2: Annotations are not allowed in this position. Extract the type into a named typedef instead.
       @cpp.Adapter{name="Adapter"} # expected-warning: At most one of @cpp.Type/@cpp.Adapter/cpp.type/cpp.template can be specified on a definition.
       @cpp.Type{name="std::uint32_t"}
@@ -1627,11 +1658,11 @@ TEST(CompilerTest, inject_metadata_fields_annotation) {
     struct Injected2 {}
 
     @internal.InjectMetadataFields{type="UnionFields"}
-      # expected-error@-1: `bar.UnionFields` is not a struct type. `@internal.InjectMetadataFields` can be only used with a struct type.
+      # expected-error@-1: `UnionFields` is not a struct type. `@internal.InjectMetadataFields` can be only used with a struct type.
     struct Injected3 {}
 
     @internal.InjectMetadataFields{type="MyI64"}
-      # expected-error@-1: `bar.MyI64` is not a struct type. `@internal.InjectMetadataFields` can be only used with a struct type.
+      # expected-error@-1: `MyI64` is not a struct type. `@internal.InjectMetadataFields` can be only used with a struct type.
     struct Injected4 {}
 
     @internal.InjectMetadataFields{type="Fields"}
@@ -1873,21 +1904,7 @@ TEST(CompilerTest, required_key_specified_in_structured_annotation) {
 TEST(CompilerTest, nonexist_type_in_variable) {
   check_compile(R"(
     const map<i8, string> foo = {1: "str"}
-      # expected-error@-1: Type `test.i8` not defined.
-  )");
-}
-
-TEST(CompilerTest, terse_write_outside_experimental_mode) {
-  check_compile(R"(
-    include "thrift/annotation/thrift.thrift"
-
-    package "meta.com/thrift/test"
-
-    struct MyStruct {
-        @thrift.TerseWrite
-        1: i32 field1 = 1;
-        # expected-warning@-2: Terse field should not have custom default value: `field1` (in `MyStruct`).
-    }
+      # expected-error@-1: Type `i8` not defined.
   )");
 }
 
@@ -2010,7 +2027,7 @@ TEST(CompilerTest, py3_invalid_field_names) {
       {"--gen", "mstch_py3"});
 }
 
-TEST(CompilerTest, warn_on_non_explicit_includes) {
+TEST(CompilerTest, error_on_non_explicit_includes) {
   std::map<std::string, std::string> name_contents_map;
   name_contents_map["path/to/upstream.thrift"] = R"(
     struct TransitiveStruct {}
@@ -2220,11 +2237,24 @@ TEST(CompilerTest, duplicate_include) {
 TEST(CompilerTest, not_bundled_annotation) {
   auto options = check_compile_options();
   options.add_standard_includes = false;
-  disable_relative_includes();
+
+  // Change the current directory to a temp directory to avoid annotations
+  // being found via relative includes.
+  std::filesystem::current_path(std::filesystem::temp_directory_path());
+
   check_compile(
       R"(
       include "thrift/annotation/baz.thrift"
       # expected-error-1: Could not find include file thrift/annotation/baz.thrift
+      )",
+      {},
+      options);
+
+  // The (hard-coded) bundles should still exist without implicit includes.
+  check_compile(
+      R"(
+      include "thrift/annotation/cpp.thrift"
+      include "thrift/lib/thrift/schema.thrift"
       )",
       {},
       options);
@@ -2276,7 +2306,7 @@ TEST(Compilertest, custom_default_values) {
 
       @thrift.TerseWrite
       5: i32 e = 43;
-        # expected-warning@-2: Terse field should not have custom default value: `e` (in `Widget`).
+        # expected-error@-2: Terse field should not have custom default value: `e` (in `Widget`).
 
       6: TestUnion f = {};
         # expected-warning@-1: Explicit default value is redundant for (unqualified) field: `f` (in `Widget`).
@@ -2289,8 +2319,7 @@ TEST(Compilertest, custom_default_values) {
 
       @thrift.TerseWrite
       9: i32 i = 0;
-        # expected-warning@-2: Terse field should not have custom default value: `i` (in `Widget`).
-        # expected-warning@-3: Explicit default value is redundant for (terse) field: `i` (in `Widget`).
+        # expected-warning@-2: Explicit default value is redundant for (terse) field: `i` (in `Widget`).
 
       10: optional bool j = false;
         # expected-warning@-1: Explicit default value is redundant for (optional) field: `j` (in `Widget`).
@@ -2372,4 +2401,358 @@ TEST(CompilerTest, cpp_deprecated_terse_write_ref) {
         # expected-error@-5: @cpp.AllowLegacyDeprecatedTerseWritesRef can not be applied to `field4` since it's not cpp.DeprecatedTerseWrite field.
     }
   )");
+}
+
+TEST(CompilerTest, base_service_defined_after_use) {
+  check_compile(R"(
+    typedef Base BaseAlias
+
+    service Derived extends Base {}  # expected-error: Service "Base" has not been defined.
+    service DerivedWithAlias extends BaseAlias {}  # expected-error: Service "BaseAlias" has not been defined.
+
+    service Base {}
+  )");
+}
+
+TEST(CompilerTest, invalid_include_alias) {
+  std::map<std::string, std::string> name_contents_map;
+
+  name_contents_map["foo.thrift"] = "";
+  name_contents_map["bar.thrift"] = "";
+  name_contents_map["baz.thrift"] = "";
+  name_contents_map["main.thrift"] = R"(
+    include "baz.thrift" as const; # expected-error: Invalid include alias 'const'
+    include "foo.thrift" as ; # expected-error: Include alias cannot be empty
+    include "bar.thrift" as 123; # expected-error: Invalid include alias 'int literal'
+  )";
+
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, duplicate_include_alias) {
+  std::map<std::string, std::string> name_contents_map;
+
+  name_contents_map["a/b/c/foo.thrift"] = "";
+  name_contents_map["d/e/bar.thrift"] = "";
+  name_contents_map["main.thrift"] = R"(
+    include "a/b/c/foo.thrift" as foo;
+    include "d/e/bar.thrift" as foo; # expected-error: 'foo' is already an alias for 'a/b/c/foo.thrift'
+    include "a/b/c/foo.thrift" as foo2; # expected-error: Include 'a/b/c/foo.thrift' has multiple aliases: 'foo' vs 'foo2'
+  )";
+
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, resolve_enum_typedefs_after_use) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["remote.thrift"] = R"(
+    typedef Remote LazyRemoteAlias;
+
+    enum Remote {
+      FOO = 1,
+    }
+
+    typedef Remote RemoteAlias;
+  )";
+  name_contents_map["main.thrift"] = R"(
+    include "remote.thrift"
+
+    typedef Local LazyLocalAlias;
+
+    struct S {
+      1: remote.Remote field_v1 = remote.Remote.FOO;
+      2: remote.Remote field_v2 = remote.RemoteAlias.FOO;
+      3: remote.Remote field_v3 = remote.FOO;
+      4: remote.Remote field_v4 = LocalAliasForRemote.FOO;
+      5: Local field_v5 = Local.BAR;
+      6: Local field_v6 = LocalAlias.BAR;
+      7: Local field_v8 = BAR;
+    }
+
+    const remote.Remote var_v1 = remote.Remote.FOO;
+    const remote.Remote var_v2 = remote.RemoteAlias.FOO;
+    const remote.Remote var_v3 = remote.FOO;
+    const remote.Remote var_v4 = remote.LazyRemoteAlias.FOO;
+    const remote.Remote var_v5 = LocalAliasForRemote.FOO;
+
+    const Local LAZY_BAR_ALIAS = Local.BAR;
+    const Local LAZY_BAR_ALIAS2 = main.BAR;
+
+    const Local var_v6 = Local.BAR;
+    const Local var_v7 = LocalAlias.BAR;
+    const Local var_v8 = BAR;
+    const Local var_v9 = LazyLocalAlias.BAR;
+    const Local var_v10 = main.LazyLocalAlias.BAR;
+    const Local var_v11 = LAZY_BAR_ALIAS;
+    const Local var_v12 = main.LAZY_BAR_ALIAS;
+    const Local var_v13 = LAZY_BAR_ALIAS2;
+    const Local var_v14 = main.LAZY_BAR_ALIAS2;
+
+    enum Local {
+      BAR = 2,
+    }
+
+    typedef remote.Remote LocalAliasForRemote;
+    typedef Local LocalAlias;
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, include_alias) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["foo.thrift"] = R"(
+    struct FooBar {
+      1: string name;
+    }
+  )";
+  name_contents_map["bar.thrift"] = R"(
+    struct FooBar {
+      1: i32 id;
+    }
+  )";
+  name_contents_map["main.thrift"] = R"(
+    include "foo.thrift" as foo_alias
+    include "bar.thrift" as bar_alias
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+// [TEMPORARY] This verifies that unscoped identifiers in injected metadata
+// annotations are resolved to the program they're defined in.
+TEST(CompilerTest, scope_resolution_for_unscoped_injected_metadata) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["module.thrift"] = R"(
+    include "thrift/annotation/internal.thrift"
+
+    struct Foo {
+      1: map<i16, i32> metadata;
+    }
+
+    @internal.InjectMetadataFields{type = "Foo"}
+    struct MyInjected {}
+
+    @internal.InjectMetadataFields{type = "module.Foo"}
+    struct MyInjected2 {}
+
+  )";
+  name_contents_map["main.thrift"] = R"(
+    include "module.thrift"
+
+    @module.MyInjected
+    struct S1 {
+    }
+
+    @module.MyInjected2
+    struct S2 {
+    }
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, local_vs_global_resolution_sanity) {
+  for (const bool use_global_resolution : {true, false}) {
+    std::map<std::string, std::string> name_content_map;
+
+    name_content_map["c/foo.thrift"] = R"(
+      struct Something {
+        1: i32 val;
+      }
+
+      struct Bar {
+        1: Something field;
+      }
+    )";
+
+    name_content_map["a/foo.thrift"] = R"(
+      include "c/foo.thrift"
+      struct Bar {
+        1: string field;
+      }
+    )";
+
+    name_content_map["b/foo.thrift"] = R"(
+      include "a/foo.thrift"
+
+      struct Bar {
+        1: i32 field;
+      }
+    )";
+
+    name_content_map["local/foo.thrift"] = R"(
+      include "a/foo.thrift"
+      include "b/foo.thrift"
+      include "c/foo.thrift"
+
+      struct Inner {
+        1: string val;
+      }
+
+      struct Bar {
+        1: Inner field;
+      }
+
+      // This should always resolve to the local Bar
+      const Bar bar = Bar{field = Inner{val = "hello"}};
+    )";
+
+    name_content_map["get_b/foo.thrift"] = R"(
+      include "a/foo.thrift"
+      include "b/foo.thrift"
+      include "c/foo.thrift"
+
+      // This should resolve to b's Bar, as it was parsed last
+      // in the hierarchy
+      const foo.Bar bar = foo.Bar{field = 12};
+    )";
+
+    auto options = check_compile_options();
+    options.use_global_resolution = use_global_resolution;
+
+    check_compile(name_content_map, "local/foo.thrift", {}, options);
+    check_compile(name_content_map, "get_b/foo.thrift", {}, options);
+  }
+}
+
+TEST(CompilerTest, include_alias_resolution_priority) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["foo.thrift"] = R"(
+    struct Bar {
+      1: string name;
+    }
+  )";
+  name_contents_map["other/Foo.thrift"] = R"(
+    struct Bar {
+      1: i32 code;
+    }
+  )";
+  name_contents_map["bar.thrift"] = R"(
+    include "other/Foo.thrift"
+  )";
+
+  name_contents_map["main.thrift"] = R"(
+    include "foo.thrift" as Foo
+    // This transitively includes other/Foo.thrift & should overwrite Foo.Bar
+    // Which clashes with the alias above
+    include "bar.thrift"
+
+    const Foo.Bar MY_BAR = Foo.Bar{name = "hello"};
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, include_alias_resolution_does_not_fallback) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["foo.thrift"] = R"(
+    struct Annot {
+      1: i32 val;
+    }
+
+    const i32 MY_VAL = 11;
+  )";
+  name_contents_map["a/Foo.thrift"] = R"(
+    const string MY_VAL = "hello";
+  )";
+
+  name_contents_map["bar.thrift"] = R"(
+    include "a/Foo.thrift"
+  )";
+
+  name_contents_map["main.thrift"] = R"(
+    include "foo.thrift" as Foo
+    include "bar.thrift"
+
+    @Foo.Annot{ val = Foo.MY_VAL }
+    struct S {
+    }
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, scope_resolution_duplicate_include_as_alias) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["v1/foo.thrift"] = R"(
+    struct Bar {
+      1: string name;
+    }
+  )";
+
+  name_contents_map["foo.thrift"] = R"(
+    include "v1/foo.thrift"
+    include "v1/foo.thrift" as FooV2 # expected-warning: Duplicate include of `v1/foo.thrift`
+
+    struct Bar {
+      1: i32 id;
+    }
+
+    // The `foo.Bar` identifier is overriden by the local definition, despite an explicit include
+    const foo.Bar MY_REMOTE_CONST_V1 = foo.Bar{name = "foo"}; # expected-error: no field named `name` in `Bar`
+    const FooV2.Bar MY_REMOTE_CONST_V2 = FooV2.Bar{name = "foo"};
+    const Bar MY_LOCAL_CONST = Bar{id = 1};
+  )";
+
+  check_compile(name_contents_map, "foo.thrift");
+}
+
+TEST(CompilerTest, report_unresolved_identifiers_in_structured_annotations) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["foo.thrift"] = R"(
+    struct MyAnnot {
+      1: string name;
+      2: i32 id;
+      3: list<float> values;
+    }
+  )";
+
+  name_contents_map["main.thrift"] = R"(
+    include "foo.thrift"
+
+    @foo.MyAnnot{ name = foo.DOES_NOT_EXIST } # expected-error: use of undeclared identifier 'foo.DOES_NOT_EXIST'
+    struct S {}
+
+    @foo.MyAnnot{ id = foo.DOES_NOT_EXIST } # expected-error: use of undeclared identifier 'foo.DOES_NOT_EXIST'
+    struct S2 {}
+
+    @foo.MyAnnot{ values = [
+      foo.DOES_NOT_EXIST, # expected-error: use of undeclared identifier 'foo.DOES_NOT_EXIST'
+      ALSO_DOES_NOT_EXIST # expected-error: use of undeclared identifier 'ALSO_DOES_NOT_EXIST'
+    ] }
+    struct S3 {}
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, reported_unresolved_identifiers_in_constants) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["foo.thrift"] = R"(
+  )";
+
+  name_contents_map["main.thrift"] = R"(
+    include "foo.thrift"
+
+    const i32 MY_CONST = foo.MY_CONST; # expected-error: use of undeclared identifier 'foo.MY_CONST'
+    const string MY_CONST2 = foo.MY_CONST; # expected-error: use of undeclared identifier 'foo.MY_CONST'
+    const list<i32> MY_CONST3 = foo.MY_CONST; # expected-error: use of undeclared identifier 'foo.MY_CONST'
+    const list<i32> MY_CONST4 = [
+      foo.MY_CONST, # expected-error: use of undeclared identifier 'foo.MY_CONST'
+      foo.MY_CONST2 # expected-error: use of undeclared identifier 'foo.MY_CONST2'
+    ];
+    const map<i32, i32> MY_CONST5 = foo.MY_CONST; # expected-error: use of undeclared identifier 'foo.MY_CONST'
+    const map<i32, i32> MY_CONST6 = { foo.MY_CONST_KEY: # expected-error: use of undeclared identifier 'foo.MY_CONST_KEY'
+      foo.MY_CONST_VALUE }; # expected-error: use of undeclared identifier 'foo.MY_CONST_VALUE'
+    const set<i32> MY_CONST7 = foo.MY_CONST; # expected-error: use of undeclared identifier 'foo.MY_CONST'
+    const set<i32> MY_CONST8 = [ foo.MY_CONST ]; # expected-error: use of undeclared identifier 'foo.MY_CONST'
+  )";
+  check_compile(name_contents_map, "main.thrift");
+}
+
+TEST(CompilerTest, unresolved_struct_in_const) {
+  std::map<std::string, std::string> name_contents_map;
+  name_contents_map["main.thrift"] = R"(
+    struct MyDeclaredStruct {
+        1: i64 some_field;
+    }
+    const MyDeclaredStruct X = MyUndeclaredStruct{}; 
+    # expected-error-1: could not resolve type `MyUndeclaredStruct` (expected `main.MyDeclaredStruct`)
+  )";
+  check_compile(name_contents_map, "main.thrift");
 }

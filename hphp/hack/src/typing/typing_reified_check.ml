@@ -27,16 +27,17 @@ let validator =
       else
         super#on_tapply acc r (p, h) tyl
 
+    method! on_tclass_ptr acc r _ty =
+      (* TODO(T199611023) allow when we enforce inner type *)
+      this#invalid acc r "a class pointer type"
+
     method! on_twildcard acc r =
       if acc.Type_validator.env.Typing_env_types.allow_wildcards then
         acc
       else
         this#invalid acc r "a wildcard"
 
-    method! on_tgeneric acc r t _tyargs =
-      (* Ignoring type aguments: If there were any, then this generic variable isn't allowed to be
-         reified anyway *)
-      (* TODO(T70069116) actually implement that check *)
+    method! on_tgeneric acc r t =
       match Env.get_reified acc.Type_validator.env t with
       | Nast.Erased -> this#invalid acc r "not reified"
       | Nast.SoftReified -> this#invalid acc r "soft reified"
@@ -44,17 +45,21 @@ let validator =
 
     method! on_tfun acc r _ = this#invalid acc r "a function type"
 
-    method! on_typeconst acc class_ typeconst =
+    method! on_typeconst acc _ typeconst =
       match typeconst.ttc_kind with
-      | TCConcrete _ -> super#on_typeconst acc class_ typeconst
-      | TCAbstract _ when Option.is_some typeconst.ttc_reifiable ->
-        super#on_typeconst acc class_ typeconst
-      | TCAbstract _ ->
-        let r = Reason.witness_from_decl (fst typeconst.ttc_name) in
-        let kind =
-          "an abstract type constant without the __Reifiable attribute"
-        in
-        this#invalid acc r kind
+      | TCConcrete { tc_type } -> this#on_type acc tc_type
+      | TCAbstract
+          { atc_as_constraint = _; atc_super_constraint = _; atc_default } ->
+      begin
+        match typeconst.ttc_reifiable with
+        | None ->
+          let r = Reason.witness_from_decl (fst typeconst.ttc_name) in
+          let kind =
+            "an abstract type constant without the __Reifiable attribute"
+          in
+          this#invalid acc r kind
+        | Some _ -> Option.fold ~f:this#on_type ~init:acc atc_default
+      end
 
     method! on_taccess acc r (root, ids) =
       let acc =

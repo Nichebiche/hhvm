@@ -28,6 +28,7 @@
 #include <folly/io/async/DelayedDestruction.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseLocal.h>
+#include <folly/memory/not_null.h>
 
 #include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/PluggableFunction.h>
@@ -37,9 +38,11 @@
 #include <thrift/lib/cpp2/transport/rocket/client/RequestContext.h>
 #include <thrift/lib/cpp2/transport/rocket/client/RequestContextQueue.h>
 #include <thrift/lib/cpp2/transport/rocket/client/RocketStreamServerCallback.h>
+#include <thrift/lib/cpp2/transport/rocket/compression/CustomCompressor.h>
 #include <thrift/lib/cpp2/transport/rocket/flush/FlushManager.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/Frames.h>
 #include <thrift/lib/cpp2/transport/rocket/framing/Parser.h>
+#include <thrift/lib/cpp2/transport/rocket/payload/PayloadSerializer.h>
 #include <thrift/lib/thrift/gen-cpp2/RpcMetadata_types.h>
 
 THRIFT_FLAG_DECLARE_bool(rocket_client_binary_rpc_metadata_encoding);
@@ -77,7 +80,7 @@ class RocketClient : public virtual folly::DelayedDestruction,
   static Ptr create(
       folly::EventBase& evb,
       folly::AsyncTransport::UniquePtr socket,
-      std::unique_ptr<SetupFrame> setupFrame,
+      RequestSetupMetadata&& setupMetadata,
       int32_t keepAliveTimeoutMs = 0,
       std::shared_ptr<rocket::ParserAllocatorType> allocatorPtr = nullptr);
 
@@ -445,7 +448,7 @@ class RocketClient : public virtual folly::DelayedDestruction,
   RocketClient(
       folly::EventBase& evb,
       folly::AsyncTransport::UniquePtr socket,
-      std::unique_ptr<SetupFrame> setupFrame,
+      RequestSetupMetadata&& setupMetadata,
       int32_t keepAliveTimeoutMs = 0,
       std::shared_ptr<rocket::ParserAllocatorType> allocatorPtr = nullptr);
 
@@ -596,6 +599,11 @@ class RocketClient : public virtual folly::DelayedDestruction,
   void setServerVersion(int32_t serverVersion);
   void sendTransportMetadataPush();
 
+  // setup custom compression based on setup frame response
+  folly::Expected<folly::Unit, transport::TTransportException>
+  handleSetupResponseCustomCompression(
+      CompressionSetupResponse const& setupResponse);
+
  protected:
   // Close the connection and fail all the requests *inline*. This should not be
   // called inline from any of the callbacks triggered by RocketClient.
@@ -608,6 +616,30 @@ class RocketClient : public virtual folly::DelayedDestruction,
 
   template <class T>
   friend class Parser;
+
+ public:
+  // this is public so client callback methods can use it
+  struct DestructionGuardedClient {
+    RocketClient* client;
+    folly::DelayedDestructionBase::DestructorGuard guard;
+
+    explicit DestructionGuardedClient(RocketClient* c)
+        : client(c), guard(folly::DelayedDestructionBase::DestructorGuard(c)) {}
+  };
+
+  PayloadSerializer::Ptr getPayloadSerializer() {
+    if (payloadSerializerHolder_) {
+      return payloadSerializerHolder_->get();
+    }
+
+    return PayloadSerializer::getInstance();
+  }
+
+ protected:
+  std::optional<PayloadSerializer::PayloadSerializerHolder>
+      payloadSerializerHolder_;
+  std::optional<CustomCompressionSetupRequest> customCompressionSetupRequest_;
+  std::shared_ptr<CustomCompressor> customCompressor_;
 };
 
 } // namespace rocket

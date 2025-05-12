@@ -30,8 +30,6 @@
 #include "hphp/runtime/base/file.h"
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/string-buffer.h"
-#include "hphp/runtime/base/tv-refcount.h"
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/interp-helpers.h"
 
 #include "hphp/runtime/ext/extension.h"
@@ -2067,9 +2065,9 @@ namespace {
 #define YYMARKER        s->ptr
 #define YYFILL(n)       RET(PDO_PARSER_EOI)
 
-typedef struct Scanner {
+struct Scanner {
   char *ptr, *cur, *lim, *tok;
-} Scanner;
+};
 
 static int scan(Scanner *s) {
   char* cursor = s->cur;

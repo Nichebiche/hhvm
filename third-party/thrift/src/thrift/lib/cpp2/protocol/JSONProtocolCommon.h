@@ -23,11 +23,9 @@
 #include <folly/Conv.h>
 #include <folly/Range.h>
 #include <folly/Traits.h>
-#include <folly/dynamic.h>
 #include <folly/io/Cursor.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/IOBufQueue.h>
-#include <folly/json.h>
 #include <thrift/lib/cpp/protocol/TBase64Utils.h>
 #include <thrift/lib/cpp2/protocol/Protocol.h>
 
@@ -275,6 +273,8 @@ class JSONProtocolReaderCommon : public detail::ProtocolBase {
 
   // Returns next character, or \0 if at the end.
   int8_t peekCharSafe();
+
+  static std::string readJSONStringViaDynamic(std::string const& json);
 
   [[noreturn]] static void throwBadVersion();
   [[noreturn]] static void throwUnrecognizableAsBoolean(const std::string& s);

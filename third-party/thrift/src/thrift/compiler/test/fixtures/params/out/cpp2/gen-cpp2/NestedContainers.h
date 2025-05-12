@@ -36,6 +36,8 @@ class NestedContainersServiceInfoHolder : public apache::thrift::ServiceInfoHold
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::NestedContainers> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::NestedContainers>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "NestedContainers"; }
 
@@ -101,6 +103,13 @@ class ServiceHandler<::cpp2::NestedContainers> : public apache::thrift::ServerIn
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_turtles{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::NestedContainers, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -4068262488431456951;
+  static constexpr ::std::string_view definitionKey = {"\x5c\x58\xe5\x01\x5d\xdc\x62\xf0\x13\x7c\x68\x6d\xff\x81\xae\x6b", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

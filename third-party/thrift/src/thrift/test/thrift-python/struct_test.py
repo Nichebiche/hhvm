@@ -20,6 +20,7 @@ import types
 import typing
 import unittest
 from datetime import datetime
+from sys import platform
 
 import thrift.python.mutable_serializer as mutable_serializer
 
@@ -191,6 +192,47 @@ class ThriftPython_ImmutableStruct_Test(unittest.TestCase):
         self.assertEqual(w2, TestStructImmutable())
         self.assertIsNone(w2.optional_string)
 
+    def test_intrinsic_default_values_for_unqualified_fields(self) -> None:
+        # GIVEN
+        # Even though this test is primarily about
+        # the intrinsic default values for unqualified fields,
+        # for sanity, set the optional fields to None.
+        expected_primitive = TestStructAllThriftPrimitiveTypesImmutable(
+            unqualified_string="",
+            optional_string=None,
+            unqualified_i32=0,
+            optional_i32=None,
+            unqualified_double=0.0,
+            optional_double=None,
+            unqualified_bool=False,
+            optional_bool=None,
+            unqualified_byte=0,
+            optional_byte=None,
+            unqualified_i16=0,
+            optional_i16=None,
+            unqualified_i64=0,
+            optional_i64=None,
+            unqualified_float=0,
+            optional_float=None,
+        )
+
+        self.assertEqual(
+            expected_primitive, TestStructAllThriftPrimitiveTypesImmutable()
+        )
+
+        expected_container = TestStructAllThriftContainerTypesImmutable(
+            unqualified_list_i32=[],
+            optional_list_i32=None,
+            unqualified_set_string=set(),
+            optional_set_string=None,
+            unqualified_map_string_i32={},
+            optional_map_string_i32=None,
+        )
+
+        self.assertEqual(
+            expected_container, TestStructAllThriftContainerTypesImmutable()
+        )
+
     def test_default_values(self) -> None:
         # Custom default values:
         # Newly created instance has custom default values for non-optional
@@ -267,11 +309,16 @@ class ThriftPython_ImmutableStruct_Test(unittest.TestCase):
         )
 
     def test_subclass(self) -> None:
-        types.new_class(
-            "TestImmutableSubclass",
-            bases=(TestStructImmutable,),
-            exec_body=lambda ns: ns.update(_fbthrift_SPEC=()),
+        err = (
+            r"Inheritance from generated thrift struct \w+ is deprecated."
+            r" Please use composition."
         )
+        with self.assertRaisesRegex(TypeError, err):
+            types.new_class(
+                "TestImmutableSubclass",
+                bases=(TestStructImmutable,),
+                exec_body=lambda ns: ns.update(_fbthrift_SPEC=()),
+            )
 
     def test_base_classes(self) -> None:
         self.assertIsInstance(TestStructImmutable(), ImmutableStruct)
@@ -299,15 +346,15 @@ class ThriftPython_ImmutableStruct_Test(unittest.TestCase):
         w = TestStructImmutable(unqualified_string="hello, world!")
 
         # Attributes of immutable types cannot be deleted.
-        #
-        # Note the interesting (and somewhat inconsistent) current behavior:
-        # Calling `del` prior to accessing an attribute raises an AttributeError
-        # (at the cinder level), but doing so after accessing it is a silent
-        # no-op.
         with self.assertRaisesRegex(AttributeError, "unqualified_string"):
             del w.unqualified_string
         self.assertEqual(w.unqualified_string, "hello, world!")
-        del w.unqualified_string  # silent no-op
+
+        # deleting after setting is no longer a no-op;
+        # we correctly raise AttributeError
+        with self.assertRaisesRegex(AttributeError, "unqualified_string"):
+            del w.unqualified_string
+
         self.assertEqual(w.unqualified_string, "hello, world!")
 
         # However, a new instance of the object can be created with a specific
@@ -564,7 +611,56 @@ class ThriftPython_MutableStruct_Test(unittest.TestCase):
         self.assertIsNot(w, w3)
         self.assertEqual(w, w3)
 
+    def test_intrinsic_default_values_for_unqualified_fields(self) -> None:
+        # GIVEN
+        # Even though this test is primarily about
+        # the intrinsic default values for unqualified fields,
+        # for sanity, set the optional fields to None.
+        expected_primitive = TestStructAllThriftPrimitiveTypesMutable(
+            unqualified_string="",
+            optional_string=None,
+            unqualified_i32=0,
+            optional_i32=None,
+            unqualified_double=0.0,
+            optional_double=None,
+            unqualified_bool=False,
+            optional_bool=None,
+            unqualified_byte=0,
+            optional_byte=None,
+            unqualified_i16=0,
+            optional_i16=None,
+            unqualified_i64=0,
+            optional_i64=None,
+            unqualified_float=0,
+            optional_float=None,
+        )
+
+        self.assertEqual(expected_primitive, TestStructAllThriftPrimitiveTypesMutable())
+
+        expected_container = TestStructAllThriftContainerTypesMutable(
+            unqualified_list_i32=to_thrift_list([]),
+            optional_list_i32=None,
+            unqualified_set_string=to_thrift_set(set()),
+            optional_set_string=None,
+            unqualified_map_string_i32=to_thrift_map({}),
+            optional_map_string_i32=None,
+        )
+
+        self.assertEqual(expected_container, TestStructAllThriftContainerTypesMutable())
+
     def test_default_values(self) -> None:
+        # Newly created instance has custom default values for non-optional
+        # fields, but custom default values for optional fields are ignored.
+        self.assertEqual(
+            TestStructWithDefaultValuesMutable(),
+            TestStructWithDefaultValuesMutable(
+                unqualified_integer=42,
+                optional_integer=None,
+                unqualified_struct=TestStructMutable(unqualified_string="hello"),
+                optional_struct=None,
+            ),
+        )
+
         # Intrinsic default values:
         # optional struct field is None
         self.assertIsNone(

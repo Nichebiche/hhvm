@@ -28,61 +28,23 @@ class HTTPUpstreamSession : public HTTPSession {
    * @param peerAddr       Address and port of the remote end of the socket.
    * @param codec          A codec with which to parse/generate messages in
    *                         whatever HTTP-like wire format this session needs.
-   * @param maxVirtualPri  Number of virtual priority nodes to represent fixed
-   *                         priority levels.
    */
-  HTTPUpstreamSession(
-      const WheelTimerInstance& wheelTimer,
-      folly::AsyncTransport::UniquePtr&& sock,
-      const folly::SocketAddress& localAddr,
-      const folly::SocketAddress& peerAddr,
-      std::unique_ptr<HTTPCodec> codec,
-      const wangle::TransportInfo& tinfo,
-      InfoCallback* infoCallback,
-      uint8_t maxVirtualPri = 0,
-      std::shared_ptr<const PriorityMapFactory> priorityMapFactory =
-          std::shared_ptr<const PriorityMapFactory>())
-      : HTTPSession(wheelTimer,
-                    std::move(sock),
-                    localAddr,
-                    peerAddr,
-                    nullptr,
-                    std::move(codec),
-                    tinfo,
-                    infoCallback),
-        maxVirtualPriorityLevel_(priorityMapFactory ? 0 : maxVirtualPri),
-        priorityMapFactory_(priorityMapFactory) {
-    if (sock_) {
-      auto asyncSocket = sock_->getUnderlyingTransport<folly::AsyncSocket>();
-      if (asyncSocket) {
-        asyncSocket->setBufferCallback(this);
-      }
-    }
-    CHECK_EQ(codec_->getTransportDirection(), TransportDirection::UPSTREAM);
-  }
+  HTTPUpstreamSession(const WheelTimerInstance& wheelTimer,
+                      folly::AsyncTransport::UniquePtr&& sock,
+                      const folly::SocketAddress& localAddr,
+                      const folly::SocketAddress& peerAddr,
+                      std::unique_ptr<HTTPCodec> codec,
+                      const wangle::TransportInfo& tinfo,
+                      InfoCallback* infoCallback);
 
   // uses folly::HHWheelTimer instance which is used on client side & thrift
-  HTTPUpstreamSession(
-      folly::HHWheelTimer* wheelTimer,
-      folly::AsyncTransport::UniquePtr&& sock,
-      const folly::SocketAddress& localAddr,
-      const folly::SocketAddress& peerAddr,
-      std::unique_ptr<HTTPCodec> codec,
-      const wangle::TransportInfo& tinfo,
-      InfoCallback* infoCallback,
-      uint8_t maxVirtualPri = 0,
-      std::shared_ptr<const PriorityMapFactory> priorityMapFactory =
-          std::shared_ptr<const PriorityMapFactory>())
-      : HTTPUpstreamSession(WheelTimerInstance(wheelTimer),
-                            std::move(sock),
-                            localAddr,
-                            peerAddr,
-                            std::move(codec),
-                            tinfo,
-                            infoCallback,
-                            maxVirtualPri,
-                            priorityMapFactory) {
-  }
+  HTTPUpstreamSession(folly::HHWheelTimer* wheelTimer,
+                      folly::AsyncTransport::UniquePtr&& sock,
+                      const folly::SocketAddress& localAddr,
+                      const folly::SocketAddress& peerAddr,
+                      std::unique_ptr<HTTPCodec> codec,
+                      const wangle::TransportInfo& tinfo,
+                      InfoCallback* infoCallback);
 
   using FilterIteratorFn = std::function<void(HTTPCodecFilter*)>;
 
@@ -171,9 +133,6 @@ class HTTPUpstreamSession : public HTTPSession {
       std::shared_ptr<const folly::SSLContext> sslContext) const;
   void maybeDetachSSLContext() const;
 
-  uint8_t maxVirtualPriorityLevel_{0};
-
-  std::shared_ptr<const PriorityMapFactory> priorityMapFactory_;
   std::unique_ptr<PriorityAdapter> priorityAdapter_;
 };
 

@@ -46,7 +46,7 @@ let go status error_format ~is_interactive ~output_json ~max_errors =
     error_list;
     dropped_count;
     last_recheck_stats;
-    watchman_clock = _;
+    file_watcher_clock = _;
   } =
     status
   in
@@ -109,13 +109,14 @@ module ErrorsInfo = struct
 
   let accumulate
       { errors_count }
-      (errors : Errors.finalized_error list Relative_path.Map.t) =
+      (errors : (Errors.finalized_error * int) list Relative_path.Map.t) =
     let errors_count =
       Relative_path.Map.fold
         errors
         ~init:errors_count
         ~f:(fun _ errors error_counts ->
-          Errors.count_errors_and_warnings errors |> add_tuples error_counts)
+          Errors.count_errors_and_warnings (List.map ~f:fst errors)
+          |> add_tuples error_counts)
     in
     { errors_count }
 
@@ -291,7 +292,9 @@ let go_streaming_on_fd
         (* We'll clear the spinner, print errs to stdout, flush stdout, and restore the spinner *)
         progress_callback None;
         let errors =
-          Relative_path.Map.map errors ~f:(Filter_errors.filter error_filter)
+          Relative_path.Map.map
+            errors
+            ~f:(Filter_errors.filter_with_hash error_filter)
         in
         let errors_info = ErrorsInfo.accumulate errors_info errors in
         let printer =
@@ -301,10 +304,11 @@ let go_streaming_on_fd
                 errors
                 ~init:printer
                 ~f:(fun _path errors_in_file acc ->
-                  List.fold
-                    errors_in_file
-                    ~init:acc
-                    ~f:(ErrorPrinter.print_error_if_below_limit ~error_format))
+                  List.fold errors_in_file ~init:acc ~f:(fun acc (err, _) ->
+                      ErrorPrinter.print_error_if_below_limit
+                        ~error_format
+                        acc
+                        err))
             in
             let printer = ErrorPrinter.print_extra_errors_if_any printer in
             Printf.printf "%!";
@@ -694,10 +698,12 @@ let rec keep_trying_to_open
         Hh_logger.log
           "Errors-file: %s is present, was started at clock %s, so querying watchman..."
           (Sys_utils.show_inode fd)
-          clock;
+          (ServerNotifier.show_clock clock);
         (* Watchman doesn't support "what files have changed from error.bin's clock until
            hh-invocation clock?". We'll instead use the (less permissive, still correct) query
            "what files have changed from error.bin's clock until now?". *)
+        (* TODO frankemrich: This must become eden-aware *)
+        let clock = ServerNotifier.watchman_clock_of_clock clock in
         let%lwt since_result =
           watchman_get_raw_updates_since
             ~root

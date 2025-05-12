@@ -192,7 +192,8 @@ class AsyncMysqlClient : public MysqlClientBase {
  protected:
   AsyncMysqlClient(
       std::unique_ptr<db::SquangleLoggerBase> db_logger,
-      std::unique_ptr<db::DBCounterBase> db_stats);
+      std::unique_ptr<db::DBCounterBase> db_stats,
+      std::unique_ptr<const MysqlExceptionBuilder> exception_builder = nullptr);
 
   bool runInThread(std::function<void()>&& fn, bool wait = false) override;
 
@@ -297,8 +298,8 @@ class AsyncMysqlClient : public MysqlClientBase {
     return active_connection_counter_;
   }
 
-  double callbackDelayMicrosAvg() override {
-    return stats_tracker_->callbackDelayAvg.value();
+  Duration callbackDelayAvg() const override {
+    return Duration((uint64_t)stats_tracker_->callbackDelayAvg.value());
   }
 
   void cleanupCompletedOperations();

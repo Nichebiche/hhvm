@@ -96,7 +96,6 @@ module Program = struct
         ServerConfig.load
           ~silent:false
           ~from:(ServerArgs.from genv.options)
-          ~ai_options:None
           ~cli_config_overrides:(ServerArgs.config genv.options)
       in
       if not (ServerConfig.is_compatible genv.config new_config) then (
@@ -176,7 +175,7 @@ let query_notifier
     (start_time : float) :
     ServerEnv.env
     * Relative_path.Set.t
-    * Watchman.clock option
+    * ServerNotifier.clock option
     * bool
     * Telemetry.t =
   let telemetry =
@@ -186,8 +185,15 @@ let query_notifier
     match query_kind with
     | `Sync ->
       ( env,
-        (try ServerNotifier.get_changes_sync genv.notifier with
-        | Watchman.Timeout -> (ServerNotifier.Unavailable, None)) )
+        begin
+          try
+            let (changes, clock) =
+              ServerNotifier.get_changes_sync genv.notifier
+            in
+            (ServerNotifier.SyncChanges changes, clock)
+          with
+          | Watchman.Timeout -> (ServerNotifier.Unavailable, None)
+        end )
     | `Async ->
       ( { env with last_notifier_check_time = start_time },
         ServerNotifier.get_changes_async genv.notifier )
@@ -196,10 +202,14 @@ let query_notifier
   let telemetry = Telemetry.duration telemetry ~key:"notified" ~start_time in
   let unpack_updates = function
     | ServerNotifier.Unavailable -> (true, SSet.empty)
-    | ServerNotifier.StateEnter _ -> (true, SSet.empty)
-    | ServerNotifier.StateLeave _ -> (true, SSet.empty)
     | ServerNotifier.AsyncChanges updates -> (true, updates)
-    | ServerNotifier.SyncChanges updates -> (false, updates)
+    | ServerNotifier.SyncChanges updates ->
+      (* We get SyncChanges either
+         a) due to a call to to  ServerNotifier.get_changes_sync  (see match on query_kind above) or
+         b) if we used ServerNotifier.get_changes_async, but the latter actually received
+            changes in a synchronous fashion,
+         In any case, the updates are up to date, meaning that the staleness flag is set to false *)
+      (false, updates)
   in
   let (updates_stale, raw_updates) = unpack_updates raw_updates in
   let rec pump_async_updates acc acc_clock =
@@ -332,7 +342,9 @@ let rec recheck_until_no_changes_left stats genv env select_outcome :
   let stats = { stats with RecheckLoopStats.updates_stale } in
   (* saving any file is our trigger to start full recheck *)
   let env =
-    if Option.is_some clock && not (Option.equal String.equal clock env.clock)
+    if
+      Option.is_some clock
+      && not (Option.equal ServerNotifier.equal_clock clock env.clock)
     then begin
       Hh_logger.log "Recheck at watchclock %s" (ServerEnv.show_clock clock);
       { env with clock }
@@ -712,7 +724,7 @@ let serve_one_iteration genv env client_provider =
 a typecheck cancelled due to files changing on disk. It constructs the
 human-readable [user_message] and also [log_message] appropriately. *)
 let cancel_due_to_watchman
-    (updates : Relative_path.Set.t) (clock : Watchman.clock option) :
+    (updates : Relative_path.Set.t) (clock : ServerNotifier.clock option) :
     MultiThreadedCall.interrupt_result =
   assert (not (Relative_path.Set.is_empty updates));
   let size = Relative_path.Set.cardinal updates in
@@ -1282,6 +1294,9 @@ let setup_server
   HackEventLogger.init_start
     ~experiments_config_meta:
       local_config.ServerLocalConfig.experiments_config_meta
+    ~decl_parser:
+      (ServerConfig.parser_options config)
+        .ParserOptions.use_oxidized_by_ref_decls
     (Memory_stats.get_host_hw_telemetry ());
 
   check_nfs ~root options local_config;
@@ -1387,7 +1402,6 @@ let daemon_main_exn ~informant_managed options monitor_pid in_fds =
       ~silent:false
       ~from:(ServerArgs.from options)
       ~cli_config_overrides:(ServerArgs.config options)
-      ~ai_options:None
   in
   Option.iter local_config.ServerLocalConfig.memtrace_dir ~f:(fun dir ->
       Daemon.start_memtracing (Filename.concat dir "memtrace.server.ctf"));

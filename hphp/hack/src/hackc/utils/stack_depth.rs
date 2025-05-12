@@ -17,8 +17,8 @@ use hhbc_gen::InstrFlags;
 use hhbc_gen::OpcodeData;
 use hhbc_gen::Outputs;
 use log::debug;
-use newtype::newtype_int;
 use newtype::IdVec;
+use newtype::newtype_int;
 use thiserror::Error;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -237,7 +237,12 @@ impl ComputeStackDepth<'_> {
                             return Err(Error::UnexpectedExitWithStack);
                         }
                     }
-                    Opcode::CreateCont | Opcode::Await | Opcode::Yield | Opcode::YieldK => {
+
+                    Opcode::CreateCont
+                    | Opcode::Await
+                    | Opcode::AwaitLowPri
+                    | Opcode::Yield
+                    | Opcode::YieldK => {
                         // Stack depth should be 1 after resume from suspend.
                         if self.cur_depth != 1 {
                             return Err(Error::UnexpectedStackAfterResume);

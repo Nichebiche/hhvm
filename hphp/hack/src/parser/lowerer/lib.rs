@@ -7,11 +7,11 @@
 #[macro_use]
 extern crate lazy_static;
 
-mod desugar_expression_tree;
+pub mod desugar_expression_tree;
 mod lowerer;
 mod modifier;
 mod scour_comment;
 
-pub use lowerer::lower;
 pub use lowerer::Env;
+pub use lowerer::lower;
 pub use scour_comment::ScourComment;

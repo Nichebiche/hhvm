@@ -21,7 +21,6 @@
 #include <glog/logging.h>
 
 #include <thrift/lib/cpp/concurrency/test/ThreadFactoryTests.h>
-#include <thrift/lib/cpp/concurrency/test/TimerManagerTests.h>
 
 using namespace apache::thrift::concurrency;
 using namespace apache::thrift::concurrency::test;
@@ -73,38 +72,5 @@ int main(int argc, char** argv) {
     std::cout << "\t\tInitThreadFactory test" << std::endl;
 
     DCHECK(threadFactoryTests.initThreadFactoryTest());
-  }
-
-  if (runAll || args[0] == "util") {
-    std::cout << "Util tests..." << std::endl;
-
-    std::cout << "\t\tUtil minimum time" << std::endl;
-
-    int64_t time00 = Util::currentTime();
-    int64_t time01 = Util::currentTime();
-
-    std::cout << "\t\t\tMinimum time: " << time01 - time00 << "ms" << std::endl;
-
-    time00 = Util::currentTime();
-    time01 = time00;
-    size_t count = 0;
-
-    while (time01 < time00 + 10) {
-      count++;
-      time01 = Util::currentTime();
-    }
-
-    std::cout << "\t\t\tscall per ms: " << count / (time01 - time00)
-              << std::endl;
-  }
-
-  if (runAll || args[0] == "timer-manager") {
-    std::cout << "TimerManager tests..." << std::endl;
-
-    std::cout << "\t\tTimerManager test00" << std::endl;
-
-    TimerManagerTests timerManagerTests;
-
-    DCHECK(timerManagerTests.test00());
   }
 }

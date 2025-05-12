@@ -19,10 +19,8 @@
 #include "hphp/runtime/base/apc-stats.h"
 #include "hphp/runtime/base/backtrace.h"
 #include "hphp/runtime/base/file-util.h"
-#include "hphp/runtime/base/http-client.h"
 #include "hphp/runtime/base/init-fini-node.h"
 #include "hphp/runtime/base/memory-manager.h"
-#include "hphp/runtime/base/program-functions.h"
 #include "hphp/runtime/base/runtime-option.h"
 #include "hphp/runtime/debugger/debugger.h"
 #include "hphp/runtime/ext/apc/ext_apc.h"
@@ -34,20 +32,15 @@
 #include "hphp/runtime/server/replay-transport.h"
 #include "hphp/runtime/server/server-stats.h"
 #include "hphp/runtime/server/warmup-request-handler.h"
-#include "hphp/runtime/server/xbox-server.h"
-#include "hphp/runtime/vm/vm-regs.h"
 
-#include "hphp/util/alloc.h"
 #include "hphp/util/boot-stats.h"
 #include "hphp/util/bump-mapper.h"
 #include "hphp/util/configs/adminserver.h"
 #include "hphp/util/configs/debugger.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/configs/server.h"
-#include "hphp/util/light-process.h"
 #include "hphp/util/logger.h"
 #include "hphp/util/process.h"
-#include "hphp/util/stack-trace.h"
 #include "hphp/util/struct-log.h"
 #include "hphp/util/sync-signal.h"
 #include "hphp/util/user-info.h"
@@ -193,10 +186,6 @@ HttpServer::HttpServer() {
 
   if (Cfg::Server::EnableSSL) {
     m_pageServer->enableSSL(Cfg::Server::SSLPort);
-  }
-
-  if (Cfg::Server::EnableSSLWithPlainText) {
-    m_pageServer->enableSSLWithPlainText();
   }
 
   ServerOptions admin_options(Cfg::AdminServer::IP,
@@ -461,6 +450,8 @@ void HttpServer::runOrExitProcess() {
   waitForServers();
   // Log APC samples after all requests finish.
   apc_sample_by_size();
+  // Log static string samples after all requests finish.
+  log_static_strings();
   playShutdownRequest(Cfg::Server::CleanupRequest);
 }
 

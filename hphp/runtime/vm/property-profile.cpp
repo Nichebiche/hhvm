@@ -16,11 +16,8 @@
 
 #include "hphp/runtime/vm/property-profile.h"
 
-#include <atomic>
-#include <cinttypes>
 #include <deque>
 
-#include "hphp/runtime/base/string-functors.h"
 #include "hphp/runtime/vm/class.h"
 #include "hphp/runtime/vm/jit/prof-data-serialize.h"
 #include "hphp/util/alloc.h"
@@ -32,7 +29,7 @@ namespace HPHP::PropertyProfile {
 
 namespace {
 
-TRACE_SET_MOD(prof_prop);
+TRACE_SET_MOD(prof_prop)
 
 // (class, prop)
 using ClassPropPair = std::pair<const StringData*, const StringData*>;

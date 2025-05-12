@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+#include <gtest/gtest.h>
 #include <folly/coro/BlockingWait.h>
-#include <folly/portability/GTest.h>
 
 #include <thrift/lib/cpp2/test/gen-cpp2/HandlerGeneric.h>
 #include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
@@ -24,8 +24,8 @@ using namespace apache::thrift;
 
 TEST(ClientTest, ReadHeaderAvailableToEventProcessor) {
   struct EventHandler : TProcessorEventHandler {
-    void postRead(
-        void*, const char*, transport::THeader* header, uint32_t) override {
+    void postRead(void*, std::string_view, transport::THeader* header, uint32_t)
+        override {
       ASSERT_EQ(header->getHeaders().at("header"), "value");
     }
   };

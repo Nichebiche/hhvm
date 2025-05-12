@@ -17,9 +17,34 @@
 #pragma once
 
 #include <folly/Utility.h>
+#include <folly/algorithm/simd/find_first_of.h>
+#include <folly/codec/hex.h>
 
 namespace apache {
 namespace thrift {
+
+namespace detail::json {
+
+inline constexpr auto json_ws_alphabet = std::array{
+    char(kJSONSpace),
+    char(kJSONNewline),
+    char(kJSONTab),
+    char(kJSONCarriageReturn),
+};
+using json_ws_scalar_needle_t = folly::conditional_t<
+    folly::kIsMobile,
+    folly::simd::default_scalar_finder_first_not_of,
+    folly::simd::ltindex_scalar_finder_first_not_of>;
+using json_ws_vector_needle_t = folly::conditional_t<
+    folly::kIsMobile || !folly::kIsArchAmd64,
+    folly::simd::default_vector_finder_first_not_of,
+    folly::simd::shuffle_vector_finder_first_not_of>;
+inline constexpr auto json_ws_vector_needle =
+    json_ws_vector_needle_t{json_ws_alphabet};
+inline constexpr auto json_ws_scalar_needle =
+    json_ws_scalar_needle_t{json_ws_alphabet};
+
+} // namespace detail::json
 
 // Return the hex character representing the integer val. The value is masked
 // to make sure it is in the correct range.
@@ -426,20 +451,26 @@ inline void JSONProtocolReaderCommon::readBinary(folly::IOBuf& str) {
  */
 
 inline void JSONProtocolReaderCommon::skipWhitespace() {
-  for (auto peek = in_.peekBytes(); !peek.empty(); peek = in_.peekBytes()) {
-    uint32_t size = 0;
-    for (char ch : peek) {
-      if (ch != apache::thrift::detail::json::kJSONSpace &&
-          ch != apache::thrift::detail::json::kJSONNewline &&
-          ch != apache::thrift::detail::json::kJSONTab &&
-          ch != apache::thrift::detail::json::kJSONCarriageReturn) {
-        in_.skip(size);
-        return;
-      }
-      ++skippedWhitespace_;
-      ++size;
+  constexpr auto& vector_needle = detail::json::json_ws_vector_needle;
+  constexpr auto& scalar_needle = detail::json::json_ws_scalar_needle;
+  while (true) { // for loop generates larger code with 2 calls to peekBytesSlow
+    auto const peek = folly::reinterpret_span_cast<char const>(in_.peek());
+    if (peek.empty()) {
+      return;
     }
+    auto const newl = apache::thrift::detail::json::kJSONNewline;
+    // if 0th char is newline then it is likely that indentation follows; vector
+    // algorithm is better for indentation but worse for single-char whitespace
+    auto const usevec = !folly::kIsMobile /* has vector acceleration */ && //
+        folly::kIsArchAmd64 && peek.size() > 16 && peek[0] == newl;
+    auto const vecskip = size_t(usevec);
+    auto const size =
+        vecskip + vector_needle(scalar_needle, usevec, peek.subspan(vecskip));
+    skippedWhitespace_ += size;
     in_.skip(size);
+    if (size < peek.size()) {
+      return;
+    }
   }
 }
 
@@ -734,8 +765,7 @@ inline void JSONProtocolReaderCommon::readJSONString(StrType& val) {
   if (fullDecodeRequired) {
     json += "\"";
     try {
-      folly::dynamic parsed = folly::parseJson(json);
-      val += parsed.getString();
+      val += readJSONStringViaDynamic(json);
     } catch (const std::exception& e) {
       throwUnrecognizableAsString(json, e);
     }
@@ -773,13 +803,11 @@ inline void JSONProtocolReaderCommon::readJSONBase64(StrType& str) {
 // Return the integer value of a hex character ch.
 // Throw a protocol exception if the character is not [0-9a-f].
 inline uint8_t JSONProtocolReaderCommon::hexVal(uint8_t ch) {
-  if ((ch >= '0') && (ch <= '9')) {
-    return ch - '0';
-  } else if ((ch >= 'a') && (ch <= 'f')) {
-    return ch - 'a' + 10;
-  } else {
+  auto const v = folly::hex_decode_digit_table(char(ch));
+  if (!folly::hex_decoded_digit_is_valid(v)) {
     throwInvalidHexChar(ch);
   }
+  return v;
 }
 
 template <class Predicate>

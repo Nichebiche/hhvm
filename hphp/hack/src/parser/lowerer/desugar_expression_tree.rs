@@ -1,30 +1,37 @@
+use std::collections::HashMap;
+
 use bstr::BString;
+use itertools::Itertools;
 use naming_special_names_rust::classes;
 use naming_special_names_rust::expression_trees as et;
 use naming_special_names_rust::pseudo_functions;
 use naming_special_names_rust::special_idents;
 use oxidized::aast;
-use oxidized::aast_visitor::visit;
-use oxidized::aast_visitor::visit_mut;
 use oxidized::aast_visitor::AstParams;
 use oxidized::aast_visitor::Node;
 use oxidized::aast_visitor::NodeMut;
 use oxidized::aast_visitor::Visitor;
 use oxidized::aast_visitor::VisitorMut;
+use oxidized::aast_visitor::visit;
+use oxidized::aast_visitor::visit_mut;
 use oxidized::ast;
 use oxidized::ast::Afield;
 use oxidized::ast::ClassId;
 use oxidized::ast::ClassId_;
+use oxidized::ast::EtSplice;
 use oxidized::ast::Expr;
 use oxidized::ast::Expr_;
 use oxidized::ast::Hint_;
+use oxidized::ast::LocalId;
 use oxidized::ast::Sid;
 use oxidized::ast::Stmt;
 use oxidized::ast::Stmt_;
 use oxidized::ast_defs;
 use oxidized::ast_defs::*;
+use oxidized::experimental_features::FeatureName;
 use oxidized::local_id;
 use oxidized::pos::Pos;
+use parser_core_types::syntax_error;
 
 use crate::lowerer::Env;
 
@@ -89,8 +96,18 @@ pub fn desugar(
     Id(visitor_pos, visitor_name): &aast::ClassName,
     e: Expr,
     env: &Env<'_>,
+    is_nested: bool,
 ) -> DesugarResult {
     let et_literal_pos = e.1.clone();
+
+    let free_vars = if is_nested {
+        // Only compute the free variables for nested expression trees.
+        // Top level ones will just desugar to a virtual expression with
+        // free variables and get an error from that
+        LiveVars::new_from_expression(&e).used
+    } else {
+        HashMap::default()
+    };
 
     let mut state = RewriteState {
         splices: vec![],
@@ -116,35 +133,7 @@ pub fn desugar(
                 &et_literal_pos,
             )]),
         };
-        let param_type = aast::Hint::new(
-            et_literal_pos.clone(),
-            Hint_::Hshape(aast::NastShapeInfo {
-                allows_unknown_fields: true,
-                field_map: vec![],
-            }),
-        );
-        let freevar_param = aast::FunParam {
-            annotation: (),
-            type_hint: aast::TypeHint((), Some(param_type)),
-            pos: et_literal_pos.clone(),
-            name: "$0fv_shape".to_string(),
-            info: aast::FunParamInfo::ParamOptional(Some(Expr(
-                (),
-                et_literal_pos.clone(),
-                Expr_::mk_shape(vec![]),
-            ))),
-            readonly: None,
-            callconv: ParamKind::Pnormal,
-            user_attributes: aast::UserAttributes(vec![]),
-            visibility: None,
-            splat: None,
-        };
-        let mut typing_fun_ = wrap_fun_(
-            false,
-            typing_fun_body,
-            vec![freevar_param],
-            et_literal_pos.clone(),
-        );
+        let mut typing_fun_ = wrap_fun_(false, typing_fun_body, vec![], et_literal_pos.clone());
         typing_fun_.ctxs = Some(aast::Contexts(
             et_literal_pos.clone(),
             vec![ast::Hint::new(
@@ -158,42 +147,45 @@ pub fn desugar(
                 ),
             )],
         ));
-        let mut spliced_vars: Vec<_> = (0..splice_count)
-            .map(|i| {
-                ast::CaptureLid(
-                    (),
-                    ast::Lid(visitor_pos.clone(), (0, temp_splice_lvar_string(i))),
-                )
-            })
-            .collect();
-        let function_pointer_vars: Vec<_> = (0..function_count)
-            .map(|i| {
-                ast::CaptureLid(
-                    (),
-                    ast::Lid(
-                        visitor_pos.clone(),
-                        (0, temp_function_pointer_lvar_string(i)),
-                    ),
-                )
-            })
-            .collect();
-        let static_method_vars: Vec<_> = (0..static_method_count)
-            .map(|i| {
-                ast::CaptureLid(
-                    (),
-                    ast::Lid(visitor_pos.clone(), (0, temp_static_method_lvar_string(i))),
-                )
-            })
-            .collect();
-        spliced_vars.extend(function_pointer_vars);
-        spliced_vars.extend(static_method_vars);
+        let mut use_ = vec![];
+        let spliced_vars = (0..splice_count).map(|i| {
+            ast::CaptureLid(
+                (),
+                ast::Lid(visitor_pos.clone(), (0, temp_splice_lvar_string(i))),
+            )
+        });
+        use_.extend(spliced_vars);
+        let function_pointer_vars = (0..function_count).map(|i| {
+            ast::CaptureLid(
+                (),
+                ast::Lid(
+                    visitor_pos.clone(),
+                    (0, temp_function_pointer_lvar_string(i)),
+                ),
+            )
+        });
+        use_.extend(function_pointer_vars);
+        let static_method_vars = (0..static_method_count).map(|i| {
+            ast::CaptureLid(
+                (),
+                ast::Lid(visitor_pos.clone(), (0, temp_static_method_lvar_string(i))),
+            )
+        });
+        use_.extend(static_method_vars);
+        if is_nested {
+            let fvs = free_vars
+                .iter()
+                .map(|(v, pos)| ast::CaptureLid((), ast::Lid(pos.clone(), v.clone())));
+            use_.extend(fvs);
+        }
         Expr::new(
             (),
             et_literal_pos.clone(),
             Expr_::mk_efun(aast::Efun {
                 fun: typing_fun_,
-                use_: spliced_vars,
+                use_,
                 closure_class_name: None,
+                is_expr_tree_virtual_expr: is_nested,
             }),
         )
     };
@@ -256,7 +248,20 @@ pub fn desugar(
     let mut function_pointers = vec![];
     function_pointers.extend(function_pointer_assignments);
     function_pointers.extend(static_method_assignments);
-
+    if is_nested
+        && !free_vars.is_empty()
+        && !FeatureName::ExpressionTreeNestedBindings
+            .can_use(env.parser_options, &env.active_experimental_features)
+    {
+        state.errors.push((
+            et_literal_pos.clone(),
+            format!(
+                "{} Free variables: {}",
+                syntax_error::cannot_use_feature(FeatureName::ExpressionTreeNestedBindings.into()),
+                free_vars.keys().map(|x| x.1.clone()).join(", ")
+            ),
+        ))
+    }
     let make_tree = static_meth_call(
         visitor_name,
         et::MAKE_TREE,
@@ -290,6 +295,16 @@ pub fn desugar(
         Expr_::mk_expression_tree(ast::ExpressionTree {
             class: Id(visitor_pos.clone(), visitor_name.clone()),
             runtime_expr,
+            free_vars: if is_nested {
+                Some(
+                    free_vars
+                        .into_iter()
+                        .map(|(id, pos)| aast::Lid(pos, id))
+                        .collect(),
+                )
+            } else {
+                None
+            },
         }),
     );
     DesugarResult {
@@ -505,7 +520,7 @@ fn v_meth_call(meth_name: &str, args: Vec<Expr>, pos: &Pos) -> Expr {
     Expr::new((), pos.clone(), c)
 }
 
-fn meth_call(receiver: Expr, meth_name: &str, args: Vec<Expr>, pos: &Pos) -> Expr {
+fn meth_call(receiver: Expr, meth_name: &str, args: Vec<Expr>, nullsafe: bool, pos: &Pos) -> Expr {
     let meth = Expr::new(
         (),
         pos.clone(),
@@ -519,7 +534,11 @@ fn meth_call(receiver: Expr, meth_name: &str, args: Vec<Expr>, pos: &Pos) -> Exp
             Expr_::mk_obj_get(
                 receiver,
                 meth,
-                OgNullFlavor::OGNullthrows,
+                if nullsafe {
+                    OgNullFlavor::OGNullsafe
+                } else {
+                    OgNullFlavor::OGNullthrows
+                },
                 ast::PropOrMethod::IsMethod,
             ),
         ),
@@ -712,7 +731,7 @@ fn shape_literal(pos: &Pos, fields: Vec<(&str, Expr)>) -> Expr {
 
 fn boolify(receiver: Expr) -> Expr {
     let pos = receiver.1.clone();
-    meth_call(receiver, "__bool", vec![], &pos)
+    meth_call(receiver, "__bool", vec![], false, &pos)
 }
 
 struct RewriteState {
@@ -891,6 +910,7 @@ impl RewriteState {
                     rewritten_lhs.virtual_expr,
                     binop_str,
                     vec![rewritten_rhs.virtual_expr],
+                    false,
                     &pos,
                 );
                 let desugar_expr = v_meth_call(
@@ -991,7 +1011,8 @@ impl RewriteState {
                         "__unsupported"
                     }
                 };
-                let virtual_expr = meth_call(rewritten_operand.virtual_expr, op_str, vec![], &pos);
+                let virtual_expr =
+                    meth_call(rewritten_operand.virtual_expr, op_str, vec![], false, &pos);
                 let desugar_expr = v_meth_call(
                     et::VISIT_UNOP,
                     vec![
@@ -1103,18 +1124,16 @@ impl RewriteState {
                     }
                 }
 
-                let (virtual_args, desugar_args) =
-                    self.rewrite_exprs(args_without_inout, visitor_name);
-
                 match recv.2 {
                     // Source: MyDsl`foo()`
                     // Virtualized: (MyDsl::symbolType($0fpXX)->__unwrap())()
                     // Desugared: $0v->visitCall(new ExprPos(...), $0v->visitGlobalFunction(new ExprPos(...), $0fpXX), vec[])
                     Id(sid) => {
+                        let (virtual_args, desugar_args) =
+                            self.rewrite_exprs(args_without_inout, visitor_name);
                         let len = self.global_function_pointers.len();
                         self.global_function_pointers.push(global_func_ptr(&sid));
                         let temp_variable = temp_function_pointer_lvar(&recv.1, len);
-
                         let desugar_expr = v_meth_call(
                             et::VISIT_CALL,
                             vec![
@@ -1139,6 +1158,7 @@ impl RewriteState {
                                         vec![temp_variable],
                                         &pos,
                                     ),
+                                    false,
                                     &pos,
                                 ),
                                 targs: vec![],
@@ -1154,8 +1174,7 @@ impl RewriteState {
                     // Source: MyDsl`Foo::bar()`
                     // Virtualized: (MyDsl::symbolType($0smXX)->__unwrap())()
                     // Desugared: $0v->visitCall(new ExprPos(...), $0v->visitStaticMethod(new ExprPos(...), $0smXX, vec[])
-                    ClassConst(cc) => {
-                        let (cid, s) = *cc;
+                    ClassConst(box (cid, s)) => {
                         if let ClassId_::CIexpr(Expr(_, _, Id(sid))) = &cid.2 {
                             if sid.1 == classes::PARENT
                                 || sid.1 == classes::SELF
@@ -1179,37 +1198,54 @@ impl RewriteState {
                         self.static_method_pointers
                             .push(static_meth_ptr(&recv.1, &cid, &s));
                         let temp_variable = temp_static_method_lvar(&recv.1, len);
-
+                        let (virtual_expr, desugar_args) = match cid {
+                            ClassId(
+                                _,
+                                _,
+                                ClassId_::CIexpr(Expr(
+                                    _,
+                                    _,
+                                    aast::Expr_::Id(box ast_defs::Id(_, name)),
+                                )),
+                            ) if name == visitor_name => match s.1.as_ref() {
+                                // type check any special function calls
+                                et::BUILTIN_SHAPE_AT => {
+                                    handle_shapes_at(self, visitor_name, &pos, args_without_inout)
+                                }
+                                et::BUILTIN_SHAPE_PUT => {
+                                    handle_shapes_put(self, visitor_name, &pos, args_without_inout)
+                                }
+                                et::BUILTIN_SHAPE_IDX => {
+                                    handle_shapes_idx(self, visitor_name, &pos, args_without_inout)
+                                }
+                                _ => handle_class_const(
+                                    self,
+                                    visitor_name,
+                                    &pos,
+                                    args_without_inout,
+                                    temp_variable.clone(),
+                                ),
+                            },
+                            _ => handle_class_const(
+                                self,
+                                visitor_name,
+                                &pos,
+                                args_without_inout,
+                                temp_variable.clone(),
+                            ),
+                        };
                         let desugar_expr = v_meth_call(
                             et::VISIT_CALL,
                             vec![
                                 pos_expr.clone(),
                                 v_meth_call(
                                     et::VISIT_STATIC_METHOD,
-                                    vec![pos_expr, temp_variable.clone()],
+                                    vec![pos_expr, temp_variable],
                                     &pos,
                                 ),
                                 vec_literal(desugar_args),
                             ],
                             &pos,
-                        );
-                        let virtual_expr = Expr(
-                            (),
-                            pos.clone(),
-                            Expr_::mk_call(ast::CallExpr {
-                                func: _virtualize_call(
-                                    static_meth_call(
-                                        visitor_name,
-                                        et::SYMBOL_TYPE,
-                                        vec![temp_variable],
-                                        &pos,
-                                    ),
-                                    &pos,
-                                ),
-                                targs: vec![],
-                                args: build_args(virtual_args),
-                                unpacked_arg: None,
-                            }),
                         );
                         RewriteResult {
                             virtual_expr,
@@ -1225,6 +1261,8 @@ impl RewriteState {
                             ObjGet(ref og) if og.3 == ast::PropOrMethod::IsMethod => false,
                             _ => true,
                         };
+                        let (virtual_args, desugar_args) =
+                            self.rewrite_exprs(args_without_inout, visitor_name);
                         let rewritten_recv =
                             self.rewrite_expr(Expr((), recv.1, recv.2), visitor_name);
 
@@ -1242,7 +1280,7 @@ impl RewriteState {
                             pos.clone(),
                             Expr_::mk_call(ast::CallExpr {
                                 func: if should_virtualize_call {
-                                    _virtualize_call(rewritten_recv.virtual_expr, &pos)
+                                    _virtualize_call(rewritten_recv.virtual_expr, false, &pos)
                                 } else {
                                     rewritten_recv.virtual_expr
                                 },
@@ -1357,44 +1395,70 @@ impl RewriteState {
                     desugar_expr,
                 }
             }
-            // Source: MyDsl`${ ... }`
-            // Virtualized to `${ ... }`
-            // Desugared to `$0v->splice(new ExprPos(...), '$var_name', ...)`
+
+            // Splices are lifted out and assigned to temporary variables.
+            // Splices can be either normal:
+            // Source: MyDsl`${ ... }` where there are no nested free variables in ETs in the splice
+            // Lifted to $0splice = ${ ... };
+            // Virtualized to ${ $0splice }
+            // Desugared to $0v->splice(new ExprPos(...), '$0splice', $0splice)
+            //
+            // Splices can also be macro splices. In that case, we wrap with a lambda to delay evaluation
+            // Source: MyDsl`${ ... }` where there are nested free variables (say $x and $y) in ETs in the splice
+            // Lifted to $0splice = ${ () ==> ... };
+            // Virtualized to ${ $0splice() } where the splice records $x and $y
+            // Desugared to $0v->macro_splice(new ExprPos(...), '$0splice', $0splice, vec!['$x', '$y'])
+            // Where there is an await inside of the splice, the lambda created is async.
+            // Further, the desugared expression calls async_macro_splice, rather than macro_splice
             ETSplice(box aast::EtSplice {
                 spliced_expr,
-                extract_client_type,
                 contains_await,
+                extract_client_type: _,
                 macro_variables,
+                temp_lid: _,
             }) => {
                 let len = self.splices.len();
                 let expr_pos = spliced_expr.1.clone();
-                self.splices.push(Expr(
-                    (),
-                    expr_pos.clone(),
-                    Expr_::mk_etsplice(aast::EtSplice {
-                        spliced_expr,
-                        extract_client_type: false,
-                        contains_await,
-                        macro_variables: macro_variables.clone(),
-                    }),
-                ));
+                let is_macro = macro_variables.is_some();
                 let temp_variable = temp_splice_lvar(&expr_pos, len);
-                let temp_variable_string = string_literal(expr_pos, &temp_splice_lvar_string(len));
-                let desugar_expr = v_meth_call(
-                    et::SPLICE,
-                    vec![pos_expr, temp_variable_string, temp_variable.clone()],
-                    &pos,
-                );
+                let temp_variable_string =
+                    string_literal(expr_pos.clone(), &temp_splice_lvar_string(len));
+                let mut args = vec![pos_expr, temp_variable_string, temp_variable.clone()];
+                if is_macro {
+                    let macro_var_exprs = macro_variables
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .map(|ast::Lid(pos, (_, s))| string_literal(pos.clone(), s))
+                        .collect();
+                    args.push(vec_literal(macro_var_exprs));
+                }
+                let desugar_expr = v_meth_call(et::SPLICE, args, &pos);
+                let virtual_spliced_expr = temp_variable.clone();
+                let temp_lid = temp_variable.2.as_lvar_into().unwrap().1;
                 let virtual_expr = Expr(
                     (),
                     pos,
                     Expr_::mk_etsplice(aast::EtSplice {
-                        spliced_expr: temp_variable,
-                        extract_client_type,
+                        spliced_expr: virtual_spliced_expr,
+                        extract_client_type: true,
                         contains_await,
-                        macro_variables,
+                        macro_variables: macro_variables.clone(),
+                        temp_lid: temp_lid.clone(),
                     }),
                 );
+                let spliced_expr =
+                    static_meth_call(visitor_name, et::LIFT, vec![spliced_expr], &expr_pos);
+                let expr_ = Expr_::mk_etsplice(aast::EtSplice {
+                    spliced_expr,
+                    contains_await,
+                    extract_client_type: false,
+                    macro_variables,
+                    temp_lid,
+                });
+                let expr = Expr::new((), expr_pos.clone(), expr_);
+                self.splices.push(expr);
+
                 self.contains_spliced_await |= contains_await;
                 RewriteResult {
                     virtual_expr,
@@ -1621,7 +1685,7 @@ impl RewriteState {
                 let virtual_expr = static_meth_call(
                     visitor_name,
                     et::SHAPE_TYPE,
-                    vec![Expr((), pos.clone(), Shape(virtual_shape_fields))],
+                    vec![Expr((), pos.clone(), Expr_::mk_shape(virtual_shape_fields))],
                     &pos,
                 );
                 let desugar_expr = v_meth_call(
@@ -1963,8 +2027,8 @@ fn strip_ns(name: &str) -> &str {
     }
 }
 
-fn _virtualize_call(e: Expr, pos: &Pos) -> Expr {
-    meth_call(e, "__unwrap", vec![], pos)
+fn _virtualize_call(e: Expr, nullsafe: bool, pos: &Pos) -> Expr {
+    meth_call(e, "__unwrap", vec![], nullsafe, pos)
 }
 
 fn _virtualize_lambda(visitor_name: &str, e: Expr, pos: &Pos) -> Expr {
@@ -2058,4 +2122,347 @@ fn mk_visit_string(pos: &Pos, str: Expr_) -> Expr {
         vec![exprpos(pos), Expr((), pos.clone(), str)],
         pos,
     )
+}
+
+// Live variable calculation, only applying to what is allowed in expression trees
+// Tests are in desugar_expression_tree_tests.rs
+#[derive(PartialEq, Debug)]
+pub struct LiveVars {
+    // The variables that might be used in a block, not following an assignment
+    // to that variable in the block
+    pub used: HashMap<LocalId, Pos>,
+    // The variables that are definitely assigned in a block
+    pub assigned: HashMap<LocalId, Pos>,
+}
+
+impl LiveVars {
+    // Compute the live variables at the entry to a list of statements,
+    // assuming nothing is live after
+    pub fn new_from_statement(stmts: &[Stmt]) -> Self {
+        let mut lvs = LiveVars {
+            used: HashMap::default(),
+            assigned: HashMap::default(),
+        };
+        lvs.update_for_stmts(stmts);
+        lvs
+    }
+
+    // Compute the live variables right before the given expression,
+    // assuming that nothing is live after
+    pub fn new_from_expression(expr: &Expr) -> Self {
+        let mut lvs = LiveVars {
+            used: HashMap::default(),
+            assigned: HashMap::default(),
+        };
+        lvs.visit_expr(&mut (), expr).unwrap();
+        lvs
+    }
+
+    // Update self with the live variable information for the stmts preceding
+    // it in control-flow order
+    fn update_for_stmts(&mut self, stmts: &[Stmt]) {
+        for Stmt(_pos, stmt) in stmts.iter().rev() {
+            match stmt {
+                Stmt_::Expr(box e) | Stmt_::Return(box Some(e)) => {
+                    self.visit_expr(&mut (), e).unwrap();
+                }
+                Stmt_::If(box (cond, ast::Block(then), ast::Block(els))) => {
+                    let then_lvs = Self::new_from_statement(then);
+                    let els_lvs = Self::new_from_statement(els);
+                    let combined_lvs = then_lvs.merge(els_lvs);
+                    self.update_for_more_live_vars(combined_lvs);
+                    self.visit_expr(&mut (), cond).unwrap();
+                }
+                Stmt_::While(box (test, body)) => {
+                    // We don't need to iterate to a fixed point, because we are
+                    // only looking at the used variables on entry to the loop,
+                    // rather than trying to use them at program points inside
+                    // the loop. Any live variable at the start of the loop
+                    // either comes from after the loop and it's not definitely
+                    // assigned in the body, or it's used in the body, in which
+                    // case it's used in the first iteration.
+
+                    let mut body_lvs = Self::new_from_statement(body);
+                    // The assigned vars don't matter because we might not enter the body
+                    body_lvs.assigned = HashMap::default();
+                    self.update_for_more_live_vars(body_lvs);
+                    // We relay on there being no assignments in the expr
+                    self.visit_expr(&mut (), test).unwrap();
+                }
+                Stmt_::For(box (init, test, inc, body)) => {
+                    let mut body_lvs = LiveVars {
+                        used: HashMap::default(),
+                        assigned: HashMap::default(),
+                    };
+                    for e in inc.iter().rev() {
+                        body_lvs.visit_expr(&mut (), e).unwrap();
+                    }
+                    body_lvs.update_for_stmts(body);
+                    body_lvs.assigned = HashMap::default();
+                    self.update_for_more_live_vars(body_lvs);
+                    for e in test.iter().rev() {
+                        self.visit_expr(&mut (), e).unwrap();
+                    }
+                    for e in init.iter().rev() {
+                        self.visit_expr(&mut (), e).unwrap();
+                    }
+                }
+                aast::Stmt_::Noop
+                | aast::Stmt_::Fallthrough
+                | aast::Stmt_::Break
+                | aast::Stmt_::Continue
+                | aast::Stmt_::Throw(_)
+                | aast::Stmt_::Return(_)
+                | aast::Stmt_::YieldBreak
+                | aast::Stmt_::Awaitall(_)
+                | aast::Stmt_::Concurrent(_)
+                | aast::Stmt_::Do(_)
+                | aast::Stmt_::Using(_)
+                | aast::Stmt_::Switch(_)
+                | aast::Stmt_::Match(_)
+                | aast::Stmt_::Foreach(_)
+                | aast::Stmt_::Try(_)
+                | aast::Stmt_::DeclareLocal(_)
+                | aast::Stmt_::Block(_)
+                | aast::Stmt_::Markup(_) => {}
+            }
+        }
+    }
+
+    // Update self with the live variable info in update, assuming that self
+    // follows update in the control flow
+    fn update_for_more_live_vars(&mut self, update: Self) {
+        for (v, pos) in update.assigned {
+            self.used.remove(&v);
+            self.assigned.insert(v, pos);
+        }
+        for (v, pos) in update.used {
+            self.used.insert(v, pos);
+        }
+    }
+
+    // Compute new live variable information where self and lvs come from two
+    // branches of a control-flow split
+    fn merge(self, lvs: Self) -> Self {
+        let assigned = self
+            .assigned
+            .into_iter()
+            .filter(|(v, _)| lvs.assigned.contains_key(v))
+            .collect();
+        let mut used = self.used;
+        for (v, pos) in lvs.used {
+            used.insert(v, pos);
+        }
+        LiveVars { assigned, used }
+    }
+
+    // Add an addignment of Lid to the live variable information. It is removed
+    // from used, since the subsequent use will now see the assignment.
+    fn add_assign(&mut self, lid: &ast::Lid) {
+        if lid.as_local_id().1 != "$this" {
+            let loc = lid.as_local_id();
+            self.used.remove(loc);
+            self.assigned.insert(loc.clone(), lid.0.clone());
+        }
+    }
+
+    fn add_use(&mut self, lid: &ast::Lid) {
+        if lid.as_local_id().1 != "$this" {
+            self.used.insert(lid.as_local_id().clone(), lid.0.clone());
+        }
+    }
+
+    // Update the live variable info in self to reflect the assignment to an
+    // lvalue
+    fn visit_lvalue(&mut self, env: &mut (), Expr(_, _, e): &Expr) {
+        match e {
+            Expr_::List(lv) => lv.iter().for_each(|e| self.visit_lvalue(env, e)),
+            Expr_::Lvar(box lid) => self.add_assign(lid),
+            _ => {
+                self.visit_expr_(env, e).unwrap();
+            }
+        }
+    }
+}
+
+// Visit an expression, updating the live variable information assumed to follow
+// the expression in control-flow order
+impl<'ast> Visitor<'ast> for LiveVars {
+    type Params = AstParams<(), ()>;
+
+    fn object(&mut self) -> &mut dyn Visitor<'ast, Params = Self::Params> {
+        self
+    }
+
+    // We won't visit lids in lvalues because assignments get treated specially
+    // in visit_expr_ (and the other lvalue position (foreach) isn't allowed in
+    // ETs)
+    fn visit_lid(&mut self, _env: &mut (), lid: &ast::Lid) -> Result<(), ()> {
+        self.add_use(lid);
+        Ok(())
+    }
+
+    fn visit_et_splice(&mut self, _env: &mut (), e: &ast::EtSplice) -> Result<(), ()> {
+        if let Some(vars) = &e.macro_variables {
+            for v in vars {
+                self.add_use(v);
+            }
+        }
+        Ok(())
+    }
+
+    fn visit_expr_(&mut self, env: &mut (), e: &Expr_) -> Result<(), ()> {
+        match e {
+            Expr_::Assign(box (lhs, bop, rhs)) => {
+                if bop.is_none() {
+                    self.visit_lvalue(env, lhs);
+                    rhs.recurse(env, self.object())
+                } else {
+                    lhs.recurse(env, self.object())?;
+                    rhs.recurse(env, self.object())?;
+                    self.visit_lvalue(env, lhs);
+                    Ok(())
+                }
+            }
+            Expr_::ExpressionTree(_) => Ok(()),
+            Expr_::ETSplice(box EtSplice {
+                macro_variables, ..
+            }) => {
+                if let Some(vars) = macro_variables {
+                    for v in vars {
+                        self.add_use(v);
+                    }
+                }
+                Ok(())
+            }
+            Expr_::Lfun(box (f, _idl)) => {
+                // functions create a new scope
+                let ast::Block(stmts) = &f.body.fb_ast;
+                let mut lv = LiveVars::new_from_statement(stmts);
+                for p in &f.params {
+                    lv.used.remove(&local_id::make_unscoped(&p.name));
+                }
+                for p in &f.params {
+                    if let ast::FunParamInfo::ParamOptional(Some(e)) = &p.info {
+                        lv.visit_expr(&mut (), e).unwrap();
+                    }
+                }
+                for (v, pos) in lv.used {
+                    self.used.insert(v, pos);
+                }
+                Ok(())
+            }
+            _ => e.recurse(env, self.object()),
+        }
+    }
+}
+
+/**
+ * Rewrite the args into virtual and desugared args, treating the second
+ * virtual argument (if present) as a shape field and so using the source
+ * rather than virtualized expression. Wrap the first virtual argument with
+ * an ->unwrap() call.
+ */
+fn rewrite_and_fixup_for_shape_op(
+    state: &mut RewriteState,
+    visitor_name: &str,
+    pos: &Pos,
+    args: Vec<Expr>,
+    nullsafe: bool,
+) -> (Vec<Expr>, Vec<Expr>) {
+    let field_arg = if args.len() > 1 {
+        Some(args[1].clone())
+    } else {
+        None
+    };
+    let (mut virtual_args, desugar_args) = state.rewrite_exprs(args, visitor_name);
+    if !virtual_args.is_empty() {
+        let mut a = Expr((), Pos::NONE, Expr_::Null);
+        std::mem::swap(&mut virtual_args[0], &mut a);
+        virtual_args[0] = _virtualize_call(a, nullsafe, pos);
+    }
+    if let Some(arg) = field_arg {
+        virtual_args[1] = arg;
+    }
+    (virtual_args, desugar_args)
+}
+
+/**
+ * Rewrite the args into virtual and desugared args. Create a virtual expression
+ * that passes the virtual arguments to a call to symbolType(temp_variable)
+ */
+fn handle_class_const(
+    state: &mut RewriteState,
+    visitor_name: &str,
+    pos: &Pos,
+    args: Vec<Expr>,
+    temp_variable: Expr,
+) -> (Expr, Vec<Expr>) {
+    let (virtual_args, desugar_args) = state.rewrite_exprs(args, visitor_name);
+    let virtual_expr = Expr(
+        (),
+        pos.clone(),
+        Expr_::mk_call(ast::CallExpr {
+            func: _virtualize_call(
+                static_meth_call(visitor_name, et::SYMBOL_TYPE, vec![temp_variable], pos),
+                false,
+                pos,
+            ),
+            targs: vec![],
+            args: build_args(virtual_args),
+            unpacked_arg: None,
+        }),
+    );
+    (virtual_expr, desugar_args)
+}
+
+/**
+ * During virtualization, handle_shapes_at unwraps the DSL Shape type into a Hack shape tape,
+ * and virtualizes the function call into a call from DSL::shapeAt into Shapes::at, to perform the type-checking.
+ *
+ * Note that this isn't used for desugaring, so in the desugared code an actual method call to DSL::shapeAt is emitted.
+ */
+fn handle_shapes_at(
+    state: &mut RewriteState,
+    visitor_name: &str,
+    pos: &Pos,
+    args: Vec<Expr>,
+) -> (Expr, Vec<Expr>) {
+    let (virtual_args, desugar_args) =
+        rewrite_and_fixup_for_shape_op(state, visitor_name, pos, args, false);
+    let virtual_expr = static_meth_call("Shapes", "at", virtual_args, pos);
+    (virtual_expr, desugar_args)
+}
+
+fn handle_shapes_idx(
+    state: &mut RewriteState,
+    visitor_name: &str,
+    pos: &Pos,
+    args: Vec<Expr>,
+) -> (Expr, Vec<Expr>) {
+    let (mut virtual_args, desugar_args) =
+        rewrite_and_fixup_for_shape_op(state, visitor_name, pos, args, true);
+    if virtual_args.len() == 2 {
+        // We need the null type as additional argument
+        virtual_args.push(static_meth_call(visitor_name, et::NULL_TYPE, vec![], pos));
+    }
+    let virtual_expr = static_meth_call("Shapes", "idx", virtual_args, pos);
+    (virtual_expr, desugar_args)
+}
+
+fn handle_shapes_put(
+    state: &mut RewriteState,
+    visitor_name: &str,
+    pos: &Pos,
+    args: Vec<Expr>,
+) -> (Expr, Vec<Expr>) {
+    let (virtual_args, desugar_args) =
+        rewrite_and_fixup_for_shape_op(state, visitor_name, pos, args, false);
+    let virtual_expr = static_meth_call(
+        visitor_name,
+        et::SHAPE_TYPE,
+        vec![static_meth_call("Shapes", "put", virtual_args, pos)],
+        pos,
+    );
+    (virtual_expr, desugar_args)
 }

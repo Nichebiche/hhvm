@@ -14,14 +14,13 @@ use bstr::BString;
 use bstr::ByteVec;
 use emit_pos::emit_pos;
 use emit_pos::emit_pos_then;
-use env::emitter::Emitter;
 use env::ClassExpr;
 use env::Env;
 use env::Flags as EnvFlags;
+use env::emitter::Emitter;
 use error::Error;
 use error::Result;
 use hash::HashSet;
-use hhbc::string_id;
 use hhbc::AsTypeStructExceptionKind;
 use hhbc::BareThisOp;
 use hhbc::ClassGetCMode;
@@ -53,10 +52,11 @@ use hhbc::StackIndex;
 use hhbc::StringId;
 use hhbc::TypeStructResolveOp;
 use hhbc::TypedValue;
+use hhbc::string_id;
 use hhbc_string_utils as string_utils;
 use indexmap::IndexSet;
-use instruction_sequence::instr;
 use instruction_sequence::InstrSeq;
+use instruction_sequence::instr;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use naming_special_names_rust::collections;
@@ -70,13 +70,13 @@ use naming_special_names_rust::typehints;
 use naming_special_names_rust::user_attributes;
 use oxidized::aast;
 use oxidized::aast_defs;
-use oxidized::aast_visitor::visit;
-use oxidized::aast_visitor::visit_mut;
 use oxidized::aast_visitor::AstParams;
 use oxidized::aast_visitor::Node;
 use oxidized::aast_visitor::NodeMut;
 use oxidized::aast_visitor::Visitor;
 use oxidized::aast_visitor::VisitorMut;
+use oxidized::aast_visitor::visit;
+use oxidized::aast_visitor::visit_mut;
 use oxidized::ast;
 use oxidized::ast_defs;
 use oxidized::local_id;
@@ -88,10 +88,10 @@ use string_utils::reified::ReifiedTparam;
 
 use super::TypeRefinementInHint;
 use crate::emit_adata;
-use crate::emit_class::REIFIED_INIT_METH_NAME;
 use crate::emit_class::REIFIED_PROP_NAME;
 use crate::emit_fatal;
 use crate::emit_type_constant;
+use crate::reified_generics_helpers as reified;
 
 #[derive(Debug)]
 pub struct EmitJmpResult {
@@ -209,7 +209,7 @@ mod inout_locals {
     ) -> bool {
         aliases
             .get(name)
-            .map_or(false, |alias| alias.in_range(i as isize))
+            .is_some_and(|alias| alias.in_range(i as isize))
     }
 
     pub(super) fn should_move_local_value(
@@ -220,7 +220,7 @@ mod inout_locals {
         let name = e.local_name(local);
         aliases
             .get(name.as_str())
-            .map_or(true, |alias| alias.has_single_ref())
+            .is_none_or(|alias| alias.has_single_ref())
     }
 
     pub(super) fn collect_written_variables<'ast>(
@@ -768,34 +768,76 @@ fn emit_string2<'a, 'd>(
     pos: &Pos,
     es: &[ast::Expr],
 ) -> Result<InstrSeq> {
-    if es.is_empty() {
-        Err(Error::unrecoverable(
-            "String2 with zero araguments is impossible",
-        ))
-    } else if es.len() == 1 {
-        Ok(InstrSeq::gather(vec![
+    match es.len() {
+        0 => Err(Error::unrecoverable(
+            "String2 with zero arguments is impossible",
+        )),
+        1 => Ok(InstrSeq::gather(vec![
             emit_expr(e, env, &es[0])?,
             emit_pos(pos),
             instr::cast_string(),
-        ]))
-    } else {
-        Ok(InstrSeq::gather(vec![
+        ])),
+        2 => Ok(InstrSeq::gather(vec![
             emit_two_exprs(e, env, &es[0].1, &es[0], &es[1])?,
             emit_pos(pos),
             instr::concat(),
-            InstrSeq::gather(
-                es[2..]
-                    .iter()
-                    .map(|expr| {
-                        Ok(InstrSeq::gather(vec![
-                            emit_expr(e, env, expr)?,
-                            emit_pos(pos),
-                            instr::concat(),
-                        ]))
-                    })
-                    .collect::<Result<_>>()?,
-            ),
-        ]))
+        ])),
+        len => {
+            // concatN supports up to 4
+            // Push one, then push chunks of 3 and concatN(4)
+            let mut idx = 1;
+            let mut all_instrs = vec![InstrSeq::gather(vec![
+                emit_expr(e, env, &es[0])?,
+                emit_pos(pos),
+            ])];
+            while len - idx >= 3 {
+                let instrs = InstrSeq::gather(
+                    es[idx..idx + 3]
+                        .iter()
+                        .map(|expr| {
+                            Ok(InstrSeq::gather(vec![
+                                emit_expr(e, env, expr)?,
+                                emit_pos(pos),
+                            ]))
+                        })
+                        .collect::<Result<_>>()?,
+                );
+                all_instrs.push(InstrSeq::gather(vec![instrs, instr::concat_n(4)]));
+                idx += 3;
+            }
+            // if there's just one left, push it onto the stack + concat,
+            // else just drain the remaining + concatN
+            let remaining = len - idx;
+            match remaining {
+                0 => {} // all done
+                1 => all_instrs.push(InstrSeq::gather(vec![
+                    emit_expr(e, env, &es[idx])?,
+                    emit_pos(pos),
+                    instr::concat(),
+                ])),
+                2 => {
+                    let instrs = InstrSeq::gather(
+                        es[idx..idx + 2]
+                            .iter()
+                            .map(|expr| {
+                                Ok(InstrSeq::gather(vec![
+                                    emit_expr(e, env, expr)?,
+                                    emit_pos(pos),
+                                ]))
+                            })
+                            .collect::<Result<_>>()?,
+                    );
+                    let size = 3; // our base string plus the 2 remaining to process
+                    all_instrs.push(InstrSeq::gather(vec![instrs, instr::concat_n(size)]));
+                }
+                len => {
+                    return Err(Error::unrecoverable(
+                        format! {"Somehow have {len} leftover items after concatN optimization in string interpolation"},
+                    ));
+                }
+            }
+            Ok(InstrSeq::gather(all_instrs))
+        }
     }
 }
 
@@ -1428,7 +1470,7 @@ fn non_numeric(s: &[u8]) -> bool {
         Ok(match s.matches('.').count() {
             0 => i as f64,
             1 => {
-                let pow = s.split('.').last().unwrap().len();
+                let pow = s.split('.').next_back().unwrap().len();
                 (i as f64) / f64::from(radix).powi(pow as i32)
             }
             _ => return Err(()),
@@ -1923,7 +1965,7 @@ where
     {
         tparams.len() == targs.len()
             && tparams.iter().zip(targs).all(|(tp, ta)| {
-                ta.1.as_happly().map_or(false, |(id, hs)| {
+                ta.1.as_happly().is_some_and(|(id, hs)| {
                     id.1 == tp.name.1
                         && hs.is_empty()
                         && !is_soft(&tp.user_attributes)
@@ -1974,7 +2016,7 @@ pub fn has_non_tparam_generics(env: &Env<'_>, hints: &[ast::Hint]) -> bool {
     hints.iter().any(|hint| {
         hint.1
             .as_happly()
-            .map_or(true, |(id, _)| !erased_tparams.contains(&id.1.as_str()))
+            .is_none_or(|(id, _)| !erased_tparams.contains(&id.1.as_str()))
     })
 }
 
@@ -1984,7 +2026,7 @@ fn has_non_tparam_generics_targs(env: &Env<'_>, targs: &[ast::Targ]) -> bool {
         (targ.1)
             .1
             .as_happly()
-            .map_or(true, |(id, _)| !erased_tparams.contains(&id.1.as_str()))
+            .is_none_or(|(id, _)| !erased_tparams.contains(&id.1.as_str()))
     })
 }
 
@@ -2209,7 +2251,7 @@ fn emit_call_lhs_and_fcall<'a, 'd>(
                         InstrSeq::gather(vec![
                             instr::null_uninit(),
                             instr::null_uninit(),
-                            get_reified_var_cexpr(e, env, &pos, &name)?,
+                            get_reified_class(e, env, &pos, &name)?,
                             instr::pop_l(tmp),
                         ]),
                         InstrSeq::gather(vec![
@@ -2299,7 +2341,7 @@ fn emit_call_lhs_and_fcall<'a, 'd>(
                         InstrSeq::gather(vec![
                             instr::null_uninit(),
                             instr::null_uninit(),
-                            get_reified_var_cexpr(e, env, &pos, &name)?,
+                            get_reified_class(e, env, &pos, &name)?,
                             instr::pop_l(cls),
                             emit_meth_name(e)?,
                             instr::pop_l(meth),
@@ -2354,6 +2396,18 @@ fn emit_call_lhs_and_fcall<'a, 'd>(
         }
         _ => emit_fcall_func(e, env, expr, fcall_args, caller_readonly_opt),
     }
+}
+
+fn get_reified_class<'a>(
+    e: &Emitter<'_>,
+    env: &Env<'a>,
+    pos: &Pos,
+    name: &str,
+) -> Result<InstrSeq> {
+    Ok(InstrSeq::gather(vec![
+        emit_reified_type(e, env, pos, name)?,
+        instr::class_get_ts(),
+    ]))
 }
 
 fn get_reified_var_cexpr<'a>(
@@ -2781,6 +2835,13 @@ fn emit_special_function<'a, 'd>(
                 emit_expr(e, env, error::expect_normal_paramkind(cname)?)?,
                 instr::class_get_c(ClassGetCMode::ExplicitConversion),
             ]))),
+            [
+                ref cname,
+                aast::Argument::Anormal(Expr(_, _, Expr_::String(ref magic))),
+            ] if magic == "cause_a_sev" => Ok(Some(InstrSeq::gather(vec![
+                emit_expr(e, env, error::expect_normal_paramkind(cname)?)?,
+                instr::class_get_c(ClassGetCMode::UnsafeBackdoor),
+            ]))),
             _ => Err(Error::fatal_runtime(
                 pos,
                 format!(
@@ -2920,7 +2981,6 @@ fn emit_special_function<'a, 'd>(
             Ok(Some(InstrSeq::gather(vec![
                 emit_reified_arg(e, env, pos, false, targs[0].hint())?.0,
                 instr::class_get_ts(),
-                instr::pop_c(),
             ])))
         }
         _ => Ok(
@@ -2987,13 +3047,11 @@ fn emit_class_meth_native<'a, 'd>(
             instr::resolve_r_cls_method_s(clsref, method_name),
         ]),
         ClassExpr::Reified(ast_defs::Id(pos, name)) if !has_generics => InstrSeq::gather(vec![
-            get_reified_var_cexpr(e, env, &pos, &name)?,
-            instr::class_get_c(ClassGetCMode::Normal),
+            get_reified_class(e, env, &pos, &name)?,
             instr::resolve_cls_method(method_name),
         ]),
         ClassExpr::Reified(ast_defs::Id(pos, name)) => InstrSeq::gather(vec![
-            get_reified_var_cexpr(e, env, &pos, &name)?,
-            instr::class_get_c(ClassGetCMode::Normal),
+            get_reified_class(e, env, &pos, &name)?,
             emit_generics(e)?,
             instr::resolve_r_cls_method(method_name),
         ]),
@@ -3519,6 +3577,20 @@ fn emit_call_expr(
                 is,
             ]))
         }
+        (Expr_::Id(id), args, None)
+            if id.1 == pseudo_functions::UNSAFE_CAST
+                && !args.is_empty()
+                && targs.len() == 2
+                && e.options().hhbc.checked_unsafe_cast =>
+        {
+            let target_type = &targs[1].1;
+            emit_checked_unsafe_cast(
+                e,
+                env,
+                error::expect_normal_paramkind(&args[0])?,
+                target_type,
+            )
+        }
         (_, _, _) => {
             let instrs = emit_call(
                 e,
@@ -3621,11 +3693,9 @@ fn emit_load_class_ref<'a, 'd>(
             emit_expr(e, env, &expr)?,
             instr::class_get_c(ClassGetCMode::Normal),
         ]),
-        ClassExpr::Reified(ast::Id(p, name)) => InstrSeq::gather(vec![
-            emit_pos(pos),
-            get_reified_var_cexpr(e, env, &p, &name)?,
-            instr::class_get_c(ClassGetCMode::Normal),
-        ]),
+        ClassExpr::Reified(ast::Id(p, name)) => {
+            InstrSeq::gather(vec![emit_pos(pos), get_reified_class(e, env, &p, &name)?])
+        }
     };
     Ok(emit_pos_then(pos, instrs))
 }
@@ -3658,17 +3728,16 @@ fn emit_new<'a, 'd>(
                 .get_class_tparams()
                 .iter()
                 .all(|tp| tp.reified.is_erased()),
-            Some(ast_defs::Id(_, n)) if string_utils::is_parent(n) => {
-                env.scope
-                    .get_class()
-                    .map_or(true, |cls| match cls.get_extends() {
-                        [h, ..] => {
-                            h.1.as_happly()
-                                .map_or(true, |(_, l)| !has_non_tparam_generics(env, l))
-                        }
-                        _ => true,
-                    })
-            }
+            Some(ast_defs::Id(_, n)) if string_utils::is_parent(n) => env
+                .scope
+                .get_class()
+                .is_none_or(|cls| match cls.get_extends() {
+                    [h, ..] => {
+                        h.1.as_happly()
+                            .is_none_or(|(_, l)| !has_non_tparam_generics(env, l))
+                    }
+                    _ => true,
+                }),
             _ => true,
         },
         _ => true,
@@ -3758,71 +3827,30 @@ fn emit_new_obj_reified_instrs<'a, 'd>(
     pos: &Pos,
     op: NewObjOpInfo<'_>,
 ) -> Result<InstrSeq> {
-    let call_reified_init = |obj, ts| -> InstrSeq {
-        InstrSeq::gather(vec![
-            obj,
-            instr::null_uninit(),
-            ts,
-            instr::f_call_obj_method_d(
-                FCallArgs::new(FCallArgsFlags::default(), 1, 1, vec![], vec![], None, None),
-                *REIFIED_INIT_METH_NAME,
-            ),
-            instr::pop_c(),
-        ])
-    };
-
     scope::with_unnamed_locals(e, |e| {
         let class_local = e.local_gen_mut().get_unnamed();
         let ts_local = e.local_gen_mut().get_unnamed();
         let obj_local = e.local_gen_mut().get_unnamed();
 
-        let no_reified_generics_passed_in_label = e.label_gen_mut().next_regular();
-        let try_parent_has_reified_generics_label = e.label_gen_mut().next_regular();
+        let reified_init_label = e.label_gen_mut().next_regular();
         let end_label = e.label_gen_mut().next_regular();
+        let set_empty_ts_label = e.label_gen_mut().next_regular();
+        let empty_vec_tv = TypedValue::vec(Default::default());
+        let empty_vec = emit_adata::typed_value_into_instr(e, empty_vec_tv)?;
 
-        let try_parent_has_reified_generics = InstrSeq::gather(vec![
-            instr::label(try_parent_has_reified_generics_label),
+        let reified_init = InstrSeq::gather(vec![
+            instr::label(reified_init_label),
+            instr::c_get_l(obj_local),
             instr::c_get_l(class_local),
-            instr::has_reified_parent(),
-            instr::jmp_z(end_label),
-            call_reified_init(
-                instr::c_get_l(obj_local),
-                InstrSeq::gather(vec![
-                    instr::new_col(CollectionType::Vector),
-                    instr::cast_vec(),
-                ]),
-            ),
+            instr::reified_init(ts_local),
+            instr::unset_l(ts_local),
             instr::jmp(end_label),
         ]);
 
-        let is_ts_empty = InstrSeq::gather(vec![
-            instr::null_uninit(),
-            instr::null_uninit(),
-            instr::c_get_l(ts_local),
-            instr::f_call_func_d(
-                FCallArgs::new(FCallArgsFlags::default(), 1, 1, vec![], vec![], None, None),
-                hhbc::FunctionName::intern("count"),
-            ),
-            instr::int(0),
-            instr::eq(),
-        ]);
-
-        let no_reified_generics_passed_in = InstrSeq::gather(vec![
-            instr::label(no_reified_generics_passed_in_label),
-            instr::c_get_l(class_local),
-            instr::class_has_reified_generics(),
-            instr::jmp_z(try_parent_has_reified_generics_label),
-            instr::c_get_l(class_local),
-            instr::check_cls_rg_soft(),
-            instr::jmp(end_label),
-        ]);
-
-        let reified_generics_passed_in = InstrSeq::gather(vec![
-            instr::c_get_l(class_local),
-            instr::class_has_reified_generics(),
-            instr::jmp_z(try_parent_has_reified_generics_label),
-            call_reified_init(instr::c_get_l(obj_local), instr::c_get_l(ts_local)),
-            instr::jmp(end_label),
+        let set_empty_ts = InstrSeq::gather(vec![
+            instr::label(set_empty_ts_label),
+            empty_vec,
+            instr::pop_l(ts_local),
         ]);
 
         let instrs = match op {
@@ -3830,20 +3858,16 @@ fn emit_new_obj_reified_instrs<'a, 'd>(
                 instr::set_l(class_local),
                 instr::new_obj(),
                 instr::pop_l(obj_local),
-                no_reified_generics_passed_in,
-                try_parent_has_reified_generics,
+                set_empty_ts,
+                reified_init,
             ]),
             NewObjOpInfo::NewObj(true) => InstrSeq::gather(vec![
-                instr::class_get_ts(),
+                instr::class_get_ts_with_generics(),
                 instr::pop_l(ts_local),
                 instr::set_l(class_local),
                 instr::new_obj(),
                 instr::pop_l(obj_local),
-                is_ts_empty,
-                instr::jmp_nz(no_reified_generics_passed_in_label),
-                reified_generics_passed_in,
-                no_reified_generics_passed_in,
-                try_parent_has_reified_generics,
+                reified_init,
             ]),
             NewObjOpInfo::NewObjD(id, targs) => {
                 let ts = match targs {
@@ -3857,18 +3881,17 @@ fn emit_new_obj_reified_instrs<'a, 'd>(
                     instr::pop_l(obj_local),
                 ]);
                 if ts.is_empty() {
-                    InstrSeq::gather(vec![
-                        store_cls_and_obj,
-                        no_reified_generics_passed_in,
-                        try_parent_has_reified_generics,
-                    ])
+                    InstrSeq::gather(vec![store_cls_and_obj, set_empty_ts, reified_init])
                 } else {
                     InstrSeq::gather(vec![
                         ts,
                         instr::pop_l(ts_local),
                         store_cls_and_obj,
-                        reified_generics_passed_in,
-                        try_parent_has_reified_generics,
+                        instr::c_get_l(class_local),
+                        instr::class_has_reified_generics(),
+                        instr::jmp_nz(reified_init_label),
+                        set_empty_ts,
+                        reified_init,
                     ])
                 }
             }
@@ -3892,21 +3915,19 @@ fn emit_new_obj_reified_instrs<'a, 'd>(
                 let store_ts_if_prop_set = InstrSeq::gather(vec![
                     instr::c_get_l(class_local),
                     instr::class_has_reified_generics(),
-                    instr::jmp_z(no_reified_generics_passed_in_label),
+                    instr::jmp_z(set_empty_ts_label),
                     instr::c_get_l(class_local),
                     instr::get_cls_rg_prop(),
                     instr::set_l(ts_local),
                     instr::is_type_c(IsTypeOp::Null),
-                    instr::jmp_nz(no_reified_generics_passed_in_label),
+                    instr::jmp_nz(set_empty_ts_label),
                 ]);
                 InstrSeq::gather(vec![
                     store_cls_and_obj,
                     store_ts_if_prop_set,
-                    is_ts_empty,
-                    instr::jmp_nz(no_reified_generics_passed_in_label),
-                    reified_generics_passed_in,
-                    no_reified_generics_passed_in,
-                    try_parent_has_reified_generics,
+                    instr::jmp(reified_init_label),
+                    set_empty_ts,
+                    reified_init,
                 ])
             }
         };
@@ -5061,6 +5082,27 @@ fn emit_pipe<'a, 'd>(
     })
 }
 
+fn emit_checked_unsafe_cast<'a, 'd>(
+    e: &mut Emitter<'d>,
+    env: &Env<'a>,
+    expr: &ast::Expr,
+    hint: &ast::Hint,
+) -> Result<InstrSeq> {
+    let hint = reified::remove_erased_generics(env, hint.clone());
+    let verify_instrs = InstrSeq::gather(vec![
+        emit_expr(e, env, expr)?,
+        get_type_structure_for_hint(
+            e,
+            &[],
+            &IndexSet::new(),
+            TypeRefinementInHint::Allowed,
+            &hint,
+        )?,
+        instr::verify_type_ts(),
+    ]);
+    Ok(verify_instrs)
+}
+
 fn emit_as<'a, 'd>(
     e: &mut Emitter<'d>,
     env: &Env<'a>,
@@ -5350,7 +5392,7 @@ fn is_trivial(env: &Env<'_>, is_base: bool, expr: &ast::Expr) -> bool {
         Expr_::ArrayGet(_) if !is_base => false,
         Expr_::ArrayGet(x) => {
             is_trivial(env, is_base, &x.0)
-                && (x.1).as_ref().map_or(true, |e| is_trivial(env, is_base, e))
+                && (x.1).as_ref().is_none_or(|e| is_trivial(env, is_base, e))
         }
         _ => false,
     }
@@ -6097,7 +6139,7 @@ pub fn emit_lval_op_list<'a, 'd>(
                         local,
                         &new_indices[..],
                         expr,
-                        last_non_omitted.map_or(false, |j| j == i),
+                        last_non_omitted.is_some_and(|j| j == i),
                         rhs_readonly,
                     )
                 })
@@ -6471,7 +6513,7 @@ fn emit_class_expr<'a, 'd>(
                 || expr
                     .2
                     .as_lvar()
-                    .map_or(false, |ast::Lid(_, id)| local_id::get_name(id) == "$this") =>
+                    .is_some_and(|ast::Lid(_, id)| local_id::get_name(id) == "$this") =>
         {
             let cexpr_local = emit_expr(e, env, expr)?;
             (
@@ -6510,6 +6552,7 @@ fn fixup_type_arg<'a, 'b>(
         }
 
         fn visit_hint_fun(&mut self, c: &mut (), hf: &ast::HintFun) -> Result<(), Option<Error>> {
+            hf.tparams.accept(c, self.object())?;
             hf.param_tys.accept(c, self.object())?;
             hf.return_ty.accept(c, self.object())
         }
@@ -6553,6 +6596,11 @@ fn fixup_type_arg<'a, 'b>(
         }
 
         fn visit_hint_fun(&mut self, c: &mut (), hf: &mut ast::HintFun) -> Result<(), ()> {
+            <Vec<ast::HintTparam> as NodeMut<Self::Params>>::accept(
+                &mut hf.tparams,
+                c,
+                self.object(),
+            )?;
             <Vec<ast::Hint> as NodeMut<Self::Params>>::accept(&mut hf.param_tys, c, self.object())?;
             <ast::Hint as NodeMut<Self::Params>>::accept(&mut hf.return_ty, c, self.object())
         }

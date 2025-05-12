@@ -297,7 +297,7 @@ let get_deprecated_wrapper_patch
 
          Thus, we subtract 1.
       *)
-      let { SymbolDefinition.span; pos; class_name; kind; _ } = definition in
+      let { SymbolDefinition.span; pos; kind; _ } = definition in
       let (_, col_start_plus1, _, _) = Pos.destruct_range_one_based span in
       let col_start = col_start_plus1 - 1 in
       let (_ctx, entry) =
@@ -325,8 +325,9 @@ let get_deprecated_wrapper_patch
               DeprecatedNonStaticMethodRef
           in
 
-          (match class_name with
-          | Some name when classish_is_interface ctx name ->
+          (match kind with
+          | SymbolDefinition.Member { class_name; _ }
+            when classish_is_interface ctx class_name ->
             (* We can't add a stub that calls the new name in
                interfaces, as methods can't have bodies there. *)
             None
@@ -520,7 +521,7 @@ let new_name_for_symbol_definition
       s
   in
   match symbol_definition.SymbolDefinition.kind with
-  | SymbolDefinition.Property ->
+  | SymbolDefinition.(Member { member_kind = Property; _ }) ->
     (* For static properties: they always have a $-sign prefix.
        For non-static properties:
          - On the definition site they have a $-sign prefix.
@@ -547,23 +548,18 @@ let new_name_for_symbol_definition
     else
       strip_dollar new_name
   | SymbolDefinition.Function
-  | SymbolDefinition.Class
-  | SymbolDefinition.Method
-  | SymbolDefinition.ClassConst
+  | SymbolDefinition.Classish _
+  | SymbolDefinition.Member _
   | SymbolDefinition.GlobalConst
-  | SymbolDefinition.Enum
-  | SymbolDefinition.Interface
-  | SymbolDefinition.Trait
   | SymbolDefinition.LocalVar
   | SymbolDefinition.TypeVar
-  | SymbolDefinition.Typeconst
   | SymbolDefinition.Param
   | SymbolDefinition.Typedef
   | SymbolDefinition.Module ->
     new_name
 
 let go_for_single_file
-    ctx ~find_refs_action ~new_name ~filename ~symbol_definition ~naming_table =
+    ctx ~find_refs_action ~new_name ~filename ~symbol_definition =
   let action =
     match find_refs_action with
     | ServerCommandTypes.Find_refs.Class str ->
@@ -573,13 +569,7 @@ let go_for_single_file
       ServerCommandTypes.Find_refs.ExplicitClass str
     | action -> action
   in
-  ( ServerFindRefs.go_for_single_file
-      ~ctx
-      ~action
-      ~filename
-      ~name:(SymbolDefinition.full_name symbol_definition)
-      ~naming_table
-  |> fun refs ->
+  ( ServerFindRefs.go_for_single_file ~ctx ~action ~filename |> fun refs ->
     let changes =
       List.fold_left
         refs

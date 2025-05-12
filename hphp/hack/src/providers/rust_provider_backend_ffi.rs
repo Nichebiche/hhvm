@@ -8,13 +8,13 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ocamlrep::ptr::UnsafeOcamlPtr;
 use ocamlrep::FromOcamlRep;
 use ocamlrep::ToOcamlRep;
+use ocamlrep::ptr::UnsafeOcamlPtr;
 use ocamlrep_custom::Custom;
+use ocamlrep_ocamlpool::Bump;
 use ocamlrep_ocamlpool::ocaml_ffi;
 use ocamlrep_ocamlpool::ocaml_ffi_with_arena;
-use ocamlrep_ocamlpool::Bump;
 use oxidized::naming_types;
 use pos::RelativePath;
 pub use rust_provider_backend_ffi_trait::ProviderBackendFfi;
@@ -85,19 +85,28 @@ ocaml_ffi! {
     fn hh_rust_provider_backend_set_ctx_empty(backend: Backend, is_empty: bool) {
         backend.set_ctx_empty(is_empty);
     }
+
+    fn hh_rust_provider_backend_direct_decl_parse_and_cache(
+        backend: UnsafeOcamlPtr,
+        path: RelativePath,
+        text: UnsafeOcamlPtr,
+    ) -> rust_decl_ffi::OcamlParsedFileWithHashes {
+        let backend = unsafe { get_backend(backend) };
+        backend.direct_decl_parse_and_cache(path, text).into()
+    }
 }
 
 // Decl_provider ////////////////////////////////////////////////////////////
 
 ocaml_ffi_with_arena! {
-    fn hh_rust_provider_backend_direct_decl_parse_and_cache<'a>(
+    fn hh_rust_provider_backend_direct_decl_parse_and_cache_obr<'a>(
         arena: &'a Bump,
         backend: UnsafeOcamlPtr,
         path: RelativePath,
         text: UnsafeOcamlPtr,
-    ) -> rust_decl_ffi::OcamlParsedFileWithHashes<'a> {
+    ) -> rust_decl_ffi::OcamlParsedFileWithHashesObr<'a> {
         let backend = unsafe { get_backend(backend) };
-        backend.direct_decl_parse_and_cache(path, text, arena).into()
+        backend.direct_decl_parse_and_cache_obr(path, text, arena).into()
     }
 
     fn hh_rust_provider_backend_add_shallow_decls<'a>(

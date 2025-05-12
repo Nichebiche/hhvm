@@ -25,7 +25,6 @@
 #include <folly/io/async/AsyncTransport.h>
 #include <folly/io/async/HHWheelTimer.h>
 #include <thrift/lib/cpp/TApplicationException.h>
-#include <thrift/lib/cpp/concurrency/Util.h>
 #include <thrift/lib/cpp2/GeneratedCodeHelper.h>
 #include <thrift/lib/cpp2/async/HeaderServerChannel.h>
 #include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
@@ -113,8 +112,8 @@ class Cpp2Connection : public HeaderServerChannel::Callback,
     return *(context_.getPeerAddress());
   }
 
-  typedef apache::thrift::ThriftPresult<true>
-      RocketUpgrade_upgradeToRocket_presult;
+  using RocketUpgrade_upgradeToRocket_presult =
+      apache::thrift::ThriftPresult<true>;
   template <class ProtocolWriter>
   ResponsePayload upgradeToRocketReply(int32_t protoSeqId) {
     folly::IOBufQueue queue;

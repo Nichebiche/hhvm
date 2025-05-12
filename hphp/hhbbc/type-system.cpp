@@ -16,36 +16,30 @@
 #include "hphp/hhbbc/type-system.h"
 
 #include <type_traits>
-#include <cmath>
 #include <algorithm>
 #include <iterator>
 #include <vector>
 
 #include <folly/Traits.h>
-#include <folly/Hash.h>
 
 #include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/array-iterator.h"
-#include "hphp/runtime/base/double-to-int64.h"
 #include "hphp/runtime/base/repo-auth-type.h"
 #include "hphp/runtime/base/tv-comparisons.h"
-#include "hphp/runtime/base/type-structure.h"
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
-#include "hphp/runtime/base/vanilla-dict.h"
 #include "hphp/runtime/base/vanilla-vec.h"
 
 #include "hphp/hhbbc/class-util.h"
 #include "hphp/hhbbc/context.h"
 #include "hphp/hhbbc/eval-cell.h"
 #include "hphp/hhbbc/index.h"
-#include "hphp/hhbbc/type-structure.h"
 
 #include "hphp/util/check-size.h"
 #include "hphp/util/configs/eval.h"
 
 namespace HPHP::HHBBC {
 
-TRACE_SET_MOD(hhbbc);
+TRACE_SET_MOD(hhbbc)
 
 #define X(y, ...) const Type T##y{B##y};
 HHBBC_TYPE_PREDEFINED(X)
@@ -3309,7 +3303,7 @@ Type demote_wait_handle(Type wh) {
   assertx(!is_specialized_wait_handle(t));
   assertx(is_specialized_obj(t));
   return t;
-};
+}
 
 Type sval(SString val) {
   assertx(val->isStatic());
@@ -5591,7 +5585,7 @@ Type loosen_string_staticness(Type t) {
   t.m_bits = bits;
   assertx(t.checkInvariants());
   return t;
-};
+}
 
 Type loosen_array_staticness(Type t) {
   auto bits = t.bits();

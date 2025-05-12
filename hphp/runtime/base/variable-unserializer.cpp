@@ -212,7 +212,7 @@ void warnOrThrowUnknownClass(const String& clsName) {
       clsName.toCppString()
     );
     if (Cfg::Eval::ForbidUnserializeIncompleteClass > 1) {
-      throw_object("Exception", make_vec_array(msg));
+      SystemLib::throwExceptionObject(msg);
     } else {
       raise_warning(msg);
     }
@@ -1230,7 +1230,7 @@ void VariableUnserializer::unserializeVariant(
       throwUnknownType(type);
     }
   case 'm': // ClsMeth
-    if (m_type == VariableUnserializer::Type::DebuggerSerialize) {
+    if (m_type == VariableUnserializer::Type::DebuggerSerialize || m_type == VariableUnserializer::Type::Internal) {
       const auto cls{Class::load(unserializeString().get())};
       expectChar(':');
       const auto func{cls->lookupMethod(unserializeString().get())};

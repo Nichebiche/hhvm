@@ -16,9 +16,9 @@
 
 #include <thrift/lib/cpp2/op/Clear.h>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <folly/io/IOBuf.h>
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
 #include <thrift/lib/cpp2/op/Testing.h>
 #include <thrift/lib/cpp2/type/Name.h>
 #include <thrift/lib/cpp2/type/Tag.h>
@@ -170,26 +170,6 @@ void test_custom_default() {
   // clear<Tag>(defaultObj);
   // EXPECT_TRUE(apache::thrift::adapt_detail::equal<Adapter>(
   //     defaultObj, intrinsicDefaultObj));
-}
-
-TEST(ClearTest, CustomDefaultTypeAdapter) {
-  using Tag = type::adapted<
-      TestAdapter,
-      type::struct_t<testset::struct_terse_i64_custom_default>>;
-  using FieldTag = type::field<Tag, FieldContext<TestStructWithContext, 1>>;
-
-  test_custom_default<Tag>();
-  test_custom_default<FieldTag>();
-}
-
-TEST(ClearTest, CustomDefaultFieldAdapter) {
-  using Tag = type::field<
-      type::adapted<
-          FieldAdapterWithContext,
-          type::struct_t<testset::struct_terse_i64_custom_default>>,
-      FieldContext<TestStructWithContext, 1>>;
-
-  test_custom_default<Tag, true>();
 }
 
 TEST(ClearTest, Default) {

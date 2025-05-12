@@ -54,7 +54,7 @@ namespace HPHP {
 struct OutOfMemoryException : Exception {
   explicit OutOfMemoryException(size_t size)
     : Exception("Unable to allocate %zu bytes of memory", size) {}
-  EXCEPTION_COMMON_IMPL(OutOfMemoryException);
+  EXCEPTION_COMMON_IMPL(OutOfMemoryException)
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -126,7 +126,7 @@ unsigned get_local_arena(uint32_t node);
 SlabManager* get_local_slab_manager(uint32_t node);
 void shutdown_slab_managers();
 
-void setup_arena0(PageSpec);
+void setup_auto_arenas(PageSpec);
 
 #if USE_JEMALLOC_EXTENT_HOOKS
 

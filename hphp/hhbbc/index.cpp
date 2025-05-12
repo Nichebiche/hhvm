@@ -26,14 +26,11 @@
 #include <utility>
 #include <vector>
 
-#include <boost/dynamic_bitset.hpp>
 #include <boost/filesystem.hpp>
 
 #include <tbb/concurrent_hash_map.h>
-#include <tbb/concurrent_unordered_map.h>
 
 #include <folly/Format.h>
-#include <folly/Hash.h>
 #include <folly/Lazy.h>
 #include <folly/MapUtil.h>
 #include <folly/Memory.h>
@@ -61,7 +58,6 @@
 #include "hphp/hhbbc/options-util.h"
 #include "hphp/hhbbc/parallel.h"
 #include "hphp/hhbbc/representation.h"
-#include "hphp/hhbbc/type-builtins.h"
 #include "hphp/hhbbc/type-structure.h"
 #include "hphp/hhbbc/type-system.h"
 #include "hphp/hhbbc/unit-util.h"
@@ -80,7 +76,7 @@
 namespace HPHP {
 namespace HHBBC {
 
-TRACE_SET_MOD(hhbbc_index);
+TRACE_SET_MOD(hhbbc_index)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -118,7 +114,7 @@ const StaticString s_Traversable("HH\\Traversable");
 static_assert(CheckSize<php::Block, 24>(), "");
 static_assert(CheckSize<php::Local, use_lowptr ? 12 : 16>(), "");
 static_assert(CheckSize<php::Param, use_lowptr ? 56: 88>(), "");
-static_assert(CheckSize<php::Func, use_lowptr ? 176: 224>(), "");
+static_assert(CheckSize<php::Func, use_lowptr ? 168: 216>(), "");
 
 // Likewise, we also keep the bytecode and immediate types small.
 static_assert(CheckSize<Bytecode, use_lowptr ? 32 : 40>(), "");
@@ -285,14 +281,14 @@ PropState make_unknown_propstate(const IIndex& index,
       elem.ty = adjust_type_for_prop(
         index,
         cls,
-        prop.typeConstraints.mainPtr(),
+        &prop.typeConstraints,
         TCell
       );
       if (prop.attrs & AttrSystemInitialValue) {
         auto initial = loosen_all(from_cell(prop.val));
         if (!initial.subtypeOf(BUninit)) elem.ty |= initial;
       }
-      elem.tc = prop.typeConstraints.mainPtr();
+      elem.tc = &prop.typeConstraints;
       elem.attrs = prop.attrs;
       elem.everModified = true;
     }
@@ -577,7 +573,7 @@ struct res::Func::FuncFamily {
 
   const PFuncVec& possibleFuncs() const {
     return m_v;
-  };
+  }
 
   Info& infoFor(bool regularOnly) {
     if (regularOnly && m_regular) return *m_regular;
@@ -1059,7 +1055,7 @@ struct FuncFamilyEntry {
     template <typename SerDe> void serde(SerDe&) {}
   };
 
-  boost::variant<
+  std::variant<
     BothFF, FFAndSingle, FFAndNone, BothSingle, SingleAndNone, None
   > m_meths{None{}};
   // A resolution is "incomplete" if there's a subclass which does not
@@ -1089,7 +1085,7 @@ struct FuncFamilyEntry {
         }
       }();
     } else {
-      match<void>(
+      match(
         m_meths,
         [&] (const BothFF& e)        { sd(uint8_t(0))(e); },
         [&] (const FFAndSingle& e)   { sd(uint8_t(1))(e); },
@@ -2005,7 +2001,7 @@ struct ClassGraph::LockedSerdeImpl {
     auto& t = table();
     {
       std::shared_lock _{t.locking->equivs};
-      if (auto const old = folly::get_default(t.regOnlyEquivs, &n)) {
+      if (auto const DEBUG_ONLY old = folly::get_default(t.regOnlyEquivs, &n)) {
         assertx(old == &e);
         return;
       }
@@ -5705,7 +5701,7 @@ Optional<SString> Func::triviallyWrappedFunc() const {
 
 std::string show(const Func& f) {
   auto ret = f.name();
-  match<void>(
+  match(
     f.val,
     [&] (Func::FuncName)          {},
     [&] (Func::MethodName)        {},
@@ -5974,7 +5970,7 @@ struct Index::IndexData {
 
 //////////////////////////////////////////////////////////////////////
 
-namespace { struct DepTracker; };
+namespace { struct DepTracker; }
 
 struct AnalysisIndex::IndexData {
   IndexData(AnalysisIndex& index,
@@ -6142,7 +6138,7 @@ struct DepTracker {
         if (!f.cls && f2->name->fsame(f.name)) return a;
       }
 
-      if (auto const added = deps[fc].add(f, t)) {
+      if (auto const DEBUG_ONLY added = deps[fc].add(f, t)) {
         FTRACE(
           2, "{} now depends on {}{} {}\n",
           HHBBC::show(fc), displayAdded(added),
@@ -6170,7 +6166,7 @@ struct DepTracker {
       if (auto const c = fc.cls()) {
         if (c->name->tsame(m.cls)) return a;
       }
-      if (auto const added = deps[fc].add(m, t)) {
+      if (auto const DEBUG_ONLY added = deps[fc].add(m, t)) {
         FTRACE(2, "{} now depends on {}method {}\n",
                HHBBC::show(fc), displayAdded(added), display(m));
       }
@@ -6194,7 +6190,7 @@ struct DepTracker {
       if (auto const f2 = fc.func()) {
         if (f2->name->fsame(f.name)) return a;
       }
-      if (auto const added = deps[fc].add(f, t)) {
+      if (auto const DEBUG_ONLY added = deps[fc].add(f, t)) {
         FTRACE(2, "{} now depends on {}func {}\n",
                HHBBC::show(fc), displayAdded(added), f.name);
       }
@@ -7369,8 +7365,8 @@ struct CheckClassInfoInvariantsJob {
         // No override methods should always have a single entry.
         if (mte.attrs & AttrNoOverride) {
           always_assert(
-            boost::get<FuncFamilyEntry::BothSingle>(&entry.m_meths) ||
-            boost::get<FuncFamilyEntry::SingleAndNone>(&entry.m_meths)
+            std::get_if<FuncFamilyEntry::BothSingle>(&entry.m_meths) ||
+            std::get_if<FuncFamilyEntry::SingleAndNone>(&entry.m_meths)
           );
           continue;
         }
@@ -7383,8 +7379,8 @@ struct CheckClassInfoInvariantsJob {
           // isn't AttrNoOverride, so there *must* be another method. So,
           // it must be a func family.
           always_assert(
-            boost::get<FuncFamilyEntry::BothFF>(&entry.m_meths) ||
-            boost::get<FuncFamilyEntry::FFAndSingle>(&entry.m_meths)
+            std::get_if<FuncFamilyEntry::BothFF>(&entry.m_meths) ||
+            std::get_if<FuncFamilyEntry::FFAndSingle>(&entry.m_meths)
           );
           // This is a regular class, so we cannot have an incomplete
           // entry (can only happen with interfaces).
@@ -8106,6 +8102,7 @@ Index::ReturnType context_sensitive_return_type(IndexData& data,
 
     if (callCtx.args.size() < finfo->func->params.size()) return true;
     for (auto i = 0; i < finfo->func->params.size(); i++) {
+      if (finfo->func->params[i].outOnly) continue;
       if (checkParam(i)) return true;
     }
     return false;
@@ -8377,7 +8374,7 @@ Type initial_type_for_public_sprop(const Index& index,
   return adjust_type_for_prop(
     IndexAdaptor { index },
     cls,
-    prop.typeConstraints.mainPtr(),
+    &prop.typeConstraints,
     ty
   );
 }
@@ -8411,7 +8408,7 @@ Type lookup_public_prop_impl(
   auto ty = adjust_type_for_prop(
     IndexAdaptor { *data.m_index },
     *knownCls,
-    prop->typeConstraints.mainPtr(),
+    &prop->typeConstraints,
     TCell
   );
   // We might have to include the initial value which might be outside of the
@@ -8492,16 +8489,16 @@ PropMergeResult prop_tc_effects(const Index& index,
   auto const check = [&] (const TypeConstraint& tc, const Type& t) {
     // If the type as is satisfies the constraint, we won't throw and
     // the type is unchanged.
-      if (t.moreRefined(
-            lookup_constraint(IndexAdaptor { index }, ctx, tc, t).lower)
-         ) {
-      return R{ t, TriBool:: No };
+    if (t.moreRefined(
+          lookup_constraint(IndexAdaptor { index }, ctx, tc, t).lower)
+       ) {
+    return R{ t, TriBool:: No };
     }
     // Otherwise adjust the type. If we get a Bottom we'll definitely
     // throw. We already know the type doesn't completely satisfy the
     // constraint, so we'll at least maybe throw.
     auto adjusted =
-      adjust_type_for_prop(IndexAdaptor { index }, *ctx.cls, &tc, t);
+      adjust_type_for_prop(IndexAdaptor { index }, *ctx.cls, tc, t);
     auto const throws = yesOrMaybe(adjusted.subtypeOf(BBottom));
     return R{ std::move(adjusted), throws };
   };
@@ -8561,7 +8558,7 @@ PropLookupResult lookup_static_impl(IndexData& data,
             adjust_type_for_prop(
               IndexAdaptor { *data.m_index },
               *ci->cls,
-              prop.typeConstraints.mainPtr(),
+              &prop.typeConstraints,
               TInitCell
             ),
             initial_type_for_public_sprop(*data.m_index, *ci->cls, prop)
@@ -11050,7 +11047,6 @@ private:
       auto meth = std::move(clone->methods[i]);
       meth->cls = clone.get();
       assertx(meth->clsIdx == i);
-      if (!meth->originalFilename) meth->originalFilename = meth->unit;
       if (!meth->originalUnit)     meth->originalUnit = meth->unit;
       if (!meth->originalClass)    meth->originalClass = closure.name;
       meth->requiresFromOriginalModule = requiresFromOriginalModule;
@@ -11135,7 +11131,6 @@ private:
     cloned->cls = const_cast<php::Class*>(&dstCls);
     cloned->unit = dstCls.unit;
 
-    if (!cloned->originalFilename) cloned->originalFilename = orig.unit;
     if (!cloned->originalUnit)     cloned->originalUnit = orig.unit;
     cloned->originalClass = orig.originalClass
       ? orig.originalClass
@@ -12318,7 +12313,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
     UniquePtrRef<MethodsWithoutCInfo> methods;
   };
   using Update =
-    boost::variant<ClassUpdate, FuncUpdate, ClosureUpdate, MethodUpdate>;
+    std::variant<ClassUpdate, FuncUpdate, ClosureUpdate, MethodUpdate>;
   using UpdateVec = std::vector<Update>;
 
   tbb::concurrent_hash_map<
@@ -12478,7 +12473,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       if (!flattenMeta.isClosure) {
         assertx(parentIdx < clsMeta.parents.size());
         auto const& parents = clsMeta.parents[parentIdx].names;
-        auto& update = boost::get<ClassUpdate>(updates.back());
+        auto& update = std::get<ClassUpdate>(updates.back());
         update.parents.insert(
           end(update.parents), begin(parents), end(parents)
         );
@@ -12558,7 +12553,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<ClassUpdate>(&update);
+            auto u = std::get_if<ClassUpdate>(&update);
             if (!u) continue;
             index.classRefs.insert_or_assign(
               u->name,
@@ -12570,7 +12565,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<ClassUpdate>(&update);
+            auto u = std::get_if<ClassUpdate>(&update);
             if (!u) continue;
             always_assert(
               index.classInfoRefs.emplace(
@@ -12584,7 +12579,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<ClassUpdate>(&update);
+            auto u = std::get_if<ClassUpdate>(&update);
             if (!u) continue;
             index.classBytecodeRefs.insert_or_assign(
               u->name,
@@ -12596,7 +12591,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<FuncUpdate>(&update);
+            auto u = std::get_if<FuncUpdate>(&update);
             if (!u) continue;
             index.funcRefs.at(u->name) = std::move(u->func);
           }
@@ -12605,7 +12600,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<FuncUpdate>(&update);
+            auto u = std::get_if<FuncUpdate>(&update);
             if (!u) continue;
             always_assert(
               index.funcInfoRefs.emplace(
@@ -12620,7 +12615,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
             // Keep closure mappings up to date.
-            auto u = boost::get<ClosureUpdate>(&update);
+            auto u = std::get_if<ClosureUpdate>(&update);
             if (!u) continue;
             initTypesMeta.fixups[u->unit].addClass.emplace_back(u->name);
             assertx(u->context);
@@ -12639,7 +12634,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
         // can gain one due to trait flattening. Update that here.
         for (auto const& updates : allUpdates) {
           for (auto const& update : updates) {
-            auto u = boost::get<ClassUpdate>(&update);
+            auto u = std::get_if<ClassUpdate>(&update);
             if (!u || !u->has86init) continue;
             index.classesWith86Inits.emplace(u->name);
           }
@@ -12651,7 +12646,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
         auto& meta = subclassMeta.meta;
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<ClassUpdate>(&update);
+            auto u = std::get_if<ClassUpdate>(&update);
             if (!u) continue;
 
             // We shouldn't have parents for closures because we
@@ -12683,7 +12678,7 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            auto u = boost::get<MethodUpdate>(&update);
+            auto u = std::get_if<MethodUpdate>(&update);
             if (!u) continue;
             always_assert(
               index.uninstantiableClsMethRefs.emplace(
@@ -12697,11 +12692,11 @@ flatten_classes(IndexData& index, IndexFlattenMetadata meta) {
       [&] {
         for (auto& updates : allUpdates) {
           for (auto& update : updates) {
-            if (auto const u = boost::get<ClassUpdate>(&update)) {
+            if (auto const u = std::get_if<ClassUpdate>(&update)) {
               auto& meta = initTypesMeta.classes[u->name];
               assertx(meta.deps.empty());
               meta.deps.insert(begin(u->typeUses), end(u->typeUses));
-            } else if (auto const u = boost::get<FuncUpdate>(&update)) {
+            } else if (auto const u = std::get_if<FuncUpdate>(&update)) {
               auto& meta = initTypesMeta.funcs[u->name];
               assertx(meta.deps.empty());
               meta.deps.insert(begin(u->typeUses), end(u->typeUses));
@@ -13098,7 +13093,7 @@ struct BuildSubclassListJob {
       meta.funcFamilyDeps.emplace_back();
       auto& deps = meta.funcFamilyDeps.back();
       for (auto const& [_, entry] : cinfo->methodFamilies) {
-        match<void>(
+        match(
           entry.m_meths,
           [&] (const FuncFamilyEntry::BothFF& e)      { deps.emplace(e.m_ff); },
           [&] (const FuncFamilyEntry::FFAndSingle& e) { deps.emplace(e.m_ff); },
@@ -13538,7 +13533,13 @@ protected:
           auto const cls = sorted[i];
           auto const it = children.find(cls);
           if (it == end(children)) continue;
-          for (auto const c : it->second) {
+          std::vector<SString> clsChildren{begin(it->second), end(it->second)};
+          std::sort(
+            begin(clsChildren),
+            end(clsChildren),
+            string_data_lt_type{}
+          );
+          for (auto const c : clsChildren) {
             indegree[c]--;
             if (indegree[c] == 0) sorted.emplace_back(c);
           }
@@ -13590,7 +13591,7 @@ protected:
       return *it->second;
     };
 
-    match<void>(
+    match(
       entry.m_meths,
       [&] (const FuncFamilyEntry::BothFF& e) {
         auto const& ff = getFF(e.m_ff);
@@ -13699,8 +13700,8 @@ protected:
 
           if (mte.attrs & AttrNoOverride) {
             always_assert(
-              boost::get<FuncFamilyEntry::BothSingle>(&it->second.m_meths) ||
-              boost::get<FuncFamilyEntry::SingleAndNone>(&it->second.m_meths)
+              std::get_if<FuncFamilyEntry::BothSingle>(&it->second.m_meths) ||
+              std::get_if<FuncFamilyEntry::SingleAndNone>(&it->second.m_meths)
             );
           }
         }
@@ -13845,7 +13846,7 @@ protected:
     // whereas they would if a class with regular class was
     // processed first. Detect this condition and manually add such
     // methods to data.methods.
-    if (!data.hasRegularClass && childData.hasRegularClass) {
+    if (!data.hasRegularClass) {
       for (auto& [name, info] : childData.methods) {
         if (!info.regularComplete || info.privateAncestor) continue;
         if (is_special_method_name(name)) continue;
@@ -14315,8 +14316,8 @@ protected:
 
         auto& entry = cinfo->methodFamilies.at(name);
         assertx(
-          boost::get<FuncFamilyEntry::BothSingle>(&entry.m_meths) ||
-          boost::get<FuncFamilyEntry::SingleAndNone>(&entry.m_meths)
+          std::get_if<FuncFamilyEntry::BothSingle>(&entry.m_meths) ||
+          std::get_if<FuncFamilyEntry::SingleAndNone>(&entry.m_meths)
         );
 
         if (debug) {
@@ -14370,8 +14371,8 @@ protected:
           // However, even if the entry changes with AttrNoOverride,
           // it can only be these two cases.
           always_assert(
-            boost::get<FuncFamilyEntry::BothSingle>(&entry.m_meths) ||
-            boost::get<FuncFamilyEntry::SingleAndNone>(&entry.m_meths)
+            std::get_if<FuncFamilyEntry::BothSingle>(&entry.m_meths) ||
+            std::get_if<FuncFamilyEntry::SingleAndNone>(&entry.m_meths)
           );
         }
       }
@@ -14800,7 +14801,7 @@ SubclassWork build_subclass_lists_assign(SubclassMetadata subclassMeta) {
       };
       std::vector<Data> splits;
     };
-    using Action = boost::variant<Root, Split, Child, RootLeaf>;
+    using Action = std::variant<Root, Split, Child, RootLeaf>;
 
     auto const actions = parallel::map(
       toProcess,
@@ -14923,7 +14924,7 @@ SubclassWork build_subclass_lists_assign(SubclassMetadata subclassMeta) {
     std::vector<SString> rootLeafs;
 
     for (auto const& action : actions) {
-      match<void>(
+      match(
         action,
         [&] (Root r) {
           assertx(!subclassMeta.meta.at(r.cls).children.empty());
@@ -15582,100 +15583,42 @@ private:
     }
   }
 
-  static Type initial_return_type(const LocalIndex& index, const php::Func& f) {
+  static Type initial_return_type(const LocalIndex& index,
+                                  const php::Func& f) {
     Trace::Bump _{
       Trace::hhbbc_index, kSystemLibBump, is_systemlib_part(f.unit)
     };
-
-    auto const ty = [&] {
-      // Return type of native functions is calculated differently.
-      if (f.isNative) return native_function_return_type(&f);
-
-      if ((f.attrs & AttrBuiltin) || f.isMemoizeWrapper) return TInitCell;
-
-      if (f.isGenerator) {
-        if (f.isAsync) {
-          // Async generators always return AsyncGenerator object.
-          return objExact(res::Class::get(s_AsyncGenerator.get()));
-        }
-        // Non-async generators always return Generator object.
-        return objExact(res::Class::get(s_Generator.get()));
-      }
-
-      auto const make_type = [&] (const TypeConstraint& tc) {
-        auto lookup = type_from_constraint(
-          tc,
-          TInitCell,
-          [&] (SString name) -> Optional<res::Class> {
-            if (auto const ci = folly::get_default(index.classInfos, name)) {
-              auto const c = res::Class::get(*ci);
-              assertx(c.isComplete());
-              return c;
-            }
-            return std::nullopt;
-          },
-          [&] () -> Optional<Type> {
-            if (!f.cls) return std::nullopt;
-            auto const& cls = [&] () -> const php::Class& {
-              if (!f.cls->closureContextCls) return *f.cls;
-              auto const c =
-                folly::get_default(index.classes, f.cls->closureContextCls);
-              always_assert_flog(
-                c,
-                "When processing return-type for {}, "
-                "tried to access missing class {}",
-                func_fullname(f),
-                f.cls->closureContextCls
-              );
-              return *c;
-            }();
-            if (cls.attrs & AttrTrait) return std::nullopt;
-            auto const c = res::Class::get(cls.name);
+    auto ty = return_type_from_constraints(
+        f,
+        [&] (SString name) -> Optional<res::Class> {
+          if (auto const ci = folly::get_default(index.classInfos, name)) {
+            auto const c = res::Class::get(*ci);
             assertx(c.isComplete());
-            return subCls(c, true);
+            return c;
           }
-        );
-        if (lookup.coerceClassToString == TriBool::Yes) {
-          lookup.upper = promote_classish(std::move(lookup.upper));
-        } else if (lookup.coerceClassToString == TriBool::Maybe) {
-          lookup.upper |= TSStr;
-        }
-        return unctx(std::move(lookup.upper));
-      };
-
-      auto const process = [&] (const TypeIntersectionConstraint& tcs) {
-        auto ret = TInitCell;
-        for (auto const& tc : tcs.range()) {
-          ret = intersection_of(std::move(ret), make_type(tc));
-        }
-        return ret;
-      };
-
-      auto ret = process(f.retTypeConstraints);
-      if (f.hasInOutArgs && !ret.is(BBottom)) {
-        std::vector<Type> types;
-        types.reserve(f.params.size() + 1);
-        types.emplace_back(std::move(ret));
-        for (auto const& p : f.params) {
-          if (!p.inout) continue;
-          auto t = process(p.typeConstraints);
-          if (t.is(BBottom)) return TBottom;
-          types.emplace_back(std::move(t));
-        }
-        std::reverse(begin(types)+1, end(types));
-        ret = vec(std::move(types));
+          return std::nullopt;
+        },
+        [&] () -> Optional<Type> {
+        if (!f.cls) return std::nullopt;
+        auto const& cls = [&] () -> const php::Class& {
+          if (!f.cls->closureContextCls) return *f.cls;
+          auto const c = folly::get_default(index.classes, f.cls->closureContextCls);
+          always_assert_flog(
+            c,
+            "When processing return-type for {}, "
+            "tried to access missing class {}",
+            func_fullname(f),
+            f.cls->closureContextCls
+          );
+          return *c;
+        }();
+        if (cls.attrs & AttrTrait) return std::nullopt;
+        auto const c = res::Class::get(cls.name);
+        assertx(c.isComplete());
+        return subCls(c, true);
       }
-
-      if (f.isAsync) {
-        // Async functions always return WaitH<T>, where T is the type
-        // returned internally.
-        return wait_handle(std::move(ret));
-      }
-      return ret;
-    }();
-
-    FTRACE(3, "Initial return type for {}: {}\n",
-           func_fullname(f), show(ty));
+    );
+    FTRACE(3, "Initial return type for {}: {}\n", func_fullname(f), show(ty));
     return ty;
   }
 
@@ -16199,7 +16142,7 @@ void init_types(IndexData& index, InitTypesMetadata meta) {
       auto& e = meta.nameOnlyFF.at(n);
       entries.emplace_back(n, std::move(e));
       for (auto const& entry : entries.back().second) {
-        match<void>(
+        match(
           entry.m_meths,
           [&] (const FuncFamilyEntry::BothFF& e) {
             funcFamilies.emplace_back(index.funcFamilyRefs.at(e.m_ff));
@@ -16251,7 +16194,7 @@ void init_types(IndexData& index, InitTypesMetadata meta) {
     // Update the dummy entries with the actual result.
     for (size_t i = 0, size = names.size(); i < size; ++i) {
       auto& old = index.nameOnlyMethodFamilies.at(names[i]);
-      assertx(boost::get<FuncFamilyEntry::None>(&old.m_meths));
+      assertx(std::get_if<FuncFamilyEntry::None>(&old.m_meths));
       old = std::move(outMeta.nameOnly[i]);
     }
 
@@ -17048,7 +16991,7 @@ void make_class_infos_local(
             continue;
           }
 
-          match<void>(
+          match(
             entry.m_meths,
             [&, name=name, &entry=entry] (const FuncFamilyEntry::BothFF& e) {
               auto const it = ffState.find(e.m_ff);
@@ -17216,7 +17159,7 @@ void make_class_infos_local(
   remote.shrink_to_fit();
 
   for (auto const& [name, entry] : index.nameOnlyMethodFamilies) {
-    match<void>(
+    match(
       entry.m_meths,
       [&, name=name] (const FuncFamilyEntry::BothFF& e) {
         auto const it = ffState.find(e.m_ff);
@@ -18231,7 +18174,7 @@ res::Func Index::rfunc_from_dcls(const DCls& dcls,
     if (!cinfo) continue;
 
     auto const func = process(cinfo, false, dcls.containsNonRegular());
-    match<void>(
+    match(
       func.val,
       [&] (Func::MethodName) {},
       [&] (Func::Method m) {
@@ -19443,7 +19386,7 @@ PropState Index::lookup_public_statics(const php::Class* cls) const {
             adjust_type_for_prop(
               IndexAdaptor { *this },
               *cls,
-              prop.typeConstraints.mainPtr(),
+              &prop.typeConstraints,
               TInitCell
             ),
             initial_type_for_public_sprop(*this, *cls, prop)
@@ -19468,7 +19411,7 @@ PropState Index::lookup_public_statics(const php::Class* cls) const {
       prop.name,
       PropStateElem{
         std::move(ty),
-        prop.typeConstraints.mainPtr(),
+        &prop.typeConstraints,
         prop.attrs,
         everModified
       }
@@ -20232,7 +20175,7 @@ void Index::refine_public_statics(DependencyContextSet& deps) {
         auto newType = adjust_type_for_prop(
           IndexAdaptor { *this },
           *cinfo->cls,
-          prop.typeConstraints.mainPtr(),
+          &prop.typeConstraints,
           unctx(union_of(std::move(knownClsType), std::move(unknownClsType)))
         );
 
@@ -22021,10 +21964,9 @@ void AnalysisScheduler::addDepClassToInput(SString cls,
     input.classes[cls] |= K::Dep;
   }
 
-  if (auto const r = folly::get_ptr(index.m_data->classInfoRefs, cls)) {
+  if (folly::get_ptr(index.m_data->classInfoRefs, cls)) {
     input.classes[cls] |= K::Info;
-  } else if (auto const r =
-             folly::get_ptr(index.m_data->uninstantiableClsMethRefs, cls)) {
+  } else if (folly::get_ptr(index.m_data->uninstantiableClsMethRefs, cls)) {
     input.classes[cls] |= K::MInfo;
   } else {
     badClass();
@@ -24979,7 +24921,7 @@ res::Func AnalysisIndex::rfunc_from_dcls(const DCls& dcls,
   const php::Func* singleMethod = nullptr;
 
   auto const onFunc = [&] (Func func) {
-    match<void>(
+    match(
       func.val,
       [&] (Func::MethodName)      {},
       [&] (Func::Method)          { always_assert(false); },
@@ -26292,11 +26234,11 @@ template struct AnalysisIndexParam<MethodsWithoutCInfo>;
 
 //////////////////////////////////////////////////////////////////////
 
-MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::ClassInfo2);
-MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::FuncInfo2);
-MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::FuncFamily2);
-MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::MethodsWithoutCInfo);
-MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::BuildSubclassListJob::Split);
+MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::ClassInfo2)
+MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::FuncInfo2)
+MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::FuncFamily2)
+MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::MethodsWithoutCInfo)
+MAKE_UNIQUE_PTR_BLOB_SERDE_HELPER(HHBBC::BuildSubclassListJob::Split)
 
 //////////////////////////////////////////////////////////////////////
 

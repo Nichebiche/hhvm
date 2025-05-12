@@ -19,11 +19,11 @@
 
 #include <folly/tracing/StaticTracepoint.h>
 
+#include <thrift/lib/cpp2/async/InterceptorFlags.h>
 #include <thrift/lib/cpp2/detail/EventHandlerRuntime.h>
 #include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 namespace {
 const char* stripServiceNamePrefix(
@@ -64,7 +64,9 @@ ContextStack::ContextStack(
       methodNamePrefixed_(method),
       methodNameUnprefixed_(
           stripServiceNamePrefix(methodNamePrefixed_, serviceName_)),
-      serviceContexts_(serviceContexts) {
+      serviceContexts_(serviceContexts),
+      clientInterceptorFrameworkMetadata_{
+          detail::initializeInterceptorFrameworkMetadataStorage()} {
   if (!handlers_ || handlers_->empty()) {
     return;
   }
@@ -358,6 +360,183 @@ void ContextStack::userExceptionWrapped(
   }
 }
 
+void ContextStack::onStreamSubscribe() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_stream_subscribe,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onStreamSubscribe(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::onStreamCredit(uint32_t credits) {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_credit_received,
+      serviceName_,
+      methodNamePrefixed_);
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onStreamCredit(contextAt(i), credits);
+    }
+  }
+}
+
+void ContextStack::onStreamNext() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_stream_item,
+      serviceName_,
+      methodNamePrefixed_);
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onStreamNext(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::onStreamPauseReceive() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_stream_pause_receive,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onStreamPauseReceive(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::onStreamResumeReceive() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_stream_resume_receive,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onStreamResumeReceive(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::handleStreamErrorWrapped(
+    const folly::exception_wrapper& ew) {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_stream_error,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->handleStreamErrorWrapped(contextAt(i), ew);
+    }
+  }
+}
+
+void ContextStack::onStreamFinally(details::STREAM_ENDING_TYPES endReason) {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_stream_finally,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onStreamFinally(contextAt(i), endReason);
+    }
+  }
+}
+
+void ContextStack::onSinkSubscribe() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_sink_established,
+      serviceName_,
+      methodNamePrefixed_);
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onSinkSubscribe(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::onSinkNext() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_sink_item,
+      serviceName_,
+      methodNamePrefixed_);
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onSinkNext(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::onSinkCancel() {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_sink_cancel,
+      serviceName_,
+      methodNamePrefixed_);
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onSinkCancel(contextAt(i));
+    }
+  }
+}
+
+void ContextStack::onSinkCredit(uint32_t credits) {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_credit_received,
+      serviceName_,
+      methodNamePrefixed_);
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onSinkCredit(contextAt(i), credits);
+    }
+  }
+}
+
+void ContextStack::onSinkFinally(details::SINK_ENDING_TYPES endReason) {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_sink_finally,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->onSinkFinally(contextAt(i), endReason);
+    }
+  }
+}
+
+void ContextStack::handleSinkError(const folly::exception_wrapper& ew) {
+  FOLLY_SDT(
+      thrift,
+      thrift_context_stack_on_sink_error,
+      serviceName_,
+      methodNamePrefixed_);
+
+  if (handlers_) {
+    for (size_t i = 0; i < handlers_->size(); i++) {
+      (*handlers_)[i]->handleSinkError(contextAt(i), ew);
+    }
+  }
+}
+
 void ContextStack::resetClientRequestContextHeader() {
   if (embeddedClientContext_ == nullptr) {
     return;
@@ -369,7 +548,8 @@ void ContextStack::resetClientRequestContextHeader() {
 
 folly::Try<void> ContextStack::processClientInterceptorsOnRequest(
     ClientInterceptorOnRequestArguments arguments,
-    apache::thrift::transport::THeader* headers) noexcept {
+    apache::thrift::transport::THeader* headers,
+    RpcOptions& options) noexcept {
   if (clientInterceptors_ == nullptr) {
     return {};
   }
@@ -381,7 +561,9 @@ folly::Try<void> ContextStack::processClientInterceptorsOnRequest(
         arguments,
         headers,
         serviceName_,
-        methodNameUnprefixed_};
+        methodNameUnprefixed_,
+        &clientInterceptorFrameworkMetadata_,
+        &options};
     try {
       clientInterceptor->internal_onRequest(std::move(requestInfo));
     } catch (...) {
@@ -443,12 +625,30 @@ ContextStack::getStorageForClientInterceptorOnRequestByIndex(
   return &clientInterceptorsStorage_[index];
 }
 
+std::unique_ptr<folly::IOBuf> ContextStack::getInterceptorFrameworkMetadata(
+    const RpcOptions& rpcOptions) {
+  detail::postProcessFrameworkMetadata(
+      clientInterceptorFrameworkMetadata_, rpcOptions);
+  return detail::serializeFrameworkMetadata(
+      std::move(clientInterceptorFrameworkMetadata_));
+}
+
 namespace detail {
-/* static */ void*& ContextStackInternals::contextAt(
-    ContextStack& contextStack, size_t index) {
-  return contextStack.contextAt(index);
+ContextStackUnsafeAPI::ContextStackUnsafeAPI(ContextStack& contextStack)
+    : contextStack_{contextStack} {}
+
+void*& ContextStackUnsafeAPI::contextAt(size_t index) const {
+  return contextStack_.contextAt(index);
+}
+
+std::unique_ptr<folly::IOBuf>
+ContextStackUnsafeAPI::getInterceptorFrameworkMetadata(
+    const RpcOptions& rpcOptions) {
+  if (!THRIFT_FLAG(enable_client_interceptor_framework_metadata)) {
+    return nullptr;
+  }
+  return contextStack_.getInterceptorFrameworkMetadata(rpcOptions);
 }
 } // namespace detail
 
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift

@@ -21,9 +21,7 @@
 #include <string>
 
 #include <execinfo.h>
-#include <signal.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 
 #include <folly/Conv.h>
@@ -34,10 +32,8 @@
 #include <folly/String.h>
 
 #include "hphp/util/assertions.h"
-#include "hphp/util/compatibility.h"
 #include "hphp/util/conv-10.h"
 #include "hphp/util/hash-map.h"
-#include "hphp/util/hash.h"
 #include "hphp/util/process.h"
 #include "hphp/util/thread-local.h"
 
@@ -179,7 +175,7 @@ void translateFromPerfMap(StackFrameExtra* frame) {
   std::lock_guard<std::mutex> lock(s_perfMapCacheMutex);
 
   if (s_perfMapCache.translate(frame)) {
-    if (s_perfMapNegCache.count(frame->addr)) {
+    if (s_perfMapNegCache.contains(frame->addr)) {
       // A prior failed lookup of frame already triggered a rebuild.
       return;
     }

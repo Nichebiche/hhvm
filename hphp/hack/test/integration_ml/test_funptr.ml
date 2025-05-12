@@ -66,6 +66,8 @@ let pos_at (line1, column1) (line2, column2) =
        ~pos_start:(line1, 0, column1 - 1)
        ~pos_end:(line2, 0, column2))
 
+let make_hack_marked_code s = [Lsp.MarkedCode ("hack", s)]
+
 let identify_tests =
   [
     ( (17, 9),
@@ -83,8 +85,8 @@ let identify_tests =
         [
           {
             HoverService.snippet =
-              "HH\\FunctionRef<(readonly function(string $s): string)>";
-            addendum = ["foo_docblock"];
+              make_hack_marked_code "function foo(string $s): string";
+            addendum = [Lsp.MarkedString "foo_docblock"];
             pos = pos_at (17, 8) (17, 10);
           };
         ] );
@@ -102,8 +104,8 @@ let identify_tests =
       go_hover
         [
           {
-            HoverService.snippet = "class Cardoor";
-            addendum = ["Cardoor_docblock"];
+            HoverService.snippet = [Lsp.MarkedCode ("hack", "class Cardoor")];
+            addendum = [Lsp.MarkedString "Cardoor_docblock"];
             pos = pos_at (20, 8) (20, 14);
           };
         ] );
@@ -122,8 +124,15 @@ let identify_tests =
         [
           {
             HoverService.snippet =
-              "// Defined in Cardoor\npublic static function bar<T>(string $x): string";
-            addendum = ["bar_docblock"];
+              [
+                Lsp.MarkedString "Defined in `Cardoor`";
+                Lsp.MarkedString "---";
+                Lsp.MarkedCode ("hack", "public static function bar<T>(T $x): T");
+                Lsp.MarkedString "---";
+                Lsp.MarkedString "Instantiation:";
+                Lsp.MarkedCode ("hack", "  T = string;");
+              ];
+            addendum = [Lsp.MarkedString "bar_docblock"];
             pos = pos_at (20, 17) (20, 19);
           };
         ] );
@@ -138,11 +147,7 @@ let test () =
   Relative_path.set_path_prefix Relative_path.Root (Path.make root);
   TestDisk.set hhconfig_filename hhconfig_contents;
   let (custom_config, _) =
-    ServerConfig.load
-      ~silent:false
-      ~from:""
-      ~ai_options:None
-      ~cli_config_overrides:[]
+    ServerConfig.load ~silent:false ~from:"" ~cli_config_overrides:[]
   in
   let env =
     Integration_test_base.setup_server

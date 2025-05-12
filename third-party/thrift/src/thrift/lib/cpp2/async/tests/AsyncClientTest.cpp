@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+#include <gtest/gtest.h>
 #include <folly/coro/GtestHelpers.h>
-#include <folly/portability/GTest.h>
 
 #include <thrift/lib/cpp2/async/AsyncClient.h>
 #include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
@@ -30,11 +30,13 @@ class TestHandler
 
 CO_TEST(AsyncClientTest, ZeroDependency) {
   class TestEventHandler : public apache::thrift::TProcessorEventHandler {
-    void preRead(void* /*ctx*/, const char* /*fn_name*/) override {
+    void preRead(void* /*ctx*/, std::string_view /*fn_name*/) override {
       preReadCallCount++;
     }
     void postWrite(
-        void* /*ctx*/, const char* /*fn_name*/, uint32_t /*bytes*/) override {
+        void* /*ctx*/,
+        std::string_view /*fn_name*/,
+        uint32_t /*bytes*/) override {
       postWriteCallCount++;
     }
 

@@ -30,12 +30,6 @@ class ByteEventTracker;
 
 constexpr uint32_t kDefaultMaxConcurrentOutgoingStreams = 100;
 
-class HTTPPriorityMapFactoryProvider {
- public:
-  virtual ~HTTPPriorityMapFactoryProvider() = default;
-  virtual HTTPCodec::StreamID sendPriority(http2::PriorityUpdate pri) = 0;
-};
-
 class HTTPSessionBase : public wangle::ManagedConnection {
  public:
   /**
@@ -336,22 +330,6 @@ class HTTPSessionBase : public wangle::ManagedConnection {
   virtual size_t sendPing(uint64_t data) = 0;
 
   /**
-   * Sends a priority message on this session.  If the underlying protocol
-   * doesn't support priority, this is a no-op.  A new stream identifier will
-   * be selected and returned.
-   */
-  virtual HTTPCodec::StreamID sendPriority(http2::PriorityUpdate pri)
-      /*override*/
-      = 0;
-
-  /**
-   * As above, but updates an existing priority node.  Do not use for
-   * real nodes, prefer HTTPTransaction::changePriority.
-   */
-  virtual size_t sendPriority(HTTPCodec::StreamID id,
-                              http2::PriorityUpdate pri) = 0;
-
-  /**
    * Send a CERTIFICATE_REQUEST frame. If the underlying protocol doesn't
    * support secondary authentication, this is a no-op and 0 is returned.
    */
@@ -443,15 +421,6 @@ class HTTPSessionBase : public wangle::ManagedConnection {
     virtual folly::Optional<const HTTPMessage::HTTP2Priority> getHTTPPriority(
         uint8_t level) = 0;
     virtual ~PriorityAdapter() = default;
-  };
-
-  class PriorityMapFactory {
-   public:
-    // Creates the map implemented by PriorityAdapter, sends the corresponding
-    // virtual stream on the given session, and retuns the map.
-    virtual std::unique_ptr<PriorityAdapter> createVirtualStreams(
-        HTTPPriorityMapFactoryProvider* session) const = 0;
-    virtual ~PriorityMapFactory() = default;
   };
 
   using FilterIteratorFn = std::function<void(HTTPCodecFilter*)>;
@@ -591,6 +560,14 @@ class HTTPSessionBase : public wangle::ManagedConnection {
       return list->removeObserver(std::move(observer));
     }
     return false;
+  }
+
+  void enableServerEarlyResponse() noexcept {
+    CHECK_EQ(codec_->getTransportDirection(), TransportDirection::DOWNSTREAM);
+    enableServerEarlyResponse_ = codec_->supportsParallelRequests();
+  }
+  bool getServerEarlyResponseEnabled() const {
+    return enableServerEarlyResponse_;
   }
 
  protected:
@@ -844,6 +821,14 @@ class HTTPSessionBase : public wangle::ManagedConnection {
    * Indicates whether quic stream ID limit is exceeded.
    */
   bool streamLimitExceeded_{false};
+
+  /**
+   * When the server sends a complete response prior to the client sending an
+   * entire request (for non-upgraded streams), the server will subsequently
+   * write RST_STREAM/NO_ERROR (h2) or STOP_SENDING/NO_ERROR (h3). This has no
+   * effect in http/1.1.
+   */
+  bool enableServerEarlyResponse_{false};
 };
 
 } // namespace proxygen

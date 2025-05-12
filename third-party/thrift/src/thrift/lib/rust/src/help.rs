@@ -22,13 +22,12 @@ use std::fmt;
 use std::fmt::Display;
 use std::future::Future;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use bytes::Buf;
 use thiserror::Error;
 
-use crate::serialize;
 use crate::ApplicationException;
 use crate::BufExt;
 use crate::ContextStack;
@@ -44,6 +43,7 @@ use crate::ResultType;
 use crate::Serialize;
 use crate::SerializedMessage;
 use crate::Transport;
+use crate::serialize;
 
 // Note: `variants_by_number` must be sorted by the i32 values.
 pub fn enum_display(
@@ -112,6 +112,7 @@ where
             let res_type = exn.result_type();
             assert_ne!(res_type, ResultType::Return);
             assert_eq!(exn.exn_is_declared(), res_type == ResultType::Error);
+            ctx_stack.on_error(exn.exn_is_declared(), &exn.exn_value())?;
             rctxt.set_user_exception_header(exn.exn_name(), &exn.exn_value())?;
             res_type
         }
@@ -161,7 +162,7 @@ where
         // this field should not be used by the server (except for some
         // language implementations).
         p.write_message_begin(name, MessageType::Call, 0);
-        args.write(p);
+        args.rs_thrift_write(p);
         p.write_message_end();
     });
 
@@ -190,7 +191,7 @@ where
 
     let res = match message_type {
         MessageType::Reply => Ok(EXN::read_result(de)?),
-        MessageType::Exception => Err(ApplicationException::read(de)?),
+        MessageType::Exception => Err(ApplicationException::rs_thrift_read(de)?),
         MessageType::Call | MessageType::Oneway | MessageType::InvalidMessageType => {
             bail!("Unwanted message type `{:?}`", message_type)
         }

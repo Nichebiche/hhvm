@@ -29,14 +29,6 @@ function thrift_protocol_read_binary_struct(\HH\object $transportobj,
 function thrift_protocol_set_compact_version(int $version)[leak_safe]: int;
 
 <<__Native>>
-function thrift_protocol_write_compact(\HH\object $transportobj,
-                                       string $method_name,
-                                       int $msgtype,
-                                       \HH\object $request_struct,
-                                       int $seqid,
-                                       bool $oneway = false): void;
-
-<<__Native>>
 function thrift_protocol_write_compact2(\HH\object $transportobj,
                                         string $method_name,
                                         int $msgtype,
@@ -51,6 +43,10 @@ function thrift_protocol_write_compact_struct(\HH\object $transportobj,
                                         int $version = 2): void;
 
 <<__Native>>
+function thrift_protocol_write_compact_struct_to_string(\HH\object $transportobj,
+                                                          int $version = 2): string;
+
+<<__Native>>
 function thrift_protocol_read_compact(\HH\object $transportobj,
                                       string $obj_typename,
                                       int $options = 0): mixed;
@@ -63,7 +59,7 @@ function thrift_protocol_read_compact_struct(\HH\object $transportobj,
 <<__Native>>
 function thrift_protocol_read_compact_struct_from_string(string $serialized,
                                                          string $obj_typename,
-                                                         int $options = 0): object;
+                                                         int $options = 0): \HH\object;
 
 <<__NativeData>>
 class InteractionId {

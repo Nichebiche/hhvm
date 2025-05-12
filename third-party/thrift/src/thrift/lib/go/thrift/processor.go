@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/stats"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 	"github.com/facebook/fbthrift/thrift/lib/thrift/metadata"
 )
@@ -39,6 +41,7 @@ type Processor interface {
 	// name on this server.
 	ProcessorFunctionMap() map[string]types.ProcessorFunction
 	GetThriftMetadata() *metadata.ThriftMetadata
+	FunctionServiceMap() map[string]string
 }
 
 func errorType(err error) string {
@@ -62,25 +65,40 @@ func getProcessorFunction(processor Processor, messageType types.MessageType, na
 	return nil, types.NewApplicationException(types.UNKNOWN_METHOD, fmt.Sprintf("no such function: %q", name))
 }
 
-func skipMessage(protocol types.Protocol) error {
+func skipMessage(protocol Protocol) error {
 	if err := protocol.Skip(types.STRUCT); err != nil {
 		return err
 	}
 	return protocol.ReadMessageEnd()
 }
 
-func setRequestHeadersForError(protocol types.Protocol, err types.ApplicationException) {
-	protocol.SetRequestHeader("uex", errorType(err))
-	protocol.SetRequestHeader("uexw", err.Error())
+func setRequestHeadersForError(protocol Protocol, err types.ApplicationException) {
+	protocol.setRequestHeader("uex", errorType(err))
+	protocol.setRequestHeader("uexw", err.Error())
 }
 
-func setRequestHeadersForResult(protocol types.Protocol, result types.WritableStruct) {
+func setRequestHeadersForResult(protocol Protocol, result types.WritableStruct) {
 	if rr, ok := result.(types.WritableResult); ok && rr.Exception() != nil {
 		// If we got a structured exception back, write metadata about it into headers
 		terr := rr.Exception()
-		protocol.SetRequestHeader("uex", errorType(terr))
-		protocol.SetRequestHeader("uexw", terr.Error())
+		protocol.setRequestHeader("uex", errorType(terr))
+		protocol.setRequestHeader("uexw", terr.Error())
 	}
+}
+
+// sendException is a utility function to send the exception for the specified
+// method.
+func sendException(prot types.Encoder, name string, seqID int32, err types.ApplicationException) error {
+	if e2 := prot.WriteMessageBegin(name, types.EXCEPTION, seqID); e2 != nil {
+		return e2
+	} else if e2 := err.Write(prot); e2 != nil {
+		return e2
+	} else if e2 := prot.WriteMessageEnd(); e2 != nil {
+		return e2
+	} else if e2 := prot.Flush(); e2 != nil {
+		return e2
+	}
+	return nil
 }
 
 // process is a utility function to take a processor and a protocol, and fully process a message.
@@ -88,7 +106,7 @@ func setRequestHeadersForResult(protocol types.Protocol, result types.WritableSt
 // 1. Read the message from the protocol.
 // 2. Process the message.
 // 3. Write the message to the protocol.
-func process(ctx context.Context, processor Processor, prot types.Protocol) (ext types.Exception) {
+func process(ctx context.Context, processor Processor, prot Protocol, processorStats map[string]*stats.TimingSeries) error {
 	// Step 1: Decode message only using Decoder interface and GetResponseHeaders method on the protocol.
 
 	// Step 1a: find the processor function for the message.
@@ -117,12 +135,17 @@ func process(ctx context.Context, processor Processor, prot types.Protocol) (ext
 	}
 
 	// Step 1c: Use Protocol interface to retrieve headers.
-	ctx = WithHeaders(ctx, prot.GetResponseHeaders())
+	ctx = WithHeaders(ctx, prot.getResponseHeaders())
 
 	// Step 2: Processing the message without using the Protocol.
 	var result types.WritableStruct
 	if pfunc != nil {
+		pfuncStartTime := time.Now()
 		result, appException = pfunc.RunContext(ctx, argStruct)
+		pfuncDuration := time.Since(pfuncStartTime)
+		if timingSeries := processorStats[name]; timingSeries != nil {
+			timingSeries.RecordWithStatus(pfuncDuration, appException == nil)
+		}
 	}
 
 	// Often times oneway calls do not even have msgType ONEWAY.

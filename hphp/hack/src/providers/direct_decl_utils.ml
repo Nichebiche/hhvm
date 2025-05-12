@@ -87,6 +87,25 @@ let remove_naming_conflict_losers ctx file decls =
         | Some nfile -> Relative_path.equal nfile file
         | None -> true))
 
+(** [add_extends_dep_edges ctx class_ dep_table]
+  adds `Extends` dep edges from each parent of the `class_` to the class itself.
+  It also adds a mapping from the dep hash of the class to the class name in
+  `dep_table` for later dep hash resolution. *)
+let add_extends_dep_edges ctx (cls_name, cls) dep_table =
+  let parents = Decl_utils.parentish_names cls in
+  Stdlib.Hashtbl.add
+    dep_table
+    (Typing_deps.Dep.make (Typing_deps.Dep.Type cls_name))
+    cls_name;
+  SSet.iter
+    (fun parent ->
+      Typing_deps.(
+        add_idep
+          (Provider_context.get_deps_mode ctx)
+          (Dep.Type cls_name)
+          (Dep.Extends parent)))
+    parents
+
 let cache_decls ctx file decls =
   let open Shallow_decl_defs in
   let open Typing_defs in
@@ -114,7 +133,8 @@ let cache_decls ctx file decls =
         | (name, Module decl) -> Decl_store.((get ()).add_module name decl))
   | Provider_backend.Rust_provider_backend backend ->
     Rust_provider_backend.Decl.add_shallow_decls backend decls
-  | Provider_backend.(Local_memory { decl_cache; shallow_decl_cache; _ }) ->
+  | Provider_backend.(
+      Local_memory { decl_cache; shallow_decl_cache; dep_table; _ }) ->
     List.iter decls ~f:(function
         | (name, Class decl) ->
           let (_ : shallow_class option) =
@@ -123,7 +143,9 @@ let cache_decls ctx file decls =
               ~key:
                 (Provider_backend.Shallow_decl_cache_entry.Shallow_class_decl
                    name)
-              ~default:(fun () -> Some decl)
+              ~default:(fun () ->
+                add_extends_dep_edges ctx (name, decl) dep_table;
+                Some decl)
           in
           ()
         | (name, Fun decl) ->
@@ -184,11 +206,18 @@ let direct_decl_parse ?(ignore_file_content_caches = false) ctx file =
       popt.ParserOptions.deregister_php_stdlib
     in
     let parsed_file =
-      Direct_decl_parser.parse_and_hash_decls
-        opts
-        deregister_php_stdlib_if_hhi
-        file
-        contents
+      if (Provider_context.get_popt ctx).use_oxidized_by_ref_decls then
+        Direct_decl_parser.parse_and_hash_decls_obr
+          opts
+          deregister_php_stdlib_if_hhi
+          file
+          contents
+      else
+        Direct_decl_parser.parse_and_hash_decls
+          opts
+          deregister_php_stdlib_if_hhi
+          file
+          contents
     in
     Some parsed_file
 
@@ -198,10 +227,16 @@ let direct_decl_parse_and_cache ctx file =
     Counters.count Counters.Category.Direct_decl_parse @@ fun () ->
     get_file_contents ~ignore_file_content_caches:false ctx file
     |> Option.map ~f:(fun contents ->
-           Rust_provider_backend.Decl.direct_decl_parse_and_cache
-             backend
-             file
-             contents)
+           if (Provider_context.get_popt ctx).use_oxidized_by_ref_decls then
+             Rust_provider_backend.Decl.direct_decl_parse_and_cache_obr
+               backend
+               file
+               contents
+           else
+             Rust_provider_backend.Decl.direct_decl_parse_and_cache
+               backend
+               file
+               contents)
   | _ ->
     let result = direct_decl_parse ctx file in
     (match result with

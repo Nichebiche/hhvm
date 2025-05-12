@@ -11,11 +11,9 @@ import apache.thrift.metadata.thrift_types as _fbthrift_metadata
 import thrift.python.types as _fbthrift_python_types
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_has_bitwise_ops:
-    pass
 
 
-class has_bitwise_ops(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_has_bitwise_ops):
+class has_bitwise_ops(_fbthrift_python_types.Enum, int):
     none = 0
     zero = 1
     one = 2
@@ -36,20 +34,16 @@ class has_bitwise_ops(_fbthrift_python_types.Enum, int, _fbthrift_compatible_wit
     def _to_python(self) -> "has_bitwise_ops":
         return self
 
-    def _to_py3(self) -> "apache.thrift.fixtures.types.module.types.has_bitwise_ops": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("apache.thrift.fixtures.types.module.types")
-        return py3_types.has_bitwise_ops(self.value)
+    def _to_py3(self) -> "has_bitwise_ops":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_is_unscoped:
-    pass
 
 
-class is_unscoped(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_is_unscoped):
+class is_unscoped(_fbthrift_python_types.Enum, int):
     hello = 0
     world = 1
     @staticmethod
@@ -67,20 +61,16 @@ class is_unscoped(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_is
     def _to_python(self) -> "is_unscoped":
         return self
 
-    def _to_py3(self) -> "apache.thrift.fixtures.types.module.types.is_unscoped": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("apache.thrift.fixtures.types.module.types")
-        return py3_types.is_unscoped(self.value)
+    def _to_py3(self) -> "is_unscoped":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_MyForwardRefEnum:
-    pass
 
 
-class MyForwardRefEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_MyForwardRefEnum):
+class MyForwardRefEnum(_fbthrift_python_types.Enum, int):
     ZERO = 0
     NONZERO = 12
     @staticmethod
@@ -98,10 +88,8 @@ class MyForwardRefEnum(_fbthrift_python_types.Enum, int, _fbthrift_compatible_wi
     def _to_python(self) -> "MyForwardRefEnum":
         return self
 
-    def _to_py3(self) -> "apache.thrift.fixtures.types.module.types.MyForwardRefEnum": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("apache.thrift.fixtures.types.module.types")
-        return py3_types.MyForwardRefEnum(self.value)
+    def _to_py3(self) -> "MyForwardRefEnum":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value

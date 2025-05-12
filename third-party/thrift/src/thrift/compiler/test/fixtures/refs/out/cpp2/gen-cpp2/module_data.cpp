@@ -6,32 +6,11 @@
  */
 
 #include "thrift/compiler/test/fixtures/refs/gen-cpp2/module_data.h"
+#include "thrift/compiler/test/fixtures/refs/gen-cpp2/module_constants.h"
 
 #include <thrift/lib/cpp2/gen/module_data_cpp.h>
 
-FOLLY_CLANG_DISABLE_WARNING("-Wunused-macros")
-
-#if defined(__GNUC__) && defined(__linux__) && !FOLLY_MOBILE
-// These attributes are applied to the static data members to ensure that they
-// are not stripped from the compiled binary, in order to keep them available
-// for use by debuggers at runtime.
-//
-// The "used" attribute is required to ensure the compiler always emits unused
-// data.
-//
-// The "section" attribute is required to stop the linker from stripping used
-// data. It works by forcing all of the data members (both used and unused ones)
-// into the same section. As the linker strips data on a per-section basis, it
-// is then unable to remove unused data without also removing used data.
-// This has a similar effect to the "retain" attribute, but works with older
-// toolchains.
-#define THRIFT_DATA_MEMBER [[gnu::used]] [[gnu::section(".rodata.thrift.data")]]
-#else
-#define THRIFT_DATA_MEMBER
-#endif
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 THRIFT_DATA_MEMBER const std::string_view TStructDataStorage<::cpp2::MyUnion>::name = "MyUnion";
 THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::MyUnion>::fields_names = { {
@@ -45,10 +24,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 2> TStructDataStorage<::cpp2::MyUni
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::cpp2::MyUnion>::fields_types = { {
   TType::T_I32,
   TType::T_STRING,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::MyUnion>::storage_names = { {
-  "anInteger"sv,
-  "aString"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::cpp2::MyUnion>::isset_indexes = { {
   -1,
@@ -64,9 +39,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::cpp2::NonTr
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::cpp2::NonTriviallyDestructibleUnion>::fields_types = { {
   TType::T_I32,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::cpp2::NonTriviallyDestructibleUnion>::storage_names = { {
-  "int_field"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::cpp2::NonTriviallyDestructibleUnion>::isset_indexes = { {
   -1,
@@ -106,17 +78,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 9> TStructDataStorage<::cpp
   TType::T_STRING,
   TType::T_STRING,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 9> TStructDataStorage<::cpp2::MyField>::storage_names = { {
-  "__fbthrift_field_opt_value"sv,
-  "__fbthrift_field_value"sv,
-  "__fbthrift_field_req_value"sv,
-  "__fbthrift_field_opt_enum_value"sv,
-  "__fbthrift_field_enum_value"sv,
-  "__fbthrift_field_req_enum_value"sv,
-  "__fbthrift_field_opt_str_value"sv,
-  "__fbthrift_field_str_value"sv,
-  "__fbthrift_field_req_str_value"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 9> TStructDataStorage<::cpp2::MyField>::isset_indexes = { {
   -1,
   -1,
@@ -145,11 +106,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::MyStruct>::storage_names = { {
-  "__fbthrift_field_opt_ref"sv,
-  "__fbthrift_field_ref"sv,
-  "__fbthrift_field_req_ref"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::MyStruct>::isset_indexes = { {
   -1,
   -1,
@@ -172,11 +128,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_DOUBLE,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithUnion>::storage_names = { {
-  "__fbthrift_field_u"sv,
-  "__fbthrift_field_aDouble"sv,
-  "__fbthrift_field_f"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithUnion>::isset_indexes = { {
   -1,
   -1,
@@ -192,9 +143,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::cpp2::Recur
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::cpp2::RecursiveStruct>::fields_types = { {
   TType::T_LIST,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::cpp2::RecursiveStruct>::storage_names = { {
-  "__fbthrift_field_mes"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::cpp2::RecursiveStruct>::isset_indexes = { {
   0,
@@ -225,14 +173,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 6> TStructDataStorage<::cpp
   TType::T_SET,
   TType::T_LIST,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 6> TStructDataStorage<::cpp2::StructWithContainers>::storage_names = { {
-  "__fbthrift_field_list_ref"sv,
-  "__fbthrift_field_set_ref"sv,
-  "__fbthrift_field_map_ref"sv,
-  "__fbthrift_field_list_ref_unique"sv,
-  "__fbthrift_field_set_ref_shared"sv,
-  "__fbthrift_field_list_ref_shared_const"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 6> TStructDataStorage<::cpp2::StructWithContainers>::isset_indexes = { {
   -1,
   -1,
@@ -258,11 +198,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithSharedConst>::storage_names = { {
-  "__fbthrift_field_opt_shared_const"sv,
-  "__fbthrift_field_shared_const"sv,
-  "__fbthrift_field_req_shared_const"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithSharedConst>::isset_indexes = { {
   -1,
   -1,
@@ -275,8 +210,6 @@ THRIFT_DATA_MEMBER const std::array<std::string_view, 0> TStructDataStorage<::cp
 THRIFT_DATA_MEMBER const std::array<int16_t, 0> TStructDataStorage<::cpp2::Empty>::fields_ids = { {
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 0> TStructDataStorage<::cpp2::Empty>::fields_types = { {
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 0> TStructDataStorage<::cpp2::Empty>::storage_names = { {
 }};
 THRIFT_DATA_MEMBER const std::array<int, 0> TStructDataStorage<::cpp2::Empty>::isset_indexes = { {
 }};
@@ -296,11 +229,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithRef>::storage_names = { {
-  "__fbthrift_field_def_field"sv,
-  "__fbthrift_field_opt_field"sv,
-  "__fbthrift_field_req_field"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithRef>::isset_indexes = { {
   -1,
@@ -324,11 +252,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_LIST,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithBox>::storage_names = { {
-  "__fbthrift_field_a"sv,
-  "__fbthrift_field_b"sv,
-  "__fbthrift_field_c"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithBox>::isset_indexes = { {
   -1,
   -1,
@@ -348,10 +271,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::StructWithInternBox>::storage_names = { {
-  "__fbthrift_field_field1"sv,
-  "__fbthrift_field_field2"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::cpp2::StructWithInternBox>::isset_indexes = { {
   0,
   1,
@@ -369,10 +288,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 2> TStructDataStorage<::cpp2::Struc
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::cpp2::StructWithTerseInternBox>::fields_types = { {
   TType::T_STRUCT,
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::StructWithTerseInternBox>::storage_names = { {
-  "__fbthrift_field_field1"sv,
-  "__fbthrift_field_field2"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::cpp2::StructWithTerseInternBox>::isset_indexes = { {
   -1,
@@ -392,10 +307,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::AdaptedStructWithInternBox>::storage_names = { {
-  "__fbthrift_field_field1"sv,
-  "__fbthrift_field_field2"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::cpp2::AdaptedStructWithInternBox>::isset_indexes = { {
   0,
   1,
@@ -413,10 +324,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 2> TStructDataStorage<::cpp2::Adapt
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 2> TStructDataStorage<::cpp2::AdaptedStructWithTerseInternBox>::fields_types = { {
   TType::T_STRUCT,
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 2> TStructDataStorage<::cpp2::AdaptedStructWithTerseInternBox>::storage_names = { {
-  "__fbthrift_field_field1"sv,
-  "__fbthrift_field_field2"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 2> TStructDataStorage<::cpp2::AdaptedStructWithTerseInternBox>::isset_indexes = { {
   -1,
@@ -438,11 +345,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithRefTypeUnique>::storage_names = { {
-  "__fbthrift_field_def_field"sv,
-  "__fbthrift_field_opt_field"sv,
-  "__fbthrift_field_req_field"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithRefTypeUnique>::isset_indexes = { {
   -1,
@@ -466,11 +368,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithRefTypeShared>::storage_names = { {
-  "__fbthrift_field_def_field"sv,
-  "__fbthrift_field_opt_field"sv,
-  "__fbthrift_field_req_field"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithRefTypeShared>::isset_indexes = { {
   -1,
   -1,
@@ -493,11 +390,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 3> TStructDataStorage<::cpp
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 3> TStructDataStorage<::cpp2::StructWithRefTypeSharedConst>::storage_names = { {
-  "__fbthrift_field_def_field"sv,
-  "__fbthrift_field_opt_field"sv,
-  "__fbthrift_field_req_field"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 3> TStructDataStorage<::cpp2::StructWithRefTypeSharedConst>::isset_indexes = { {
   -1,
   -1,
@@ -513,9 +405,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::cpp2::Struc
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::cpp2::StructWithRefAndAnnotCppNoexceptMoveCtor>::fields_types = { {
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::cpp2::StructWithRefAndAnnotCppNoexceptMoveCtor>::storage_names = { {
-  "__fbthrift_field_def_field"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::cpp2::StructWithRefAndAnnotCppNoexceptMoveCtor>::isset_indexes = { {
   -1,
@@ -543,13 +432,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 5> TStructDataStorage<::cpp
   TType::T_STRING,
   TType::T_STRING,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 5> TStructDataStorage<::cpp2::StructWithString>::storage_names = { {
-  "__fbthrift_field_def_unique_string_ref"sv,
-  "__fbthrift_field_def_shared_string_ref"sv,
-  "__fbthrift_field_def_shared_string_const_ref"sv,
-  "__fbthrift_field_unique_string_ref"sv,
-  "__fbthrift_field_shared_string_ref"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 5> TStructDataStorage<::cpp2::StructWithString>::isset_indexes = { {
   -1,
   -1,
@@ -558,5 +440,73 @@ THRIFT_DATA_MEMBER const std::array<int, 5> TStructDataStorage<::cpp2::StructWit
   -1,
 }};
 
-} // namespace thrift
-} // namespace apache
+namespace detail {
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::MyUnion, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::NonTriviallyDestructibleUnion, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::MyField, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::MyStruct, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithUnion, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::RecursiveStruct, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithContainers, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithSharedConst, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::Empty, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithRef, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithBox, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithInternBox, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithTerseInternBox, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::AdaptedStructWithInternBox, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::AdaptedStructWithTerseInternBox, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithRefTypeUnique, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithRefTypeShared, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithRefTypeSharedConst, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithRefAndAnnotCppNoexceptMoveCtor, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::StructWithString, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::MyEnum, true>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::cpp2::TypedEnum, true>::bundle)() =
+    nullptr;
+
+} // namespace detail
+} // namespace apache::thrift

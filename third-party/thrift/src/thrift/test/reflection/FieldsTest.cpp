@@ -20,8 +20,8 @@
 #include <type_traits>
 #include <typeindex>
 
+#include <gtest/gtest.h>
 #include <folly/Utility.h>
-#include <folly/portability/GTest.h>
 #include <thrift/lib/cpp2/BadFieldAccess.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/op/Get.h>
@@ -54,7 +54,7 @@ TEST(FieldsTest, Get) {
 }
 
 TEST(FieldsTest, field_id_by_ordinal) {
-  EXPECT_EQ(op::size_v<test_cpp2::cpp_reflection::struct3>, 19);
+  EXPECT_EQ(op::num_fields<test_cpp2::cpp_reflection::struct3>, 19);
 }
 
 TEST(UnionFieldsTest, Get) {
@@ -92,35 +92,23 @@ template <
     class TypeTag,
     class FieldTag>
 void checkField(const char* identName) {
-  if constexpr (Ordinal::value != Ordinal{}) {
-    static_assert(
-        std::is_same_v<Id, private_access::field_id<Struct, Ordinal>>);
-  }
-  static_assert(
-      std::is_same_v<TypeTag, private_access::type_tag<Struct, Ordinal>>);
-  static_assert(std::is_same_v<Ident, private_access::ident<Struct, Ordinal>>);
-  static_assert(std::is_same_v<Ordinal, private_access::ordinal<Struct, Id>>);
-  static_assert(
-      std::is_same_v<Ordinal, private_access::ordinal<Struct, Ident>>);
-
-  if constexpr (is_type_tag_unique) {
-    static_assert(
-        std::is_same_v<Ordinal, private_access::ordinal<Struct, TypeTag>>);
-  }
-
   static_assert(std::is_same_v<op::get_ordinal<Struct, Ordinal>, Ordinal>);
   static_assert(std::is_same_v<op::get_field_id<Struct, Ordinal>, Id>);
   static_assert(std::is_same_v<op::get_type_tag<Struct, Ordinal>, TypeTag>);
   static_assert(std::is_same_v<op::get_ident<Struct, Ordinal>, Ident>);
   static_assert(std::is_same_v<op::get_field_tag<Struct, Ordinal>, FieldTag>);
-  EXPECT_EQ((op::get_name_v<Struct, Ordinal>), identName);
+  if constexpr (Ordinal::value != FieldOrdinal{0}) {
+    EXPECT_EQ((op::get_name_v<Struct, Ordinal>), identName);
+  }
 
   static_assert(std::is_same_v<op::get_ordinal<Struct, Id>, Ordinal>);
   static_assert(std::is_same_v<op::get_field_id<Struct, Id>, Id>);
   static_assert(std::is_same_v<op::get_type_tag<Struct, Id>, TypeTag>);
   static_assert(std::is_same_v<op::get_ident<Struct, Id>, Ident>);
   static_assert(std::is_same_v<op::get_field_tag<Struct, Id>, FieldTag>);
-  EXPECT_EQ((op::get_name_v<Struct, Id>), identName);
+  if constexpr (Ordinal::value != FieldOrdinal{0}) {
+    EXPECT_EQ((op::get_name_v<Struct, Id>), identName);
+  }
 
   if constexpr (is_type_tag_unique && !std::is_void_v<TypeTag>) {
     static_assert(std::is_same_v<op::get_ordinal<Struct, TypeTag>, Ordinal>);
@@ -128,7 +116,9 @@ void checkField(const char* identName) {
     static_assert(std::is_same_v<op::get_type_tag<Struct, TypeTag>, TypeTag>);
     static_assert(std::is_same_v<op::get_ident<Struct, TypeTag>, Ident>);
     static_assert(std::is_same_v<op::get_field_tag<Struct, TypeTag>, FieldTag>);
-    EXPECT_EQ((op::get_name_v<Struct, TypeTag>), identName);
+    if constexpr (Ordinal::value != FieldOrdinal{0}) {
+      EXPECT_EQ((op::get_name_v<Struct, TypeTag>), identName);
+    }
   }
 
   if constexpr (!std::is_void_v<Ident>) {
@@ -137,7 +127,9 @@ void checkField(const char* identName) {
     static_assert(std::is_same_v<op::get_type_tag<Struct, Ident>, TypeTag>);
     static_assert(std::is_same_v<op::get_ident<Struct, Ident>, Ident>);
     static_assert(std::is_same_v<op::get_field_tag<Struct, Ident>, FieldTag>);
-    EXPECT_EQ((op::get_name_v<Struct, Ident>), identName);
+    if constexpr (Ordinal::value != FieldOrdinal{0}) {
+      EXPECT_EQ((op::get_name_v<Struct, Ident>), identName);
+    }
   }
 
   if constexpr (!std::is_void_v<FieldTag>) {
@@ -147,7 +139,9 @@ void checkField(const char* identName) {
     static_assert(std::is_same_v<op::get_ident<Struct, FieldTag>, Ident>);
     static_assert(
         std::is_same_v<op::get_field_tag<Struct, FieldTag>, FieldTag>);
-    EXPECT_EQ((op::get_name_v<Struct, FieldTag>), identName);
+    if constexpr (Ordinal::value != FieldOrdinal{0}) {
+      EXPECT_EQ((op::get_name_v<Struct, FieldTag>), identName);
+    }
   }
 }
 
@@ -342,14 +336,14 @@ TEST(FieldsTest, HelperAPIs) {
     EXPECT_TRUE(is_field_id_v<decltype(id)>);
     count++;
   });
-  EXPECT_EQ(count, op::size_v<Struct>);
+  EXPECT_EQ(count, op::num_fields<Struct>);
 
   count = 0;
   op::for_each_ident<Struct>([&](auto id) {
     EXPECT_TRUE(isIdentTag(id));
     count++;
   });
-  EXPECT_EQ(count, op::size_v<Struct>);
+  EXPECT_EQ(count, op::num_fields<Struct>);
 
   count = 0;
   op::for_each_ordinal<Struct>([&](auto id) {
@@ -357,7 +351,7 @@ TEST(FieldsTest, HelperAPIs) {
     count++;
   });
 
-  EXPECT_EQ(count, op::size_v<Struct>);
+  EXPECT_EQ(count, op::num_fields<Struct>);
 }
 
 TEST(FieldsTest, GetFieldNameCppName) {

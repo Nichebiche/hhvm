@@ -111,10 +111,16 @@ cdef class TypeInfoBase:
 
 cdef class TypeInfo(TypeInfoBase):
     cdef const cTypeInfo* cpp_obj
-    cdef tuple pytypes
+    cdef type true_pytype
+    cdef tuple allowed_pytypes
     cdef str singleton_name
     @staticmethod
-    cdef create(const cTypeInfo& cpp_obj, pytypes, str singleton_name)
+    cdef create(
+        const cTypeInfo& cpp_obj,
+        type true_pytype,
+        tuple allowed_pytypes,
+        str singleton_name
+    )
     cpdef to_internal_data(self, object)
     cpdef to_python_value(self, object)
     cdef const cTypeInfo* get_cTypeInfo(self)
@@ -233,7 +239,7 @@ cdef class StructOrUnion:
     cdef uint32_t _deserialize(
         StructOrUnion self, folly.iobuf.IOBuf buf, Protocol proto
     ) except? 0
-    cdef _fbthrift_get_field_value(self, int16_t index)
+    cdef _fbthrift_get_cached_field_value(self, int16_t index)
 
 cdef api object _get_fbthrift_data(object struct_or_union)
 cdef api object _get_exception_fbthrift_data(object generated_error)
@@ -244,7 +250,7 @@ cdef class Struct(StructOrUnion):
     cdef uint32_t _deserialize(
         Struct self, folly.iobuf.IOBuf buf, Protocol proto
     ) except? 0
-    cdef _fbthrift_get_field_value(Struct self, int16_t index)
+    cdef _fbthrift_get_cached_field_value(Struct self, int16_t index)
     cdef _fbthrift_populate_primitive_fields(Struct self)
     cdef _fbthrift_fully_populate_cache(Struct self)
     cdef _initStructTupleWithValues(Struct self, object kwargs) except *

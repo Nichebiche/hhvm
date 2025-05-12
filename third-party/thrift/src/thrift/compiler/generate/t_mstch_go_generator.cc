@@ -84,8 +84,6 @@ class mstch_go_program : public mstch_program {
             {"program:compat_setters?",
              &mstch_go_program::go_gen_compat_setters},
             {"program:thrift_imports", &mstch_go_program::thrift_imports},
-            {"program:has_thrift_imports",
-             &mstch_go_program::has_thrift_imports},
             {"program:thrift_lib_import", &mstch_go_program::thrift_lib_import},
             {"program:thrift_metadata_import",
              &mstch_go_program::thrift_metadata_import},
@@ -93,8 +91,6 @@ class mstch_go_program : public mstch_program {
             {"program:gen_metadata?", &mstch_go_program::should_gen_metadata},
             {"program:gen_default_get?",
              &mstch_go_program::should_gen_default_get},
-            {"program:use_reflect_codec?",
-             &mstch_go_program::should_use_reflect_codec},
             {"program:import_metadata_package?",
              &mstch_go_program::should_import_metadata_package},
             {"program:metadata_qualifier",
@@ -124,9 +120,6 @@ class mstch_go_program : public mstch_program {
     }
     return a;
   }
-  mstch::node has_thrift_imports() {
-    return !program_->get_includes_for_codegen().empty();
-  }
   mstch::node go_import_path() { return get_go_import_path_(); }
   mstch::node thrift_lib_import() { return data_.thrift_lib_import; }
   mstch::node thrift_metadata_import() { return data_.thrift_metadata_import; }
@@ -135,7 +128,6 @@ class mstch_go_program : public mstch_program {
   }
   mstch::node should_gen_metadata() { return data_.gen_metadata; }
   mstch::node should_gen_default_get() { return data_.gen_default_get; }
-  mstch::node should_use_reflect_codec() { return data_.use_reflect_codec; }
   mstch::node should_import_metadata_package() {
     // We don't need to import the metadata package if we are
     // generating metadata inside the metadata package itself. Duh.
@@ -300,10 +292,6 @@ class mstch_go_field : public mstch_field {
             {"field:pointer?", &mstch_go_field::is_pointer},
             {"field:non_struct_pointer?",
              &mstch_go_field::is_non_struct_pointer},
-            {"field:compat_setter_pointer?",
-             &mstch_go_field::is_compat_setter_pointer},
-            {"field:compat_setter_value_op",
-             &mstch_go_field::compat_setter_value_op},
             {"field:nilable?", &mstch_go_field::is_nilable},
             {"field:must_be_set_to_serialize?",
              &mstch_go_field::must_be_set_to_serialize},
@@ -368,22 +356,6 @@ class mstch_go_field : public mstch_field {
     auto real_type = field_->type()->get_true_type();
     return is_pointer_() && !go::is_type_go_struct(real_type);
   }
-  mstch::node is_compat_setter_pointer() { return is_compat_setter_pointer_(); }
-  mstch::node compat_setter_value_op() {
-    if (is_pointer_()) {
-      if (is_compat_setter_pointer_()) {
-        return std::string("");
-      } else {
-        return std::string("&");
-      }
-    } else { // !is_pointer_()
-      if (is_compat_setter_pointer_()) {
-        return std::string("*");
-      } else {
-        return std::string("");
-      }
-    }
-  }
   mstch::node key_str() {
     // Legacy schemas may have negative tags - replace minus with an underscore.
     if (field_->get_key() < 0) {
@@ -428,20 +400,6 @@ class mstch_go_field : public mstch_field {
          !go::is_type_go_nilable(real_type));
   }
 
-  bool is_compat_setter_pointer_() {
-    // Whether this field's value should be a pointer in compat-setter.
-    // This is needed for a seamless migration from the legacy generator.
-    //
-    // Legacy generator treats optional fields with default values differently
-    // compared to the new generator (pointer vs non-pointer).
-    // This method helps with backwards compatibility.
-    bool has_default_value = (field_->default_value() != nullptr);
-    if (is_optional_() && has_default_value) {
-      return false;
-    }
-    return is_pointer_();
-  }
-
   bool is_inside_union_() {
     // Whether field is part of a union
     return field_context_ != nullptr && field_context_->strct != nullptr &&
@@ -475,6 +433,8 @@ class mstch_go_struct : public mstch_struct {
             {"struct:req?", &mstch_go_struct::is_req_struct},
             {"struct:fields_sorted", &mstch_go_struct::fields_sorted},
             {"struct:scoped_name", &mstch_go_struct::scoped_name},
+            {"struct:use_reflect_codec?",
+             &mstch_go_struct::should_use_reflect_codec},
         });
   }
 
@@ -516,9 +476,27 @@ class mstch_go_struct : public mstch_struct {
     return "premadeStructSpec_" + struct_->name();
   }
   mstch::node fields_sorted() {
-    return make_mstch_fields(struct_->get_sorted_members());
+    auto fields_in_id_order = struct_->get_sorted_members();
+    // Fields (optionally) in the most optimal (memory-saving) layout order.
+    auto minimizePadding =
+        struct_->has_structured_annotation(kGoMinimizePaddingUri);
+    if (minimizePadding) {
+      std::vector<t_field*> fields_in_layout_order;
+      std::copy(
+          fields_in_id_order.begin(),
+          fields_in_id_order.end(),
+          std::back_inserter(fields_in_layout_order));
+      go::optimize_fields_layout(fields_in_layout_order, struct_->is_union());
+      return make_mstch_fields(fields_in_layout_order);
+    }
+    return make_mstch_fields(fields_in_id_order);
   }
   mstch::node scoped_name() { return struct_->get_scoped_name(); }
+  mstch::node should_use_reflect_codec() {
+    auto use_reflect_codec_annotation =
+        struct_->find_structured_annotation_or_null(kGoUseReflectCodecUri);
+    return data_.use_reflect_codec || use_reflect_codec_annotation != nullptr;
+  }
 
  private:
   go::codegen_data& data_;
@@ -611,11 +589,11 @@ class mstch_go_function : public mstch_function {
         this,
         {
             {"function:go_name", &mstch_go_function::go_name},
-            {"function:go_supported?", &mstch_go_function::is_go_supported},
+            {"function:go_client_supported?",
+             &mstch_go_function::is_go_client_supported},
+            {"function:go_server_supported?",
+             &mstch_go_function::is_go_server_supported},
             {"function:ctx_arg_name", &mstch_go_function::ctx_arg_name},
-            {"function:out_var_name", &mstch_go_function::out_var_name},
-            {"function:in_var_name", &mstch_go_function::in_var_name},
-            {"function:err_var_name", &mstch_go_function::err_var_name},
             {"function:retval_field_name",
              &mstch_go_function::retval_field_name},
             {"function:retval_nilable?", &mstch_go_function::is_retval_nilable},
@@ -623,34 +601,18 @@ class mstch_go_function : public mstch_function {
   }
   mstch::node go_name() { return go::get_go_func_name(function_); }
 
-  mstch::node is_go_supported() { return go::is_func_go_supported(function_); }
+  mstch::node is_go_client_supported() {
+    return go::is_func_go_client_supported(function_);
+  }
+  mstch::node is_go_server_supported() {
+    return go::is_func_go_server_supported(function_);
+  }
 
   mstch::node ctx_arg_name() {
     // This helper returns the Context object name to be used in the function
     // signature. "ctx" by default, "ctx<num>" in case of name collisions with
     // other function arguments. The name is guaranteed not to collide.
     return get_unique_name("ctx");
-  }
-
-  mstch::node out_var_name() {
-    // This helper function returns a unique "out" variable name,
-    // that doesn't conflict with any parameter names.
-    // The name is guaranteed not to collide.
-    return get_unique_name("out");
-  }
-
-  mstch::node in_var_name() {
-    // This helper function returns a unique "in" variable name,
-    // that doesn't conflict with any parameter names.
-    // The name is guaranteed not to collide.
-    return get_unique_name("in");
-  }
-
-  mstch::node err_var_name() {
-    // This helper function returns a unique "err" variable name,
-    // that doesn't conflict with any parameter names.
-    // The name is guaranteed not to collide.
-    return get_unique_name("err");
   }
 
   std::string get_unique_name(std::string const& name) {

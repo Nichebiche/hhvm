@@ -18,8 +18,8 @@
 #include <thrift/lib/cpp2/type/Any.h>
 #include <thrift/test/AnyTesting.h>
 
+#include <gtest/gtest.h>
 #include <folly/io/IOBuf.h>
-#include <folly/portability/GTest.h>
 #include <thrift/lib/cpp2/type/Protocol.h>
 #include <thrift/lib/cpp2/type/Tag.h>
 #include <thrift/test/gen-cpp2/AnyTest1_types.h>
@@ -106,6 +106,7 @@ TYPED_TEST(AnyTestFixture, ToAny) {
     // Rely on infer_tag if TypeParam is not string_t or binary_t
     any = AnyData::toAny(value);
     any.get(v1);
+    EXPECT_EQ(v1, any.get<decltype(value)>());
   } else {
     any = toAnyData<TypeParam>();
     any.get<TypeParam>(v1);

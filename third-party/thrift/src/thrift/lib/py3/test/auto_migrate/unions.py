@@ -16,10 +16,21 @@
 # pyre-strict
 
 import enum
+import types
 import unittest
 
 from folly.iobuf import IOBuf
-from testing.types import Color, ComplexUnion, easy, Integers, IOBufUnion, ReservedUnion
+from testing.types import (
+    _UnderscoreUnion,
+    Color,
+    ComplexUnion,
+    easy,
+    Integers,
+    IOBufUnion,
+    Misordered,
+    ReservedUnion,
+    ValueOrError,
+)
 from thrift.lib.py3.test.auto_migrate.auto_migrate_util import (
     brokenInAutoMigrate,
     is_auto_migrated,
@@ -71,6 +82,15 @@ class UnionTests(unittest.TestCase):
         self.assertIn("__members__", contents)
         for itype in iter(Integers.Type):
             self.assertTrue(itype.name in contents)
+
+    def test_union_type_enum_name(self) -> None:
+        type_enum = Integers.Type
+        if is_auto_migrated():
+            self.assertEqual(type_enum.__name__, "Integers")
+        else:
+            self.assertEqual(type_enum.__name__, "__IntegersType")
+
+        self.assertIsInstance(Integers().type, Integers.Type)
 
     def test_union_enum_members(self) -> None:
         members = Integers.Type.__members__
@@ -136,7 +156,6 @@ class UnionTests(unittest.TestCase):
         union = Integers.fromValue(large)
         self.assertEqual(union.type, Integers.Type.large)
 
-    @brokenInAutoMigrate()
     def test_complexunion_fromValue(self) -> None:
         tiny = 2**7 - 1
         large = 2**63 - 1
@@ -151,7 +170,13 @@ class UnionTests(unittest.TestCase):
         self.assertEqual(union.type, ComplexUnion.Type.float_val)
         union = ComplexUnion.fromValue(adouble)
         self.assertEqual(union.value, adouble)
-        self.assertEqual(union.type, ComplexUnion.Type.double_val)
+        # thrift-python has no mechanism to distinguish between float and double
+        adouble_arm = (
+            ComplexUnion.Type.float_val
+            if is_auto_migrated()
+            else ComplexUnion.Type.double_val
+        )
+        self.assertEqual(union.type, adouble_arm)
         union = ComplexUnion.fromValue(Color.red)
         self.assertEqual(union.type, ComplexUnion.Type.color)
         union = ComplexUnion.fromValue(easy())
@@ -162,6 +187,49 @@ class UnionTests(unittest.TestCase):
         self.assertEqual(union.type, ComplexUnion.Type.raw)
         union = ComplexUnion.fromValue(True)
         self.assertEqual(union.type, ComplexUnion.Type.truthy)
+
+    def test_misordered_fromValue(self) -> None:
+        u = Misordered.fromValue(31)
+        # BAD: thrift-python uses key order, thrift-py3 uses declaration order
+        # this is a risk for auto-migration
+        if is_auto_migrated():
+            self.assertEqual(u.type, Misordered.Type.val64)
+            self.assertEqual(u.val64, 31)
+        else:
+            self.assertEqual(u.type, Misordered.Type.val32)
+            self.assertEqual(u.val32, 31)
+
+        u = Misordered.fromValue("31")
+        if is_auto_migrated():
+            self.assertEqual(u.type, Misordered.Type.s2)
+            self.assertEqual(u.s2, "31")
+        else:
+            self.assertEqual(u.type, Misordered.Type.s1)
+            self.assertEqual(u.s1, "31")
+
+    @brokenInAutoMigrate()
+    def test_float32_field(self) -> None:
+        # thrift-py3 rounds to float32 via cython. We want to eventually
+        # remove this behavior and update tests that expect float32 rounding.
+        self.assertNotEqual(ComplexUnion(float_val=1.1).float_val, 1.1)
+        self.assertEqual(ComplexUnion(float_val=1.1).float_val, 1.100000023841858)
+
+        doubles = [1.1, 2.2, 3.3]
+        floats = [1.100000023841858, 2.200000047683716, 3.299999952316284]
+        u = ComplexUnion(float_list=doubles)
+        self.assertNotEqual(u.float_list, doubles)
+        self.assertEqual(u.float_list, floats)
+
+        double_set = set(doubles)
+        u = ComplexUnion(float_set=double_set)
+        self.assertNotEqual(u.float_set, double_set)
+        self.assertEqual(u.float_set, set(floats))
+
+        double_map = {x: x for x in doubles}
+        u = ComplexUnion(float_map=double_map)
+        float_map = {x: x for x in floats}
+        self.assertNotEqual(u.float_map, double_map)
+        self.assertEqual(u.float_map, float_map)
 
     def test_iobuf_union(self) -> None:
         abuf = IOBuf(b"3.141592025756836")
@@ -188,6 +256,20 @@ class UnionTests(unittest.TestCase):
         self.assertEqual(x.value, "bar")
         self.assertEqual(x.ok, "bar")
 
+    def test_underscore_union(self) -> None:
+        x = _UnderscoreUnion(_a="foo")
+        self.assertEqual(x.type, _UnderscoreUnion.Type._a)
+        self.assertEqual(x._a, "foo")
+
+        x = _UnderscoreUnion(_b=31)
+        self.assertEqual(x.type, _UnderscoreUnion.Type._b)
+        self.assertEqual(x._b, 31)
+
+        if is_auto_migrated():
+            self.assertEqual(x.Type.__name__, "_UnderscoreUnion")
+        else:
+            self.assertEqual(x.Type.__name__, "___UnderscoreUnionType")
+
     def test_instance_base_class(self) -> None:
         self.assertIsInstance(ComplexUnion(tiny=1), Union)
         self.assertIsInstance(ComplexUnion(tiny=1), Struct)
@@ -202,3 +284,18 @@ class UnionTests(unittest.TestCase):
         self.assertFalse(issubclass(Union, ComplexUnion))
         self.assertFalse(issubclass(Struct, ComplexUnion))
         self.assertFalse(issubclass(ComplexUnion, ReservedUnion))
+
+    def test_subclass_not_allow_inheritance(self) -> None:
+        thrift_python_err = r"Inheritance from generated thrift union .+ is deprecated. Please use composition."
+        cython_err = (
+            r"type '.+' is not an acceptable base type"
+            if not hasattr(ValueOrError, "_FBTHRIFT__PYTHON_CLASS")
+            else r"Inheritance of thrift-generated .+ from TestSubclass is deprecated."
+        )
+        err_regex = thrift_python_err if is_auto_migrated() else cython_err
+
+        with self.assertRaisesRegex(TypeError, err_regex):
+            types.new_class(
+                "TestSubclass",
+                bases=(ValueOrError,),
+            )

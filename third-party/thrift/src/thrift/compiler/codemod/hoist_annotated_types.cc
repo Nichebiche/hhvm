@@ -132,7 +132,7 @@ class hoist_annotated_types {
     if (needs_replacement(type)) {
       auto range = f.src_range();
       auto annotations_end_offset = range.begin.offset();
-      for (const auto& [k, v] : type.get_type()->annotations()) {
+      for (const auto& [k, v] : type.get_type()->unstructured_annotations()) {
         annotations_end_offset =
             std::max(annotations_end_offset, v.src_range.end.offset());
       }
@@ -179,7 +179,7 @@ class hoist_annotated_types {
     if (auto type = c.type_ref(); needs_replacement(type)) {
       auto range = c.src_range();
       auto annotations_end_offset = range.begin.offset();
-      for (const auto& [k, v] : type.get_type()->annotations()) {
+      for (const auto& [k, v] : type.get_type()->unstructured_annotations()) {
         annotations_end_offset =
             std::max(annotations_end_offset, v.src_range.end.offset());
       }
@@ -226,7 +226,7 @@ class hoist_annotated_types {
         }
       }
       auto type_end_offset = range.begin.offset();
-      for (const auto& [k, v] : type.get_type()->annotations()) {
+      for (const auto& [k, v] : type.get_type()->unstructured_annotations()) {
         type_end_offset = std::max(type_end_offset, v.src_range.end.offset());
       }
       while (type_end_offset < old_content.size() &&
@@ -239,7 +239,7 @@ class hoist_annotated_types {
         // render_type separates it back out.
         auto begin = annot->src_range().begin.offset();
         auto end = annot->src_range().end.offset();
-        const_cast<t_type&>(*type).set_annotation(
+        const_cast<t_type&>(*type).set_unstructured_annotation(
             std::string(old_content.substr(begin, end - begin)));
         if (old_content[end] == '\n') {
           end++;
@@ -259,7 +259,7 @@ class hoist_annotated_types {
 
   bool needs_replacement(t_type_ref type) {
     auto ptr = type.get_type();
-    if (ptr->annotations().empty()) {
+    if (ptr->unstructured_annotations().empty()) {
       return false;
     }
     if (dynamic_cast<const t_container*>(ptr)) {
@@ -281,8 +281,7 @@ class hoist_annotated_types {
     auto name = name_typedef(type);
     if (typedefs_.count(name)) {
       assert(typedefs_[name].type == render_type(type));
-    } else if (
-        auto existing = prog_.scope()->find<t_type>(prog_.scope_name(name))) {
+    } else if (auto existing = prog_.find<t_type>(name)) {
       if (existing->get_true_type()->get_full_name() !=
           type->get_true_type()->get_full_name()) {
         throw std::runtime_error(fmt::format(
@@ -294,7 +293,7 @@ class hoist_annotated_types {
     } else {
       auto typedf = std::make_unique<t_typedef>(&prog_, name, type);
       std::string structured;
-      for (const auto& [k, v] : type->annotations()) {
+      for (const auto& [k, v] : type->unstructured_annotations()) {
         if (k[0] == '@') {
           structured = fmt::format("{}{}\n", structured, k);
         }
@@ -308,7 +307,7 @@ class hoist_annotated_types {
   std::string name_typedef(t_type_ref ref) {
     auto type = ref.get_type();
     std::vector<std::string> annotations;
-    for (const auto& [k, v] : type->annotations()) {
+    for (const auto& [k, v] : type->unstructured_annotations()) {
       annotations.push_back(fmt::format("{}_{}", k, v.value));
     }
     auto id = std::hash<std::string>()(fmt::format(
@@ -338,7 +337,7 @@ class hoist_annotated_types {
     }
     std::vector<std::string> annotations;
     std::string structured;
-    for (const auto& [k, v] : type->annotations()) {
+    for (const auto& [k, v] : type->unstructured_annotations()) {
       if (k[0] == '@') {
         // handled in maybe_create_typedef
         continue;
@@ -353,11 +352,11 @@ class hoist_annotated_types {
   struct typedef_info {
     std::string type;
     t_typedef* ptr;
-    std::string structured = "";
+    std::string structured;
   };
   std::map<std::string, typedef_info> typedefs_;
   codemod::file_manager fm_;
-  source_manager sm_;
+  source_manager& sm_;
   t_program& prog_;
 };
 } // namespace

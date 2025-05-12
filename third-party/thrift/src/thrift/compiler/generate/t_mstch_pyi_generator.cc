@@ -137,11 +137,12 @@ std::string to_flat_type_name(const t_type* type) {
 const std::string* get_py_adapter(const t_type* type) {
   assert(type != nullptr);
 
-  if (!type->get_true_type()->is_struct()) {
+  if (!type->get_true_type()->is_struct_or_union()) {
     return nullptr;
   }
 
-  return t_typedef::get_first_annotation_or_null(type, {"py.adapter"});
+  return t_typedef::get_first_unstructured_annotation_or_null(
+      type, {"py.adapter"});
 }
 
 std::set<std::string> get_distinct_adapters(const t_program* program) {

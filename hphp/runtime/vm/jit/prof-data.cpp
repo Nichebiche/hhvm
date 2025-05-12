@@ -17,7 +17,6 @@
 #include "hphp/runtime/vm/jit/prof-data.h"
 
 #include <vector>
-#include <algorithm>
 
 #include <folly/MapUtil.h>
 
@@ -25,16 +24,13 @@
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/logger.h"
 
-#include "hphp/runtime/vm/jit/normalized-instruction.h"
 #include "hphp/runtime/vm/jit/region-selection.h"
-#include "hphp/runtime/vm/jit/translator.h"
 #include "hphp/runtime/vm/jit/vasm-block-counters.h"
-#include "hphp/runtime/vm/treadmill.h"
 #include "hphp/runtime/vm/verifier/cfg.h"
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(pgo);
+TRACE_SET_MOD(pgo)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -205,7 +201,7 @@ bool ProfData::anyBlockEndsAt(const Func* func, Offset offset) {
                                    std::move(offsets)).first;
   }
 
-  return it->second.count(offset);
+  return it->second.contains(offset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

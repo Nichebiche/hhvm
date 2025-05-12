@@ -97,7 +97,10 @@ let check_overlapping env (t_pos, t_name) hints =
     | [] -> acc
   in
   let (env, data_types) =
-    hints |> List.fold_map ~init:env ~f:Typing_case_types.data_type_from_hint
+    hints
+    |> List.fold_map
+         ~init:env
+         ~f:(Typing_case_types.data_type_from_hint ~safe_for_are_disjoint:false)
   in
   let err = data_types |> pairwise_check [] |> Typing_error.multiple_opt in
   (env, err)
@@ -127,7 +130,6 @@ let check_invalid_recursive_case_type
     | Tdynamic
     | Tvar _
     | Tclass _
-    | Tunapplied_alias _
     | Tany _ ->
       false
     | Tunion tyl
@@ -246,17 +248,18 @@ let typedef_def ctx typedef =
   } =
     typedef
   in
-  let (do_report_cycles, hints) =
+  let (do_report_cycles, hint_constraints_pairs) =
     match t_assignment with
-    | SimpleTypeDef { tvh_vis = _; tvh_hint } -> ((fun _env -> true), [tvh_hint])
-    (* TODO T201569125 - do I need to do something with the where constraints here? *)
+    | SimpleTypeDef { tvh_vis = _; tvh_hint } ->
+      ((fun _env -> true), [(tvh_hint, None)])
     | CaseType (variant, variants) ->
       ( (fun env ->
           let recursive_case_types env =
             (Env.get_tcopt env).GlobalOptions.recursive_case_types
           in
           not (recursive_case_types env)),
-        List.map (variant :: variants) ~f:(fun v -> v.tctv_hint) )
+        List.map (variant :: variants) ~f:(fun v ->
+            (v.tctv_hint, Some v.tctv_where_constraints)) )
   in
   let env = Env.set_current_module env t_module in
   let env = Env.set_internal env t_internal in
@@ -276,44 +279,49 @@ let typedef_def ctx typedef =
 
   let env =
     if do_report_cycles env then
-      check_cycles env t_name hints
+      (* TODO(T201569125) cycle checking for constraints? *)
+      check_cycles env t_name (List.map ~f:fst hint_constraints_pairs)
     else
       env
   in
-  let env =
-    let (env, ty_err_opt2, tys) =
-      List.fold_left
-        hints
-        ~init:(env, None, [])
-        ~f:(fun (env, ty_err_opt2, tys) hint ->
-          let ((env, new_ty_err_opt2), ty) =
-            Phase.localize_hint_no_subst env ~ignore_errors:false hint
-          in
-          ( env,
-            Option.merge ~f:Typing_error.both new_ty_err_opt2 ty_err_opt2,
-            ty :: tys ))
-    in
-    let env = casetype_def env typedef in
-    Option.iter ~f:(Typing_error_utils.add_typing_error ~env) ty_err_opt2;
-
-    let (env, ty_err_opt3) =
-      List.fold_left_env env tys ~init:None ~f:(fun env acc_err ty ->
-          let (env, err) = Constraints.check env t_as_constraint As t_name ty in
-          (env, Option.merge ~f:Typing_error.both acc_err err))
-    in
-    let (env, ty_err_opt4) =
-      List.fold_left_env env tys ~init:None ~f:(fun env acc_err ty ->
-          let (env, err) =
-            Constraints.check env t_super_constraint Super t_name ty
-          in
-          (env, Option.merge ~f:Typing_error.both acc_err err))
+  let check_variant env (hint, constraints_opt) =
+    let ((env, localize_ty_err_opt), ty) =
+      Phase.localize_hint_no_subst env ~ignore_errors:false hint
     in
     Option.iter
       ~f:(Typing_error_utils.add_typing_error ~env)
-      (Option.merge ~f:Typing_error.both ty_err_opt3 ty_err_opt4);
+      localize_ty_err_opt;
+    let env_for_variant =
+      match constraints_opt with
+      | None -> env
+      | Some constraints ->
+        let (env, _err) =
+          Phase.localize_and_add_where_constraints
+            env
+            ~ignore_errors:true
+            constraints
+        in
+        env
+    in
+    let (env_for_variant, t_as_constraint_err_opt) =
+      Constraints.check env_for_variant t_as_constraint As t_name ty
+    in
+    Option.iter
+      ~f:(Typing_error_utils.add_typing_error ~env:env_for_variant)
+      t_as_constraint_err_opt;
+    let (_env_for_variant, t_super_constraint_err_opt) =
+      Constraints.check env_for_variant t_super_constraint Super t_name ty
+    in
+    Option.iter
+      ~f:(Typing_error_utils.add_typing_error ~env:env_for_variant)
+      t_super_constraint_err_opt;
+    (* we return env instead of env_for_variant because env_for_variant contains
+       assumptions from the where clause which we do not want to assume for
+       other variants *)
     env
   in
-
+  let env = List.fold_left hint_constraints_pairs ~init:env ~f:check_variant in
+  let env = casetype_def env typedef in
   let (env, user_attributes) =
     Typing.attributes_check_def
       env
@@ -324,22 +332,22 @@ let typedef_def ctx typedef =
   let (env, file_attributes) = Typing.file_attributes env t_file_attributes in
   {
     Aast.t_annotation = Env.save (Env.get_tpenv env) env;
-    Aast.t_name;
-    Aast.t_mode;
-    Aast.t_user_attributes = user_attributes;
-    Aast.t_as_constraint;
-    Aast.t_super_constraint;
-    Aast.t_assignment;
-    Aast.t_runtime_type;
-    Aast.t_tparams = tparams;
-    Aast.t_namespace;
-    Aast.t_span;
-    Aast.t_emit_id;
-    Aast.t_is_ctx;
-    Aast.t_file_attributes = file_attributes;
-    Aast.t_internal;
-    Aast.t_module;
-    Aast.t_docs_url;
-    Aast.t_doc_comment;
-    Aast.t_package;
+    t_name;
+    t_mode;
+    t_user_attributes = user_attributes;
+    t_as_constraint;
+    t_super_constraint;
+    t_assignment;
+    t_runtime_type;
+    t_tparams = tparams;
+    t_namespace;
+    t_span;
+    t_emit_id;
+    t_is_ctx;
+    t_file_attributes = file_attributes;
+    t_internal;
+    t_module;
+    t_docs_url;
+    t_doc_comment;
+    t_package;
   }

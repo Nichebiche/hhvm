@@ -5,11 +5,6 @@
 
 use std::collections::BTreeMap;
 
-use pos::TypeName;
-use ty::decl::subst::Subst;
-use ty::decl::ty::ShapeType;
-use ty::decl::ty::TupleExtra;
-use ty::decl::ty::TupleType;
 use ty::decl::AbstractTypeconst;
 use ty::decl::ClassConst;
 use ty::decl::ClassRefinement;
@@ -27,6 +22,10 @@ use ty::decl::Ty_;
 use ty::decl::TypeConst;
 use ty::decl::Typeconst;
 use ty::decl::WhereConstraint;
+use ty::decl::subst::Subst;
+use ty::decl::ty::ShapeType;
+use ty::decl::ty::TupleExtra;
+use ty::decl::ty::TupleType;
 use ty::reason::Reason;
 
 // note(sf, 2022-02-14): c.f. `Decl_subst`, `Decl_instantiate`
@@ -37,40 +36,6 @@ pub struct Substitution<'a, R: Reason> {
 }
 
 impl<'a, R: Reason> Substitution<'a, R> {
-    fn merge_hk_type(
-        &self,
-        orig_r: R,
-        orig_var: TypeName,
-        ty: &Ty<R>,
-        args: impl Iterator<Item = Ty<R>>,
-    ) -> Ty<R> {
-        let ty_: &Ty_<R> = ty.node();
-        let res_ty_ = match ty_ {
-            Ty_::Tapply(params) => {
-                // We could insist on `existing_args.is_empty()` here
-                // unless we want to support partial application.
-                let (name, existing_args) = &**params;
-                Ty_::Tapply(Box::new((
-                    name.clone(),
-                    existing_args.iter().cloned().chain(args).collect(),
-                )))
-            }
-            Ty_::Tgeneric(params) => {
-                // Same here.
-                let (name, ref existing_args) = **params;
-                Ty_::Tgeneric(Box::new((
-                    name,
-                    existing_args.iter().cloned().chain(args).collect(),
-                )))
-            }
-            // We could insist on existing_args = [] here unless we want to
-            // support partial application.
-            _ => ty_.clone(),
-        };
-        let r = ty.reason().clone();
-        Ty::new(R::instantiate(r, orig_var, orig_r), res_ty_)
-    }
-
     pub fn instantiate(&self, ty: &Ty<R>) -> Ty<R> {
         // PERF: If subst is empty then instantiation is a no-op. We can save a
         // significant amount of CPU by avoiding recursively deconstructing the
@@ -81,14 +46,15 @@ impl<'a, R: Reason> Substitution<'a, R> {
         let r = ty.reason().clone();
         let ty_: &Ty_<R> = ty.node();
         match ty_ {
-            Ty_::Tgeneric(params) => {
-                let (x, ref existing_args) = **params;
-                let args = existing_args.iter().map(|arg| self.instantiate(arg));
-                match self.subst.0.get(&x) {
-                    Some(x_ty) => self.merge_hk_type(r, x, x_ty, args),
-                    None => Ty::generic(r, x, args.collect()),
+            Ty_::Tgeneric(x) => match self.subst.0.get(x) {
+                Some(found_ty) => {
+                    let found_r = found_ty.reason();
+                    let found_ty_ = found_ty.node_ref();
+                    let new_r = R::instantiate(found_r.clone(), *x, r);
+                    Ty::new(new_r, found_ty_.clone())
                 }
-            }
+                None => Ty::generic(r, *x),
+            },
             _ => Ty::new(r, self.instantiate_(ty_)),
         }
     }

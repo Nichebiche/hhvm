@@ -21,8 +21,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <set>
-#include <unordered_map>
 
 /*
  * This module implements a code layout strategy for sorting a Vunit's blocks:
@@ -47,7 +45,7 @@ namespace HPHP::jit::layout {
 namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(layout);
+TRACE_SET_MOD(layout)
 
 // Algorithm-specific constants for the ext-tsp model.
 const double kForwardWeightCond = 0.1;

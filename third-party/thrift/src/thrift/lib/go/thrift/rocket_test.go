@@ -23,6 +23,8 @@ import (
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/dummy"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	dummyif "github.com/facebook/fbthrift/thrift/test/go/if/dummy"
+	"github.com/stretchr/testify/require"
 )
 
 // This tests the rocket client against a rocket server.
@@ -32,32 +34,26 @@ func TestRocket(t *testing.T) {
 	errChan := make(chan error)
 	defer close(errChan)
 	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	processor := dummy.NewDummyProcessor(&dummy.DummyHandler{})
+	require.NoError(t, err)
+
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
 	server := NewServer(processor, listener, TransportIDRocket)
 	go func() {
 		errChan <- server.ServeContext(ctx)
 	}()
 	addr := listener.Addr()
 	conn, err := net.Dial(addr.Network(), addr.String())
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
-	}
+	require.NoError(t, err)
+
 	proto, err := newRocketClient(conn, types.ProtocolIDCompact, 0, nil)
-	if err != nil {
-		t.Fatalf("could not create client protocol: %s", err)
-	}
-	client := dummy.NewDummyChannelClient(NewSerialChannel(proto))
+	require.NoError(t, err)
+
+	client := dummyif.NewDummyChannelClient(NewSerialChannel(proto))
 	defer client.Close()
 	result, err := client.Echo(context.TODO(), "hello")
-	if err != nil {
-		t.Fatalf("could not complete call: %v", err)
-	}
-	if result != "hello" {
-		t.Fatalf("expected response to be a hello, got %s", result)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "hello", result)
+
 	cancel()
 	<-errChan
 }

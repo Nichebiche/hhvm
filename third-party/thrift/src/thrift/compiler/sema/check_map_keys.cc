@@ -27,8 +27,12 @@
 namespace apache::thrift::compiler {
 namespace {
 
-diagnostic_level kMismatchLevel = diagnostic_level::warning;
-diagnostic_level kDuplicateLevel = diagnostic_level::warning;
+// When a mapping (struct or map) has duplicate keys, and they have conflicting
+// values, then we report a compiler error.
+static const diagnostic_level kMismatchLevel = diagnostic_level::error;
+// When a mapping has duplicate keys, and they have the same values, or if a set
+// has duplicate keys, then we report a compiler warning.
+static const diagnostic_level kDuplicateLevel = diagnostic_level::warning;
 
 using const_value_kv = std::pair<t_const_value*, t_const_value*>;
 
@@ -69,6 +73,7 @@ std::string to_string(const t_const_value* val) {
     case t_const_value::CV_MAP:
       return to_string(val->get_map());
   }
+  abort();
 }
 
 bool equal_value(const t_const_value* a, const t_const_value* b);
@@ -114,6 +119,7 @@ bool equal_value(const t_const_value* a, const t_const_value* b) {
     case t_const_value::CV_MAP:
       return equal_value(a->get_map(), b->get_map());
   }
+  abort();
 }
 
 bool lt_value(const t_const_value* a, const t_const_value* b);
@@ -160,6 +166,7 @@ bool lt_value(const t_const_value* a, const t_const_value* b) {
     case t_const_value::CV_MAP:
       return lt_value(a->get_map(), b->get_map());
   }
+  abort();
 }
 
 struct const_value_comp {

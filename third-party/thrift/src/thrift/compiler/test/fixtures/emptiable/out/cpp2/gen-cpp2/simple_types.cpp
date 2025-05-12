@@ -89,6 +89,7 @@ void swap([[maybe_unused]] MyStruct& a, [[maybe_unused]] MyStruct& b) {
   using ::std::swap;
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void MyStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -97,6 +98,7 @@ template void MyStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t MyStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t MyStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t MyStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace apache::thrift::test
@@ -227,8 +229,8 @@ void EmptiableStruct::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::apache::thrift::test::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -436,6 +438,7 @@ void swap([[maybe_unused]] EmptiableStruct& a, [[maybe_unused]] EmptiableStruct&
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void EmptiableStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t EmptiableStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t EmptiableStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -444,6 +447,7 @@ template void EmptiableStruct::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t EmptiableStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t EmptiableStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t EmptiableStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -564,8 +568,8 @@ void EmptiableTerseStruct::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::apache::thrift::test::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -580,8 +584,8 @@ void EmptiableTerseStruct::__fbthrift_clear_terse_fields() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::apache::thrift::test::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -632,6 +636,7 @@ void swap([[maybe_unused]] EmptiableTerseStruct& a, [[maybe_unused]] EmptiableTe
   swap(a.__fbthrift_field_struct_field, b.__fbthrift_field_struct_field);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void EmptiableTerseStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t EmptiableTerseStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t EmptiableTerseStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -640,6 +645,7 @@ template void EmptiableTerseStruct::readNoXfer<>(apache::thrift::CompactProtocol
 template uint32_t EmptiableTerseStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t EmptiableTerseStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t EmptiableTerseStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -776,8 +782,8 @@ void NotEmptiableStruct::__fbthrift_clear() {
   this->__fbthrift_field_long_field = ::std::int64_t();
   this->__fbthrift_field_float_field = float();
   this->__fbthrift_field_double_field = double();
-  this->__fbthrift_field_string_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_string_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_binary_field = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_enum_field = ::apache::thrift::test::MyEnum();
   this->__fbthrift_field_list_field.clear();
   this->__fbthrift_field_set_field.clear();
@@ -968,6 +974,7 @@ void swap([[maybe_unused]] NotEmptiableStruct& a, [[maybe_unused]] NotEmptiableS
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void NotEmptiableStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t NotEmptiableStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t NotEmptiableStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -976,6 +983,7 @@ template void NotEmptiableStruct::readNoXfer<>(apache::thrift::CompactProtocolRe
 template uint32_t NotEmptiableStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t NotEmptiableStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t NotEmptiableStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<

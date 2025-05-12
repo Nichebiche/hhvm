@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <folly/SocketAddress.h>
 #include <folly/io/Cursor.h>
@@ -35,7 +35,6 @@
 #include <thrift/lib/cpp2/async/HeaderServerChannel.h>
 #include <thrift/lib/cpp2/async/MessageChannel.h>
 #include <thrift/lib/cpp2/async/RequestCallback.h>
-#include <thrift/lib/cpp2/async/RequestChannel.h>
 #include <thrift/lib/cpp2/async/ResponseChannel.h>
 #include <thrift/lib/cpp2/async/RpcTypes.h>
 
@@ -499,13 +498,15 @@ class HeaderChannelTest
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new Callback(this, true)));
+        RequestClientCallback::Ptr(new Callback(this, true)),
+        /* frameworkMetadata */ nullptr);
     channel0_->sendRequestResponse(
         options,
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new Callback(this, false)));
+        RequestClientCallback::Ptr(new Callback(this, false)),
+        /* frameworkMetadata */ nullptr);
     channel0_->setCloseCallback(nullptr);
   }
 
@@ -577,7 +578,8 @@ class HeaderChannelClosedTest
         "test",
         makeTestSerializedRequest(42),
         std::make_unique<THeader>(),
-        RequestClientCallback::Ptr(new Callback(this)));
+        RequestClientCallback::Ptr(new Callback(this)),
+        /* frameworkMetadata */ nullptr);
   }
 
   void postLoop() override {
@@ -643,13 +645,15 @@ class InOrderTest
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new Callback(this)));
+        RequestClientCallback::Ptr(new Callback(this)),
+        /* frameworkMetadata */ nullptr);
     channel0_->sendRequestResponse(
         options,
         "test",
         makeTestSerializedRequest(len_ + 1),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new Callback(this)));
+        RequestClientCallback::Ptr(new Callback(this)),
+        /* frameworkMetadata */ nullptr);
   }
 
   void postLoop() override {
@@ -725,13 +729,15 @@ class BadSeqIdTest
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new Callback(this, true)));
+        RequestClientCallback::Ptr(new Callback(this, true)),
+        /* frameworkMetadata */ nullptr);
     channel0_->sendRequestResponse(
         options,
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new Callback(this, false)));
+        RequestClientCallback::Ptr(new Callback(this, false)),
+        /* frameworkMetadata */ nullptr);
   }
 
   void postLoop() override {
@@ -778,13 +784,15 @@ class TimeoutTest
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new TestRequestCallback()));
+        RequestClientCallback::Ptr(new TestRequestCallback()),
+        /* frameworkMetadata */ nullptr);
     channel0_->sendRequestResponse(
         options,
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new TestRequestCallback()));
+        RequestClientCallback::Ptr(new TestRequestCallback()),
+        /* frameworkMetadata */ nullptr);
   }
 
   void postLoop() override {
@@ -853,7 +861,8 @@ class OptionsTimeoutTest
         "test",
         makeTestSerializedRequest(len_),
         std::unique_ptr<THeader>(new THeader),
-        RequestClientCallback::Ptr(new TestRequestCallback()));
+        RequestClientCallback::Ptr(new TestRequestCallback()),
+        /* frameworkMetadata */ nullptr);
     // Verify the timeout worked within 10ms
     channel0_->getEventBase()->tryRunAfterDelay(
         [&]() { EXPECT_EQ(replyError_, 1); }, 35);
@@ -866,7 +875,8 @@ class OptionsTimeoutTest
               "test",
               makeTestSerializedRequest(len_),
               std::unique_ptr<THeader>(new THeader),
-              RequestClientCallback::Ptr(new TestRequestCallback()));
+              RequestClientCallback::Ptr(new TestRequestCallback()),
+              /* frameworkMetadata */ nullptr);
         },
         20);
   }
@@ -1059,7 +1069,15 @@ class ClientCloseOnErrorTest
     if (forcePendingSend_) {
       // make request size big enough to not fit into kernel buffer
       getsockopt(getFd1(), SOL_SOCKET, SO_RCVBUF, &reqSize_, &ss);
-      reqSize_++;
+
+      if (folly::kIsApple) {
+        // On macOS, the kernel does not fail the request if the size slightly
+        // exceeds the kernel buffer. Significantly increase the
+        // size to ensure the intended behavior is triggered.
+        reqSize_ *= 2;
+      } else {
+        reqSize_++;
+      }
     }
 
     channel1_->setCallback(this);
@@ -1069,13 +1087,15 @@ class ClientCloseOnErrorTest
         "test",
         makeTestSerializedRequest(10),
         std::make_unique<THeader>(),
-        RequestClientCallback::Ptr(new Callback(this)));
+        RequestClientCallback::Ptr(new Callback(this)),
+        /* frameworkMetadata */ nullptr);
     channel0_->sendRequestResponse(
         options,
         "test",
         makeTestSerializedRequest(reqSize_),
         std::make_unique<THeader>(),
-        RequestClientCallback::Ptr(new Callback(this)));
+        RequestClientCallback::Ptr(new Callback(this)),
+        /* frameworkMetadata */ nullptr);
   }
 
   void postLoop() override {
@@ -1176,8 +1196,8 @@ class DestroyAsyncTransport : public folly::AsyncTransport {
 
 class DestroyRecvCallback : public MessageChannel::RecvCallback {
  public:
-  typedef std::unique_ptr<Cpp2Channel, folly::DelayedDestruction::Destructor>
-      ChannelPointer;
+  using ChannelPointer =
+      std::unique_ptr<Cpp2Channel, folly::DelayedDestruction::Destructor>;
   explicit DestroyRecvCallback(ChannelPointer&& channel)
       : channel_(std::move(channel)), invocations_(0) {
     channel_->setReceiveCallback(this);

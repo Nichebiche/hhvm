@@ -27,6 +27,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <typeindex>
 #include <typeinfo>
 #include <unordered_map>
 #include <utility>
@@ -42,6 +43,8 @@
 
 #include <fmt/core.h>
 
+#include <boost/core/demangle.hpp>
+
 namespace whisker {
 
 // Whisker supports a small set of types.
@@ -54,8 +57,6 @@ namespace whisker {
 //   * array   — An ordered list of `whisker::object`s (recursive)
 //   * map     — An unordered list of key-value pairs, where the key is a valid
 //               identifier, and the value is a `whisker::object` (recursive)
-//   * native_object —
-//               User-defined (C++) type with lazily evaluated properties.
 //   * native_function —
 //               User-defined (C++) function that operates on `whisker::object`.
 //   * native_handle —
@@ -68,19 +69,6 @@ using boolean = bool;
 using null = std::monostate;
 
 class object;
-/**
- * There are two main reasons why we are choosing std::map (rather than
- * std::unordered_map):
- *   1. Before C++20, std::unordered_map does not support heterogenous lookups.
- *   2. *Technically* neither std::map or std::unordered_map are supposed to be
- *      instantiate with an incomplete type. However, the standard library
- *      implementations we use do support it. We know this because mstch has
- *      been doing this for years in production at this point.
- *      std::unordered_map actually breaks for incomplete types in practice.
- */
-using map = std::map<std::string, object, std::less<>>;
-using array = std::vector<object>;
-
 /**
  * Options for whisker::to_string() and whisker::print_to().
  */
@@ -100,8 +88,6 @@ struct object_print_options {
    *     truncated.
    *   - For whisker::array, the array indices are printed by elements are
    *     truncated.
-   *   - For whisker::native_object, the behavior is implementation-defined. See
-   *     whisker::native_object::print_to().
    *
    * For all other whisker::object types, no truncation occurs because they do
    * not incur additional depth.
@@ -113,165 +99,72 @@ struct object_print_options {
 };
 
 /**
- * A native_object is the most powerful type in Whisker. Its properties and
- * behavior are defined by highly customizable C++ code.
+ * An exception that can be thrown to indicate a fatal error in property
+ * lookup or function evaluation.
  *
- * A native_object can work as a "map":
- *   as_map_like() can be implemented to resolve a property names using
- *   arbitrary C++ code, which Whisker's renderer will perform lookups on.
- *
- * A native_object can work as an "array":
- *   as_array_like() can be implemented to return a sequence of objects, which
- *   Whisker's renderer will iterate over like an array.
- *
- * A native_object can work as both "map" and "array" at the same time!
+ * This exception is intended to be thrown for any failed expression
+ * evaluation. For example:
+ *   - failed property lookups (map::lookup_property)
+ *   - failed array lookups (array::at)
+ *   - failed function calls (native_function::invoke)
  */
-class native_object {
+struct eval_error : std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
+
+/**
+ * A class that allows map-like named property access.
+ */
+class map {
  public:
-  using ptr = std::shared_ptr<native_object>;
-  virtual ~native_object() = default;
+  using ptr = managed_ptr<map>;
+  /**
+   * There are two main reasons why we are choosing std::map (rather than
+   * std::unordered_map):
+   *   1. Before C++20, std::unordered_map does not support heterogenous
+   *      lookups.
+   *   2. *Technically* neither std::map or std::unordered_map are supposed to
+   *      be instantiated with an incomplete type. However, the standard library
+   *      implementations we use do support it. We know this because mstch has
+   *      been doing this for years in production at this point.
+   *      std::unordered_map actually breaks for incomplete types in practice.
+   */
+  using raw = std::map<std::string, object, std::less<>>;
+  /**
+   * Creates a map from a raw C++ map.
+   */
+  static ptr of(raw);
+
+  virtual ~map() = default;
+  /**
+   * Searches for a property on an object whose name matches the provided
+   * identifier, returning a non-null pointer if present.
+   *
+   * Preconditions:
+   *   - The provided string is a valid Whisker identifier
+   *
+   * Throws:
+   *   - `eval_error` if the property lookup fails in an irrecoverable way.
+   *     Failing to find a property matching the identifier is not a fatal
+   *     error. In that case, this function returns nullptr.
+   *     This function should only throw if the identifier is recognized but
+   *     evaluating its value failed.
+   */
+  virtual std::optional<object> lookup_property(
+      std::string_view identifier) const = 0;
 
   /**
-   * A class that allows "map-like" named property access over an underlying
-   * C++ object.
+   * Returns an ordered set of finitely enumerable property names of this map
+   * object.
    *
-   * This interface is strictly more capable than the built-in map. For example:
-   *   - Property names do not need to be finitely enumerable.
-   *   - Property values can be lazily computed at lookup time.
+   * If property names are not enumerable (i.e. dynamically generated), then
+   * this returns the empty optional.
+   *
+   * For each name returned in this set, lookup_property must not return
+   * nullptr.
    */
-  class map_like {
-   public:
-    using ptr = managed_ptr<map_like>;
-    virtual ~map_like() = default;
-    /**
-     * Searches for a property on an object whose name matches the provided
-     * identifier, returning a non-null pointer if present.
-     *
-     * The returned object is by value because it may outlive this native_object
-     * instance. For most whisker::object types, this is fine because they are
-     * self-contained.
-     *
-     * If this property lookup returns a native_object, `foo`, and that object
-     * depends on `this`, then `foo` should keep a `shared_ptr` to `this` to
-     * ensure that `this` outlives `foo`. The Whisker runtime does not provide
-     * any lifetime guarantees for `this`.
-     *
-     * Preconditions:
-     *   - The provided string is a valid Whisker identifier
-     */
-    virtual managed_ptr<object> lookup_property(
-        std::string_view identifier) const = 0;
-
-    /**
-     * Returns an ordered set of finitely enumerable property names of this
-     * map-like object.
-     *
-     * If property names are not enumerable (i.e. dynamically generated), then
-     * this returns the empty optional.
-     *
-     * For each name returned in this set, lookup_property must not return
-     * nullptr.
-     */
-    virtual std::optional<std::set<std::string>> keys() const {
-      return std::nullopt;
-    }
-
-   protected:
-    /**
-     * A default implementation of whisker::print_to for native object
-     * subclasses of map_like to use.
-     *
-     * For the default implementation to work, property names must be explicitly
-     * enumerated.
-     *
-     * The provided name allows the caller to expose type information.
-     */
-    void default_print_to(
-        std::string_view name,
-        const std::set<std::string>& property_names,
-        tree_printer::scope,
-        const object_print_options&) const;
-  };
-  /**
-   * Returns an implementation of map_list if this object supports map-like
-   * property lookups. Otherwise, returns nullptr.
-   *
-   * When this function returns a non-null pointer, the returned object can be
-   * used in Whisker property lookups, such as section blocks.
-   *
-   * This function returns a shared_ptr so that the returned object can be this
-   * object itself (which is expected to be stored as a native_object::ptr).
-   * Doing so prevents an extra heap allocation in favor of an atomic increment.
-   *
-   *     class my_object : public native_object,
-   *                       public native_object::map_like,
-   *                       public std::enable_shared_from_this<my_object> {
-   *      public:
-   *       native_object::map_like:ptr as_map_like() const override {
-   *         return shared_from_this();
-   *       }
-   *
-   *       // Implement map-like functions...
-   *     };
-   */
-  virtual native_object::map_like::ptr as_map_like() const { return nullptr; }
-
-  /**
-   * A class that allows "array-like" random access over an underlying sequence
-   * of objects.
-   */
-  class array_like {
-   public:
-    using ptr = managed_ptr<array_like>;
-    virtual ~array_like() = default;
-    /**
-     * Returns the number of elements in the sequence.
-     */
-    virtual std::size_t size() const = 0;
-    /**
-     * Returns the object at the specified index within the sequence.
-     *
-     * Preconditions:
-     *   - index < size()
-     */
-    virtual managed_ptr<object> at(std::size_t index) const = 0;
-
-   protected:
-    /**
-     * A default implementation of whisker::print_to for native object
-     * subclasses of array_like to use.
-     *
-     * The provided name allows the caller to expose type information.
-     */
-    void default_print_to(
-        std::string_view name,
-        tree_printer::scope,
-        const object_print_options&) const;
-  };
-  /**
-   * Returns an implementation of array_like if this object supports array-like
-   * iteration. Otherwise, returns nullptr.
-   *
-   * When this function returns a non-null pointer, the returned object can be
-   * used in Whisker template looping constructs, such as section blocks.
-   *
-   * This function returns a shared_ptr so that the returned object can be this
-   * object itself (which is expected to be stored as a native_object::ptr).
-   * Doing so prevents an extra heap allocation in favor of an atomic increment.
-   *
-   *     class my_object : public native_object,
-   *                       public native_object::array_like,
-   *                       public std::enable_shared_from_this<my_object> {
-   *      public:
-   *       native_object::array_like::ptr as_array_like() const override {
-   *         return shared_from_this();
-   *       }
-   *
-   *       // Implement array-like functions...
-   *     };
-   */
-  virtual native_object::array_like::ptr as_array_like() const {
-    return nullptr;
+  virtual std::optional<std::set<std::string>> keys() const {
+    return std::nullopt;
   }
 
   /**
@@ -282,7 +175,8 @@ class native_object {
    * printing as well as encodes the location in an existing print tree where
    * this object should be inline. See its documentation for more details.
    */
-  virtual void print_to(tree_printer::scope, const object_print_options&) const;
+  virtual void print_to(
+      tree_printer::scope&, const object_print_options&) const;
 
   /**
    * Produces a textual representation of the data type represented by this
@@ -291,16 +185,93 @@ class native_object {
   virtual std::string describe_type() const;
 
   /**
-   * Determines if this native_object compares equal to the other object.
+   * Determines if two maps have the same properties.
    *
-   * This functions returns true iff:
-   *   - `*this` and `other` are the same object.
-   *   - both objects are native_object::array_like and their corresponding
-   *     elements are equal.
-   *   - both objects are native_object::map_like, they have enumerable keys,
-   *     and all key-value pairs are equal between them.
+   * This functions returns true if:
+   *   - `lhs` and `rhs` are the same object. Or,
+   *   - both maps have enumerable keys, and all key-value pairs are equal
+   *     between them.
    */
-  bool operator==(const native_object& other) const;
+  friend bool operator==(const map& lhs, const map& rhs);
+
+ protected:
+  /**
+   * A default implementation of whisker::print_to for subclasses to use.
+   *
+   * For the default implementation to work, property names must be explicitly
+   * enumerated.
+   *
+   * The provided name allows the caller to expose type information.
+   */
+  void default_print_to(
+      std::string_view name,
+      const std::set<std::string>& property_names,
+      tree_printer::scope&,
+      const object_print_options&) const;
+};
+
+/**
+ * A class that allows array-like random access over a sequence of objects.
+ */
+class array {
+ public:
+  using ptr = managed_ptr<array>;
+  using raw = std::vector<object>;
+  /**
+   * Creates a map from a raw C++ map.
+   */
+  static ptr of(raw);
+
+  virtual ~array() = default;
+  /**
+   * Returns the number of elements in the sequence.
+   */
+  virtual std::size_t size() const = 0;
+  /**
+   * Returns the object at the specified index within the sequence.
+   *
+   * Preconditions:
+   *   - index < size()
+   */
+  virtual object at(std::size_t index) const = 0;
+
+  /**
+   * Creates a tree-like string representation of this object, primarily for
+   * debugging and diagnostic purposes.
+   *
+   * The provided tree_printer::scope object abstracts away the details of tree
+   * printing as well as encodes the location in an existing print tree where
+   * this object should be inline. See its documentation for more details.
+   */
+  virtual void print_to(
+      tree_printer::scope&, const object_print_options&) const;
+
+  /**
+   * Produces a textual representation of the data type represented by this
+   * object, primarily for debugging and diagnostic purposes.
+   */
+  virtual std::string describe_type() const;
+
+  /**
+   * Determines if two arrays have the same elements.
+   *
+   * This functions returns true if:
+   *   - `lhs` and `rhs` are the same object. Or,
+   *   - both arrays have the same size and their corresponding elements are
+   *     equal.
+   */
+  friend bool operator==(const array& lhs, const array& rhs);
+
+ protected:
+  /**
+   * A default implementation of whisker::print_to for subclasses to use.
+   *
+   * The provided name allows the caller to expose type information.
+   */
+  void default_print_to(
+      std::string_view name,
+      tree_printer::scope&,
+      const object_print_options&) const;
 };
 
 /**
@@ -319,6 +290,15 @@ class native_function {
   using ptr = std::shared_ptr<native_function>;
   virtual ~native_function() = default;
 
+  /**
+   * A class that provides information about the executing function to
+   * invoke(...).
+   *
+   * This includes:
+   *   - Access to positional and named arguments to the function call
+   *   - The ability to output diagnostics
+   *   - The source location of the function call
+   */
   class context;
   /**
    * The implementation-defined behavior for this function.
@@ -331,70 +311,18 @@ class native_function {
    * Postconditions:
    *  - The returned object is non-null.
    */
-  virtual managed_ptr<object> invoke(context) = 0;
-
-  /**
-   * An exception that can be thrown to indicate a fatal error in function
-   * evaluation. See `context::error(...)` for more details.
-   */
-  struct fatal_error : std::runtime_error {
-    using std::runtime_error::runtime_error;
-  };
+  virtual object invoke(context) = 0;
 
   /**
    * An ordered list of positional argument values. The position is equal to
    * the index in this vector.
    */
-  using positional_arguments_t = std::vector<std::shared_ptr<const object>>;
+  using positional_arguments_t = std::vector<object>;
   /**
    * A map of argument names to their values. The names are guaranteed to be a
    * valid Whisker identifier.
    */
-  using named_arguments_t =
-      std::unordered_map<std::string_view, std::shared_ptr<const object>>;
-
-  /**
-   * A class that provides information about the executing function to
-   * invoke(...).
-   *
-   * This includes:
-   *   - Access to positional and named arguments to the function call
-   *   - The ability to output diagnostics
-   *   - The source location of the function call
-   */
-  class context {
-   public:
-    context(
-        source_range loc,
-        diagnostics_engine& diags,
-        positional_arguments_t&& positional_args,
-        named_arguments_t&& named_args)
-        : loc_(std::move(loc)),
-          diags_(diags),
-          positional_args_(std::move(positional_args)),
-          named_args_(std::move(named_args)) {}
-
-    context(const context&) = delete;
-    context& operator=(const context&) = delete;
-    context(context&&) = default;
-    context& operator=(context&&) = default;
-    ~context() noexcept = default;
-
-    source_range location() const noexcept { return loc_; }
-    diagnostics_engine& diagnostics() const noexcept { return diags_; }
-    const positional_arguments_t& positional_arguments() const noexcept {
-      return positional_args_;
-    }
-    const named_arguments_t& named_arguments() const noexcept {
-      return named_args_;
-    }
-
-    source_range loc_;
-    std::reference_wrapper<diagnostics_engine> diags_;
-    positional_arguments_t positional_args_;
-    named_arguments_t named_args_;
-  };
-  static_assert(std::is_move_constructible_v<context>);
+  using named_arguments_t = std::unordered_map<std::string_view, object>;
 
   /**
    * Produces a textual representation of the function represented by this
@@ -405,41 +333,80 @@ class native_function {
    * Creates a string representation to described this function, primarily for
    * debugging and diagnostic purposes.
    */
-  virtual void print_to(tree_printer::scope, const object_print_options&) const;
+  virtual void print_to(
+      tree_printer::scope&, const object_print_options&) const;
 };
 
 /**
  * A native_handle represents an opaque reference to any native (C++) data type.
+ * It always contains a non-null reference.
  *
- * While whisker templates do not "understand" these types, it can pass around
- * the handle like any other data type (such as iterating with each-loops). To
- * extract usable information out of the handle, it can be passed as an argument
- * into a native_function (which *can* understand the type).
- *
- * native_handle and native_function together enable the "opaque pointer"
- * pattern, commonly used in languages like C:
- *   https://en.wikipedia.org/wiki/Opaque_pointer#C
- *
- * native_handle always contains a non-null reference.
+ * There are two ways to use these types in Whisker templates:
+ *   - Pass them as arguments to native_function which can extract the
+ *     underlying C++ type and corresponding data. This resembles the "opaque
+ *     pointer" pattern, commonly used in languages like C:
+ *       https://en.wikipedia.org/wiki/Opaque_pointer#C
+ *   - Access properties that are defined by the attached prototype (see
+ *     below).
  */
 template <typename T = void>
 class native_handle;
+
+/**
+ * A "prototype" for a native_handle that can be used for prototype-based
+ * programming:
+ *   https://en.wikipedia.org/wiki/Prototype-based_programming
+ *
+ * When property access is performed on a native_handle, the lookup is
+ * dispatched to the prototype. That is, for the lookup `foo.bar`, if `foo` is a
+ * `native_handle`, then the lookup is resolved by calling
+ * `find_descriptor("bar")` on the prototype of `foo`.
+ *
+ * A prototype may have a parent prototype upon which lookups should fall back
+ * to if there is no descriptor for a particular name in this instance. This
+ * forms a "chain of prototypes", which can be used to emulate an inheritance
+ * hierarchy.
+ *
+ * Strictly speaking, a prototype is should be a whisker::object because the
+ * definition of prototype-based programming requires "reusing existing
+ * objects".
+ * The implementation here *could* be changed to use whisker::object, but we
+ * intentionally choose to use a separate type that is more constrained.
+ * The main advantages of this decision are:
+ *   - We achieve type-safety in C++ (native_handle<T> only allows
+ *     `prototype<T>`).
+ *   - We avoid unhelpful states, such as a `string` or `i64` instance being
+ *     used as a prototype. This also reduces implementation complexity.
+ */
+template <typename T = void>
+class prototype;
+/**
+ * Same as prototype<T>::ptr but avoids dependent template type. This
+ * allows template argument deduction.
+ */
+template <typename Self = void>
+using prototype_ptr = std::shared_ptr<const prototype<Self>>;
 
 namespace detail {
 
 template <typename T>
 class native_handle_base {
  public:
-  explicit native_handle_base(managed_ptr<T> ref) noexcept
-      : ref_(std::move(ref)) {
+  explicit native_handle_base(
+      managed_ptr<T> ref, prototype_ptr<> proto) noexcept
+      : ref_(std::move(ref)), proto_(std::move(proto)) {
     assert(ref_ != nullptr);
   }
 
   const managed_ptr<T>& ptr() const& { return ref_; }
   managed_ptr<T>&& ptr() && { return std::move(ref_); }
 
+  const prototype_ptr<>& proto() const& { return proto_; }
+  prototype_ptr<>&& proto() && { return std::move(proto_); }
+
  private:
   managed_ptr<T> ref_;
+  prototype_ptr<> proto_;
 };
 
 std::string describe_native_handle_for_type(const std::type_info&);
@@ -463,9 +430,16 @@ class native_handle<void> final : private detail::native_handle_base<void> {
 
   template <typename T>
   explicit native_handle(managed_ptr<T> ref) noexcept
-      : base(managed_ptr<void>(ref, static_cast<const void*>(ref.get()))),
+      : native_handle(std::move(ref), nullptr /* prototype */) {}
+
+  template <typename T>
+  explicit native_handle(managed_ptr<T> ref, prototype_ptr<> proto) noexcept
+      : base(
+            managed_ptr<void>(ref, static_cast<const void*>(ref.get())),
+            std::move(proto)),
         type_(typeid(T)) {}
 
+  using base::proto;
   using base::ptr;
 
   /**
@@ -487,7 +461,8 @@ class native_handle<void> final : private detail::native_handle_base<void> {
   template <typename T>
   std::optional<native_handle<T>> try_as() const noexcept {
     if (type() == typeid(T)) {
-      return native_handle<T>(std::static_pointer_cast<const T>(ptr()));
+      return native_handle<T>(
+          std::static_pointer_cast<const T>(ptr()), proto());
     }
     return std::nullopt;
   }
@@ -523,9 +498,10 @@ class native_handle final : private detail::native_handle_base<T> {
   using base::ptr;
   const T& operator*() const noexcept { return *ptr(); }
   const T* operator->() const noexcept { return ptr().get(); }
+  using base::proto;
 
   /* implicit */ operator native_handle<void>() const noexcept {
-    return native_handle<void>(ptr());
+    return native_handle<void>(ptr(), proto());
   }
 
   /**
@@ -539,6 +515,8 @@ class native_handle final : private detail::native_handle_base<T> {
 
 template <typename T>
 native_handle(managed_ptr<T>) -> native_handle<T>;
+template <typename T>
+native_handle(managed_ptr<T>, prototype_ptr<>) -> native_handle<T>;
 
 /**
  * Two native_handle objects are equal iff they point to the same data.
@@ -567,37 +545,19 @@ inline bool operator!=(
 }
 
 namespace detail {
-// Value equality between all arrays. array_like::ptr may be nullptr.
-bool array_eq(const array&, const array&);
-bool array_eq(const array&, const native_object::array_like::ptr&);
-bool array_eq(const native_object::array_like::ptr& lhs, const array&);
-bool array_eq(
-    const native_object::array_like::ptr&,
-    const native_object::array_like::ptr&);
-
-// Value equality between all maps. map_like::ptr may be nullptr.
-bool map_eq(const map&, const map&);
-bool map_eq(const map&, const native_object::map_like::ptr&);
-bool map_eq(const native_object::map_like::ptr& lhs, const map&);
-bool map_eq(
-    const native_object::map_like::ptr&, const native_object::map_like::ptr&);
-} // namespace detail
-
-namespace detail {
 // This only exists to form a kind-of recursive std::variant with the help of
 // forward declared types.
-template <typename Self>
 using object_base = std::variant<
     null,
     i64,
     f64,
     string,
     boolean,
-    native_object::ptr,
     native_function::ptr,
     native_handle<>,
-    std::vector<Self>,
-    std::map<std::string, Self, std::less<>>>;
+    array::ptr,
+    map::ptr,
+    managed_ptr<object> /* proxied */>;
 } // namespace detail
 
 /**
@@ -622,21 +582,23 @@ using object_base = std::variant<
  * or move-assign — the moved from whisker::object is left in a valid state
  * whose value is whisker::null.
  */
-class object final : private detail::object_base<object> {
+class object final : private detail::object_base {
+ public:
+  using ptr = managed_ptr<object>;
+
  private:
-  using base = detail::object_base<object>;
+  using base = detail::object_base;
   base& as_variant() & { return *this; }
   const base& as_variant() const& { return *this; }
 
-  template <typename T>
-  bool holds_alternative() const noexcept {
-    assert(!valueless_by_exception());
-    return std::holds_alternative<T>(*this);
-  }
+  // If this object contains the ptr variant, it behaves exactly like the target
+  // object of that ptr.
+  bool is_proxy() const { return std::holds_alternative<ptr>(*this); }
+  const ptr& as_proxy() const { return std::get<ptr>(*this); }
 
   // This function moves out the base variant object which would normally leave
   // the object in a partially moved-from state. However, moving a variant
-  // performs a move on the contained alternative, meaniong that assigning to
+  // performs a move on the contained alternative, meaning that assigning to
   // the variant after a move is safe. We have this steal_variant() function
   // hide this detail so we don't trip clang-tidy use-after-move linter.
   base&& steal_variant() & { return std::move(*this); }
@@ -644,34 +606,71 @@ class object final : private detail::object_base<object> {
  public:
   template <typename T>
   bool is() const noexcept {
+    static_assert(
+        !std::is_same_v<T, ptr>,
+        "The proxied ptr should never be exposed via public API");
     assert(!valueless_by_exception());
+    if (is_proxy()) {
+      return as_proxy()->is<T>();
+    }
     return std::holds_alternative<T>(*this);
   }
 
   template <typename T>
-  decltype(auto) as() const {
+  const T& as() const {
+    static_assert(
+        !std::is_same_v<T, ptr>,
+        "The proxied ptr should never be exposed via public API");
     assert(!valueless_by_exception());
+    if (is_proxy()) {
+      return as_proxy()->as<T>();
+    }
     return std::get<T>(*this);
   }
 
-  using ptr = managed_ptr<object>;
-
   /* implicit */ object(null = {}) : base(std::in_place_type<null>) {}
-  explicit object(boolean value) : base(bool(value)) {}
+
+  /**
+   * Pointers have the nasty behavior of being implicitly convertible to bool.
+   */
+  template <
+      typename U = boolean,
+      std::enable_if_t<std::is_same_v<U, boolean>>* = nullptr>
+  explicit object(U value) : base(value) {}
+
   explicit object(i64 value) : base(value) {}
   explicit object(f64 value) : base(value) {}
-  explicit object(string&& value) : base(std::move(value)) {}
-  explicit object(native_object::ptr&& value) : base(std::move(value)) {
-    assert(as_native_object() != nullptr);
-  }
-  explicit object(native_function::ptr&& value) : base(std::move(value)) {
+  explicit object(string value) : base(std::move(value)) {}
+  explicit object(native_function::ptr value) : base(std::move(value)) {
     assert(as_native_function() != nullptr);
   }
-  explicit object(native_handle<>&& value) : base(std::move(value)) {
+  explicit object(native_handle<> value) : base(std::move(value)) {
     assert(as_native_handle().ptr() != nullptr);
   }
-  explicit object(map&& value) : base(std::move(value)) {}
-  explicit object(array&& value) : base(std::move(value)) {}
+  explicit object(map::ptr value) : base(std::move(value)) {
+    assert(as_map() != nullptr);
+  }
+  explicit object(array::ptr value) : base(std::move(value)) {
+    assert(as_array() != nullptr);
+  }
+
+  /**
+   * Creates a "proxy" object that behaves the same as the provided object. This
+   * function is useful, for example, for storing an owning reference to
+   * existing objects in an array or map without deep-copying.
+   *
+   * This object will keep the source object alive.
+   *
+   * Postconditions:
+   *   - *this == *object
+   */
+  /* implicit */ object(ptr source) : base(std::move(source)) {
+    assert(as_proxy() != nullptr);
+  }
+
+  /* implicit */ object(std::nullptr_t) = delete;
+
+  ~object() noexcept = default;
 
   object(const object&) = default;
   object& operator=(const object&) = default;
@@ -694,50 +693,68 @@ class object final : private detail::object_base<object> {
 
   template <typename... Visitors>
   decltype(auto) visit(Visitors&&... visitors) const {
-    return detail::variant_match(
-        as_variant(), std::forward<Visitors>(visitors)...);
+    // Remove any layers of proxying since we do not expose it to callers.
+    const object* resolved = this;
+    while (resolved->is_proxy()) {
+      resolved = resolved->as_proxy().get();
+    }
+
+    auto overloaded = detail::overload(std::forward<Visitors>(visitors)...);
+    // This macro could be implemented using variant_match + overload, but that
+    // would require two levels of indirection. That leads to some really ugly
+    // template-related compiler errors.
+#define WHISKER_OBJECT_TRY_VISIT(type)                 \
+  do {                                                 \
+    if (const auto* v = std::get_if<type>(resolved)) { \
+      return overloaded(*v);                           \
+    }                                                  \
+  } while (false)
+    WHISKER_OBJECT_TRY_VISIT(null);
+    WHISKER_OBJECT_TRY_VISIT(i64);
+    WHISKER_OBJECT_TRY_VISIT(f64);
+    WHISKER_OBJECT_TRY_VISIT(string);
+    WHISKER_OBJECT_TRY_VISIT(boolean);
+    WHISKER_OBJECT_TRY_VISIT(native_function::ptr);
+    WHISKER_OBJECT_TRY_VISIT(native_handle<>);
+    WHISKER_OBJECT_TRY_VISIT(map::ptr);
+    WHISKER_OBJECT_TRY_VISIT(array::ptr);
+#undef WHISKER_OBJECT_TRY_VISIT
+    assert(!static_cast<bool>(
+        "There is a missed variant alternative in object::visit() implementation"));
+    throw std::bad_variant_access();
   }
 
   const i64& as_i64() const { return as<i64>(); }
-  bool is_i64() const noexcept { return holds_alternative<i64>(); }
+  bool is_i64() const noexcept { return is<i64>(); }
 
   const f64& as_f64() const { return as<f64>(); }
-  bool is_f64() const noexcept { return holds_alternative<f64>(); }
+  bool is_f64() const noexcept { return is<f64>(); }
 
   const string& as_string() const { return as<string>(); }
-  bool is_string() const noexcept { return holds_alternative<string>(); }
+  bool is_string() const noexcept { return is<string>(); }
 
   const boolean& as_boolean() const { return as<boolean>(); }
-  bool is_boolean() const noexcept { return holds_alternative<boolean>(); }
+  bool is_boolean() const noexcept { return is<boolean>(); }
 
-  bool is_null() const noexcept { return holds_alternative<null>(); }
-
-  const native_object::ptr& as_native_object() const {
-    return as<native_object::ptr>();
-  }
-  bool is_native_object() const noexcept {
-    return holds_alternative<native_object::ptr>();
-  }
+  bool is_null() const noexcept { return is<null>(); }
 
   const native_function::ptr& as_native_function() const {
     return as<native_function::ptr>();
   }
   bool is_native_function() const noexcept {
-    return holds_alternative<native_function::ptr>();
+    return is<native_function::ptr>();
   }
 
   const native_handle<>& as_native_handle() const {
     return as<native_handle<>>();
   }
-  bool is_native_handle() const noexcept {
-    return holds_alternative<native_handle<>>();
-  }
+  bool is_native_handle() const noexcept { return is<native_handle<>>(); }
 
-  const array& as_array() const { return as<array>(); }
-  bool is_array() const noexcept { return holds_alternative<array>(); }
+  const array::ptr& as_array() const { return as<array::ptr>(); }
+  bool is_array() const noexcept { return is<array::ptr>(); }
 
-  const map& as_map() const { return as<map>(); }
-  bool is_map() const noexcept { return holds_alternative<map>(); }
+  const map::ptr& as_map() const { return as<map::ptr>(); }
+  bool is_map() const noexcept { return is<map::ptr>(); }
 
   friend bool operator==(const object& lhs, null) noexcept {
     return lhs.is_null();
@@ -787,27 +804,6 @@ class object final : private detail::object_base<object> {
     return rhs == lhs;
   }
 
-  friend bool operator==(
-      const object& lhs, const native_object::ptr& rhs) noexcept {
-    if (rhs == nullptr) {
-      return false;
-    }
-    if (lhs.is_native_object()) {
-      return *lhs.as_native_object() == *rhs;
-    }
-    if (lhs.is_array()) {
-      return detail::array_eq(lhs.as_array(), rhs->as_array_like());
-    }
-    if (lhs.is_map()) {
-      return detail::map_eq(lhs.as_map(), rhs->as_map_like());
-    }
-    return false;
-  }
-  friend bool operator==(
-      const native_object::ptr& lhs, const object& rhs) noexcept {
-    return rhs == lhs;
-  }
-  // whisker::object is not allowed to have a nullptr native_object
   friend bool operator==(const object&, std::nullptr_t) = delete;
   friend bool operator==(std::nullptr_t, const object&) = delete;
 
@@ -830,29 +826,23 @@ class object final : private detail::object_base<object> {
     return rhs == lhs;
   }
 
-  friend bool operator==(const object& lhs, const array& rhs) noexcept {
-    if (lhs.is_array()) {
-      return lhs.as_array() == rhs;
-    }
-    if (lhs.is_native_object()) {
-      return detail::array_eq(lhs.as_native_object()->as_array_like(), rhs);
+  friend bool operator==(const object& lhs, const array::ptr& rhs) noexcept {
+    if (lhs.is_array() && rhs != nullptr) {
+      return *lhs.as_array() == *rhs;
     }
     return false;
   }
-  friend bool operator==(const array& lhs, const object& rhs) noexcept {
+  friend bool operator==(const array::ptr& lhs, const object& rhs) noexcept {
     return rhs == lhs;
   }
 
-  friend bool operator==(const object& lhs, const map& rhs) noexcept {
-    if (lhs.is_map()) {
-      return lhs.as_map() == rhs;
-    }
-    if (lhs.is_native_object()) {
-      return detail::map_eq(lhs.as_native_object()->as_map_like(), rhs);
+  friend bool operator==(const object& lhs, const map::ptr& rhs) noexcept {
+    if (lhs.is_map() && rhs != nullptr) {
+      return *lhs.as_map() == *rhs;
     }
     return false;
   }
-  friend bool operator==(const map& lhs, const object& rhs) noexcept {
+  friend bool operator==(const map::ptr& lhs, const object& rhs) noexcept {
     return rhs == lhs;
   }
 
@@ -904,15 +894,6 @@ class object final : private detail::object_base<object> {
     return !(lhs == rhs);
   }
 
-  friend bool operator!=(
-      const object& lhs, const native_object::ptr& rhs) noexcept {
-    return !(lhs == rhs);
-  }
-  friend bool operator!=(
-      const native_object::ptr& lhs, const object& rhs) noexcept {
-    return !(lhs == rhs);
-  }
-  // whisker::object is not allowed to have a nullptr native_object
   friend bool operator!=(const object&, std::nullptr_t) = delete;
   friend bool operator!=(std::nullptr_t, const object&) = delete;
 
@@ -934,17 +915,17 @@ class object final : private detail::object_base<object> {
     return !(lhs == rhs);
   }
 
-  friend bool operator!=(const object& lhs, const array& rhs) noexcept {
+  friend bool operator!=(const object& lhs, const array::ptr& rhs) noexcept {
     return !(lhs == rhs);
   }
-  friend bool operator!=(const array& lhs, const object& rhs) noexcept {
+  friend bool operator!=(const array::ptr& lhs, const object& rhs) noexcept {
     return !(lhs == rhs);
   }
 
-  friend bool operator!=(const object& lhs, const map& rhs) noexcept {
+  friend bool operator!=(const object& lhs, const map::ptr& rhs) noexcept {
     return !(lhs == rhs);
   }
-  friend bool operator!=(const map& lhs, const object& rhs) noexcept {
+  friend bool operator!=(const map::ptr& lhs, const object& rhs) noexcept {
     return !(lhs == rhs);
   }
 
@@ -953,37 +934,193 @@ class object final : private detail::object_base<object> {
   }
 };
 
+// Defined here because object is an incomplete type where this is declared.
+class native_function::context {
+ public:
+  context(
+      source_range loc,
+      diagnostics_engine& diags,
+      object self,
+      positional_arguments_t positional_args,
+      named_arguments_t named_args)
+      : loc_(loc),
+        diags_(diags),
+        self_(std::move(self)),
+        positional_args_(std::move(positional_args)),
+        named_args_(std::move(named_args)) {}
+
+  context(const context&) = delete;
+  context& operator=(const context&) = delete;
+  context(context&&) = default;
+  context& operator=(context&&) = default;
+  ~context() noexcept = default;
+
+  source_range location() const noexcept { return loc_; }
+  diagnostics_engine& diagnostics() const noexcept { return diags_; }
+  const object& self() const noexcept { return self_; }
+  const positional_arguments_t& positional_arguments() const noexcept {
+    return positional_args_;
+  }
+  const named_arguments_t& named_arguments() const noexcept {
+    return named_args_;
+  }
+
+  source_range loc_;
+  std::reference_wrapper<diagnostics_engine> diags_;
+  object self_;
+  positional_arguments_t positional_args_;
+  named_arguments_t named_args_;
+};
+static_assert(std::is_move_constructible_v<native_function::context>);
+
+template <>
+class prototype<void> {
+ public:
+  using ptr = std::shared_ptr<const prototype>;
+  virtual ~prototype() noexcept = default;
+
+  /**
+   * Property descriptors are immediately invoked during property lookup.
+   *
+   * For the property lookup `foo.bar`, if `bar` is a property descriptor, then
+   * the result of the lookup is computed by invoking the function stored in the
+   * `bar`.
+   *
+   * A property descriptor behaves like a native_function with no arguments.
+   */
+  struct property {
+    native_function::ptr function;
+    /* implicit */ property(native_function::ptr f) : function(std::move(f)) {}
+  };
+  /**
+   * Fixed object descriptors are statically bound objects to the prototype.
+   *
+   * For the property lookup `foo.bar`, if `bar` is a fixed object descriptor,
+   * then the result of the lookup is the object stored in the `bar`.
+   *
+   * Objects such as native_function that are intended to be "member functions"
+   * are a good candidate for a fixed object descriptor.
+   */
+  struct fixed_object {
+    object value;
+    /* implicit */ fixed_object(object o) : value(std::move(o)) {}
+  };
+  using descriptor = std::variant<property, fixed_object>;
+
+  /**
+   * Tries to look up a descriptor defined in this prototype. If there is no
+   * entry for an identifier in this map, this should return nullptr.
+   */
+  virtual const descriptor* find_descriptor(std::string_view) const = 0;
+  /**
+   * Returns the names of all descriptors defined in this prototype.
+   */
+  virtual std::set<std::string> keys() const = 0;
+  /**
+   * Returns the fallback parent prototype, if one is provided.
+   * This is used in case find_descriptor returns nullptr.
+   */
+  virtual const ptr& parent() const = 0;
+
+  using descriptors_map = std::map<std::string, descriptor, std::less<>>;
+  /**
+   * Creates a prototype from the provided map of descriptors and
+   * (optionally) a parent.
+   */
+  static ptr from(descriptors_map, ptr parent = nullptr);
+};
+
+/**
+ * A type-tagged prototype that is intended for native_handle<Self>.
+ */
+template <typename Self>
+class prototype : public prototype<> {
+ public:
+  using ptr = std::shared_ptr<const prototype>;
+  /**
+   * Creates a prototype from the provided map of descriptors and
+   * (optionally) a parent.
+   */
+  static ptr from(descriptors_map, prototype<>::ptr parent);
+};
+
+/**
+ * A "basic" untyped implementation of a prototype that is backed by a
+ * static map.
+ *
+ * Prototypes *should* be static so this implementation is sufficient for most
+ * use cases.
+ */
+template <typename T = void>
+class basic_prototype : public prototype<T> {
+ public:
+  const prototype<>::descriptor* find_descriptor(
+      std::string_view name) const override {
+    if (auto found = descriptors_.find(name); found != descriptors_.end()) {
+      return &found->second;
+    }
+    return nullptr;
+  }
+
+  std::set<std::string> keys() const override {
+    std::set<std::string> result;
+    for (const auto& [key, _] : descriptors_) {
+      result.insert(key);
+    }
+    return result;
+  }
+
+  const prototype<>::ptr& parent() const override { return parent_; }
+
+  basic_prototype(
+      prototype<>::descriptors_map descriptors, prototype<>::ptr parent)
+      : descriptors_(std::move(descriptors)), parent_(std::move(parent)) {}
+
+ private:
+  prototype<>::descriptors_map descriptors_;
+  prototype<>::ptr parent_;
+};
+
+template <typename T>
+/* static */ typename prototype<T>::ptr prototype<T>::from(
+    descriptors_map descriptors, prototype<>::ptr parent) {
+  return std::make_shared<basic_prototype<T>>(
+      std::move(descriptors), std::move(parent));
+}
+
 namespace detail {
 template <typename T, typename... Alternatives>
 static constexpr bool is_any_of = (std::is_same_v<T, Alternatives> || ...);
 }
 
 /**
- * A type trait which checks that the provided type T is one of the possible
- * alternatives for whisker::object.
+ * A type trait which checks that the provided type T can be used to construct
+ * whisker::object.
  */
 template <typename T>
-constexpr inline bool is_any_object_type = detail::is_any_of<
-    T,
-    i64,
-    f64,
-    string,
-    boolean,
-    null,
-    array,
-    map,
-    native_object::ptr,
-    native_function::ptr,
-    native_handle<>>;
+constexpr inline bool is_any_object_type =
+    detail::is_specialization_v<T, whisker::native_handle> ||
+    detail::is_any_of<
+        T,
+        i64,
+        f64,
+        string,
+        boolean,
+        null,
+        array::ptr,
+        map::ptr,
+        native_function::ptr,
+        native_handle<>>;
 
 /**
  * An alternative to to_string() that allows printing a whisker::object within
  * an ongoing tree printing session. The output is appended to the provided
  * tree_printer::scope's output stream.
  *
- * This is primarily needed for native_object::print_to() implementations.
+ * This is primarily needed for map::print_to() and array::print_to()
+ * implementations.
  */
-void print_to(const object&, tree_printer::scope, const object_print_options&);
+void print_to(const object&, tree_printer::scope&, const object_print_options&);
 std::string to_string(const object&, const object_print_options& = {});
 
 std::ostream& operator<<(std::ostream&, const object&);
@@ -1109,8 +1246,23 @@ inline object string(const char* value) {
  *   object::is_map() == true
  *   object::as_map() == value
  */
-inline object map(map&& value) {
+inline object map(map::ptr value) {
   return object(std::move(value));
+}
+inline object map(map::raw value = {}) {
+  return object(map::of(std::move(value)));
+}
+
+/**
+ * Creates a map::ptr of a concrete type with the given arguments.
+ *
+ * Postconditions:
+ *   object::is_map() == true
+ *   object::as_map() == value
+ */
+template <typename T, typename... Args>
+object make_map(Args&&... args) {
+  return map(std::make_shared<T>(std::forward<Args>(args)...));
 }
 
 /**
@@ -1121,31 +1273,23 @@ inline object map(map&& value) {
  *   object::is_array() == true
  *   object::as_array() == value
  */
-inline object array(array&& value) {
+inline object array(array::ptr value) {
   return object(std::move(value));
+}
+inline object array(array::raw value = {}) {
+  return object(array::of(std::move(value)));
 }
 
 /**
- * Creates whisker::object with a backing native_object.
+ * Creates a map::ptr of a concrete type with the given arguments.
  *
  * Postconditions:
- *   object::is_native_object() == true
- *   object::as_native_object() == value
- */
-inline object native_object(native_object::ptr value) {
-  return object(std::move(value));
-}
-
-/**
- * Creates a native_object::ptr of a concrete type with the given arguments.
- *
- * Postconditions:
- *   object::is_native_object() == true
- *   object::as_native_object() == value
+ *   object::is_array() == true
+ *   object::as_array() == value
  */
 template <typename T, typename... Args>
-object make_native_object(Args&&... args) {
-  return native_object(std::make_shared<T>(std::forward<Args>(args)...));
+object make_array(Args&&... args) {
+  return array(std::make_shared<T>(std::forward<Args>(args)...));
 }
 
 /**
@@ -1179,33 +1323,121 @@ object make_native_function(Args&&... args) {
  *   object::as_native_handle().ptr() == value
  */
 template <typename T>
-object native_handle(managed_ptr<T> value) {
-  return object(whisker::native_handle<>(std::move(value)));
+object native_handle(managed_ptr<T> value, prototype<>::ptr prototype) {
+  return object(
+      whisker::native_handle<>(std::move(value), std::move(prototype)));
+}
+template <typename T>
+object native_handle(whisker::native_handle<T> handle) {
+  return object(std::move(handle));
 }
 
-/**
- * Creates a "proxy" object that behaves the same as the provided object. This
- * function is useful, for example, for storing an owning reference to existing
- * objects in an array or map without deep-copying.
- *
- * For primitive types (i64, f64, string, boolean, null), this returns a copy
- * of the object, and so behaves like a value type.
- *
- * For arrays and maps, the returned object uses array_like and map_like
- * respectively, and so behaves like a reference type.
- *
- * For native objects, native functions, and native handles, a copy of the
- * underlying shared_ptr is stored, meaning that the underlying object is kept
- * alive at least as long as the returned object.
- *
- * The returned object keeps the source object alive, as needed. For primitive
- * types, ownership of the source is not necessary.
- *
- * Postconditions:
- *   - proxy(object) == *object
- */
-object proxy(const object::ptr& source);
-
 } // namespace make
+
+/**
+ * The prototype database stores and caches prototype indexed by typeid.
+ *
+ * This allows reusing prototypes when dealing with recursive native types such
+ * as AST classes.
+ */
+class prototype_database {
+ public:
+  template <typename T>
+  void define(prototype_ptr<T> prototype) {
+    auto [_, inserted] =
+        prototypes_.emplace(std::type_index(typeid(T)), std::move(prototype));
+    if (!inserted) {
+      throw std::runtime_error(fmt::format(
+          "Prototype for type '{}' already exists.",
+          boost::core::demangle(typeid(T).name())));
+    }
+  }
+
+  /**
+   * Gets the cached prototype for the given type, or throws an exception if
+   * the type is unknown.
+   *
+   * If allow_lazy is true, then a failed lookup falls back to a "lazy"
+   * prototype which is resolved when used. This is helpful when there is a
+   * cycle of type references.
+   */
+  template <typename T>
+  prototype_ptr<T> of(bool allow_lazy = true) const {
+    auto found = prototypes_.find(std::type_index(typeid(T)));
+    if (found == prototypes_.end()) {
+      if (allow_lazy) {
+        return this->lazy<T>();
+      }
+      throw std::runtime_error(fmt::format(
+          "Prototype for type '{}' does not exist.",
+          boost::core::demangle(typeid(T).name())));
+    }
+    auto casted = std::dynamic_pointer_cast<const prototype<T>>(found->second);
+    if (casted == nullptr) {
+      throw std::runtime_error(fmt::format(
+          "Prototype for type '{}' is of an unexpected type.",
+          typeid(T).name()));
+    }
+    return casted;
+  }
+
+  /**
+   * Creates a native_handle for the given reference with a prototype stored
+   * in this database.
+   *
+   * std::remove_reference_t<T> forces the caller to explicitly specify the
+   * template argument. This is to prevent accidental use of the wrong type.
+   */
+  template <typename T>
+  whisker::native_handle<T> create(
+      whisker::managed_ptr<std::remove_reference_t<T>> o) const {
+    return whisker::native_handle<T>(std::move(o), of<T>());
+  }
+  template <typename T>
+  whisker::native_handle<T> create(const std::remove_reference_t<T>& o) const {
+    return this->create<T>(whisker::manage_as_static(o));
+  }
+  template <typename T>
+  whisker::object create_nullable(const std::remove_reference_t<T>* o) const {
+    return o == nullptr ? whisker::make::null
+                        : whisker::object(this->create<T>(*o));
+  }
+
+  /**
+   * A "lazy" prototype is one whose definition can be deferred until first
+   * use. This allows prototypes to refer to each other in cycles that have
+   * cyclic references.
+   *
+   * Note that cyclical prototypes chains are still disallowed.
+   */
+  template <typename T>
+  prototype_ptr<T> lazy() const {
+    class lazy_prototype final : public prototype<T> {
+     public:
+      explicit lazy_prototype(const prototype_database& db) : db_(db) {}
+
+      const prototype<>::descriptor* find_descriptor(
+          std::string_view name) const final {
+        return this->resolve()->find_descriptor(name);
+      }
+      std::set<std::string> keys() const final {
+        return this->resolve()->keys();
+      }
+      const prototype<>::ptr& parent() const final {
+        return this->resolve()->parent();
+      }
+
+     private:
+      prototype_ptr<T> resolve() const {
+        return db_.of<T>(false /* allow_lazy */);
+      }
+      const prototype_database& db_;
+    };
+    return std::make_shared<const lazy_prototype>(*this);
+  }
+
+ private:
+  std::unordered_map<std::type_index, whisker::prototype<>::ptr> prototypes_;
+};
 
 } // namespace whisker

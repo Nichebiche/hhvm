@@ -17,7 +17,6 @@
 #include <thrift/lib/cpp2/transport/core/RpcMetadataUtil.h>
 
 #include <chrono>
-#include <map>
 #include <string>
 #include <utility>
 
@@ -42,7 +41,9 @@ RequestRpcMetadata makeRequestRpcMetadata(
     std::variant<InteractionCreate, int64_t, std::monostate> interactionHandle,
     bool serverZstdSupported,
     ssize_t payloadSize,
-    transport::THeader& header) {
+    transport::THeader& header,
+    std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata,
+    bool customCompressionEnabled) {
   RequestRpcMetadata metadata;
   metadata.protocol() = static_cast<ProtocolId>(header.getProtocolId());
   metadata.kind() = kind;
@@ -66,6 +67,14 @@ RequestRpcMetadata makeRequestRpcMetadata(
   // add user specified compression settings to metadata
   if (auto compressionConfig = header.getDesiredCompressionConfig()) {
     if (auto codec = compressionConfig->codecConfig()) {
+      // If custom codec cannot be used (yet), fall back to zlib, which
+      // will be auto-updated to zstd if server supports it
+      // (see logic right below).
+      if (codec->getType() == CodecConfig::Type::customConfig &&
+          !customCompressionEnabled) {
+        codec->zlibConfig_ref().emplace();
+      }
+
       if (codec->getType() == CodecConfig::Type::zlibConfig &&
           serverZstdSupported) {
         codec->zstdConfig_ref().emplace();
@@ -129,7 +138,9 @@ RequestRpcMetadata makeRequestRpcMetadata(
     metadata.otherMetadata() = std::move(writeHeaders);
   }
 
-  if (rpcOptions.getContextPropMask()) {
+  if (interceptorFrameworkMetadata != nullptr) {
+    metadata.frameworkMetadata() = std::move(interceptorFrameworkMetadata);
+  } else if (rpcOptions.getContextPropMask()) {
     folly::dynamic logMessages = folly::dynamic::object();
     auto frameworkMetadata = makeFrameworkMetadata(rpcOptions, logMessages);
     if (frameworkMetadata) {

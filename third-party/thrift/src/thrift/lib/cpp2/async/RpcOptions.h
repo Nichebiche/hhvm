@@ -28,15 +28,21 @@ namespace apache::thrift {
 
 struct SerializedAuthProofs {
   SerializedAuthProofs() = default;
+  ~SerializedAuthProofs() = default;
+
   explicit SerializedAuthProofs(std::unique_ptr<folly::IOBuf> newBuf)
       : buf(std::move(newBuf)) {}
 
   SerializedAuthProofs(const SerializedAuthProofs& other) {
     buf = other.buf ? other.buf->clone() : nullptr;
   }
-  void operator=(const SerializedAuthProofs& other) {
+  SerializedAuthProofs& operator=(const SerializedAuthProofs& other) {
     buf = other.buf ? other.buf->clone() : nullptr;
+    return *this;
   }
+
+  SerializedAuthProofs(SerializedAuthProofs&&) = default;
+  SerializedAuthProofs& operator=(SerializedAuthProofs&&) = default;
 
   std::unique_ptr<folly::IOBuf> buf{nullptr};
 };
@@ -68,7 +74,7 @@ class RpcOptions {
     XXH3_64 = 2,
   };
 
-  typedef apache::thrift::concurrency::PRIORITY PRIORITY;
+  using PRIORITY = apache::thrift::concurrency::PRIORITY;
 
   /**
    * NOTE: This only sets the receive timeout, and not the send timeout on
@@ -160,6 +166,9 @@ class RpcOptions {
   RpcOptions& setFdsToSend(folly::SocketFds::ToSend);
   folly::SocketFds copySocketFdsToSend() const;
 
+  RpcOptions& setMetricsToCollect(std::shared_ptr<void> metricsToClient);
+  const std::shared_ptr<void>& getMetricsToCollect() const;
+
   /**
    * In the routing layer, this key can be used to create or select specific
    * connections to a server.
@@ -169,6 +178,9 @@ class RpcOptions {
 
   RpcOptions& setChecksum(Checksum checksum);
   Checksum getChecksum() const;
+
+  RpcOptions& setForceSyncOnFiber(bool forceSyncOnFiber);
+  bool getForceSyncOnFiber() const;
 
  private:
   using timeout_ms_t = uint32_t;
@@ -209,6 +221,11 @@ class RpcOptions {
   folly::SocketFds::ToSend fdsToSend_;
 
   Checksum checksum_{Checksum::NONE};
+
+  bool forceSyncOnFiber_{false};
+
+  // Metrics to be sent back to the client
+  std::shared_ptr<void> metricsToCollect_;
 };
 
 } // namespace apache::thrift

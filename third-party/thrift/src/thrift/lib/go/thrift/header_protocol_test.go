@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHeaderProtocolHeaders(t *testing.T) {
@@ -29,36 +30,22 @@ func TestHeaderProtocolHeaders(t *testing.T) {
 		IDVersionHeader:    IDVersion,
 		IdentityHeader:     "batman",
 	})
-	if err != nil {
-		t.Fatalf("failed to create header protocol: %s", err)
-	}
-	proto2, err := NewHeaderProtocol(mockSocket)
-	if err != nil {
-		t.Fatalf("failed to create header protocol: %s", err)
-	}
+	require.NoError(t, err)
 
-	proto1.SetRequestHeader("preferred_cheese", "cheddar")
-	if v, _ := proto1.(*headerProtocol).trans.writeInfoHeaders["preferred_cheese"]; v != "cheddar" {
-		t.Fatalf("failed to set header")
-	}
-	if len(proto1.(*headerProtocol).trans.writeInfoHeaders) != 1 {
-		t.Fatalf("wrong number of headers")
-	}
+	proto2, err := NewHeaderProtocol(mockSocket)
+	require.NoError(t, err)
+
+	proto1.setRequestHeader("preferred_cheese", "cheddar")
+	require.Equal(t, "cheddar", proto1.(*headerProtocol).trans.writeInfoHeaders["preferred_cheese"])
+	require.Len(t, proto1.(*headerProtocol).trans.writeInfoHeaders, 1)
 
 	proto1.WriteMessageBegin("", types.CALL, 1)
 	proto1.WriteMessageEnd()
 	proto1.Flush()
 
 	_, _, _, err = proto2.ReadMessageBegin()
-	if err != nil {
-		t.Fatalf("failed to read message from proto1 in proto2")
-	}
+	require.NoError(t, err)
 
-	if v, _ := proto2.GetResponseHeaders()["preferred_cheese"]; v != "gouda" {
-		t.Fatalf("failed to read header, got: %s", v)
-	}
-
-	if peerIdentity(proto2.(*headerProtocol).trans) != "batman" {
-		t.Fatalf("failed to peer identity")
-	}
+	require.Equal(t, "gouda", proto2.getResponseHeaders()["preferred_cheese"])
+	require.Equal(t, "batman", peerIdentity(proto2.(*headerProtocol).trans))
 }

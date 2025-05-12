@@ -14,18 +14,18 @@ use hhbc::Instruct;
 use hhbc::Opcode;
 use hhbc::Pseudo;
 use instruction_sequence::InstrSeq;
-use ir::instr;
-use ir::instr::HasLoc;
-use ir::instr::HasLocals;
-use ir::instr::IrToBc;
-use ir::print::FmtRawVid;
-use ir::print::FmtSep;
 use ir::BlockId;
 use ir::BlockIdMap;
 use ir::FCallArgsFlags;
 use ir::Immediate;
 use ir::LocalId;
 use ir::StringId;
+use ir::instr;
+use ir::instr::HasLoc;
+use ir::instr::HasLocals;
+use ir::instr::IrToBc;
+use ir::print::FmtRawVid;
+use ir::print::FmtSep;
 use itertools::Itertools;
 use log::trace;
 
@@ -187,7 +187,7 @@ pub(crate) struct InstrEmitter<'b> {
 
 fn convert_indexes_to_bools(total_len: usize, indexes: Option<&[u32]>) -> Vec<bool> {
     let mut buf: Vec<bool> = Vec::with_capacity(total_len);
-    if !indexes.map_or(true, |indexes| indexes.is_empty()) {
+    if !indexes.is_none_or(|indexes| indexes.is_empty()) {
         buf.resize(total_len, false);
         if let Some(indexes) = indexes {
             for &idx in indexes.iter() {
@@ -402,6 +402,7 @@ impl<'b> InstrEmitter<'b> {
                 let locals = self.convert_local_range(locals);
                 Opcode::AwaitAll(locals)
             }
+            Hhbc::AwaitLowPri(..) => Opcode::AwaitLowPri,
             Hhbc::BareThis(op, _) => Opcode::BareThis(op),
             Hhbc::BitAnd(..) => Opcode::BitAnd,
             Hhbc::BitNot(..) => Opcode::BitNot,
@@ -435,6 +436,7 @@ impl<'b> InstrEmitter<'b> {
             Hhbc::CheckThis(_) => Opcode::CheckThis,
             Hhbc::ClassGetC(_, mode, _) => Opcode::ClassGetC(mode),
             Hhbc::ClassGetTS(_, _) => Opcode::ClassGetTS,
+            Hhbc::ClassGetTSWithGenerics(_, _) => Opcode::ClassGetTSWithGenerics,
             Hhbc::ClassHasReifiedGenerics(_, _) => Opcode::ClassHasReifiedGenerics,
             Hhbc::ClassName(..) => Opcode::ClassName,
             Hhbc::Clone(..) => Opcode::Clone,
@@ -551,6 +553,10 @@ impl<'b> InstrEmitter<'b> {
             Hhbc::Print(..) => Opcode::Print,
             Hhbc::RaiseClassStringConversionNotice(..) => Opcode::RaiseClassStringConversionNotice,
             Hhbc::RecordReifiedGeneric(..) => Opcode::RecordReifiedGeneric,
+            Hhbc::ReifiedInit(_, lid, _) => {
+                let local = self.lookup_local(lid);
+                Opcode::ReifiedInit(local)
+            }
             Hhbc::ResolveClass(clsid, _) => Opcode::ResolveClass(clsid),
             Hhbc::ResolveClsMethod(_, method, _) => Opcode::ResolveClsMethod(method),
             Hhbc::ResolveClsMethodD(clsid, method, _) => Opcode::ResolveClsMethodD(clsid, method),
@@ -607,6 +613,7 @@ impl<'b> InstrEmitter<'b> {
             }
             Hhbc::VerifyRetTypeC(..) => Opcode::VerifyRetTypeC,
             Hhbc::VerifyRetTypeTS(..) => Opcode::VerifyRetTypeTS,
+            Hhbc::VerifyTypeTS(..) => Opcode::VerifyTypeTS,
             Hhbc::WHResult(..) => Opcode::WHResult,
             Hhbc::Yield(..) => Opcode::Yield,
             Hhbc::YieldK(..) => Opcode::YieldK,
@@ -1117,7 +1124,7 @@ fn member_op_may_mutate_stack_base(member_op: &instr::MemberOp) -> bool {
             member_op
                 .final_op
                 .key()
-                .map_or(true, |k| k.is_element_access())
+                .is_none_or(|k| k.is_element_access())
         },
         |dim| dim.key.is_element_access(),
     );

@@ -20,33 +20,61 @@ import (
 	"context"
 	"testing"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/dummy"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	dummyif "github.com/facebook/fbthrift/thrift/test/go/if/dummy"
+	"github.com/stretchr/testify/require"
 )
 
-type exampleProcessor struct {
-	Processor
-	hit *bool
-}
-
-func (ep *exampleProcessor) ProcessorFunctionMap() map[string]types.ProcessorFunction {
-	*ep.hit = true
-	return nil // happens in "no such method" case
-}
-
-func TestInterceptorWrapperNilFunctionContext(t *testing.T) {
-	var hit bool
-	proc := &exampleProcessor{nil, &hit}
-
-	derivedProc := WrapInterceptor(emptyInterceptor, proc)
-	pFunc := derivedProc.ProcessorFunctionMap()["blah"]
-	if hit != true {
-		t.Fatalf("interceptor should have called underlying processor function handler.")
+func dummyInterceptor(
+	ctx context.Context,
+	methodName string,
+	pfunc types.ProcessorFunction,
+	args types.Struct,
+) (types.WritableStruct, types.ApplicationException) {
+	if methodName == "Echo" {
+		if echoArg, ok := args.(*dummyif.DummyEchoArgsDeprecated); ok {
+			echoArg.Value = echoArg.Value + "-intercepted"
+		}
 	}
-	if pFunc != nil {
-		t.Fatalf("derived interceptor context should return underlying nil processor function context.")
-	}
-}
-
-func emptyInterceptor(ctx context.Context, methodName string, pfunc types.ProcessorFunction, args types.Struct) (types.WritableStruct, types.ApplicationException) {
 	return pfunc.RunContext(ctx, args)
+}
+
+func TestInterceptorCreation(t *testing.T) {
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
+
+	// Nil case
+	derivedProc := WrapInterceptor(nil, processor)
+	require.NotNil(t, derivedProc)
+	require.Equal(t, processor, derivedProc)
+
+	// Regular case
+	derivedProc = WrapInterceptor(dummyInterceptor, processor)
+	require.NotNil(t, derivedProc)
+	require.NotEqual(t, processor, derivedProc)
+}
+
+func TestInterceptorProcessorFunctionMap(t *testing.T) {
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
+	derivedProc := WrapInterceptor(dummyInterceptor, processor)
+	pFunc := derivedProc.ProcessorFunctionMap()["blah"]
+	// Assert that all original functions are present
+	require.Equal(t, len(processor.ProcessorFunctionMap()), len(derivedProc.ProcessorFunctionMap()))
+	for funcName := range processor.ProcessorFunctionMap() {
+		require.Contains(t, derivedProc.ProcessorFunctionMap(), funcName)
+	}
+	require.Nil(t, pFunc)
+}
+
+func TestInterceptorRunContext(t *testing.T) {
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
+	derivedProc := WrapInterceptor(dummyInterceptor, processor)
+	pFunc := derivedProc.ProcessorFunctionMap()["Echo"]
+	arg := dummyif.DummyEchoArgsDeprecated{
+		Value: "hello",
+	}
+	resp, err := pFunc.RunContext(context.Background(), &arg)
+	echoResp := resp.(*dummyif.DummyEchoResultDeprecated)
+	require.NoError(t, err)
+	require.Equal(t, "hello-intercepted", *echoResp.Success)
 }

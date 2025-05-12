@@ -41,13 +41,18 @@ struct MaskedDecodeResult {
 };
 
 namespace detail {
+
+// TODO(dokwon): Use Path once avaialble.
+// Path of a field in a Thrift struct as a list of field ids.
+using FieldPath = std::vector<FieldId>;
+
 // Validates the mask with the given Struct. Ensures that mask doesn't contain
 // fields not in the Struct.
 template <typename T>
 bool validate_mask(MaskRef ref) {
   // Get the field ids in the thrift struct type.
   std::unordered_set<FieldId> ids;
-  ids.reserve(op::size_v<T>);
+  ids.reserve(op::num_fields<T>);
   op::for_each_ordinal<T>(
       [&](auto ord) { ids.insert(op::get_field_id<T, decltype(ord)>()); });
   const FieldIdToMask& map = ref.mask.includes_ref()
@@ -376,6 +381,43 @@ void setMaskedDataFull(
   maskedData.full_ref() = type::ValueId{apache::thrift::util::i32ToZigzag(pos)};
 }
 
+inline MaskRef getKeyMaskRefByValue(MaskRef maskRef, const Value& value) {
+  switch (value.getType()) {
+    case Value::Type::byteValue:
+      return maskRef.get(MapId{value.as_byte()});
+    case Value::Type::i16Value:
+      return maskRef.get(MapId{value.as_i16()});
+    case Value::Type::i32Value:
+      return maskRef.get(MapId{value.as_i32()});
+    case Value::Type::i64Value:
+      return maskRef.get(MapId{value.as_i64()});
+    case Value::Type::stringValue:
+      return maskRef.get(value.as_string());
+    case Value::Type::binaryValue: {
+      const auto& binaryValue = value.as_binary();
+
+      if (binaryValue.isChained()) {
+        std::string key = binaryValue.toString();
+        return maskRef.get(key);
+      }
+
+      std::string_view key(
+          reinterpret_cast<const char*>(binaryValue.data()),
+          binaryValue.length());
+      return maskRef.get(key);
+    }
+    case Value::Type::boolValue:
+    case Value::Type::floatValue:
+    case Value::Type::doubleValue:
+    case Value::Type::objectValue:
+    case Value::Type::listValue:
+    case Value::Type::setValue:
+    case Value::Type::mapValue:
+    case Value::Type::__EMPTY__:
+      folly::throw_exception<std::runtime_error>("Value is empty");
+  }
+}
+
 // parseValue with readMaskRef and writeMaskRef
 template <bool KeepExcludedData, typename Protocol>
 MaskedDecodeResultValue parseValueWithMask(
@@ -439,7 +481,7 @@ MaskedDecodeResultValue parseValueWithMask(
                 protocolData,
                 string_to_binary);
         // Set nested MaskedDecodeResult if not empty.
-        if (!apache::thrift::empty(nestedResult.included)) {
+        if (!apache::thrift::empty(nestedResult.included.toThrift())) {
           object[FieldId{fid}] = std::move(nestedResult.included);
         }
         if constexpr (KeepExcludedData) {
@@ -463,14 +505,10 @@ MaskedDecodeResultValue parseValueWithMask(
         prot.readMapEnd();
         return result;
       }
-      auto readValueIndex = buildValueIndex(readMaskRef.mask);
-      auto writeValueIndex = buildValueIndex(writeMaskRef.mask);
       for (uint32_t i = 0; i < size; i++) {
         auto keyValue = parseValue(prot, keyType, string_to_binary);
-        MaskRef nextRead = readMaskRef.get(
-            getMapIdValueAddressFromIndex(readValueIndex, keyValue));
-        MaskRef nextWrite = writeMaskRef.get(
-            getMapIdValueAddressFromIndex(writeValueIndex, keyValue));
+        MaskRef nextRead = getKeyMaskRefByValue(readMaskRef, keyValue);
+        MaskRef nextWrite = getKeyMaskRefByValue(writeMaskRef, keyValue);
         MaskedDecodeResultValue nestedResult =
             parseValueWithMask<KeepExcludedData>(
                 prot,
@@ -480,7 +518,7 @@ MaskedDecodeResultValue parseValueWithMask(
                 protocolData,
                 string_to_binary);
         // Set nested MaskedDecodeResult if not empty.
-        if (!apache::thrift::empty(nestedResult.included)) {
+        if (!apache::thrift::empty(nestedResult.included.toThrift())) {
           map[keyValue] = std::move(nestedResult.included);
         }
         if constexpr (KeepExcludedData) {
@@ -529,5 +567,8 @@ MaskedDecodeResult parseObject(
   result.included = std::move(parseValueResult.included.ensure_object());
   return result;
 }
+
+Mask fieldPathToMask(const FieldPath& path, const Mask& other);
+
 } // namespace detail
 } // namespace apache::thrift::protocol

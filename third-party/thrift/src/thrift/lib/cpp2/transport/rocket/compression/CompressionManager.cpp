@@ -17,7 +17,6 @@
 #include <thrift/lib/cpp2/transport/rocket/compression/CompressionManager.h>
 
 #include <thrift/lib/cpp/TApplicationException.h>
-
 #include <thrift/lib/cpp2/transport/rocket/compression/CompressionAlgorithmSelector.h>
 
 namespace apache {
@@ -83,7 +82,8 @@ CompressionAlgorithm CompressionManager::fromCodecConfig(
   return CompressionAlgorithmSelector::fromCodecConfig(codecConfig);
 }
 
-std::pair<folly::io::CodecType, int> CompressionManager::toCodecTypeAndLevel(
+std::pair<folly::compression::CodecType, int>
+CompressionManager::toCodecTypeAndLevel(
     const CompressionAlgorithm& compressionAlgorithm) {
   return CompressionAlgorithmSelector::toCodecTypeAndLevel(
       compressionAlgorithm);

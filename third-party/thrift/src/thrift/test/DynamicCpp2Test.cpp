@@ -16,8 +16,8 @@
 
 #include <limits>
 
+#include <gtest/gtest.h>
 #include <folly/json.h>
-#include <folly/portability/GTest.h>
 
 #include <folly/io/async/EventBaseManager.h>
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
@@ -148,8 +148,7 @@ TEST_P(RoundtripTestFixture, RoundtripContainer) {
 
 TEST_P(RoundtripTestFixture, SerializeOverHandler) {
   ScopedServerInterfaceThread runner(std::make_shared<TestServiceHandler>());
-  auto eb = EventBaseManager::get()->getEventBase();
-  auto client = runner.newClient<DynamicTestServiceAsyncClient>(eb);
+  auto client = runner.newClient<DynamicTestServiceAsyncClient>();
 
   const SerializableDynamic expected = GetParam();
   SerializableDynamic actual;

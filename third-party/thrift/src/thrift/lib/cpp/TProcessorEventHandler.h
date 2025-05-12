@@ -16,17 +16,29 @@
 
 #pragma once
 
+#include <string_view>
 #include <typeinfo>
 
 #include <folly/Demangle.h>
 #include <folly/ExceptionWrapper.h>
-
 #include <thrift/lib/cpp/SerializedMessage.h>
 #include <thrift/lib/cpp/server/TConnectionContext.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
+namespace details {
+enum class STREAM_ENDING_TYPES {
+  COMPLETE = 0,
+  ERROR = 1,
+  CANCEL = 2,
+};
+
+enum class SINK_ENDING_TYPES {
+  COMPLETE = 0,
+  COMPLETE_WITH_ERROR = 1,
+  ERROR = 2,
+};
+} // namespace details
 
 using server::TConnectionContext;
 
@@ -55,25 +67,25 @@ class TProcessorEventHandler {
    * for that function invocation.
    */
   virtual void* getServiceContext(
-      const char* /*service_name*/,
-      const char* fn_name,
+      std::string_view /*service_name*/,
+      std::string_view fn_name,
       TConnectionContext* connectionContext) {
     return getContext(fn_name, connectionContext);
   }
   virtual void* getContext(
-      const char* /*fn_name*/, TConnectionContext* /*connectionContext*/) {
+      std::string_view /*fn_name*/, TConnectionContext* /*connectionContext*/) {
     return nullptr;
   }
 
   /**
    * Expected to free resources associated with a context.
    */
-  virtual void freeContext(void* /*ctx*/, const char* /*fn_name*/) {}
+  virtual void freeContext(void* /*ctx*/, std::string_view /*fn_name*/) {}
 
   /**
    * Called before reading arguments.
    */
-  virtual void preRead(void* /*ctx*/, const char* /*fn_name*/) {}
+  virtual void preRead(void* /*ctx*/, std::string_view /*fn_name*/) {}
 
   /**
    * Called before postRead, after reading arguments (server) / after reading
@@ -86,7 +98,7 @@ class TProcessorEventHandler {
    */
   virtual void onReadData(
       void* /*ctx*/,
-      const char* /*fn_name*/,
+      std::string_view /*fn_name*/,
       const SerializedMessage& /*msg*/) {}
 
   /**
@@ -94,14 +106,14 @@ class TProcessorEventHandler {
    */
   virtual void postRead(
       void* /*ctx*/,
-      const char* /*fn_name*/,
+      std::string_view /*fn_name*/,
       apache::thrift::transport::THeader* /*header*/,
       uint32_t /*bytes*/) {}
 
   /**
    * Called between calling the handler and writing the response.
    */
-  virtual void preWrite(void* /*ctx*/, const char* /*fn_name*/) {}
+  virtual void preWrite(void* /*ctx*/, std::string_view /*fn_name*/) {}
 
   /**
    * Called before postWrite, after serializing response (server) / after
@@ -114,14 +126,14 @@ class TProcessorEventHandler {
    */
   virtual void onWriteData(
       void* /*ctx*/,
-      const char* /*fn_name*/,
+      std::string_view /*fn_name*/,
       const SerializedMessage& /*msg*/) {}
 
   /**
    * Called after writing the response.
    */
   virtual void postWrite(
-      void* /*ctx*/, const char* /*fn_name*/, uint32_t /*bytes*/) {}
+      void* /*ctx*/, std::string_view /*fn_name*/, uint32_t /*bytes*/) {}
 
   /**
    * Called when an interaction is terminated (not necessarily
@@ -146,9 +158,11 @@ class TProcessorEventHandler {
   /**
    * Called if the handler throws an undeclared exception.
    */
-  virtual void handlerError(void* /*ctx*/, const char* /*fn_name*/) {}
+  virtual void handlerError(void* /*ctx*/, std::string_view /*fn_name*/) {}
   virtual void handlerErrorWrapped(
-      void* ctx, const char* fn_name, const folly::exception_wrapper& /*ew*/) {
+      void* ctx,
+      std::string_view fn_name,
+      const folly::exception_wrapper& /*ew*/) {
     handlerError(ctx, fn_name);
   }
 
@@ -159,12 +173,12 @@ class TProcessorEventHandler {
    */
   virtual void userException(
       void* /*ctx*/,
-      const char* /*fn_name*/,
-      const std::string& /*ex*/,
-      const std::string& /*ex_what*/) {}
+      std::string_view /*fn_name*/,
+      std::string_view /*ex*/,
+      std::string_view /*ex_what*/) {}
   virtual void userExceptionWrapped(
       void* ctx,
-      const char* fn_name,
+      std::string_view fn_name,
       bool declared,
       const folly::exception_wrapper& ew_) {
     const auto type = ew_.class_name();
@@ -180,8 +194,28 @@ class TProcessorEventHandler {
     } else {
       what = ew_.what().toStdString();
     }
-    return userException(ctx, fn_name, type.toStdString(), what);
+    return userException(ctx, fn_name, type, what);
   }
+
+  // Experimental: callbacks for stream events, please do not use without asking
+  // help from Thrift team.
+  virtual void onStreamSubscribe(void*) {}
+  virtual void onStreamNext(void*) {}
+  virtual void onStreamCredit(void*, uint32_t) {}
+  virtual void onStreamPauseReceive(void*) {}
+  virtual void onStreamResumeReceive(void*) {}
+  virtual void handleStreamErrorWrapped(
+      void*, const folly::exception_wrapper&) {}
+  virtual void onStreamFinally(void*, details::STREAM_ENDING_TYPES) {}
+
+  // Experimental: callbacks for sink events, please do not use without asking
+  // help from Thrift team.
+  virtual void onSinkSubscribe(void*) {}
+  virtual void onSinkNext(void*) {}
+  virtual void onSinkCancel(void*) {}
+  virtual void onSinkCredit(void*, uint32_t) {}
+  virtual void handleSinkError(void*, const folly::exception_wrapper&) {}
+  virtual void onSinkFinally(void*, details::SINK_ENDING_TYPES) {}
 
  protected:
   TProcessorEventHandler() {}
@@ -197,18 +231,18 @@ class TProcessorEventHandler {
  */
 class TProcessorEventHandlerNoUserExnCallbacks : public TProcessorEventHandler {
  public:
+ public:
   void userException(
       void* /*ctx*/,
-      const char* /*fn_name*/,
-      const std::string& /*ex*/,
-      const std::string& /*ex_what*/) final {}
+      std::string_view /*fn_name*/,
+      std::string_view /*ex*/,
+      std::string_view /*ex_what*/) final {}
 
   void userExceptionWrapped(
       void* /*ctx*/,
-      const char* /*fn_name*/,
+      std::string_view /*fn_name*/,
       bool /*declared*/,
       const folly::exception_wrapper& /*ew_*/) final {}
 };
 
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift

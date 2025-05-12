@@ -93,17 +93,13 @@ internal trait DbMixedStackArgumentsClientBase {
    *   getDataByKey0(1: string key);
    */
   public async function getDataByKey0(string $key): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \test\fixtures\basic\DbMixedStackArguments_getDataByKey0_args::fromShape(shape(
       'key' => $key,
     ));
     await $this->asyncHandler_->genBefore(DbMixedStackArgumentsStaticMetadata::THRIFT_SVC_NAME, "getDataByKey0", $args);
     $currentseqid = $this->sendImplHelper($args, "getDataByKey0", false, DbMixedStackArgumentsStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\test\fixtures\basic\DbMixedStackArguments_getDataByKey0_result::class, "getDataByKey0", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\test\fixtures\basic\DbMixedStackArguments_getDataByKey0_result::class, "getDataByKey0", false, $currentseqid, $rpc_options))[0];
   }
 
   /**
@@ -112,17 +108,13 @@ internal trait DbMixedStackArgumentsClientBase {
    *   getDataByKey1(1: string key);
    */
   public async function getDataByKey1(string $key): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = \test\fixtures\basic\DbMixedStackArguments_getDataByKey1_args::fromShape(shape(
       'key' => $key,
     ));
     await $this->asyncHandler_->genBefore(DbMixedStackArgumentsStaticMetadata::THRIFT_SVC_NAME, "getDataByKey1", $args);
     $currentseqid = $this->sendImplHelper($args, "getDataByKey1", false, DbMixedStackArgumentsStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(\test\fixtures\basic\DbMixedStackArguments_getDataByKey1_result::class, "getDataByKey1", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(\test\fixtures\basic\DbMixedStackArguments_getDataByKey1_result::class, "getDataByKey1", false, $currentseqid, $rpc_options))[0];
   }
 
 }

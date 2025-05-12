@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <initializer_list>
 #include <map>
 #include <stack>
 #include <string>
@@ -46,9 +45,14 @@ namespace apache::thrift::compiler::cpp2 {
 const t_field_id kInjectMetadataFieldsStartId = -1000;
 const t_field_id kInjectMetadataFieldsLastId = -2000;
 
-template <typename Node>
-const std::string& get_name(const Node* node) {
+inline const std::string& get_name(const t_named* node) {
   return cpp_name_resolver::get_cpp_name(*node);
+}
+inline std::string get_qualified_name(const t_named& node) {
+  return fmt::format(
+      "{}::{}",
+      cpp_name_resolver::gen_namespace(*node.program()),
+      get_name(&node));
 }
 
 bool is_custom_type(const t_field& field);
@@ -81,8 +85,11 @@ inline std::string get_service_qualified_name(const t_service& service) {
  * its not considered orderable, and we don't need to generate operator< methods
  */
 bool is_orderable(
-    std::unordered_map<const t_type*, bool>& memo, const t_type& type);
-bool is_orderable(const t_type& type);
+    std::unordered_map<const t_type*, bool>& memo,
+    const t_type& type,
+    bool enableCustomTypeOrderingIfStructureHasUri);
+bool is_orderable(
+    const t_type& type, bool enableCustomTypeOrderingIfStructureHasUri);
 
 /**
  * Return the cpp.type/cpp2.type attribute or empty string if nothing set.
@@ -116,8 +123,8 @@ inline bool field_has_isset(const t_field* field) {
 }
 
 inline bool is_lazy(const t_field* field) {
-  return field->has_annotation("cpp.experimental.lazy") ||
-      field->find_structured_annotation_or_null(kCppLazyUri) != nullptr;
+  return field->has_unstructured_annotation("cpp.experimental.lazy") ||
+      field->has_structured_annotation(kCppLazyUri);
 }
 
 inline bool is_lazy_ref(const t_field* field) {
@@ -174,7 +181,8 @@ void for_each_transitive_field(const t_structured* s, F f) {
     if (!f(field)) {
       return;
     }
-    if (const auto* sub = dynamic_cast<const t_struct*>(field->get_type())) {
+    if (const auto* sub =
+            dynamic_cast<const t_structured*>(field->get_type())) {
       fields.push_back({sub, 0});
     }
   }
@@ -189,7 +197,7 @@ inline bool is_unique_ref(const t_field* f) {
 }
 
 bool is_stack_arguments(
-    const std::map<std::string, std::string>& options,
+    const std::map<std::string, std::string, std::less<>>& options,
     const t_function& function);
 
 bool is_mixin(const t_field& field);
@@ -222,15 +230,10 @@ struct mixin_member {
 std::vector<mixin_member> get_mixins_and_members(const t_structured& strct);
 
 //  get_gen_type_class
-//  get_gen_type_class_with_indirection
 //
 //  Returns a string with the fully-qualified name of the C++ type class type
 //  representing the given type.
-//
-//  The _with_indirection variant intersperses indirection_tag wherever the
-//  annotation cpp.indirection appears in the corresponding definitions.
 std::string get_gen_type_class(const t_type& type);
-std::string get_gen_type_class_with_indirection(const t_type& type);
 
 std::string sha256_hex(const std::string& in);
 

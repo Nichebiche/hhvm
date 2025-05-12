@@ -28,10 +28,11 @@ type ('prim_pos, 'pos) t = {
   quickfixes: 'prim_pos Quickfix.t list; [@hash.ignore]
   custom_msgs: string list;
   is_fixmed: bool;
-  flags: User_error_flags.t;
   function_pos: 'prim_pos option;
 }
 [@@deriving eq, hash, ord, show]
+
+val hash_error_for_saved_state : (Pos.t, Pos_or_decl.t) t -> int
 
 val make :
   severity ->
@@ -39,7 +40,6 @@ val make :
   ?is_fixmed:bool ->
   ?quickfixes:'a Quickfix.t list ->
   ?custom_msgs:string list ->
-  ?flags:User_error_flags.t ->
   ?function_pos:'a ->
   'a Message.t ->
   'b Message.t list ->
@@ -52,7 +52,6 @@ val make_err :
   ?is_fixmed:bool ->
   ?quickfixes:'a Quickfix.t list ->
   ?custom_msgs:string list ->
-  ?flags:User_error_flags.t ->
   ?function_pos:'a ->
   'a Message.t ->
   'b Message.t list ->
@@ -65,7 +64,6 @@ val make_warning :
   ?is_fixmed:bool ->
   ?quickfixes:'a Quickfix.t list ->
   ?custom_msgs:string list ->
-  ?flags:User_error_flags.t ->
   'a Message.t ->
   'b Message.t list ->
   ('a, 'b) t
@@ -111,3 +109,11 @@ val to_json :
   filename_to_string:('a -> string) ->
   ('a Pos.pos, 'a Pos.pos) t ->
   Hh_json.json
+
+val claim_message : ('a, _) t -> 'a Message.t
+
+val reason_messages : (_, 'a) t -> 'a Message.t list
+
+val function_pos : ('a, _) t -> 'a option
+
+val custom_errors : (_, _) t -> string list

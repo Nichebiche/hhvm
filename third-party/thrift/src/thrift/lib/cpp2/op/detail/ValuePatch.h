@@ -19,6 +19,7 @@
 #include <utility>
 
 #include <thrift/lib/cpp2/op/detail/BasePatch.h>
+#include <thrift/lib/cpp2/protocol/Patch.h>
 
 namespace apache::thrift::op::detail {
 
@@ -46,7 +47,7 @@ class BoolPatch : public BaseClearPatch<Patch, BoolPatch<Patch>> {
     val = !val;
   }
 
-  /// @copybrief AssignPatch::customVisit
+  /// @copybrief StructPatch::customVisit
   ///
   /// Users should provide a visitor with the following methods
   ///
@@ -73,7 +74,7 @@ class BoolPatch : public BaseClearPatch<Patch, BoolPatch<Patch>> {
       v.clear();
       v.invert();
     }
-    if (!Base::template customVisitAssignAndClear(v) && *data_.invert()) {
+    if (!Base::customVisitAssignAndClear(v) && *data_.invert()) {
       std::forward<Visitor>(v).invert();
     }
   }
@@ -87,6 +88,20 @@ class BoolPatch : public BaseClearPatch<Patch, BoolPatch<Patch>> {
     };
 
     return customVisit(Visitor{val});
+  }
+
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const {
+    struct Visitor {
+      void assign(T) { masks = {protocol::noneMask(), protocol::allMask()}; }
+      void clear() { masks = {protocol::noneMask(), protocol::allMask()}; }
+      void invert() { masks = {protocol::allMask(), protocol::allMask()}; }
+
+      protocol::ExtractedMasksFromPatch masks{
+          protocol::noneMask(), protocol::noneMask()};
+    };
+    Visitor v;
+    customVisit(v);
+    return std::move(v.masks);
   }
 
  private:
@@ -127,7 +142,7 @@ class NumberPatch : public BaseClearPatch<Patch, NumberPatch<Patch>> {
     assignOr(*data_.add()) -= std::forward<U>(val);
   }
 
-  /// @copybrief AssignPatch::customVisit
+  /// @copybrief StructPatch::customVisit
   ///
   /// Users should provide a visitor with the following methods
   ///
@@ -154,7 +169,7 @@ class NumberPatch : public BaseClearPatch<Patch, NumberPatch<Patch>> {
       v.clear();
       v.add(T{});
     }
-    if (!Base::template customVisitAssignAndClear(v)) {
+    if (!Base::customVisitAssignAndClear(v)) {
       v.add(*data_.add());
     }
   }
@@ -168,6 +183,27 @@ class NumberPatch : public BaseClearPatch<Patch, NumberPatch<Patch>> {
     };
 
     return customVisit(Visitor{val});
+  }
+
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const {
+    struct Visitor {
+      void assign(const T&) {
+        masks = {protocol::noneMask(), protocol::allMask()};
+      }
+      void clear() { masks = {protocol::noneMask(), protocol::allMask()}; }
+      void add(const T& t) {
+        if (t != op::getIntrinsicDefault<Tag>()) {
+          masks = {protocol::allMask(), protocol::allMask()};
+        }
+      }
+
+      protocol::ExtractedMasksFromPatch masks{
+          protocol::noneMask(), protocol::noneMask()};
+    };
+
+    Visitor v;
+    customVisit(v);
+    return std::move(v.masks);
   }
 
   /// Increases the value.
@@ -231,8 +267,33 @@ class BaseStringPatch : public BaseContainerPatch<Patch, Derived> {
     return derived();
   }
 
+  protocol::ExtractedMasksFromPatch extractMaskFromPatch() const {
+    struct Visitor {
+      void assign(const T&) {
+        masks = {protocol::noneMask(), protocol::allMask()};
+      }
+      void clear() { masks = {protocol::noneMask(), protocol::allMask()}; }
+      void prepend(const T& t) {
+        if (!t.empty()) {
+          masks = {protocol::allMask(), protocol::allMask()};
+        }
+      }
+      void append(const T& t) {
+        if (!t.empty()) {
+          masks = {protocol::allMask(), protocol::allMask()};
+        }
+      }
+
+      protocol::ExtractedMasksFromPatch masks{
+          protocol::noneMask(), protocol::noneMask()};
+    };
+    Visitor v;
+    customVisit(v);
+    return std::move(v.masks);
+  }
+
  private:
-  /// @copybrief AssignPatch::customVisit
+  /// @copybrief StructPatch::customVisit
   ///
   /// Users should provide a visitor with the following methods
   ///
@@ -341,7 +402,9 @@ class StringPatch : public BaseStringPatch<Patch, StringPatch<Patch>> {
   }
 
  public:
+  /// @cond
   FOLLY_FOR_EACH_THIS_OVERLOAD_IN_CLASS_BODY_DELEGATE(apply, applyImpl);
+  /// @endcond
 
  private:
   using Base::assignOr;
@@ -375,6 +438,8 @@ class BinaryPatch : public BaseStringPatch<Patch, BinaryPatch<Patch>> {
   void assign(std::string s) {
     assign(*folly::IOBuf::fromString(std::move(s)));
   }
+  void assign(std::unique_ptr<folly::IOBuf>&& s) { assign(std::move(*s)); }
+  void assign(const std::unique_ptr<folly::IOBuf>& s) { assign(*s); }
 
   template <typename T>
   BinaryPatch& operator=(T&& other) {
@@ -425,6 +490,13 @@ class BinaryPatch : public BaseStringPatch<Patch, BinaryPatch<Patch>> {
     auto buf = folly::IOBuf::fromString(std::move(val));
     apply(*buf);
     val = buf->toString();
+  }
+
+  void apply(std::unique_ptr<folly::IOBuf>& val) const {
+    if (!val) {
+      val = std::make_unique<folly::IOBuf>();
+    }
+    apply(*val);
   }
 
  private:

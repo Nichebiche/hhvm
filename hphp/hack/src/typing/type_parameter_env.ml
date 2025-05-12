@@ -41,6 +41,9 @@ type t = {
 }
 [@@deriving hash, show { with_path = false }]
 
+let bindings { tparams; _ } =
+  List.map ~f:(fun (k, (_, v)) -> (k, v)) (SMap.bindings tparams)
+
 let empty = { tparams = SMap.empty; consistent = true }
 
 let mem name tpenv = SMap.mem name tpenv.tparams
@@ -82,29 +85,15 @@ let merge_env env tpenv1 tpenv2 ~combine =
   in
   (env, { tparams; consistent = tpenv1.consistent || tpenv2.consistent })
 
-let get_lower_bounds tpenv name tyargs =
-  (* TODO(T70068435) For now, anything with tyargs cannot have bounds.
-     Eventually, we need to instantiate the parameters with the provided args.
-     We must support the case here that the number of provided tyargs does not
-     match the number of expected arguments for the named type parameter. In this
-     case, chop off superfluous argumnents and fill in Tany for missing ones. *)
-  match (get name tpenv, tyargs) with
-  | (_, _ :: _)
-  | (None, _) ->
-    empty_bounds
-  | (Some { lower_bounds; _ }, _) -> lower_bounds
+let get_lower_bounds tpenv name =
+  match get name tpenv with
+  | None -> empty_bounds
+  | Some { lower_bounds; _ } -> lower_bounds
 
-let get_upper_bounds tpenv name tyargs =
-  (* TODO(T70068435) For now, anything with tyargs cannot have bounds.
-     Eventually, we need to instantiate the parameters with the provided args.
-     We must support the case here that the number of provided tyargs does not
-     match the number of expected arguments for the named type parameter. In this
-     case, chop off superfluous argumnents and fill in Tany for missing ones. *)
-  match (get name tpenv, tyargs) with
-  | (_, _ :: _)
-  | (None, _) ->
-    empty_bounds
-  | (Some { upper_bounds; _ }, _) -> upper_bounds
+let get_upper_bounds tpenv name =
+  match get name tpenv with
+  | None -> empty_bounds
+  | Some { upper_bounds; _ } -> upper_bounds
 
 let get_arity tpenv name =
   match get name tpenv with
@@ -136,6 +125,11 @@ let get_pos tpenv name =
   | None -> Pos_or_decl.none
   | Some (pos, _) -> pos
 
+let get_rank tpenv name =
+  match get name tpenv with
+  | None -> 0
+  | Some { rank; _ } -> rank
+
 let get_tparam_names tpenv = SMap.keys tpenv.tparams
 
 let is_consistent tpenv = tpenv.consistent
@@ -145,7 +139,7 @@ let mark_inconsistent tpenv = { tpenv with consistent = false }
 (* This assumes that [name] is a nullary generic parameter *)
 let rec is_generic_param ~elide_nullable ty name =
   match get_node ty with
-  | Tgeneric (name', []) -> String.equal name name'
+  | Tgeneric name' -> String.equal name name'
   | Toption ty when elide_nullable -> is_generic_param ~elide_nullable ty name
   | _ -> false
 
@@ -167,6 +161,7 @@ let add_upper_bound_ tpenv name ty =
             newable = false;
             require_dynamic = false;
             parameters = [];
+            rank = 0;
           } )
       | Some (pos, tp) ->
         (pos, { tp with upper_bounds = TySet.add ty tp.upper_bounds })
@@ -191,6 +186,7 @@ let add_lower_bound_ tpenv name ty =
             newable = false;
             require_dynamic = false;
             parameters = [];
+            rank = 0;
           } )
       | Some (pos, tp) ->
         (pos, { tp with lower_bounds = TySet.add ty tp.lower_bounds })
@@ -208,19 +204,14 @@ let add_lower_bound_ tpenv name ty =
 let add_upper_bound ?intersect env_tpenv name ty =
   let tpenv =
     match deref ty with
-    | (r, Tgeneric (formal_super, [])) ->
-      add_lower_bound_ env_tpenv formal_super (mk (r, Tgeneric (name, [])))
-    | (_r, Tgeneric (_formal_super, _tyargs)) ->
-      (* TODO(T70068435) Revisit this when implementing bounds on HK generic vars *)
-      env_tpenv
+    | (r, Tgeneric formal_super) ->
+      add_lower_bound_ env_tpenv formal_super (mk (r, Tgeneric name))
     | _ -> env_tpenv
   in
   match intersect with
   | None -> add_upper_bound_ env_tpenv name ty
   | Some intersect ->
-    let tyl =
-      intersect ty (TySet.elements (get_upper_bounds env_tpenv name []))
-    in
+    let tyl = intersect ty (TySet.elements (get_upper_bounds env_tpenv name)) in
     let add_generic ty tys =
       if is_generic_param ~elide_nullable:true ty name then
         tys
@@ -230,12 +221,13 @@ let add_upper_bound ?intersect env_tpenv name ty =
 
     let def_pos = get_pos env_tpenv name in
     let upper_bounds = List.fold_right ~init:TySet.empty ~f:add_generic tyl in
-    let lower_bounds = get_lower_bounds env_tpenv name [] in
+    let lower_bounds = get_lower_bounds env_tpenv name in
     let reified = get_reified env_tpenv name in
     let enforceable = get_enforceable env_tpenv name in
     let newable = get_newable env_tpenv name in
     let require_dynamic = get_require_dynamic env_tpenv name in
     let parameters = [] in
+    let rank = get_rank env_tpenv name in
     add
       ~def_pos
       name
@@ -247,6 +239,7 @@ let add_upper_bound ?intersect env_tpenv name ty =
         newable;
         require_dynamic;
         parameters;
+        rank;
       }
       tpenv
 
@@ -261,25 +254,23 @@ let add_upper_bound ?intersect env_tpenv name ty =
 let add_lower_bound ?union env_tpenv name ty =
   let tpenv =
     match deref ty with
-    | (r, Tgeneric (formal_sub, [])) ->
-      add_upper_bound_ env_tpenv formal_sub (mk (r, Tgeneric (name, [])))
-    | (_r, Tgeneric (_formal_sub, _tyargs)) ->
-      (* TODO(T70068435) Revisit this when implementing bounds on HK generic vars *)
-      env_tpenv
+    | (r, Tgeneric formal_sub) ->
+      add_upper_bound_ env_tpenv formal_sub (mk (r, Tgeneric name))
     | _ -> env_tpenv
   in
   match union with
   | None -> add_lower_bound_ env_tpenv name ty
   | Some union ->
-    let tyl = union ty (TySet.elements (get_lower_bounds env_tpenv name [])) in
+    let tyl = union ty (TySet.elements (get_lower_bounds env_tpenv name)) in
     let def_pos = get_pos env_tpenv name in
     let lower_bounds = List.fold_right ~init:TySet.empty ~f:TySet.add tyl in
-    let upper_bounds = get_upper_bounds env_tpenv name [] in
+    let upper_bounds = get_upper_bounds env_tpenv name in
     let reified = get_reified env_tpenv name in
     let enforceable = get_enforceable env_tpenv name in
     let newable = get_newable env_tpenv name in
     let require_dynamic = get_require_dynamic env_tpenv name in
     let parameters = [] in
+    let rank = get_rank env_tpenv name in
     add
       ~def_pos
       name
@@ -291,6 +282,7 @@ let add_lower_bound ?union env_tpenv name ty =
         newable;
         require_dynamic;
         parameters;
+        rank;
       }
       tpenv
 
@@ -313,20 +305,18 @@ let remove_lower_bound tpenv name bound =
     add ~def_pos name tparam_info tpenv
 
 let remove tpenv name =
-  (* TODO(T70068435) Revisit this function when implementing bounds on HK generic vars,
-     in particular, look at the two Tgeneric below. *)
-  let tparam = mk (Typing_reason.none, Tgeneric (name, [])) in
-  let lower_bounds = get_lower_bounds tpenv name [] in
+  let tparam = mk (Typing_reason.none, Tgeneric name) in
+  let lower_bounds = get_lower_bounds tpenv name in
   let remove_from_upper_bounds_of ty tpenv =
     match get_node ty with
-    | Tgeneric (name, _tyargs) -> remove_upper_bound tpenv name tparam
+    | Tgeneric name -> remove_upper_bound tpenv name tparam
     | _ -> tpenv
   in
   let tpenv = TySet.fold remove_from_upper_bounds_of lower_bounds tpenv in
-  let upper_bounds = get_upper_bounds tpenv name [] in
+  let upper_bounds = get_upper_bounds tpenv name in
   let remove_from_lower_bounds_of ty tpenv =
     match get_node ty with
-    | Tgeneric (name, _tyargs) -> remove_lower_bound tpenv name tparam
+    | Tgeneric name -> remove_lower_bound tpenv name tparam
     | _ -> tpenv
   in
   let tpenv = TySet.fold remove_from_lower_bounds_of upper_bounds tpenv in
@@ -358,6 +348,7 @@ let add_generic_parameters tpenv tparaml =
       newable;
       require_dynamic;
       parameters = nested_params;
+      rank = 0;
     }
   in
 

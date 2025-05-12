@@ -20,8 +20,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 template <class T>
 struct BaseDistinctTablePolicy {
@@ -39,9 +38,9 @@ struct BaseDistinctTablePolicy {
 template <class T, template <class> class Policy = BaseDistinctTablePolicy>
 class DistinctTable {
  public:
-  typedef typename Policy<T>::Store Store;
-  typedef typename Policy<T>::Hash Hash;
-  typedef typename Policy<T>::Equal Equal;
+  using Store = typename Policy<T>::Store;
+  using Hash = typename Policy<T>::Hash;
+  using Equal = typename Policy<T>::Equal;
 
   explicit DistinctTable(
       Store* store, Equal equal = Equal(), Hash hash = Hash())
@@ -92,11 +91,10 @@ class DistinctTable {
     Store* store_;
   };
 
-  typedef typename Policy<T>::template Index<HashIndirect, EqualIndirect> Index;
+  using Index = typename Policy<T>::template Index<HashIndirect, EqualIndirect>;
 
   Store* store_;
   Index indexes_;
 };
 
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift

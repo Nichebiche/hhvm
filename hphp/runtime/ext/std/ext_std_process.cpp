@@ -18,7 +18,6 @@
 #include <cstdlib>
 #include <vector>
 #include <string>
-#include <iostream>
 
 #include <fcntl.h>
 #include <signal.h>
@@ -29,23 +28,18 @@
 #include <folly/portability/Unistd.h>
 
 #include "hphp/util/light-process.h"
-#include "hphp/util/process.h"
 #include "hphp/util/lock.h"
 #include "hphp/util/logger.h"
 #include "hphp/util/rds-local.h"
 
 #include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/array-iterator.h"
-#include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/plain-file.h"
 #include "hphp/runtime/base/string-buffer.h"
-#include "hphp/runtime/base/surprise-flags.h"
-#include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/base/string-util.h"
 #include "hphp/runtime/base/zend-string.h"
 #include "hphp/runtime/ext/std/ext_std.h"
 #include "hphp/runtime/ext/std/ext_std_file.h"
-#include "hphp/runtime/ext/std/ext_std_function.h"
 #include "hphp/runtime/ext/string/ext_string.h"
 #include "hphp/runtime/server/cli-server.h"
 
@@ -238,7 +232,7 @@ struct ChildProcess : SweepableResourceData {
   String command;
   Variant env;
 
-  CLASSNAME_IS("process");
+  CLASSNAME_IS("process")
   // overriding ResourceData
   const String& o_getClassNameHook() const override { return classnameof(); }
 
@@ -279,7 +273,7 @@ const StaticString s_w("w");
 
 struct DescriptorItem {
 private:
-  typedef int FileDescriptor;
+  using FileDescriptor = int;
   static constexpr int defaultFd = -1;
   static int dupFd(int fd) {
     return dup(fd);
@@ -514,7 +508,7 @@ HHVM_FUNCTION(proc_open, const String& cmd, const Array& descriptorspec,
 
   std::vector<DescriptorItem> items;
 
-  std::string scwd = "";
+  std::string scwd;
   if (!cwd.isNull() && cwd.isString() && !cwd.asCStrRef().empty()) {
     scwd = cwd.asCStrRef().c_str();
   } else if (!g_context->getCwd().empty()) {

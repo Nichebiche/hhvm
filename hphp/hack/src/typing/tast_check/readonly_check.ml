@@ -46,17 +46,13 @@ let union_fty_readonly
   in
   { fty with Typing_defs.ft_params = fps }
 
-let rec get_fty ty =
+let rec get_fty env ty =
   let open Typing_defs in
+  let (_, ty) = Tast_env.strip_supportdyn env ty in
   match get_node ty with
-  | Tnewtype (name, _, ty2)
-    when String.equal name SN.Classes.cSupportDyn
-         || String.equal name SN.Classes.cFunctionRef ->
-    get_fty ty2
-  | Tfun fty -> Some fty
   | Tunion tyl ->
     (* Filter out dynamic types *)
-    let ftys = List.filter_map tyl ~f:get_fty in
+    let ftys = List.filter_map tyl ~f:(get_fty env) in
     (* Because Typing_union already aggressively simplifies function unions to a single function type,
        there should be a single function type here 99% of the time. *)
     (match ftys with
@@ -66,7 +62,10 @@ let rec get_fty ty =
     | fty1 :: rest ->
       let result = List.fold ~init:fty1 ~f:union_fty_readonly rest in
       Some result)
-  | _ -> None
+  | _ ->
+    (match Tast_env.get_underlying_function_type env ty with
+    | None -> None
+    | Some (_, ft) -> Some ft)
 
 type rty =
   | Readonly
@@ -131,13 +130,13 @@ let rec grab_class_elts_from_ty ~static ?(seen = SSet.empty) env ty prop_id =
       tyl
   (* Generic types can be treated similarly to an intersection type
      where we find the first prop that works from the upper bounds *)
-  | Tgeneric (name, tyargs) ->
+  | Tgeneric name ->
     (* Avoid circular generics with a set *)
     if SSet.mem name seen then
       []
     else
       let new_seen = SSet.add name seen in
-      let upper_bounds = Tast_env.get_upper_bounds env name tyargs in
+      let upper_bounds = Tast_env.get_upper_bounds env name in
       find_first_in_list ~seen:new_seen (Typing_set.elements upper_bounds)
       |> Option.value ~default:[]
   | Tdependent (_, ty) ->
@@ -175,14 +174,20 @@ let rec ty_expr env ((_, _, expr_) : Tast.expr) : rty =
       (* In the mut case, we need to check if the property is marked readonly *)
       let prop_elts = get_prop_elts env e1 e2 in
       let readonly_prop =
-        List.find ~f:Typing_defs.get_ce_readonly_prop prop_elts
+        List.find
+          ~f:Typing_defs.get_ce_readonly_prop_or_needs_concrete
+          prop_elts
       in
       Option.value_map readonly_prop ~default:Mut ~f:(fun _ -> Readonly))
   | Class_get (class_id, expr, Is_prop) ->
     (* If any of the static props could be readonly, treat the expression as readonly *)
     let class_elts = get_static_prop_elts env class_id expr in
     (* Note that the empty list case (when the prop doesn't exist) returns Mut *)
-    if List.exists class_elts ~f:Typing_defs.get_ce_readonly_prop then
+    if
+      List.exists
+        class_elts
+        ~f:Typing_defs.get_ce_readonly_prop_or_needs_concrete
+    then
       Readonly
     else
       Mut
@@ -234,13 +239,13 @@ let rec is_safe_mut_ty env (seen : SSet.t) ty =
     is_safe_mut_ty env seen upper
   | Tclass (_, _, tyl) when is_value_collection_ty env ty ->
     List.for_all tyl ~f:(fun l -> is_safe_mut_ty env seen l)
-  | Tgeneric (name, tyargs) ->
+  | Tgeneric name ->
     (* Avoid circular generics with a set *)
     if SSet.mem name seen then
       false
     else
       let new_seen = SSet.add name seen in
-      let upper_bounds = Tast_env.get_upper_bounds env name tyargs in
+      let upper_bounds = Tast_env.get_upper_bounds env name in
       Typing_set.exists (fun l -> is_safe_mut_ty env new_seen l) upper_bounds
   | _ ->
     (* Otherwise, check if there's any primitive type it could be *)
@@ -274,7 +279,7 @@ let rec check_readonly_return_call env pos caller_ty is_readonly =
       List.iter tyl ~f:(fun ty ->
           check_readonly_return_call env pos ty is_readonly)
     | _ ->
-      (match get_fty caller_ty with
+      (match get_fty env caller_ty with
       | Some fty when get_ft_returns_readonly fty ->
         Typing_error_utils.add_typing_error
           ~env:(Tast_env.tast_env_as_typing_env env)
@@ -293,7 +298,9 @@ let check_readonly_property env obj get obj_ro =
   let prop_elts = get_prop_elts env obj get in
   (* If there's any property in the list of possible properties that could be readonly,
       it must be explicitly cast to readonly *)
-  let readonly_prop = List.find ~f:get_ce_readonly_prop prop_elts in
+  let readonly_prop =
+    List.find ~f:get_ce_readonly_prop_or_needs_concrete prop_elts
+  in
   match (readonly_prop, obj_ro) with
   | (Some elt, Mut) ->
     Typing_error_utils.add_typing_error
@@ -312,9 +319,12 @@ let check_static_readonly_property pos env (class_ : Tast.class_id) get obj_ro =
   let prop_elts = get_static_prop_elts env class_ get in
   (* If there's any property in the list of possible properties that could be readonly,
       it must be explicitly cast to readonly *)
-  let readonly_prop = List.find ~f:Typing_defs.get_ce_readonly_prop prop_elts in
+  let readonly_prop =
+    List.find ~f:Typing_defs.get_ce_readonly_prop_or_needs_concrete prop_elts
+  in
   match (readonly_prop, obj_ro) with
-  | (Some elt, Mut) when Typing_defs.get_ce_readonly_prop elt ->
+  | (Some elt, Mut) when Typing_defs.get_ce_readonly_prop_or_needs_concrete elt
+    ->
     Typing_error_utils.add_typing_error
       ~env:(Tast_env.tast_env_as_typing_env env)
       Typing_error.(
@@ -349,10 +359,13 @@ let rec assign env lval rval =
   (* Check that we're assigning a readonly value to a readonly property *)
   let check_ro_prop_assignment prop_elts =
     let mutable_prop =
-      List.find ~f:(fun r -> not (Typing_defs.get_ce_readonly_prop r)) prop_elts
+      List.find
+        ~f:(fun r -> not (Typing_defs.get_ce_readonly_prop_or_needs_concrete r))
+        prop_elts
     in
     match mutable_prop with
-    | Some elt when not (Typing_defs.get_ce_readonly_prop elt) ->
+    | Some elt when not (Typing_defs.get_ce_readonly_prop_or_needs_concrete elt)
+      ->
       Typing_error_utils.add_typing_error
         ~env:(Tast_env.tast_env_as_typing_env env)
         Typing_error.(
@@ -434,7 +447,7 @@ let method_call env caller =
   match caller with
   (* Readonly call checks *)
   | (ty, _, ReadonlyExpr (_, _, Obj_get (e1, _, _, Is_method))) ->
-    (match get_fty ty with
+    (match get_fty env ty with
     | Some fty when not (get_ft_readonly_this fty) ->
       Typing_error_utils.add_typing_error
         ~env:(Tast_env.tast_env_as_typing_env env)
@@ -474,7 +487,7 @@ let call
   let open Typing_defs in
   let (env, caller_ty) = Tast_env.expand_type env caller_ty in
   let check_readonly_closure caller_ty caller_rty =
-    match (get_fty caller_ty, caller_rty) with
+    match (get_fty env caller_ty, caller_rty) with
     | (Some fty, Readonly)
       when (not (get_ft_readonly_this fty)) && not method_call ->
       (* Get the position of why this function is its current type (usually a typehint) *)
@@ -523,7 +536,7 @@ let call
 
   (* Check that readonly arguments match their parameters *)
   let check_args env caller_ty args unpacked_arg =
-    match get_fty caller_ty with
+    match get_fty env caller_ty with
     | Some fty ->
       let rec check args params =
         match (args, params) with

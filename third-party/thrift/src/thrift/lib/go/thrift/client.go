@@ -37,7 +37,7 @@ type clientOptions struct {
 // ClientOption is a single configuration setting for the thrift client
 type ClientOption func(*clientOptions)
 
-// NoTimeout is a special value for WithTimeout that disables timeouts.
+// NoTimeout is a special value for WithIoTimeout that disables timeouts.
 const NoTimeout = time.Duration(0)
 
 // WithProtocolID sets protocol to given protocolID
@@ -101,11 +101,6 @@ func WithIoTimeout(ioTimeout time.Duration) ClientOption {
 	}
 }
 
-// Deprecated: use WithIoTimeout() instead.
-func WithTimeout(ioTimeout time.Duration) ClientOption {
-	return WithIoTimeout(ioTimeout)
-}
-
 // WithTLS is a creates a TLS connection to the given address, including ALPN for thrift.
 func WithTLS(addr string, dialTimeout time.Duration, tlsConfig *tls.Config) ClientOption {
 	clonedTLSConfig := tlsConfig.Clone()
@@ -147,10 +142,11 @@ func newOptions(opts ...ClientOption) *clientOptions {
 	return res
 }
 
-// NewClient will return a connected thrift protocol object.
+// DeprecatedNewClient will return a connected thrift protocol object.
 // Effectively, this is an open thrift connection to a server.
 // A thrift client can use this connection to communicate with a server.
-func NewClient(opts ...ClientOption) (types.Protocol, error) {
+// Deprecated: use NewClient instead.
+func DeprecatedNewClient(opts ...ClientOption) (Protocol, error) {
 	options := newOptions(opts...)
 
 	// Important: TLS config must be modified *before* the dialerFn below is called.
@@ -175,7 +171,7 @@ func NewClient(opts ...ClientOption) (types.Protocol, error) {
 		}
 	}
 
-	var protocol types.Protocol
+	var protocol Protocol
 	var protocolErr error
 	switch options.transport {
 	case TransportIDHeader:
@@ -194,4 +190,21 @@ func NewClient(opts ...ClientOption) (types.Protocol, error) {
 	}
 
 	return protocol, protocolErr
+}
+
+// NewClient will return a connected thrift RequestChannel object.
+// Effectively, this is an open thrift connection to a server.
+// A thrift client can use this connection to communicate with a server.
+func NewClient(opts ...ClientOption) (RequestChannel, error) {
+	proto, err := DeprecatedNewClient(opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// RocketClient (protocol) implements RequestChannel.
+	// It doesn't need to be wrapped in a SerialChannel.
+	if channel, ok := proto.(RequestChannel); ok {
+		return channel, nil
+	}
+	return NewSerialChannel(proto), nil
 }

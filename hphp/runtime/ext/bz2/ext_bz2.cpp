@@ -23,7 +23,6 @@
 #include "hphp/runtime/ext/bz2/bz2-file.h"
 #include "hphp/runtime/ext/std/ext_std_file.h"
 #include "hphp/runtime/vm/native-data.h"
-#include "hphp/util/alloc.h"
 #include <folly/String.h>
 
 // Don't do the do { ... } while(0) trick here because we need 'f' outside of
@@ -296,11 +295,7 @@ struct ChunkedBunzipper {
       } else {
         m_eof = true;
         BZ2_bzDecompressEnd(&m_bzstream);
-        throw_object(
-          "Exception",
-          make_vec_array(folly::sformat("bz2 error status={}", status))
-        );
-        return empty_string();
+        SystemLib::throwExceptionObject(folly::sformat("bz2 error status={}", status));
       }
     }
 
@@ -309,11 +304,7 @@ struct ChunkedBunzipper {
       BZ2_bzDecompressEnd(&m_bzstream);
     }
     if (!completed) {
-      throw_object(
-        "Exception",
-        make_vec_array("inflate failed: output too large")
-      );
-      return empty_string();
+      SystemLib::throwExceptionObject("inflate failed: output too large");
     }
     return result;
   }

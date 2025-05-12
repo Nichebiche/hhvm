@@ -38,7 +38,6 @@
 #include <thrift/lib/cpp/concurrency/FunctionRunner.h>
 #include <thrift/lib/cpp/concurrency/PosixThreadFactory.h>
 #include <thrift/lib/cpp/concurrency/Thread.h>
-#include <thrift/lib/cpp/concurrency/Util.h>
 
 FOLLY_GFLAGS_DECLARE_bool(codel_enabled);
 
@@ -77,8 +76,8 @@ class ThreadManager : public virtual folly::Executor {
   static const size_t DEFAULT_MAX_QUEUE_SIZE = 1 << 16; // should be power of 2
 
   class Task;
-  typedef std::function<void(std::shared_ptr<Runnable>)> ExpireCallback;
-  typedef std::function<void()> InitCallback;
+  using ExpireCallback = std::function<void(std::shared_ptr<Runnable>)>;
+  using InitCallback = std::function<void()>;
 
   ~ThreadManager() override {}
 

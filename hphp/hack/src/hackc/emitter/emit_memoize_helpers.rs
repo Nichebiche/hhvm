@@ -9,8 +9,8 @@ use error::Result;
 use hhbc::FCallArgs;
 use hhbc::FCallArgsFlags;
 use hhbc::Local;
-use instruction_sequence::instr;
 use instruction_sequence::InstrSeq;
+use instruction_sequence::instr;
 use oxidized::aast::FunParam;
 use oxidized::aast::FunParamInfo;
 use oxidized::pos::Pos;
@@ -54,7 +54,7 @@ pub fn check_memoize_possible<Ex, En>(
     if !is_method
         && params.iter().any(|param| match param.info {
             FunParamInfo::ParamVariadic => true,
-            FunParamInfo::ParamRequired | FunParamInfo::ParamOptional(_) => false,
+            FunParamInfo::ParamRequired | FunParamInfo::ParamOptional(_) => param.splat.is_some(),
         })
     {
         return Err(Error::fatal_runtime(

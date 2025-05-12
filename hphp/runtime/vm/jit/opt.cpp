@@ -20,7 +20,6 @@
 #include "hphp/runtime/base/tracing.h"
 #include "hphp/runtime/vm/jit/check.h"
 #include "hphp/runtime/vm/jit/irgen-bespoke.h"
-#include "hphp/runtime/vm/jit/ir-builder.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/mutation.h"
 #include "hphp/runtime/vm/jit/pass-tracer.h"
@@ -33,8 +32,6 @@
 
 #include "hphp/util/configs/hhir.h"
 #include "hphp/util/trace.h"
-
-#include <boost/dynamic_bitset.hpp>
 
 namespace HPHP::jit {
 
@@ -183,7 +180,7 @@ bool lowerBespokes(IRUnit& unit) {
  * marked as hotter (i.e. more likely to execute) than any of its predecessors.
  */
 void fixBlockHints(IRUnit& unit) {
-  TRACE_SET_MOD(hhir_fixhint);
+  TRACE_SET_MOD(hhir_fixhint)
   bool changed = false;
   auto blocks = rpoSortCfg(unit);
   do {

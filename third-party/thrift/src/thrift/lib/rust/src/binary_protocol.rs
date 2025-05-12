@@ -16,8 +16,8 @@
 
 use std::io::Cursor;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use bufsize::SizeCounter;
 use bytes::Bytes;
 use bytes::BytesMut;
@@ -332,7 +332,7 @@ impl<B: BufExt> ProtocolReader for BinaryProtocolDeserializer<B> {
         Ok(())
     }
     #[inline]
-    fn read_map_begin(&mut self) -> Result<(TType, TType, Option<usize>)> {
+    fn read_map_begin_unchecked(&mut self) -> Result<(TType, TType, Option<usize>)> {
         let k_type = TType::try_from(self.read_byte()?)?;
         let v_type = TType::try_from(self.read_byte()?)?;
 
@@ -360,7 +360,7 @@ impl<B: BufExt> ProtocolReader for BinaryProtocolDeserializer<B> {
         Ok(())
     }
     #[inline]
-    fn read_list_begin(&mut self) -> Result<(TType, Option<usize>)> {
+    fn read_list_begin_unchecked(&mut self) -> Result<(TType, Option<usize>)> {
         let elem_type = TType::try_from(self.read_byte()?)?;
         let size = self.read_i32()?;
         ensure_err!(size >= 0, ProtocolError::InvalidDataLength);
@@ -381,7 +381,7 @@ impl<B: BufExt> ProtocolReader for BinaryProtocolDeserializer<B> {
         Ok(())
     }
     #[inline]
-    fn read_set_begin(&mut self) -> Result<(TType, Option<usize>)> {
+    fn read_set_begin_unchecked(&mut self) -> Result<(TType, Option<usize>)> {
         let elem_type = TType::try_from(self.read_byte()?)?;
         let size = self.read_i32()?;
         ensure_err!(size >= 0, ProtocolError::InvalidDataLength);
@@ -495,7 +495,7 @@ where
     T: Serialize<BinaryProtocolSerializer<SizeCounter>>,
 {
     let mut sizer = BinaryProtocolSerializer::with_buffer(SizeCounter::new());
-    v.write(&mut sizer);
+    v.rs_thrift_write(&mut sizer);
     sizer.finish()
 }
 
@@ -509,7 +509,7 @@ where
 {
     // Now that we have the size, allocate an output buffer and serialize into it
     let mut buf = BinaryProtocolSerializer::with_buffer(buffer);
-    v.write(&mut buf);
+    v.rs_thrift_write(&mut buf);
     buf
 }
 
@@ -563,5 +563,5 @@ where
 {
     let source: DeserializeSource<C> = b.into();
     let mut deser = BinaryProtocolDeserializer::new(source.0);
-    T::read(&mut deser)
+    T::rs_thrift_read(&mut deser)
 }

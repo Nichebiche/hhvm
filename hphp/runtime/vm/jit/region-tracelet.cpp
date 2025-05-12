@@ -25,7 +25,6 @@
 #include "hphp/runtime/vm/jit/punt.h"
 #include "hphp/runtime/vm/jit/timer.h"
 #include "hphp/runtime/vm/jit/translator.h"
-#include "hphp/runtime/vm/jit/analysis.h"
 
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/trace.h"
@@ -33,7 +32,6 @@
 #include <folly/MapUtil.h>
 
 #include <algorithm>
-#include <vector>
 
 #include "hphp/runtime/vm/jit/irgen.h"
 
@@ -44,7 +42,7 @@
 
 namespace HPHP { namespace jit {
 
-TRACE_SET_MOD(region);
+TRACE_SET_MOD(region)
 
 using InterpSet = hphp_hash_set<SrcKey, SrcKey::Hasher>;
 
@@ -168,8 +166,7 @@ bool instructionEndsRegion(const Env& env) {
   return false;
 }
 
-Type getLiveType(const jit::vector<RegionDesc::TypedLocation>& liveTypes,
-                 const Location& loc) {
+Type getLiveType(const LiveTypesVec& liveTypes, const Location& loc) {
   for (auto const& lt : liveTypes) {
     if (lt.location == loc) return lt.type;
   }
@@ -519,7 +516,7 @@ RegionDescPtr form_region(Env& env) {
       FTRACE(1, "ir generation for {} failed with {}\n",
              env.inst.toString(), exn.what());
       always_assert_flog(
-        !env.interp.count(env.sk),
+        !env.interp.contains(env.sk),
         "Double PUNT trying to translate {}\n", env.inst
       );
       env.interp.insert(env.sk);

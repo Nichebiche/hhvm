@@ -15,7 +15,7 @@ import (
 // (needed to ensure safety because of naive import list construction)
 var _ = fmt.Printf
 var _ = reflect.Ptr
-var _ = thrift.ZERO
+var _ = thrift.VOID
 
 
 type Enum int32
@@ -46,10 +46,6 @@ func (x Enum) String() string {
         return v
     }
     return "<UNSET>"
-}
-
-func (x Enum) Ptr() *Enum {
-    return &x
 }
 
 // Deprecated: Use EnumToValue instead (e.g. `x, ok := EnumToValue["name"]`).

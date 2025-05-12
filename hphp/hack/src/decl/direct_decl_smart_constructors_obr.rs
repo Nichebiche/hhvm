@@ -11,8 +11,8 @@ use arena_collections::AssocListMut;
 use arena_collections::List;
 use arena_collections::MultiSetMut;
 use bstr::BStr;
-use bumpalo::collections as bump;
 use bumpalo::Bump;
+use bumpalo::collections as bump;
 use flatten_smart_constructors::FlattenSmartConstructors;
 use hash::HashSet;
 use hh_autoimport_rust as hh_autoimport;
@@ -584,7 +584,15 @@ fn read_member_modifiers<'a: 'b, 'b>(modifiers: impl Iterator<Item = &'b Node<'a
     };
     for modifier in modifiers {
         if let Some(vis) = modifier.as_visibility() {
-            ret.visibility = vis;
+            match (ret.visibility, vis) {
+                (aast::Visibility::Protected, aast::Visibility::Internal) => {
+                    ret.visibility = aast::Visibility::ProtectedInternal
+                }
+                (aast::Visibility::Internal, aast::Visibility::Protected) => {
+                    ret.visibility = aast::Visibility::ProtectedInternal
+                }
+                _ => ret.visibility = vis,
+            }
         }
         match modifier.token_kind() {
             Some(TokenKind::Static) => ret.is_static = true,
@@ -1221,6 +1229,7 @@ struct Attributes<'a> {
     cross_package: Option<&'a str>,
     sort_text: Option<&'a str>,
     dynamically_referenced: bool,
+    needs_concrete: bool,
 }
 
 impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> Impl<'a, 'o, 't, S> {
@@ -1646,8 +1655,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                 let reason =
                     self.alloc(Reason::FromWitnessDecl(self.alloc(WitnessDecl::Hint(pos))));
                 let ty_ = if self.is_type_param_in_scope(name) {
-                    // TODO (T69662957) must fill type args of Tgeneric
-                    Ty_::Tgeneric(self.alloc((name, &[])))
+                    Ty_::Tgeneric(self.alloc(name))
                 } else {
                     match name {
                         "nothing" => Ty_::Tunion(&[]),
@@ -1747,6 +1755,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
             cross_package: None,
             sort_text: None,
             dynamically_referenced: false,
+            needs_concrete: false,
         };
 
         let nodes = match node {
@@ -1835,6 +1844,8 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                             .string_literal_param
                             .map(|(_, x)| self.str_from_utf8_for_bytes_in_arena(x));
                     }
+                    "__NeedsConcrete" => attributes.needs_concrete = true,
+
                     _ => {}
                 }
             }
@@ -2394,7 +2405,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                         .map(|&targ| self.convert_tapply_to_tgeneric(targ)),
                 );
                 match self.tapply_should_be_tgeneric(ty.0, id) {
-                    Some(name) => Ty_::Tgeneric(self.alloc((name, converted_targs))),
+                    Some(name) => Ty_::Tgeneric(self.alloc(name)),
                     None => Ty_::Tapply(self.alloc((id, converted_targs))),
                 }
             }
@@ -2444,18 +2455,20 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                 self.convert_tapply_to_tgeneric(tk),
                 self.convert_tapply_to_tgeneric(tv),
             ))),
-            Ty_::Ttuple(&TupleType {
-                required,
-                extra: TupleExtra::Textra { optional, variadic },
-            }) => {
-                let extra = self.alloc(TupleExtra::Textra {
-                    optional: self.slice(
-                        optional
-                            .iter()
-                            .map(|&targ| self.convert_tapply_to_tgeneric(targ)),
-                    ),
-                    variadic: self.convert_tapply_to_tgeneric(variadic),
-                });
+            Ty_::Ttuple(&TupleType { required, extra }) => {
+                let extra = match extra {
+                    TupleExtra::Textra { optional, variadic } => self.alloc(TupleExtra::Textra {
+                        optional: self.slice(
+                            optional
+                                .iter()
+                                .map(|&targ| self.convert_tapply_to_tgeneric(targ)),
+                        ),
+                        variadic: self.convert_tapply_to_tgeneric(variadic),
+                    }),
+                    TupleExtra::Tsplat(hint) => {
+                        self.alloc(TupleExtra::Tsplat(self.convert_tapply_to_tgeneric(hint)))
+                    }
+                };
                 Ty_::Ttuple(
                     self.alloc(TupleType {
                         required: self.slice(
@@ -2526,9 +2539,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
             | Ty_::Tneg(_)
             | Ty_::Tlabel(_)
             | Ty_::Tnewtype(_)
-            | Ty_::Tvar(_)
-            | Ty_::TunappliedAlias(_)
-            | Ty_::Ttuple(_) => panic!("unexpected decl type in constraint"),
+            | Ty_::Tvar(_) => panic!("unexpected decl type in constraint"),
         };
         self.alloc(Ty(ty.0, ty_))
     }
@@ -2598,7 +2609,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
     // hint Haccess is a flat list, whereas decl ty Taccess is a tree.
     fn taccess_root_is_generic(ty: &Ty<'_>) -> bool {
         match ty {
-            Ty(_, Ty_::Tgeneric((_, &[]))) => true,
+            Ty(_, Ty_::Tgeneric(_)) => true,
             Ty(_, Ty_::Taccess(&TaccessType(t, _))) => Self::taccess_root_is_generic(t),
             _ => false,
         }
@@ -2606,7 +2617,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
 
     fn ctx_generic_for_generic_taccess_inner(ty: &Ty<'_>, cst: &str) -> std::string::String {
         let left = match ty {
-            Ty(_, Ty_::Tgeneric((name, &[]))) => name.to_string(),
+            Ty(_, Ty_::Tgeneric(name)) => name.to_string(),
             Ty(_, Ty_::Taccess(&TaccessType(ty, cst))) => {
                 Self::ctx_generic_for_generic_taccess_inner(ty, cst.1)
             }
@@ -2653,7 +2664,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                     user_attributes: &[],
                 });
                 tparams.push(tparam);
-                let cap_ty = self.alloc(Ty(cap_ty.0, Ty_::Tgeneric(self.alloc((name, &[])))));
+                let cap_ty = self.alloc(Ty(cap_ty.0, Ty_::Tgeneric(self.alloc(name))));
                 let ft = self.alloc(FunType {
                     implicit_params: self.alloc(FunImplicitParams {
                         capability: CapTy(cap_ty),
@@ -2740,9 +2751,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                 // If the type hint for this function parameter is a type
                 // parameter introduced in this function declaration, don't add
                 // a new type parameter.
-                Ty_::Tgeneric(&(type_name, _))
-                    if tparams.iter().any(|tp| tp.name.1 == type_name) =>
-                {
+                Ty_::Tgeneric(type_name) if tparams.iter().any(|tp| tp.name.1 == type_name) => {
                     ty.clone()
                 }
                 // Otherwise, if the parameter is `G $g`, create tparam
@@ -2759,7 +2768,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                         self.alloc(Reason::FromWitnessDecl(
                             self.alloc(WitnessDecl::Hint(param_pos)),
                         )),
-                        Ty_::Tgeneric(self.alloc((id.1, &[]))),
+                        Ty_::Tgeneric(self.alloc(id.1)),
                     )
                 }
             };
@@ -2773,10 +2782,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                 self.ctx_generic_for_dependent(name, cst.1),
             );
             tparams.push(tp(left_id, &[]));
-            let left = self.alloc(Ty(
-                context_reason,
-                Ty_::Tgeneric(self.alloc((left_id.1, &[]))),
-            ));
+            let left = self.alloc(Ty(context_reason, Ty_::Tgeneric(self.alloc(left_id.1))));
             where_constraints.push(self.alloc(WhereConstraint(
                 left,
                 ConstraintKind::ConstraintEq,
@@ -2841,10 +2847,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
                         self.ctx_generic_for_generic_taccess(t, cst.1),
                     );
                     tparams.push(tp(left_id, &[]));
-                    let left = self.alloc(Ty(
-                        context_ty.0,
-                        Ty_::Tgeneric(self.alloc((left_id.1, &[]))),
-                    ));
+                    let left = self.alloc(Ty(context_ty.0, Ty_::Tgeneric(self.alloc(left_id.1))));
                     where_constraints.push(self.alloc(WhereConstraint(
                         left,
                         ConstraintKind::ConstraintEq,
@@ -2869,17 +2872,17 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> DirectDeclSmartConstructors<'a,
         let context_tys = self.slice(context_tys.iter().copied().map(|ty| {
             let ty_ = match ty.1 {
                 Ty_::Tapply(((_, name), &[])) if name.starts_with('$') => {
-                    Ty_::Tgeneric(self.alloc((self.ctx_generic_for_fun(name), &[])))
+                    Ty_::Tgeneric(self.alloc(self.ctx_generic_for_fun(name)))
                 }
                 Ty_::Taccess(&TaccessType(Ty(_, Ty_::Tapply(((_, name), &[]))), cst))
                     if name.starts_with('$') =>
                 {
                     let name = self.ctx_generic_for_dependent(name, cst.1);
-                    Ty_::Tgeneric(self.alloc((name, &[])))
+                    Ty_::Tgeneric(self.alloc(name))
                 }
                 Ty_::Taccess(&TaccessType(t, cst)) if Self::taccess_root_is_generic(t) => {
                     let name = self.ctx_generic_for_generic_taccess(t, cst.1);
-                    Ty_::Tgeneric(self.alloc((name, &[])))
+                    Ty_::Tgeneric(self.alloc(name))
                 }
                 _ => return ty,
             };
@@ -3625,13 +3628,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
                 let Id(pos, class_type) = class_id;
                 match class_type.rsplit('\\').next() {
                     Some(name) if self.is_type_param_in_scope(name) => {
-                        let pos = self.merge(pos, self.get_pos(type_arguments));
-                        let type_arguments = self.slice(
-                            type_arguments
-                                .iter()
-                                .filter_map(|&node| self.node_to_ty(node)),
-                        );
-                        let ty_ = Ty_::Tgeneric(self.alloc((name, type_arguments)));
+                        let ty_ = Ty_::Tgeneric(self.alloc(name));
                         self.hint_ty(pos, ty_)
                     }
                     _ => {
@@ -3715,9 +3712,10 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
             }
         }
 
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         let is_module_newtype = module_kw_opt.is_ignored_token_with_kind(TokenKind::Module);
         let vis = match keyword.token_kind() {
             Some(TokenKind::Type) => aast::TypedefVisibility::Transparent,
@@ -3904,9 +3902,10 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
             }
         }
 
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         let typedef = self.alloc(TypedefType {
             module: self.module,
             pos,
@@ -4169,10 +4168,10 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
                     s.push_str(msg);
                     s.into_bump_str()
                 });
-                let internal = header
-                    .modifiers
-                    .iter()
-                    .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+                let internal = header.modifiers.iter().any(|m| {
+                    m.as_visibility() == Some(aast::Visibility::Internal)
+                        || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+                });
                 let fun_elt = self.alloc(FunElt {
                     module: self.module,
                     internal,
@@ -5203,6 +5202,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
             !is_constructor && attributes.support_dynamic_type,
         );
         flags.set(MethodFlags::NO_AUTO_LIKES, attributes.no_auto_likes);
+        flags.set(MethodFlags::NEEDS_CONCRETE, attributes.needs_concrete);
 
         // Parse the user attributes
         // in facts-mode all attributes are saved, otherwise only __NoAutoDynamic/__NoAutoLikes is
@@ -5284,9 +5284,10 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
             Some(ty) => ty,
             None => return Node::Ignored(SK::EnumDeclaration),
         };
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         let key = id.1;
         let consts = self.slice(enumerators.iter().filter_map(|node| match *node {
             Node::Const(const_) => Some(const_),
@@ -5528,9 +5529,10 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
                 _ => {}
             }
         }
-        let internal = modifiers
-            .iter()
-            .any(|m| m.as_visibility() == Some(aast::Visibility::Internal));
+        let internal = modifiers.iter().any(|m| {
+            m.as_visibility() == Some(aast::Visibility::Internal)
+                || m.as_visibility() == Some(aast::Visibility::ProtectedInternal)
+        });
         user_attributes.push(self.alloc(shallow_decl_defs::UserAttribute {
             name: (name.0, "__EnumClass"),
             params: &[],
@@ -6121,6 +6123,7 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
         outer_left_paren: Self::Output,
         readonly_keyword: Self::Output,
         _function_keyword: Self::Output,
+        type_parameters: Self::Output,
         _inner_left_paren: Self::Output,
         parameter_list: Self::Output,
         _inner_right_paren: Self::Output,
@@ -6176,6 +6179,51 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
             _ => None,
         }));
 
+        let tparams = match type_parameters {
+            Node::TypeParameters(&tparams) => tparams,
+            _ => &[],
+        };
+
+        let tparams = if self.implicit_sdt() {
+            // Create a new Vec to hold the updated Tparams
+            let mut updated_tparams = bump::Vec::with_capacity_in(tparams.len(), self.arena);
+            // Iterate over the old tparams and add `supportdyn<mixed>` upper bounds
+            // unless there is `__NoAutoBound` attribute
+            tparams.iter().for_each(|&tparam| {
+                if tparam.user_attributes.iter().any(|ua| {
+                    ua.name.1 == naming_special_names_rust::user_attributes::NO_AUTO_BOUND
+                }) {
+                    updated_tparams.push(tparam);
+                } else {
+                    let mut new_tparam = (*tparam).clone();
+                    let mixed = self.alloc(Ty(
+                        self.alloc(Reason::FromWitnessDecl(
+                            self.alloc(WitnessDecl::Hint(tparam.name.0)),
+                        )),
+                        Ty_::Tmixed,
+                    ));
+                    let ub = self.alloc(Ty(
+                        self.alloc(Reason::FromWitnessDecl(
+                            self.alloc(WitnessDecl::Hint(tparam.name.0)),
+                        )),
+                        Ty_::Tapply(self.alloc((
+                            (tparam.name.0, naming_special_names::classes::SUPPORT_DYN),
+                            self.alloc([mixed]),
+                        ))),
+                    ));
+                    let mut constraints = new_tparam.constraints.to_vec();
+                    constraints.push((ConstraintKind::ConstraintAs, ub));
+                    new_tparam.constraints = self.alloc(constraints);
+                    let x = self.alloc(new_tparam);
+                    updated_tparams.push(x);
+                }
+            });
+            updated_tparams.into_bump_slice()
+        } else {
+            tparams
+        };
+        let instantiated = tparams.is_empty();
+
         let ret = match self.node_to_ty(return_type) {
             Some(ty) => ty,
             None => return Node::Ignored(SK::ClosureTypeSpecifier),
@@ -6203,14 +6251,14 @@ impl<'a, 'o, 't, S: SourceTextAllocator<'t, 'a>> FlattenSmartConstructors
             ret
         };
         let fty = Ty_::Tfun(self.alloc(FunType {
-            tparams: &[],
+            tparams,
             where_constraints: &[],
             params,
             implicit_params,
             ret: pess_return_type,
             flags,
             cross_package: None,
-            instantiated: true,
+            instantiated,
         }));
 
         if self.implicit_sdt() {

@@ -155,6 +155,16 @@ const ServerAttributeDynamic<uint32_t>& ThriftServerConfig::getMaxQps() const {
   return maxQps_;
 }
 
+const ServerAttributeDynamic<uint32_t>&
+ThriftServerConfig::getConcurrencyLimit() const {
+  return concurrencyLimit_;
+}
+
+const ServerAttributeDynamic<uint32_t>& ThriftServerConfig::getExecutionRate()
+    const {
+  return executionRate_;
+}
+
 const ServerAttributeDynamic<bool>& ThriftServerConfig::getUseClientTimeout()
     const {
   return useClientTimeout_;
@@ -429,6 +439,18 @@ void ThriftServerConfig::setMaxQps(
   maxQps_.set(maxQps, source);
 }
 
+void ThriftServerConfig::setConcurrencyLimit(
+    folly::observer::Observer<std::optional<uint32_t>> concurrencyLimit,
+    AttributeSource source) {
+  concurrencyLimit_.set(std::move(concurrencyLimit), source);
+}
+
+void ThriftServerConfig::setExecutionRate(
+    folly::observer::Observer<std::optional<uint32_t>> executionRate,
+    AttributeSource source) {
+  executionRate_.set(std::move(executionRate), source);
+}
+
 void ThriftServerConfig::setUseClientTimeout(
     folly::observer::Observer<std::optional<bool>> useClientTimeout,
     AttributeSource source) {
@@ -497,7 +519,7 @@ void ThriftServerConfig::setWriteBatchingByteSize(
   writeBatchingByteSize_.set(batchingByteSize, source);
 }
 
-void ThriftServerConfig::setMaxResponseWriteTime(
+void ThriftServerConfig::setMaxResponseWriteTime_Deprecated(
     folly::observer::Observer<std::optional<std::chrono::milliseconds>>
         maxResponseWriteTime,
     AttributeSource source) {

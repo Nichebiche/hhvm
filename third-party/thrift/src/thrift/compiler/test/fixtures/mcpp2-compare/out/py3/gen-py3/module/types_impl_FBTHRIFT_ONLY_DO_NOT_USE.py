@@ -12,172 +12,10 @@ import module.thrift_enums as _fbthrift_python_enums
 _fbthrift__module_name__ = "module.types"
 
 
-
-class MyEnumA(thrift.py3.types.CompiledEnum):
-    fieldA = 1
-    fieldB = 2
-    fieldC = 4
-
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    @staticmethod
-    def __get_metadata__():
-        return _fbthrift_python_enums.gen_metadata_enum_MyEnumA()
-
-    @staticmethod
-    def __get_thrift_name__():
-        return "module.MyEnumA"
-
-    def _to_python(self):
-        return _fbthrift_python_enums.MyEnumA(self._fbthrift_value_)
-
-    def _to_py3(self):
-        return self
-
-    def _to_py_deprecated(self):
-        return self._fbthrift_value_
-
-    def __lt__(self, other):
-        if isinstance(other, MyEnumA):
-            return self._fbthrift_value_ < other._fbthrift_value_
-
-        raise NotImplementedError(
-            "'<' only implemented for comparisons with MyEnumA"
-        )
-
-    def __int__(self):
-        return self._fbthrift_value_
-
-    def __index__(self):
-        return self._fbthrift_value_
-
-
-
-
-class AnnotatedEnum(thrift.py3.types.CompiledEnum):
-    FIELDA = 2
-    FIELDB = 4
-    FIELDC = 9
-
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    @staticmethod
-    def __get_metadata__():
-        return _fbthrift_python_enums.gen_metadata_enum_AnnotatedEnum()
-
-    @staticmethod
-    def __get_thrift_name__():
-        return "module.AnnotatedEnum"
-
-    def _to_python(self):
-        return _fbthrift_python_enums.AnnotatedEnum(self._fbthrift_value_)
-
-    def _to_py3(self):
-        return self
-
-    def _to_py_deprecated(self):
-        return self._fbthrift_value_
-
-    def __lt__(self, other):
-        if isinstance(other, AnnotatedEnum):
-            return self._fbthrift_value_ < other._fbthrift_value_
-
-        raise NotImplementedError(
-            "'<' only implemented for comparisons with AnnotatedEnum"
-        )
-
-    def __int__(self):
-        return self._fbthrift_value_
-
-    def __index__(self):
-        return self._fbthrift_value_
-
-
-
-
-class AnnotatedEnum2(thrift.py3.types.CompiledEnum):
-    FIELDA = 2
-    FIELDB = 4
-    FIELDC = 9
-
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    @staticmethod
-    def __get_metadata__():
-        return _fbthrift_python_enums.gen_metadata_enum_AnnotatedEnum2()
-
-    @staticmethod
-    def __get_thrift_name__():
-        return "module.AnnotatedEnum2"
-
-    def _to_python(self):
-        return _fbthrift_python_enums.AnnotatedEnum2(self._fbthrift_value_)
-
-    def _to_py3(self):
-        return self
-
-    def _to_py_deprecated(self):
-        return self._fbthrift_value_
-
-    def __lt__(self, other):
-        if isinstance(other, AnnotatedEnum2):
-            return self._fbthrift_value_ < other._fbthrift_value_
-
-        raise NotImplementedError(
-            "'<' only implemented for comparisons with AnnotatedEnum2"
-        )
-
-    def __int__(self):
-        return self._fbthrift_value_
-
-    def __index__(self):
-        return self._fbthrift_value_
-
-
-
-
-class MyEnumB(thrift.py3.types.CompiledEnum):
-    AField = 0
-
-    __module__ = _fbthrift__module_name__
-    __slots__ = ()
-
-    @staticmethod
-    def __get_metadata__():
-        return _fbthrift_python_enums.gen_metadata_enum_MyEnumB()
-
-    @staticmethod
-    def __get_thrift_name__():
-        return "module.MyEnumB"
-
-    def _to_python(self):
-        return _fbthrift_python_enums.MyEnumB(self._fbthrift_value_)
-
-    def _to_py3(self):
-        return self
-
-    def _to_py_deprecated(self):
-        return self._fbthrift_value_
-
-    def __lt__(self, other):
-        if isinstance(other, MyEnumB):
-            return self._fbthrift_value_ < other._fbthrift_value_
-
-        raise NotImplementedError(
-            "'<' only implemented for comparisons with MyEnumB"
-        )
-
-    def __int__(self):
-        return self._fbthrift_value_
-
-    def __index__(self):
-        return self._fbthrift_value_
-
-
-
+MyEnumA = _fbthrift_python_enums.MyEnumA
+AnnotatedEnum = _fbthrift_python_enums.AnnotatedEnum
+AnnotatedEnum2 = _fbthrift_python_enums.AnnotatedEnum2
+MyEnumB = _fbthrift_python_enums.MyEnumB
 
 
 class __SimpleUnionType(enum.Enum):
@@ -187,7 +25,6 @@ class __SimpleUnionType(enum.Enum):
 
     __module__ = _fbthrift__module_name__
     __slots__ = ()
-
 
 class __ComplexUnionType(enum.Enum):
     intValue = 1
@@ -223,7 +60,6 @@ class __ComplexUnionType(enum.Enum):
     __module__ = _fbthrift__module_name__
     __slots__ = ()
 
-
 class __FloatUnionType(enum.Enum):
     floatSide = 1
     doubleSide = 2
@@ -231,4 +67,3 @@ class __FloatUnionType(enum.Enum):
 
     __module__ = _fbthrift__module_name__
     __slots__ = ()
-

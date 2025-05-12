@@ -23,7 +23,7 @@
 
 #include <queue>
 
-TRACE_SET_MOD(coeffects);
+TRACE_SET_MOD(coeffects)
 
 namespace HPHP {
 
@@ -449,7 +449,7 @@ CoeffectsConfig::toStringList(const StaticCoeffects input) {
     if (std::all_of(caps.begin(),
                     caps.end(),
                     [&] (const std::string& s) {
-                      return capabilities.count(s) > 0;
+                      return capabilities.contains(s);
                     })) {
       result.push_back(name);
     }

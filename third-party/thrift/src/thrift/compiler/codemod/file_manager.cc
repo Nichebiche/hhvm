@@ -43,7 +43,7 @@ size_t get_first_character_of_this_line(
   // Otherwise, `pos` is not the first character in the content, look for any
   // preceding newline (marking the end of the previous line).
   const std::string::size_type line_start_offset =
-      content.find_last_of("\n", pos - 1);
+      content.find_last_of('\n', pos - 1);
 
   if (line_start_offset == std::string::npos) {
     // If no preceding newline is found, `pos` is in the first line of
@@ -160,7 +160,7 @@ void file_manager::remove_all_annotations(const t_node& node) {
   size_t begin_offset = SIZE_MAX;
   size_t end_offset = 0;
 
-  for (const auto& annotation : node.annotations()) {
+  for (const auto& annotation : node.unstructured_annotations()) {
     begin_offset = std::min<size_t>(
         begin_offset, to_offset(annotation.second.src_range.begin));
     end_offset = std::max<size_t>(
@@ -244,7 +244,7 @@ void file_manager::remove_namespace(std::string language) {
     auto begin_offset = old_content_.find(ns_stmt, 0);
     size_t end_offset = old_content_.length();
     if (begin_offset != std::string::npos) {
-      end_offset = old_content_.find("\n", begin_offset);
+      end_offset = old_content_.find('\n', begin_offset);
       if (end_offset < old_content_.length()) {
         end_offset++;
       }

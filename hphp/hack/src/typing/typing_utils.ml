@@ -79,6 +79,8 @@ let sub_type_with_dynamic_as_bottom x = !sub_type_with_dynamic_as_bottom_ref x
 
 type is_sub_type_type = env -> locl_ty -> locl_ty -> bool
 
+type is_sub_type_opt_type = env -> locl_ty -> locl_ty -> bool option
+
 let (is_sub_type_ref : is_sub_type_type ref) =
   ref (not_implemented "is_sub_type")
 
@@ -105,6 +107,12 @@ let (is_sub_type_ignore_generic_params_ref : is_sub_type_type ref) =
 
 let is_sub_type_ignore_generic_params x =
   !is_sub_type_ignore_generic_params_ref x
+
+let (is_sub_type_opt_ignore_generic_params_ref : is_sub_type_opt_type ref) =
+  ref (not_implemented "is_sub_type_opt_ignore_generic_params")
+
+let is_sub_type_opt_ignore_generic_params x =
+  !is_sub_type_opt_ignore_generic_params_ref x
 
 type add_constraint =
   env ->
@@ -424,7 +432,7 @@ let get_concrete_supertypes
         in
         iter seen env acc tyl
       | Tdependent (_, ty) -> iter seen env (TySet.add ty acc) tyl
-      | Tgeneric (n, targs) ->
+      | Tgeneric n ->
         if SSet.mem n seen then
           iter seen env acc tyl
         else
@@ -432,7 +440,7 @@ let get_concrete_supertypes
             (SSet.add n seen)
             env
             acc
-            (TySet.elements (Env.get_upper_bounds env n targs) @ tyl)
+            (TySet.elements (Env.get_upper_bounds env n) @ tyl)
       | Tintersection tyl' -> iter seen env acc (tyl' @ tyl)
       | _ -> iter seen env (TySet.add ty acc) tyl)
   in
@@ -527,6 +535,16 @@ let rec strip_supportdyn env ty =
     (true, env, ty)
   | _ -> (false, env, ty)
 
+let rec get_underlying_function_type env ty =
+  let (env, ty) = Env.expand_type env ty in
+  match get_node ty with
+  | Tnewtype (name, [tyarg], _)
+    when String.equal name SN.Classes.cSupportDyn
+         || String.equal name SN.Classes.cFunctionRef ->
+    get_underlying_function_type env tyarg
+  | Tfun ft -> (env, Some (get_reason ty, ft))
+  | _ -> (env, None)
+
 (* The list of types should not be considered to be a bound if it is all mixed
    or supportdyn<mixed> (when include_sd_mixed is set *)
 let no_upper_bound ~include_sd_mixed env tyl =
@@ -556,12 +574,12 @@ let get_base_type ?(expand_supportdyn = true) env ty =
         MakeType.supportdyn r ty
     (* If we have an expression dependent type and it only has one super
        type, we can treat it similarly to AKdependent _, Some ty *)
-    | Tgeneric (n, targs) when DependentKind.is_generic_dep_ty n -> begin
-      match TySet.elements (Env.get_upper_bounds env n targs) with
+    | Tgeneric n when DependentKind.is_generic_dep_ty n -> begin
+      match TySet.elements (Env.get_upper_bounds env n) with
       | ty2 :: _ when ty_equal ty ty2 -> ty
       (* If it's exactly equal, then the base ty is just this one *)
       | ty :: _ ->
-        if TySet.mem ty (Env.get_lower_bounds env n targs) then
+        if TySet.mem ty (Env.get_lower_bounds env n) then
           ty
         else if SSet.mem n seen_generics then
           ty
@@ -637,7 +655,7 @@ let collect_enum_class_upper_bounds env name =
    * is to be found.
    *)
   let rec collect seen ok result name =
-    let upper_bounds = Env.get_upper_bounds env name [] in
+    let upper_bounds = Env.get_upper_bounds env name in
     TySet.fold
       (fun lty (seen, ok, result) ->
         match get_node lty with
@@ -652,7 +670,7 @@ let collect_enum_class_upper_bounds env name =
             mk (r, Tintersection [result; lty])
           in
           (seen, true, result)
-        | Tgeneric (name, _) when not (SSet.mem name seen) ->
+        | Tgeneric name when not (SSet.mem name seen) ->
           collect (SSet.add name seen) ok result name
         | _ -> (seen, ok, result))
       upper_bounds
@@ -751,6 +769,16 @@ let simple_make_supportdyn r env ty =
     | Tnewtype (n, _, _) when String.equal n SN.Classes.cSupportDyn -> ty
     | _ -> MakeType.supportdyn r ty )
 
+let map_supportdyn env ty f =
+  let (env, ty) = Env.expand_type env ty in
+  match deref ty with
+  | (r, Tnewtype (name, [tyarg], _))
+    when String.equal name SN.Classes.cSupportDyn ->
+    let (_, env, ty) = strip_supportdyn env tyarg in
+    let (env, ty) = f env ty in
+    make_supportdyn r env ty
+  | _ -> f env ty
+
 let make_supportdyn_decl_type p r ty =
   mk (r, Tapply ((p, SN.Classes.cSupportDyn), [ty]))
 
@@ -782,7 +810,7 @@ let rec is_capability ty =
     true
   | Tintersection [] -> false
   | Tintersection tyl -> List.for_all ~f:is_capability tyl
-  | Tgeneric (s, []) when SN.Coeffects.is_generated_generic s -> true
+  | Tgeneric s when SN.Coeffects.is_generated_generic s -> true
   | _ -> false
 
 let is_capability_i ty =

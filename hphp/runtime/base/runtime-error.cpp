@@ -14,23 +14,17 @@
    +----------------------------------------------------------------------+
 */
 
-#include "hphp/runtime/base/init-fini-node.h"
 #include "hphp/runtime/base/runtime-error.h"
 #include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/execution-context.h"
 #include "hphp/runtime/base/runtime-option.h"
 #include "hphp/runtime/base/request-info.h"
-#include "hphp/runtime/vm/repo-global-data.h"
 #include "hphp/runtime/vm/vm-regs.h"
 #include "hphp/util/configs/errorhandling.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/configs/php7.h"
-#include "hphp/util/logger.h"
-#include "hphp/util/stack-trace.h"
 #include "hphp/util/string-vsnprintf.h"
-#include "hphp/util/struct-log.h"
 
-#include <folly/AtomicHashMap.h>
 #include <folly/logging/RateLimiter.h>
 #include <folly/Range.h>
 
@@ -111,6 +105,18 @@ void raise_typehint_error_without_first_frame(const std::string& msg) {
 
 void raise_reified_typehint_error(const std::string& msg, bool warn) {
   if (!warn) return raise_typehint_error_without_first_frame(msg);
+  raise_warning_unsampled(msg);
+}
+
+void raise_inline_typehint_error(std::string& givenType, std::string& expectedType, std::string& errorKey) {
+  std::string msg;
+  if (errorKey.empty()) {
+    msg = folly::sformat("Runtime type-check: Expected {}, got {}", expectedType, givenType);
+  } else {
+    msg = folly::sformat("Runtime type-check: Expected {} at {}, got {}",
+      expectedType, errorKey, givenType);
+  }
+  if (Cfg::ErrorHandling::ThrowExceptionOnInlineTypeError) return raise_typehint_error(msg);
   raise_warning_unsampled(msg);
 }
 

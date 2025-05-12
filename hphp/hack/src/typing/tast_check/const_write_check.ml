@@ -65,8 +65,8 @@ let rec check_expr env ((_, _, e) : Tast.expr) =
         | Tclass ((_, c), _, _) -> check_prop env c pid None
         | _ -> ()
       end
-      | Tgeneric (name, targs) ->
-        let upper_bounds = Env.get_upper_bounds env name targs in
+      | Tgeneric name ->
+        let upper_bounds = Env.get_upper_bounds env name in
         let check_class bound =
           match get_node bound with
           | Tclass ((_, c), _, _) -> check_prop env c pid None
@@ -94,8 +94,8 @@ let rec check_expr env ((_, _, e) : Tast.expr) =
         | Tnewtype (_, _, bound)
         | Tdependent (_, bound) ->
           check_const_cty seen bound
-        | Tgeneric (name, targs) ->
-          let upper_bounds = Env.get_upper_bounds env name targs in
+        | Tgeneric name ->
+          let upper_bounds = Env.get_upper_bounds env name in
           let check_class cty seen = check_const_cty seen cty in
           Typing_set.fold check_class upper_bounds seen
         | _ -> seen

@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+#include <gtest/gtest.h>
 #include <folly/CPortability.h>
-#include <folly/portability/GTest.h>
 
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
+#include <thrift/lib/cpp2/protocol/detail/protocol_methods.h>
 
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
@@ -84,14 +85,6 @@ TEST_F(BinaryProtocolTest, writeStringExactly4GB) {
   auto q = folly::IOBufQueue();
   w.setOutput(&q);
   std::string monster((uint64_t)1 << 32, 'x');
-  EXPECT_THROW(w.writeString(monster), TProtocolException);
-}
-
-TEST_F(BinaryProtocolTest, writeStringExceeds4GB) {
-  auto w = BinaryProtocolWriter();
-  auto q = folly::IOBufQueue();
-  w.setOutput(&q);
-  std::string monster(((uint64_t)1 << 32) + 100, 'x');
   EXPECT_THROW(w.writeString(monster), TProtocolException);
 }
 

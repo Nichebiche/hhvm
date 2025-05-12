@@ -46,22 +46,15 @@ namespace {
  *
  * All array elements are marshaled to whisker::object on first use.
  */
-class mstch_array_proxy final
-    : public native_object,
-      public native_object::array_like,
-      public std::enable_shared_from_this<mstch_array_proxy> {
+class mstch_array_proxy final : public array {
  public:
   explicit mstch_array_proxy(mstch_array&& array)
       : proxied_(std::move(array)) {}
 
  private:
-  native_object::array_like::ptr as_array_like() const override {
-    return shared_from_this();
-  }
-
   std::size_t size() const override { return proxied_.size(); }
 
-  object::ptr at(std::size_t index) const override {
+  object at(std::size_t index) const override {
     assert(index < proxied_.size());
     // Only allocate the converted vector when the array is used
     if (converted_.size() == 0) {
@@ -70,12 +63,12 @@ class mstch_array_proxy final
         converted_.emplace_back(from_mstch(std::move(node)));
       }
     }
-    return manage_derived_ref(shared_from_this(), converted_[index]);
+    return converted_[index];
   }
 
-  void print_to(tree_printer::scope scope, const object_print_options& options)
+  void print_to(tree_printer::scope& scope, const object_print_options& options)
       const override {
-    default_print_to("mstch::array", std::move(scope), options);
+    default_print_to("mstch::array", scope, options);
   }
 
   mutable mstch_array proxied_;
@@ -88,28 +81,23 @@ class mstch_array_proxy final
  * Properties are lazily marshaled to whisker::object on first access by name.
  */
 class mstch_map_proxy final
-    : public native_object,
-      public native_object::map_like,
+    : public map,
       public std::enable_shared_from_this<mstch_map_proxy> {
  public:
   explicit mstch_map_proxy(mstch_map&& map) : proxied_(std::move(map)) {}
 
  private:
-  native_object::map_like::ptr as_map_like() const override {
-    return shared_from_this();
-  }
-
-  object::ptr lookup_property(std::string_view id) const override {
+  std::optional<object> lookup_property(std::string_view id) const override {
     if (auto cached = converted_.find(id); cached != converted_.end()) {
-      return manage_derived_ref(shared_from_this(), cached->second);
+      return cached->second;
     }
     if (auto property = proxied_.find(id); property != proxied_.end()) {
       auto [result, inserted] = converted_.insert(
           {std::string(id), from_mstch(std::move(property->second))});
       assert(inserted);
-      return manage_derived_ref(shared_from_this(), result->second);
+      return result->second;
     }
-    return nullptr;
+    return std::nullopt;
   }
 
   std::optional<std::set<std::string>> keys() const override {
@@ -120,9 +108,9 @@ class mstch_map_proxy final
     return property_names;
   }
 
-  void print_to(tree_printer::scope scope, const object_print_options& options)
+  void print_to(tree_printer::scope& scope, const object_print_options& options)
       const override {
-    default_print_to("mstch::map", *keys(), std::move(scope), options);
+    default_print_to("mstch::map", *keys(), scope, options);
   }
 
   mutable mstch_map proxied_;
@@ -136,29 +124,24 @@ class mstch_map_proxy final
  * mstch::object may be volatile.
  */
 class mstch_object_proxy
-    : public native_object,
-      public native_object::map_like,
+    : public map,
       public std::enable_shared_from_this<mstch_object_proxy> {
  public:
   explicit mstch_object_proxy(std::shared_ptr<mstch_object>&& obj)
       : proxied_(std::move(obj)) {}
 
-  native_object::map_like::ptr as_map_like() const override {
-    return shared_from_this();
-  }
-
-  object::ptr lookup_property(std::string_view id) const override {
+  std::optional<object> lookup_property(std::string_view id) const override {
     if (!proxied_->has(id)) {
-      return nullptr;
+      return std::nullopt;
     }
 
     return detail::variant_match(
         proxied_->at(id),
-        [&](const mstch_node& node) -> object::ptr {
+        [&](const mstch_node& node) -> object {
           object::ptr converted = manage_owned<object>(from_mstch(node));
           return manage_derived(shared_from_this(), std::move(converted));
         },
-        [](object::ptr o) -> object::ptr { return o; });
+        [](const object& o) -> object { return o; });
   }
 
   std::optional<std::set<std::string>> keys() const override {
@@ -166,17 +149,15 @@ class mstch_object_proxy
   }
 
   void print_to(
-      tree_printer::scope scope,
+      tree_printer::scope& scope,
       [[maybe_unused]] const object_print_options& options) const override {
-    assert(scope.semantic_depth() <= options.max_depth);
-    scope.println("mstch::object");
+    assert(scope.depth() <= options.max_depth);
+    scope.print("mstch::object");
 
     for (const auto& key : proxied_->property_names()) {
-      auto element_scope = scope.open_transparent_property();
-      element_scope.println("'{}'", key);
       // It's not safe to access the mstch::object properties since they can
       // have side-effects. So we can only report property names.
-      element_scope.open_node().println("...");
+      scope.make_child("'{}' → ...", key);
     }
   }
 
@@ -195,29 +176,14 @@ object from_mstch(mstch_node node) {
       [](double value) { return w::f64(value); },
       [](bool value) { return w::boolean(value); },
       [](std::shared_ptr<mstch_object>&& mstch_obj) -> object {
-        return w::make_native_object<mstch_object_proxy>(std::move(mstch_obj));
+        return w::make_map<mstch_object_proxy>(std::move(mstch_obj));
       },
       [](mstch_map&& map) -> object {
-        return w::make_native_object<mstch_map_proxy>(std::move(map));
+        return w::make_map<mstch_map_proxy>(std::move(map));
       },
       [](mstch_array&& array) -> object {
-        return w::make_native_object<mstch_array_proxy>(std::move(array));
+        return w::make_array<mstch_array_proxy>(std::move(array));
       });
-}
-
-bool is_mstch_object(const object& o) {
-  return o.is_native_object() &&
-      dynamic_cast<mstch_object_proxy*>(o.as_native_object().get()) != nullptr;
-}
-
-bool is_mstch_map(const object& o) {
-  return o.is_native_object() &&
-      dynamic_cast<mstch_map_proxy*>(o.as_native_object().get()) != nullptr;
-}
-
-bool is_mstch_array(const object& o) {
-  return o.is_native_object() &&
-      dynamic_cast<mstch_array_proxy*>(o.as_native_object().get()) != nullptr;
 }
 
 } // namespace whisker

@@ -17,6 +17,7 @@
 package thrift
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -24,6 +25,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/facebook/fbthrift/thrift/lib/go/thrift/format"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
 )
 
@@ -34,55 +36,68 @@ type rocketClient struct {
 	// rsocket client state
 	client RSocketClient
 
-	resultData []byte
-	resultErr  error
-
 	ioTimeout time.Duration
 
 	protoID types.ProtocolID
 
+	persistentHeaders map[string]string
+
+	// NOTE: all variables below are used per-request.
 	messageName string
 	writeType   types.MessageType
 	seqID       int32
-
-	reqHeaders        map[string]string
-	respHeaders       map[string]string
-	persistentHeaders map[string]string
-
-	rbuf *MemoryBuffer
-	wbuf *MemoryBuffer
+	resultData  []byte
+	resultErr   error
+	reqHeaders  map[string]string
+	respHeaders map[string]string
+	rbuf        *bytes.Buffer
+	wbuf        *bytes.Buffer
 }
 
-var _ types.Protocol = (*rocketClient)(nil)
-var _ types.RequestHeaders = (*rocketClient)(nil)
-var _ types.ResponseHeaderGetter = (*rocketClient)(nil)
+var _ Protocol = (*rocketClient)(nil)
+var _ RequestChannel = (*rocketClient)(nil)
 
 // NewRocketClient creates a new Rocket client given an RSocketClient.
-func NewRocketClient(client RSocketClient, protoID types.ProtocolID, ioTimeout time.Duration, persistentHeaders map[string]string) (types.Protocol, error) {
+func NewRocketClient(
+	client RSocketClient,
+	protoID types.ProtocolID,
+	ioTimeout time.Duration,
+	persistentHeaders map[string]string,
+) (Protocol, error) {
 	return newRocketClientFromRsocket(client, protoID, ioTimeout, persistentHeaders)
 }
 
-func newRocketClient(conn net.Conn, protoID types.ProtocolID, ioTimeout time.Duration, persistentHeaders map[string]string) (types.Protocol, error) {
+func newRocketClient(
+	conn net.Conn,
+	protoID types.ProtocolID,
+	ioTimeout time.Duration,
+	persistentHeaders map[string]string,
+) (Protocol, error) {
 	return newRocketClientFromRsocket(newRSocketClient(conn), protoID, ioTimeout, persistentHeaders)
 }
 
-func newRocketClientFromRsocket(client RSocketClient, protoID types.ProtocolID, ioTimeout time.Duration, persistentHeaders map[string]string) (types.Protocol, error) {
+func newRocketClientFromRsocket(
+	client RSocketClient,
+	protoID types.ProtocolID,
+	ioTimeout time.Duration,
+	persistentHeaders map[string]string,
+) (Protocol, error) {
 	p := &rocketClient{
 		client:            client,
 		protoID:           protoID,
 		persistentHeaders: persistentHeaders,
-		rbuf:              NewMemoryBuffer(),
-		wbuf:              NewMemoryBuffer(),
+		rbuf:              new(bytes.Buffer),
+		wbuf:              new(bytes.Buffer),
 		ioTimeout:         ioTimeout,
 		reqHeaders:        make(map[string]string),
 	}
 	switch p.protoID {
 	case types.ProtocolIDBinary:
-		p.Decoder = newBinaryDecoder(p.rbuf)
-		p.Encoder = newBinaryEncoder(p.wbuf)
+		p.Decoder = format.NewBinaryDecoder(p.rbuf)
+		p.Encoder = format.NewBinaryEncoder(p.wbuf)
 	case types.ProtocolIDCompact:
-		p.Decoder = newCompactDecoder(p.rbuf)
-		p.Encoder = newCompactEncoder(p.wbuf)
+		p.Decoder = format.NewCompactDecoder(p.rbuf)
+		p.Encoder = format.NewCompactEncoder(p.wbuf)
 	default:
 		return nil, types.NewProtocolException(fmt.Errorf("Unknown protocol id: %d", p.protoID))
 	}
@@ -102,7 +117,7 @@ func (p *rocketClient) WriteMessageEnd() error {
 	return nil
 }
 
-func (p *rocketClient) Flush() (err error) {
+func (p *rocketClient) Flush() error {
 	dataBytes := p.wbuf.Bytes()
 
 	ctx := context.Background()
@@ -117,25 +132,97 @@ func (p *rocketClient) Flush() (err error) {
 	}
 	headers := unionMaps(p.reqHeaders, p.persistentHeaders)
 	if p.writeType == types.ONEWAY {
-		return p.client.FireAndForget(p.messageName, p.protoID, p.writeType, headers, dataBytes)
+		return p.client.FireAndForget(p.messageName, p.protoID, headers, dataBytes)
 	}
 	if p.writeType != types.CALL {
 		return nil
 	}
-	p.respHeaders, p.resultData, p.resultErr = p.client.RequestResponse(ctx, p.messageName, p.protoID, p.writeType, headers, dataBytes)
+	p.respHeaders, p.resultData, p.resultErr = p.client.RequestResponse(ctx, p.messageName, p.protoID, headers, dataBytes)
 	clear(p.reqHeaders)
 	return nil
 }
 
-func unionMaps(dst, src map[string]string) map[string]string {
-	if dst == nil {
-		return src
+func (p *rocketClient) SendRequestNoResponse(ctx context.Context, messageName string, request WritableStruct) error {
+	dataBytes, err := encodeRequest(p.protoID, request)
+	if err != nil {
+		return err
 	}
-	if src == nil {
-		return dst
+
+	if p.ioTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.ioTimeout)
+		defer cancel()
 	}
-	maps.Copy(dst, src)
-	return dst
+
+	err = p.client.SendSetup(ctx)
+	if err != nil {
+		return err
+	}
+	reqHeaders := RequestHeadersFromContext(ctx)
+	headers := unionMaps(reqHeaders, p.persistentHeaders)
+	return p.client.FireAndForget(messageName, p.protoID, headers, dataBytes)
+}
+
+func (p *rocketClient) SendRequestResponse(ctx context.Context, messageName string, request WritableStruct, response ReadableStruct) error {
+	dataBytes, err := encodeRequest(p.protoID, request)
+	if err != nil {
+		return err
+	}
+
+	if p.ioTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.ioTimeout)
+		defer cancel()
+	}
+
+	err = p.client.SendSetup(ctx)
+	if err != nil {
+		return err
+	}
+	reqHeaders := RequestHeadersFromContext(ctx)
+	headers := unionMaps(reqHeaders, p.persistentHeaders)
+	respHeaders, resultData, resultErr := p.client.RequestResponse(ctx, messageName, p.protoID, headers, dataBytes)
+	if resultErr != nil {
+		return resultErr
+	}
+
+	setResponseHeaders(ctx, respHeaders)
+	err = decodeResponse(p.protoID, resultData, response)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func encodeRequest(protoID types.ProtocolID, request WritableStruct) ([]byte, error) {
+	switch protoID {
+	case types.ProtocolIDBinary:
+		return EncodeBinary(request)
+	case types.ProtocolIDCompact:
+		return EncodeCompact(request)
+	default:
+		return nil, types.NewProtocolException(fmt.Errorf("Unknown protocol id: %d", protoID))
+	}
+}
+
+func decodeResponse(protoID types.ProtocolID, data []byte, response ReadableStruct) error {
+	switch protoID {
+	case types.ProtocolIDBinary:
+		return DecodeBinary(data, response)
+	case types.ProtocolIDCompact:
+		return DecodeCompact(data, response)
+	default:
+		return types.NewProtocolException(fmt.Errorf("Unknown protocol id: %d", protoID))
+	}
+}
+
+func unionMaps(args ...map[string]string) map[string]string {
+	// Creates a brand new unified map and copies contents of 'args' into it.
+	unifiedMap := make(map[string]string)
+	for _, arg := range args {
+		maps.Copy(unifiedMap, arg)
+	}
+	return unifiedMap
 }
 
 func (p *rocketClient) ReadMessageBegin() (string, types.MessageType, int32, error) {
@@ -144,7 +231,13 @@ func (p *rocketClient) ReadMessageBegin() (string, types.MessageType, int32, err
 		return name, types.EXCEPTION, p.seqID, p.resultErr
 	}
 
-	p.rbuf.Init(p.resultData)
+	// Clear the buffer, but keep the underlying storage.
+	p.rbuf.Reset()
+	// Write the result data into the buffer.
+	_, err := p.rbuf.Write(p.resultData)
+	if err != nil {
+		return name, types.EXCEPTION, p.seqID, err
+	}
 	return name, types.REPLY, p.seqID, nil
 }
 
@@ -152,15 +245,15 @@ func (p *rocketClient) ReadMessageEnd() error {
 	return nil
 }
 
-func (p *rocketClient) Skip(fieldType types.Type) (err error) {
+func (p *rocketClient) Skip(fieldType types.Type) error {
 	return types.SkipDefaultDepth(p, fieldType)
 }
 
-func (p *rocketClient) SetRequestHeader(key, value string) {
+func (p *rocketClient) setRequestHeader(key, value string) {
 	p.reqHeaders[key] = value
 }
 
-func (p *rocketClient) GetResponseHeaders() map[string]string {
+func (p *rocketClient) getResponseHeaders() map[string]string {
 	return p.respHeaders
 }
 
@@ -168,4 +261,12 @@ func (p *rocketClient) Close() error {
 	// no need for a finalizer anymore
 	runtime.SetFinalizer(p, nil)
 	return p.client.Close()
+}
+
+func (p *rocketClient) DO_NOT_USE_WrapChannel() RequestChannel {
+	return NewSerialChannel(p)
+}
+
+func (p *rocketClient) DO_NOT_USE_GetResponseHeaders() map[string]string {
+	return p.getResponseHeaders()
 }

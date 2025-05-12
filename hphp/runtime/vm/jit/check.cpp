@@ -19,27 +19,18 @@
 #include "hphp/runtime/vm/jit/analysis.h"
 #include "hphp/runtime/vm/jit/block.h"
 #include "hphp/runtime/vm/jit/cfg.h"
-#include "hphp/runtime/vm/jit/id-set.h"
 #include "hphp/runtime/vm/jit/ir-instruction.h"
 #include "hphp/runtime/vm/jit/ir-opcode.h"
 #include "hphp/runtime/vm/jit/ir-unit.h"
 #include "hphp/runtime/vm/jit/memory-effects.h"
-#include "hphp/runtime/vm/jit/state-vector.h"
-#include "hphp/runtime/vm/jit/phys-reg.h"
 #include "hphp/runtime/vm/jit/reg-alloc.h"
 #include "hphp/runtime/vm/jit/type.h"
 
 #include "hphp/runtime/base/bespoke-array.h"
-#include "hphp/runtime/base/perf-warning.h"
-#include "hphp/runtime/ext/core/ext_core_closure.h"
 
 #include <folly/Format.h>
 
-#include <bitset>
-#include <iostream>
 #include <string>
-
-#include <boost/dynamic_bitset.hpp>
 
 namespace HPHP::jit {
 
@@ -49,7 +40,7 @@ namespace {
 
 //////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 /*
  * Return the number of parameters required for this block.
@@ -653,7 +644,7 @@ using TypeNames::TCA;
     always_assert(acls <= AUnknownTV);
     always_assert(acls <= canonicalize(pointee(inst->typeParam())));
   }
-  if (inst->is(LdPropAddr, LdInitPropAddr,
+  if (inst->is(LdClosureArg, LdPropAddr, LdInitPropAddr,
                LdClsPropAddrOrNull, LdClsPropAddrOrRaise)) {
     always_assert(inst->typeParam() <= TCell);
   }

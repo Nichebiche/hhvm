@@ -62,9 +62,9 @@ containerStruct2::containerStruct2() :
   static_cast<::std::int32_t>(2),
   static_cast<::std::int32_t>(3),
   static_cast<::std::int32_t>(4) }),
-    __fbthrift_field_fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")),
-    __fbthrift_field_req_fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")),
-    __fbthrift_field_opt_fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")) {
+    __fbthrift_field_fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")),
+    __fbthrift_field_req_fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")),
+    __fbthrift_field_opt_fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")) {
 }
 
 
@@ -143,10 +143,10 @@ void containerStruct2::__fbthrift_clear() {
   this->__fbthrift_field_fieldC.clear();
   this->__fbthrift_field_req_fieldC.clear();
   this->__fbthrift_field_opt_fieldC.clear();
-  this->__fbthrift_field_fieldD = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_req_fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_opt_fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_fieldD = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_req_fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_opt_fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   __isset = {};
 }
 
@@ -271,6 +271,7 @@ void swap([[maybe_unused]] containerStruct2& a, [[maybe_unused]] containerStruct
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void containerStruct2::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t containerStruct2::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t containerStruct2::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -279,6 +280,7 @@ template void containerStruct2::readNoXfer<>(apache::thrift::CompactProtocolRead
 template uint32_t containerStruct2::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t containerStruct2::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t containerStruct2::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 template void containerStruct2::readNoXfer<>(apache::thrift::SimpleJSONProtocolReader*);
 template uint32_t containerStruct2::write<>(apache::thrift::SimpleJSONProtocolWriter*) const;
 template uint32_t containerStruct2::serializedSize<>(apache::thrift::SimpleJSONProtocolWriter const*) const;

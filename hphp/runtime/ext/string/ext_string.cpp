@@ -36,12 +36,9 @@
 #include "hphp/runtime/base/string-util.h"
 #include "hphp/runtime/base/zend-scanf.h"
 #include "hphp/runtime/base/zend-string.h"
-#include "hphp/runtime/base/zend-url.h"
-#include "hphp/runtime/ext/std/ext_std_classobj.h"
 #include "hphp/runtime/ext/std/ext_std_math.h"
 #include "hphp/runtime/ext/std/ext_std_variable.h"
 #include "hphp/runtime/server/http-protocol.h"
-#include "hphp/runtime/server/http-request-handler.h"
 #include "hphp/util/concurrent-lru-cache.h"
 #include "hphp/util/configs/php7.h"
 #include "hphp/util/lock.h"
@@ -1870,7 +1867,7 @@ private:
 uint16_t inline PatAndRepl::hash(int start, int len) const {
   assertx(pat.size() >= start + len);
   return strtr_hash(pat.data() + start, len);
-};
+}
 
 bool WuManberReplacement::initPatterns(const Array& arr) {
   patterns.reserve(arr.size());

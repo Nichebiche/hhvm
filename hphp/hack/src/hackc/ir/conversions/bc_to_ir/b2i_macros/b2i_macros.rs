@@ -11,12 +11,9 @@ use hhbc_gen::OpcodeData;
 use hhbc_gen::Outputs;
 use proc_macro2::Ident;
 use proc_macro2::TokenStream;
+use quote::ToTokens;
 use quote::quote;
 use quote::quote_spanned;
-use quote::ToTokens;
-use syn::parse::ParseStream;
-use syn::parse::Parser;
-use syn::spanned::Spanned;
 use syn::Arm;
 use syn::Attribute;
 use syn::Error;
@@ -33,6 +30,9 @@ use syn::Path;
 use syn::Result;
 use syn::Stmt;
 use syn::Token;
+use syn::parse::ParseStream;
+use syn::parse::Parser;
+use syn::spanned::Spanned;
 
 /// This macro is used by the convert_opcode function to help it convert
 /// "standard" opcodes from HHVM's bytecode to IR Instrs.
@@ -121,7 +121,7 @@ fn has_bc_to_ir_attr(attrs: &mut [Attribute]) -> bool {
     attrs
         .iter()
         .next()
-        .map_or(false, |attr| attr.path.is_ident("bc_to_ir"))
+        .is_some_and(|attr| attr.path.is_ident("bc_to_ir"))
 }
 
 fn expr_to_path(expr: Expr) -> Result<Path> {

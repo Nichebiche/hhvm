@@ -22,26 +22,33 @@
 #include <thrift/conformance/stresstest/client/TestRunner.h>
 #include <thrift/lib/cpp2/transport/rocket/payload/PayloadSerializer.h>
 
-namespace apache {
-namespace thrift {
-namespace stress {
+namespace apache::thrift::stress {
 
 using namespace apache::thrift::rocket;
 
 // Stress tests may override the default main() behavior by defining this weak
 // symbol.
-FOLLY_ATTR_WEAK int customStressTestMain(int argc, char* argv[]);
+FOLLY_ATTR_WEAK int customStressTestMain(int argc, char* argv[])
+// Mac doesn't like undefined weak symbols, but our dev-mode linker doesn't like
+// defined weak symbols. ¯\_(ツ)_/¯
+#ifdef __APPLE__
+{
+  (void)argc;
+  (void)argv;
+  return 0;
+}
+#else
+    ;
+#endif
 
-} // namespace stress
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift::stress
 
 using namespace apache::thrift::stress;
 
 int main(int argc, char* argv[]) {
   folly::init(&argc, &argv);
 
-  if (customStressTestMain) {
+  if (&customStressTestMain) {
     return customStressTestMain(argc, argv);
   }
 

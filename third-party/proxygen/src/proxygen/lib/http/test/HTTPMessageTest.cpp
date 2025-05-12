@@ -479,7 +479,7 @@ TEST(HTTPMessage, CheckHeaderForToken) {
 }
 
 TEST(HTTPHeaders, AddStringPiece) {
-  const char foo[] = "name:value";
+  constexpr const char* foo = "name:value";
   HTTPHeaders headers;
 
   folly::StringPiece str(foo);
@@ -774,6 +774,14 @@ TEST(HTTPMessage, HTTPPriorityOrderIdSetGet) {
   auto priHeaderViaGetter = message.getHTTPPriority();
   EXPECT_EQ(priHeaderViaGetter->urgency, 7);
   EXPECT_EQ(priHeaderViaGetter->orderId, 10);
+}
+
+TEST(HTTPMessage, HTTPPriorityPausedSetGet) {
+  HTTPMessage message;
+  message.setHTTPPriority(HTTPPriority(7, false, 0, true /* paused */));
+  EXPECT_TRUE(httpPriorityFromHTTPMessage(message)->paused);
+  auto& priHeader = message.getHeaders().getSingleOrEmpty(HTTP_HEADER_PRIORITY);
+  EXPECT_EQ("u=7,p", priHeader);
 }
 
 TEST(HTTPHeaders, GetSetOnResize) {

@@ -87,6 +87,8 @@ type t = locl_phase t_ [@@deriving show]
 
 val to_json : 'a t_ -> Hh_json.json
 
+val to_json_full : 'a t_ -> Hh_json.json
+
 val debug_reason : sub:locl_phase t_ -> super:locl_phase t_ -> 'a Explanation.t
 
 val debug_derivation :
@@ -241,6 +243,8 @@ val yield_asyncgen : Pos.t -> t
 val yield_asyncnull : Pos.t -> t
 
 val yield_send : Pos.t -> t
+
+val polymorphic_type_param : Pos_or_decl.t * string * string * int -> t
 
 val lost_info : string * t * blame -> t
 
@@ -529,6 +533,18 @@ val prj_fn_ret :
   super:locl_phase t_ ->
   locl_phase t_
 
+(** Record the decomposition of a subtype constraint between an aggregate type in
+    subtype position and some other type into another contraint between some
+    type contained in the aggregate and the other type *)
+val prj_contains_sub :
+  sub:locl_phase t_ -> sub_prj:locl_phase t_ -> locl_phase t_
+
+(** Record the decomposition of a subtype constraint between an aggregate type in
+    supertype position and some other type into another contraint between some
+    type contained in the aggregate and the other type *)
+val prj_contains_super :
+  super:locl_phase t_ -> super_prj:locl_phase t_ -> locl_phase t_
+
 (** Record the decomposition of a subtype constraint between a union type in
     subtype position and some other type into another contraint between some
     member of the union and the other type *)
@@ -596,12 +612,6 @@ val prj_arraykey_sub :
     the int or string part of the arraykey type and the other type *)
 val prj_arraykey_super :
   super:locl_phase t_ -> super_prj:locl_phase t_ -> locl_phase t_
-
-(** Record the rewrite of a subtype constraint between a class<T> type in the
-    subtype position and a string-ish type in the supertype position to
-    classname<T> <: Tsuper *)
-val prj_rewrite_classname :
-  sub:locl_phase t_ -> sub_prj:locl_phase t_ -> locl_phase t_
 
 val missing_field : t
 

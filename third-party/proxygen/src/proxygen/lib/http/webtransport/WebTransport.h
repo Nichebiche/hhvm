@@ -14,6 +14,7 @@
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 #include <proxygen/lib/http/HTTPMessage.h>
+#include <quic/api/QuicCallbacks.h>
 
 namespace proxygen {
 
@@ -46,7 +47,7 @@ class WebTransport {
   };
 
   static bool isConnectMessage(const proxygen::HTTPMessage& msg) {
-    static const std::string kWebTransport{"webtransport"};
+    constexpr std::string_view kWebTransport{"webtransport"};
     return msg.isRequest() &&
            msg.getMethod() == proxygen::HTTPMethod::CONNECT &&
            msg.getUpgradeProtocol() &&
@@ -152,6 +153,41 @@ class WebTransport {
         uint32_t error) = 0;
   };
 
+  class ByteEventCallback : public quic::ByteEventCallback {
+   public:
+    ByteEventCallback() = default;
+
+    ~ByteEventCallback() override = default;
+
+    virtual void onByteEvent(quic::StreamId id, uint64_t offset) noexcept = 0;
+
+    virtual void onByteEventCanceled(quic::StreamId id,
+                                     uint64_t offset) noexcept = 0;
+
+    // setWritePrefaceSize is called by the WebTransport layer, and doesn't need
+    // to be called by the user.
+    // The reason this is present is that some WebTransport implementations
+    // write a preface to the stream once it is created. We want to pass the
+    // correct value of offset to the onByteEvent and onByteEventCanceled
+    // callbacks.
+    void setWritePrefaceSize(uint32_t writePrefaceSize) {
+      writePrefaceSize_ = writePrefaceSize;
+    }
+
+   private:
+    void onByteEvent(quic::ByteEvent byteEvent) final {
+      onByteEvent(byteEvent.id, byteEvent.offset - writePrefaceSize_);
+    }
+
+    void onByteEventCanceled(quic::ByteEventCancellation cancellation) final {
+      onByteEventCanceled(cancellation.id,
+                          cancellation.offset - writePrefaceSize_);
+    }
+
+   private:
+    uint32_t writePrefaceSize_{0};
+  };
+
   enum class FCState { BLOCKED, UNBLOCKED };
   // Handle for write streams
   class StreamWriteHandle : public StreamHandleBase {
@@ -170,7 +206,9 @@ class WebTransport {
     // fail with a WebTransport::Exception with the stopSendingErrorCode.
     // After the cancellation callback, the StreamWriteHandle is invalid.
     virtual folly::Expected<FCState, ErrorCode> writeStreamData(
-        std::unique_ptr<folly::IOBuf> data, bool fin) = 0;
+        std::unique_ptr<folly::IOBuf> data,
+        bool fin,
+        ByteEventCallback* byteEventCallback) = 0;
 
     // Reset the stream with the given error
     virtual folly::Expected<folly::Unit, ErrorCode> resetStream(
@@ -224,7 +262,10 @@ class WebTransport {
                           WebTransport::ErrorCode>
   readStreamData(uint64_t id) = 0;
   virtual folly::Expected<FCState, ErrorCode> writeStreamData(
-      uint64_t id, std::unique_ptr<folly::IOBuf> data, bool fin) = 0;
+      uint64_t id,
+      std::unique_ptr<folly::IOBuf> data,
+      bool fin,
+      ByteEventCallback* deliveryCallback) = 0;
   virtual folly::Expected<folly::Unit, ErrorCode> resetStream(
       uint64_t streamId, uint32_t error) = 0;
   virtual folly::Expected<folly::Unit, ErrorCode> setPriority(

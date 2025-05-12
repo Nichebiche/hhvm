@@ -103,7 +103,7 @@ struct Args_BadInteraction_foo {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_BadInteraction_foo {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "BadInteraction.foo"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -339,7 +339,7 @@ struct Args_MyService_ping {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_ping {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.ping"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -364,7 +364,7 @@ struct Args_MyService_getRandomData {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_getRandomData {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.getRandomData"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -390,7 +390,7 @@ struct Args_MyService_hasDataById {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_hasDataById {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.hasDataById"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("id", ::fbthrift::TType::I64, 1),
         ];
@@ -400,7 +400,7 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_My
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "id", function: "hasDataById"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -420,7 +420,7 @@ struct Args_MyService_getDataById {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_getDataById {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.getDataById"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("id", ::fbthrift::TType::I64, 1),
         ];
@@ -430,7 +430,7 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_My
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "id", function: "getDataById"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -451,7 +451,7 @@ struct Args_MyService_putDataById {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_putDataById {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.putDataById"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("data", ::fbthrift::TType::String, 2),
             ::fbthrift::Field::new("id", ::fbthrift::TType::I64, 1),
@@ -463,8 +463,8 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_My
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
-                (::fbthrift::TType::String, 2) => field_data = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "id", function: "putDataById"})?),
+                (::fbthrift::TType::String, 2) => field_data = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "data", function: "putDataById"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -486,7 +486,7 @@ struct Args_MyService_lobDataById {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_lobDataById {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.lobDataById"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             ::fbthrift::Field::new("data", ::fbthrift::TType::String, 2),
             ::fbthrift::Field::new("id", ::fbthrift::TType::I64, 1),
@@ -498,8 +498,8 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_My
             let (_, fty, fid) = p.read_field_begin(|_| (), ARGS)?;
             match (fty, fid as ::std::primitive::i32) {
                 (::fbthrift::TType::Stop, _) => break,
-                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
-                (::fbthrift::TType::String, 2) => field_data = ::std::option::Option::Some(::fbthrift::Deserialize::read(p)?),
+                (::fbthrift::TType::I64, 1) => field_id = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "id", function: "lobDataById"})?),
+                (::fbthrift::TType::String, 2) => field_data = ::std::option::Option::Some(::anyhow::Context::context(::fbthrift::Deserialize::rs_thrift_read(p), ::fbthrift::errors::DeserializingArgError { arg: "data", function: "lobDataById"})?),
                 (fty, _) => p.skip(fty)?,
             }
             p.read_field_end()?;
@@ -519,7 +519,7 @@ struct Args_MyService_doNothing {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyService_doNothing {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyService.doNothing"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -572,13 +572,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"ping";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.ping";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_ping = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_ping = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -601,12 +602,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.ping", exception = ?exn);
+                ::tracing::error!(method = "MyService.ping", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.ping", exn);
-                ::tracing::error!(method = "MyService.ping", panic = ?aexn);
+                ::tracing::error!(method = "MyService.ping", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::PingExn::ApplicationException(aexn))
             }
         };
@@ -633,13 +634,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"getRandomData";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.getRandomData";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_getRandomData = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_getRandomData = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -662,12 +664,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.getRandomData", exception = ?exn);
+                ::tracing::error!(method = "MyService.getRandomData", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.getRandomData", exn);
-                ::tracing::error!(method = "MyService.getRandomData", panic = ?aexn);
+                ::tracing::error!(method = "MyService.getRandomData", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::GetRandomDataExn::ApplicationException(aexn))
             }
         };
@@ -694,13 +696,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"hasDataById";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.hasDataById";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_hasDataById = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_hasDataById = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -724,12 +727,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.hasDataById", exception = ?exn);
+                ::tracing::error!(method = "MyService.hasDataById", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.hasDataById", exn);
-                ::tracing::error!(method = "MyService.hasDataById", panic = ?aexn);
+                ::tracing::error!(method = "MyService.hasDataById", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::HasDataByIdExn::ApplicationException(aexn))
             }
         };
@@ -756,13 +759,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"getDataById";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.getDataById";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_getDataById = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_getDataById = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -786,12 +790,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.getDataById", exception = ?exn);
+                ::tracing::error!(method = "MyService.getDataById", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.getDataById", exn);
-                ::tracing::error!(method = "MyService.getDataById", panic = ?aexn);
+                ::tracing::error!(method = "MyService.getDataById", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::GetDataByIdExn::ApplicationException(aexn))
             }
         };
@@ -818,13 +822,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"putDataById";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.putDataById";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_putDataById = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_putDataById = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -849,12 +854,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.putDataById", exception = ?exn);
+                ::tracing::error!(method = "MyService.putDataById", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.putDataById", exn);
-                ::tracing::error!(method = "MyService.putDataById", panic = ?aexn);
+                ::tracing::error!(method = "MyService.putDataById", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::PutDataByIdExn::ApplicationException(aexn))
             }
         };
@@ -881,13 +886,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"lobDataById";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.lobDataById";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_lobDataById = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_lobDataById = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -912,12 +918,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.lobDataById", exception = ?exn);
+                ::tracing::error!(method = "MyService.lobDataById", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.lobDataById", exn);
-                ::tracing::error!(method = "MyService.lobDataById", panic = ?aexn);
+                ::tracing::error!(method = "MyService.lobDataById", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::LobDataByIdExn::ApplicationException(aexn))
             }
         };
@@ -944,13 +950,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyService";
         const METHOD_NAME: &::std::ffi::CStr = c"doNothing";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyService.doNothing";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyService_doNothing = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyService_doNothing = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -973,12 +980,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyService.doNothing", exception = ?exn);
+                ::tracing::error!(method = "MyService.doNothing", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyService.doNothing", exn);
-                ::tracing::error!(method = "MyService.doNothing", panic = ?aexn);
+                ::tracing::error!(method = "MyService.doNothing", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service::DoNothingExn::ApplicationException(aexn))
             }
         };
@@ -1328,7 +1335,7 @@ struct Args_MyServicePrioParent_ping {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyServicePrioParent_ping {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyServicePrioParent.ping"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -1353,7 +1360,7 @@ struct Args_MyServicePrioParent_pong {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyServicePrioParent_pong {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyServicePrioParent.pong"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -1406,13 +1413,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyServicePrioParent";
         const METHOD_NAME: &::std::ffi::CStr = c"ping";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyServicePrioParent.ping";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyServicePrioParent_ping = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyServicePrioParent_ping = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -1435,12 +1443,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyServicePrioParent.ping", exception = ?exn);
+                ::tracing::error!(method = "MyServicePrioParent.ping", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyServicePrioParent.ping", exn);
-                ::tracing::error!(method = "MyServicePrioParent.ping", panic = ?aexn);
+                ::tracing::error!(method = "MyServicePrioParent.ping", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service_prio_parent::PingExn::ApplicationException(aexn))
             }
         };
@@ -1467,13 +1475,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyServicePrioParent";
         const METHOD_NAME: &::std::ffi::CStr = c"pong";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyServicePrioParent.pong";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyServicePrioParent_pong = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyServicePrioParent_pong = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -1496,12 +1505,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyServicePrioParent.pong", exception = ?exn);
+                ::tracing::error!(method = "MyServicePrioParent.pong", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyServicePrioParent.pong", exn);
-                ::tracing::error!(method = "MyServicePrioParent.pong", panic = ?aexn);
+                ::tracing::error!(method = "MyServicePrioParent.pong", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service_prio_parent::PongExn::ApplicationException(aexn))
             }
         };
@@ -1774,7 +1783,7 @@ struct Args_MyServicePrioChild_pang {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_MyServicePrioChild_pang {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "MyServicePrioChild.pang"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -1829,13 +1838,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"MyServicePrioChild";
         const METHOD_NAME: &::std::ffi::CStr = c"pang";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"MyServicePrioChild.pang";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_MyServicePrioChild_pang = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_MyServicePrioChild_pang = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -1858,12 +1868,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "MyServicePrioChild.pang", exception = ?exn);
+                ::tracing::error!(method = "MyServicePrioChild.pang", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("MyServicePrioChild.pang", exn);
-                ::tracing::error!(method = "MyServicePrioChild.pang", panic = ?aexn);
+                ::tracing::error!(method = "MyServicePrioChild.pang", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::my_service_prio_child::PangExn::ApplicationException(aexn))
             }
         };
@@ -2144,13 +2154,14 @@ pub mod bad_service {
             _seqid: ::std::primitive::u32,
         ) -> ::anyhow::Result<()> {
             use ::futures::FutureExt as _;
+            use ::fbthrift::ExceptionInfo;
     
             const SERVICE_NAME: &::std::ffi::CStr = c"BadService";
             const METHOD_NAME: &::std::ffi::CStr = c"BadInteraction.foo";
             const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"BadService.BadInteraction.foo";
             let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
             ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-            let _args: self::Args_BadInteraction_foo = ::fbthrift::Deserialize::read(p)?;
+            let _args: self::Args_BadInteraction_foo = ::fbthrift::Deserialize::rs_thrift_read(p)?;
             let bytes_read = ::fbthrift::help::buf_len(&req)?;
             ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
                 protocol: P::PROTOCOL_ID,
@@ -2173,12 +2184,12 @@ pub mod bad_service {
                     ::std::result::Result::Ok(res)
                 }
                 ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                    ::tracing::error!(method = "BadInteraction.foo", exception = ?exn);
+                    ::tracing::error!(method = "BadInteraction.foo", exception = ?exn, error = exn.exn_value());
                     ::std::result::Result::Err(exn)
                 }
                 ::std::result::Result::Err(exn) => {
                     let aexn = ::fbthrift::ApplicationException::handler_panic("BadInteraction.foo", exn);
-                    ::tracing::error!(method = "BadInteraction.foo", panic = ?aexn);
+                    ::tracing::error!(method = "BadInteraction.foo", panic = ?aexn, error = aexn.exn_value());
                     ::std::result::Result::Err(crate::services::bad_interaction::FooExn::ApplicationException(aexn))
                 }
             };
@@ -2423,7 +2434,7 @@ struct Args_BadService_bar {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_BadService_bar {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "BadService.bar"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -2482,13 +2493,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"BadService";
         const METHOD_NAME: &::std::ffi::CStr = c"bar";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"BadService.bar";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_BadService_bar = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_BadService_bar = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -2511,12 +2523,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "BadService.bar", exception = ?exn);
+                ::tracing::error!(method = "BadService.bar", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("BadService.bar", exn);
-                ::tracing::error!(method = "BadService.bar", panic = ?aexn);
+                ::tracing::error!(method = "BadService.bar", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::bad_service::BarExn::ApplicationException(aexn))
             }
         };
@@ -2835,7 +2847,7 @@ struct Args_FooBarBazService_foo {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_FooBarBazService_foo {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "FooBarBazService.foo"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -2860,7 +2872,7 @@ struct Args_FooBarBazService_bar {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_FooBarBazService_bar {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "FooBarBazService.bar"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -2885,7 +2897,7 @@ struct Args_FooBarBazService_baz {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_FooBarBazService_baz {
     #[inline]
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "FooBarBazService.baz"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
         ];
         let _ = p.read_struct_begin(|_| ())?;
@@ -2938,13 +2950,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"FooBarBazService";
         const METHOD_NAME: &::std::ffi::CStr = c"foo";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"FooBarBazService.foo";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_FooBarBazService_foo = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_FooBarBazService_foo = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -2967,12 +2980,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "FooBarBazService.foo", exception = ?exn);
+                ::tracing::error!(method = "FooBarBazService.foo", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("FooBarBazService.foo", exn);
-                ::tracing::error!(method = "FooBarBazService.foo", panic = ?aexn);
+                ::tracing::error!(method = "FooBarBazService.foo", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::foo_bar_baz_service::FooExn::ApplicationException(aexn))
             }
         };
@@ -2999,13 +3012,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"FooBarBazService";
         const METHOD_NAME: &::std::ffi::CStr = c"bar";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"FooBarBazService.bar";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_FooBarBazService_bar = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_FooBarBazService_bar = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -3028,12 +3042,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "FooBarBazService.bar", exception = ?exn);
+                ::tracing::error!(method = "FooBarBazService.bar", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("FooBarBazService.bar", exn);
-                ::tracing::error!(method = "FooBarBazService.bar", panic = ?aexn);
+                ::tracing::error!(method = "FooBarBazService.bar", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::foo_bar_baz_service::BarExn::ApplicationException(aexn))
             }
         };
@@ -3060,13 +3074,14 @@ where
         _seqid: ::std::primitive::u32,
     ) -> ::anyhow::Result<()> {
         use ::futures::FutureExt as _;
+        use ::fbthrift::ExceptionInfo;
 
         const SERVICE_NAME: &::std::ffi::CStr = c"FooBarBazService";
         const METHOD_NAME: &::std::ffi::CStr = c"baz";
         const SERVICE_METHOD_NAME: &::std::ffi::CStr = c"FooBarBazService.baz";
         let mut ctx_stack = req_ctxt.get_context_stack(SERVICE_NAME, SERVICE_METHOD_NAME)?;
         ::fbthrift::ContextStack::pre_read(&mut ctx_stack)?;
-        let _args: self::Args_FooBarBazService_baz = ::fbthrift::Deserialize::read(p)?;
+        let _args: self::Args_FooBarBazService_baz = ::fbthrift::Deserialize::rs_thrift_read(p)?;
         let bytes_read = ::fbthrift::help::buf_len(&req)?;
         ::fbthrift::ContextStack::on_read_data(&mut ctx_stack, ::fbthrift::SerializedMessage {
             protocol: P::PROTOCOL_ID,
@@ -3089,12 +3104,12 @@ where
                 ::std::result::Result::Ok(res)
             }
             ::std::result::Result::Ok(::std::result::Result::Err(exn)) => {
-                ::tracing::error!(method = "FooBarBazService.baz", exception = ?exn);
+                ::tracing::error!(method = "FooBarBazService.baz", exception = ?exn, error = exn.exn_value());
                 ::std::result::Result::Err(exn)
             }
             ::std::result::Result::Err(exn) => {
                 let aexn = ::fbthrift::ApplicationException::handler_panic("FooBarBazService.baz", exn);
-                ::tracing::error!(method = "FooBarBazService.baz", panic = ?aexn);
+                ::tracing::error!(method = "FooBarBazService.baz", panic = ?aexn, error = aexn.exn_value());
                 ::std::result::Result::Err(crate::services::foo_bar_baz_service::BazExn::ApplicationException(aexn))
             }
         };

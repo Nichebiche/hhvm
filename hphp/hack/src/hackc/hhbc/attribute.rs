@@ -99,7 +99,7 @@ fn is_dynamically_constructible(attr: &Attribute) -> bool {
 }
 
 fn is_dynamically_referenced(attr: &Attribute) -> bool {
-    is(ua::DYNAMICALLY_REFERENCED, attr)
+    is(ua::DYNAMICALLY_REFERENCED, attr) && attr.arguments.len() == 0
 }
 
 fn is_sealed(attr: &Attribute) -> bool {
@@ -124,6 +124,14 @@ fn is_dynamically_callable(attr: &Attribute) -> bool {
 
 fn is_enum_class(attr: &Attribute) -> bool {
     is(ua::ENUM_CLASS, attr)
+}
+
+fn is_asio_low_pri(attr: &Attribute) -> bool {
+    is(ua::ASIO_LOW_PRI, attr)
+}
+
+pub fn has_asio_low_pri(attrs: &[Attribute]) -> bool {
+    has(attrs, is_asio_low_pri)
 }
 
 pub fn has_enum_class(attrs: &[Attribute]) -> bool {

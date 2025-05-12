@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+#include <gtest/gtest.h>
 #include <folly/io/async/EventBase.h>
-#include <folly/portability/GTest.h>
 #include <thrift/lib/cpp2/async/Cpp2Channel.h>
 #include <thrift/lib/cpp2/async/RequestCallback.h>
 
@@ -191,7 +191,8 @@ TEST(H2ClientConnectionTest, H2GoAway) {
       MethodMetadata("foo"),
       SerializedRequest(folly::IOBuf::create(0)),
       std::move(header),
-      std::move(cb));
+      std::move(cb),
+      /* frameworkMetadata */ nullptr);
 
   // Loop until server receives a message and sends us GOAWAY.
   evb.loopForever();

@@ -16,8 +16,7 @@
 
 #include <thrift/lib/cpp2/protocol/detail/index.h>
 
-#include <folly/Portability.h>
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 namespace apache::thrift::detail {
 

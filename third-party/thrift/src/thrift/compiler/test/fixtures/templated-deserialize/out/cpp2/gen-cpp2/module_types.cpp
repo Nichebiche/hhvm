@@ -118,6 +118,7 @@ void swap([[maybe_unused]] SmallStruct& a, [[maybe_unused]] SmallStruct& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void SmallStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t SmallStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t SmallStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -126,6 +127,7 @@ template void SmallStruct::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t SmallStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t SmallStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t SmallStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace cpp2
@@ -175,9 +177,6 @@ containerStruct::containerStruct(const containerStruct& srcObj) :
     __fbthrift_field_fieldK(srcObj.__fbthrift_field_fieldK),
     __fbthrift_field_fieldL(srcObj.__fbthrift_field_fieldL),
     __fbthrift_field_fieldM(srcObj.__fbthrift_field_fieldM),
-    __fbthrift_field_fieldN(srcObj.__fbthrift_field_fieldN),
-    __fbthrift_field_fieldO(srcObj.__fbthrift_field_fieldO),
-    __fbthrift_field_fieldP(srcObj.__fbthrift_field_fieldP),
     __fbthrift_field_fieldQ(srcObj.__fbthrift_field_fieldQ),
     __fbthrift_field_fieldR(::apache::thrift::detail::st::copy_field<
           ::apache::thrift::type_class::map<::apache::thrift::type_class::string, ::apache::thrift::type_class::integral>>(srcObj.__fbthrift_field_fieldR)),
@@ -203,13 +202,13 @@ containerStruct::containerStruct() :
   static_cast<::std::int32_t>(2),
   static_cast<::std::int32_t>(3),
   static_cast<::std::int32_t>(4) }),
-    __fbthrift_field_fieldE(apache::thrift::StringTraits<std::string>::fromStringLiteral("somestring")),
+    __fbthrift_field_fieldE(apache::thrift::StringTraits<::std::string>::fromStringLiteral("somestring")),
     __fbthrift_field_fieldI(true),
-    __fbthrift_field_fieldJ(std::initializer_list<::std::map<::std::string, ::std::vector<::std::int32_t>>::value_type>{ { apache::thrift::StringTraits<std::string>::fromStringLiteral("subfieldA"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(1),
+    __fbthrift_field_fieldJ(std::initializer_list<::std::map<::std::string, ::std::vector<::std::int32_t>>::value_type>{ { apache::thrift::StringTraits<::std::string>::fromStringLiteral("subfieldA"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(1),
   static_cast<::std::int32_t>(4),
   static_cast<::std::int32_t>(8),
   static_cast<::std::int32_t>(12) } },
-  { apache::thrift::StringTraits<std::string>::fromStringLiteral("subfieldB"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(2),
+  { apache::thrift::StringTraits<::std::string>::fromStringLiteral("subfieldB"), std::initializer_list<::std::int32_t>{ static_cast<::std::int32_t>(2),
   static_cast<::std::int32_t>(5),
   static_cast<::std::int32_t>(9),
   static_cast<::std::int32_t>(13) } } }),
@@ -238,9 +237,6 @@ containerStruct::containerStruct([[maybe_unused]] containerStruct&& other) noexc
     __fbthrift_field_fieldK(std::move(other.__fbthrift_field_fieldK)),
     __fbthrift_field_fieldL(std::move(other.__fbthrift_field_fieldL)),
     __fbthrift_field_fieldM(std::move(other.__fbthrift_field_fieldM)),
-    __fbthrift_field_fieldN(std::move(other.__fbthrift_field_fieldN)),
-    __fbthrift_field_fieldO(std::move(other.__fbthrift_field_fieldO)),
-    __fbthrift_field_fieldP(std::move(other.__fbthrift_field_fieldP)),
     __fbthrift_field_fieldQ(std::move(other.__fbthrift_field_fieldQ)),
     __fbthrift_field_fieldR(std::move(other.__fbthrift_field_fieldR)),
     __fbthrift_field_fieldS(std::move(other.__fbthrift_field_fieldS)),
@@ -264,9 +260,6 @@ containerStruct& containerStruct::operator=([[maybe_unused]] containerStruct&& o
     this->__fbthrift_field_fieldK = std::move(other.__fbthrift_field_fieldK);
     this->__fbthrift_field_fieldL = std::move(other.__fbthrift_field_fieldL);
     this->__fbthrift_field_fieldM = std::move(other.__fbthrift_field_fieldM);
-    this->__fbthrift_field_fieldN = std::move(other.__fbthrift_field_fieldN);
-    this->__fbthrift_field_fieldO = std::move(other.__fbthrift_field_fieldO);
-    this->__fbthrift_field_fieldP = std::move(other.__fbthrift_field_fieldP);
     this->__fbthrift_field_fieldQ = std::move(other.__fbthrift_field_fieldQ);
     this->__fbthrift_field_fieldR = std::move(other.__fbthrift_field_fieldR);
     this->__fbthrift_field_fieldS = std::move(other.__fbthrift_field_fieldS);
@@ -278,7 +271,7 @@ containerStruct& containerStruct::operator=([[maybe_unused]] containerStruct&& o
 }
 
 
-containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA__arg, ::std::map<::std::string, bool> fieldB__arg, ::std::set<::std::int32_t> fieldC__arg, ::std::string fieldD__arg, ::std::string fieldE__arg, ::std::vector<::std::vector<::std::vector<::std::int32_t>>> fieldF__arg, ::std::map<::std::string, ::std::map<::std::string, ::std::map<::std::string, ::std::int32_t>>> fieldG__arg, ::std::vector<::std::set<::std::int32_t>> fieldH__arg, bool fieldI__arg, ::std::map<::std::string, ::std::vector<::std::int32_t>> fieldJ__arg, ::std::vector<::std::vector<::std::vector<::std::vector<::std::int32_t>>>> fieldK__arg, ::std::set<::std::set<::std::set<bool>>> fieldL__arg, ::std::map<::std::set<::std::vector<::std::int32_t>>, ::std::map<::std::vector<::std::set<::std::string>>, ::std::string>> fieldM__arg, ::std::vector<::cpp2::IndirectionA> fieldN__arg, ::std::vector<::cpp2::IndirectionB> fieldO__arg, ::std::vector<::cpp2::IndirectionC> fieldP__arg, ::cpp2::MyEnumA fieldQ__arg, ::std::unique_ptr<::std::map<::std::string, bool>> fieldR__arg, ::std::unique_ptr<::cpp2::SmallStruct> fieldS__arg, ::std::shared_ptr<::cpp2::SmallStruct> fieldT__arg, ::std::shared_ptr<const ::cpp2::SmallStruct> fieldU__arg, ::std::unique_ptr<::cpp2::SmallStruct> fieldX__arg) :
+containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA__arg, ::std::map<::std::string, bool> fieldB__arg, ::std::set<::std::int32_t> fieldC__arg, ::std::string fieldD__arg, ::std::string fieldE__arg, ::std::vector<::std::vector<::std::vector<::std::int32_t>>> fieldF__arg, ::std::map<::std::string, ::std::map<::std::string, ::std::map<::std::string, ::std::int32_t>>> fieldG__arg, ::std::vector<::std::set<::std::int32_t>> fieldH__arg, bool fieldI__arg, ::std::map<::std::string, ::std::vector<::std::int32_t>> fieldJ__arg, ::std::vector<::std::vector<::std::vector<::std::vector<::std::int32_t>>>> fieldK__arg, ::std::set<::std::set<::std::set<bool>>> fieldL__arg, ::std::map<::std::set<::std::vector<::std::int32_t>>, ::std::map<::std::vector<::std::set<::std::string>>, ::std::string>> fieldM__arg, ::cpp2::MyEnumA fieldQ__arg, ::std::unique_ptr<::std::map<::std::string, bool>> fieldR__arg, ::std::unique_ptr<::cpp2::SmallStruct> fieldS__arg, ::std::shared_ptr<::cpp2::SmallStruct> fieldT__arg, ::std::shared_ptr<const ::cpp2::SmallStruct> fieldU__arg, ::std::unique_ptr<::cpp2::SmallStruct> fieldX__arg) :
     __fbthrift_field_fieldA(std::move(fieldA__arg)),
     __fbthrift_field_fieldB(std::move(fieldB__arg)),
     __fbthrift_field_fieldC(std::move(fieldC__arg)),
@@ -292,9 +285,6 @@ containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA
     __fbthrift_field_fieldK(std::move(fieldK__arg)),
     __fbthrift_field_fieldL(std::move(fieldL__arg)),
     __fbthrift_field_fieldM(std::move(fieldM__arg)),
-    __fbthrift_field_fieldN(std::move(fieldN__arg)),
-    __fbthrift_field_fieldO(std::move(fieldO__arg)),
-    __fbthrift_field_fieldP(std::move(fieldP__arg)),
     __fbthrift_field_fieldQ(std::move(fieldQ__arg)),
     __fbthrift_field_fieldR(std::move(fieldR__arg)),
     __fbthrift_field_fieldS(std::move(fieldS__arg)),
@@ -315,9 +305,6 @@ containerStruct::containerStruct(apache::thrift::FragileConstructor, bool fieldA
   __isset.set(folly::index_constant<11>(), true);
   __isset.set(folly::index_constant<12>(), true);
   __isset.set(folly::index_constant<13>(), true);
-  __isset.set(folly::index_constant<14>(), true);
-  __isset.set(folly::index_constant<15>(), true);
-  __isset.set(folly::index_constant<16>(), true);
 }
 
 
@@ -326,8 +313,8 @@ void containerStruct::__fbthrift_clear() {
   this->__fbthrift_field_fieldA = bool();
   this->__fbthrift_field_fieldB.clear();
   this->__fbthrift_field_fieldC.clear();
-  this->__fbthrift_field_fieldD = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
-  this->__fbthrift_field_fieldE = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_fieldD = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
+  this->__fbthrift_field_fieldE = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_fieldF.clear();
   this->__fbthrift_field_fieldG.clear();
   this->__fbthrift_field_fieldH.clear();
@@ -336,9 +323,6 @@ void containerStruct::__fbthrift_clear() {
   this->__fbthrift_field_fieldK.clear();
   this->__fbthrift_field_fieldL.clear();
   this->__fbthrift_field_fieldM.clear();
-  this->__fbthrift_field_fieldN.clear();
-  this->__fbthrift_field_fieldO.clear();
-  this->__fbthrift_field_fieldP.clear();
   this->__fbthrift_field_fieldQ = ::cpp2::MyEnumA();
   this->__fbthrift_field_fieldR = ::apache::thrift::detail::make_mutable_smart_ptr<::std::unique_ptr<::std::map<::std::string, bool>>>();
   if (this->__fbthrift_field_fieldS) ::apache::thrift::clear(*this->__fbthrift_field_fieldS);
@@ -454,30 +438,6 @@ const ::std::map<::std::set<::std::vector<::std::int32_t>>, ::std::map<::std::ve
   return static_cast<::std::map<::std::set<::std::vector<::std::int32_t>>, ::std::map<::std::vector<::std::set<::std::string>>, ::std::string>>&&>(__fbthrift_field_fieldM);
 }
 
-const ::std::vector<::cpp2::IndirectionA>& containerStruct::get_fieldN() const& {
-  return __fbthrift_field_fieldN;
-}
-
-::std::vector<::cpp2::IndirectionA> containerStruct::get_fieldN() && {
-  return static_cast<::std::vector<::cpp2::IndirectionA>&&>(__fbthrift_field_fieldN);
-}
-
-const ::std::vector<::cpp2::IndirectionB>& containerStruct::get_fieldO() const& {
-  return __fbthrift_field_fieldO;
-}
-
-::std::vector<::cpp2::IndirectionB> containerStruct::get_fieldO() && {
-  return static_cast<::std::vector<::cpp2::IndirectionB>&&>(__fbthrift_field_fieldO);
-}
-
-const ::std::vector<::cpp2::IndirectionC>& containerStruct::get_fieldP() const& {
-  return __fbthrift_field_fieldP;
-}
-
-::std::vector<::cpp2::IndirectionC> containerStruct::get_fieldP() && {
-  return static_cast<::std::vector<::cpp2::IndirectionC>&&>(__fbthrift_field_fieldP);
-}
-
 ::cpp2::MyEnumA containerStruct::get_fieldQ() const {
   return __fbthrift_field_fieldQ;
 }
@@ -502,9 +462,6 @@ void swap([[maybe_unused]] containerStruct& a, [[maybe_unused]] containerStruct&
   swap(a.__fbthrift_field_fieldK, b.__fbthrift_field_fieldK);
   swap(a.__fbthrift_field_fieldL, b.__fbthrift_field_fieldL);
   swap(a.__fbthrift_field_fieldM, b.__fbthrift_field_fieldM);
-  swap(a.__fbthrift_field_fieldN, b.__fbthrift_field_fieldN);
-  swap(a.__fbthrift_field_fieldO, b.__fbthrift_field_fieldO);
-  swap(a.__fbthrift_field_fieldP, b.__fbthrift_field_fieldP);
   swap(a.__fbthrift_field_fieldQ, b.__fbthrift_field_fieldQ);
   swap(a.__fbthrift_field_fieldR, b.__fbthrift_field_fieldR);
   swap(a.__fbthrift_field_fieldS, b.__fbthrift_field_fieldS);
@@ -514,6 +471,7 @@ void swap([[maybe_unused]] containerStruct& a, [[maybe_unused]] containerStruct&
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void containerStruct::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t containerStruct::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t containerStruct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -522,6 +480,7 @@ template void containerStruct::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t containerStruct::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t containerStruct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t containerStruct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<

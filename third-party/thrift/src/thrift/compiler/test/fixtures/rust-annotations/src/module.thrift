@@ -16,6 +16,7 @@
 
 include "thrift/annotation/rust.thrift"
 include "thrift/annotation/scope.thrift"
+include "thrift/annotation/thrift.thrift"
 
 // --
 
@@ -44,8 +45,9 @@ struct T4 {
 
 // --
 
+@rust.NewType
 @rust.Type{name = "smallvec::SmallVec<[u8; 16]>"}
-typedef binary binary_t (rust.newtype)
+typedef binary binary_t
 
 @rust.NewType
 typedef i64 Generation
@@ -78,6 +80,9 @@ struct T7 {
 struct T8 {
   @rust.Arc
   1: i64 data; // `::std::sync::Arc<::std::primitive::i64>`
+  @rust.Arc
+  @thrift.Box
+  2: optional i64 cppbox; // `::std::option::Option<::std::sync::Arc<::std::primitive::i64>>`
 }
 
 // --
@@ -181,7 +186,8 @@ service OneMethodOptOut {
 }
 
 union Bar {
-  1: i32 WithAnnotation (rust.name = "Annotated");
+  @rust.Name{name = "Annotated"}
+  1: i32 WithAnnotation;
   2: i32 WithoutAnnotation;
 }
 

@@ -6,32 +6,11 @@
  */
 
 #include "thrift/compiler/test/fixtures/default_values/gen-cpp2/module_data.h"
+#include "thrift/compiler/test/fixtures/default_values/gen-cpp2/module_constants.h"
 
 #include <thrift/lib/cpp2/gen/module_data_cpp.h>
 
-FOLLY_CLANG_DISABLE_WARNING("-Wunused-macros")
-
-#if defined(__GNUC__) && defined(__linux__) && !FOLLY_MOBILE
-// These attributes are applied to the static data members to ensure that they
-// are not stripped from the compiled binary, in order to keep them available
-// for use by debuggers at runtime.
-//
-// The "used" attribute is required to ensure the compiler always emits unused
-// data.
-//
-// The "section" attribute is required to stop the linker from stripping used
-// data. It works by forcing all of the data members (both used and unused ones)
-// into the same section. As the linker strips data on a per-section basis, it
-// is then unable to remove unused data without also removing used data.
-// This has a similar effect to the "retain" attribute, but works with older
-// toolchains.
-#define THRIFT_DATA_MEMBER [[gnu::used]] [[gnu::section(".rodata.thrift.data")]]
-#else
-#define THRIFT_DATA_MEMBER
-#endif
-
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 
 THRIFT_DATA_MEMBER const std::string_view TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>::name = "TrivialStruct";
 THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>::fields_names = { {
@@ -42,9 +21,6 @@ THRIFT_DATA_MEMBER const std::array<int16_t, 1> TStructDataStorage<::facebook::t
 }};
 THRIFT_DATA_MEMBER const std::array<protocol::TType, 1> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>::fields_types = { {
   TType::T_I32,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 1> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>::storage_names = { {
-  "__fbthrift_field_int_value"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 1> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct>::isset_indexes = { {
   0,
@@ -74,14 +50,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 6> TStructDataStorage<::fac
   TType::T_STRUCT,
   TType::T_STRUCT,
   TType::T_STRUCT,
-}};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 6> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::StructWithNoCustomDefaultValues>::storage_names = { {
-  "__fbthrift_field_unqualified_integer"sv,
-  "__fbthrift_field_optional_integer"sv,
-  "__fbthrift_field_required_integer"sv,
-  "__fbthrift_field_unqualified_struct"sv,
-  "__fbthrift_field_optional_struct"sv,
-  "__fbthrift_field_required_struct"sv,
 }};
 THRIFT_DATA_MEMBER const std::array<int, 6> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::StructWithNoCustomDefaultValues>::isset_indexes = { {
   0,
@@ -117,14 +85,6 @@ THRIFT_DATA_MEMBER const std::array<protocol::TType, 6> TStructDataStorage<::fac
   TType::T_STRUCT,
   TType::T_STRUCT,
 }};
-THRIFT_DATA_MEMBER const std::array<std::string_view, 6> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::StructWithCustomDefaultValues>::storage_names = { {
-  "__fbthrift_field_unqualified_integer"sv,
-  "__fbthrift_field_optional_integer"sv,
-  "__fbthrift_field_required_integer"sv,
-  "__fbthrift_field_unqualified_struct"sv,
-  "__fbthrift_field_optional_struct"sv,
-  "__fbthrift_field_required_struct"sv,
-}};
 THRIFT_DATA_MEMBER const std::array<int, 6> TStructDataStorage<::facebook::thrift::compiler::test::fixtures::default_values::StructWithCustomDefaultValues>::isset_indexes = { {
   0,
   1,
@@ -134,5 +94,16 @@ THRIFT_DATA_MEMBER const std::array<int, 6> TStructDataStorage<::facebook::thrif
   -1,
 }};
 
-} // namespace thrift
-} // namespace apache
+namespace detail {
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::facebook::thrift::compiler::test::fixtures::default_values::TrivialStruct, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::facebook::thrift::compiler::test::fixtures::default_values::StructWithNoCustomDefaultValues, false>::bundle)() =
+    nullptr;
+
+::folly::Range<const ::std::string_view*>(*TSchemaAssociation<::facebook::thrift::compiler::test::fixtures::default_values::StructWithCustomDefaultValues, false>::bundle)() =
+    nullptr;
+
+} // namespace detail
+} // namespace apache::thrift

@@ -134,7 +134,9 @@ namespace HPHP {
                      TWO(CV,CV),      ONE(CV),    NF) \
   O(ClassGetC,       ONE(OA(ClassGetCMode)),                            \
                                        ONE(CV),         ONE(CV),    NF) \
-  O(ClassGetTS,      NA,               ONE(CV),         TWO(CV,CV), NF) \
+  O(ClassGetTS,      NA,               ONE(CV),         ONE(CV),    NF) \
+  O(ClassGetTSWithGenerics,                                             \
+                     NA,               ONE(CV),         TWO(CV,CV), NF) \
   O(GetMemoKeyL,     ONE(NLA),         NOV,             ONE(CV),    NF) \
   O(AKExists,        NA,               TWO(CV,CV),      ONE(CV),    NF) \
   O(IssetL,          ONE(LA),          NOV,             ONE(CV),    NF) \
@@ -227,6 +229,7 @@ namespace HPHP {
   O(VerifyRetTypeC,  NA,               ONE(CV),         ONE(CV),    NF) \
   O(VerifyRetTypeTS, NA,               TWO(CV,CV),      ONE(CV),    NF) \
   O(VerifyRetNonNullC, NA,             ONE(CV),         ONE(CV),    NF) \
+  O(VerifyTypeTS,    NA,               TWO(CV,CV),      ONE(CV),    NF) \
   O(SelfCls,         NA,               NOV,             ONE(CV),    NF) \
   O(ParentCls,       NA,               NOV,             ONE(CV),    NF) \
   O(LateBoundCls,    NA,               NOV,             ONE(CV),    NF) \
@@ -236,6 +239,7 @@ namespace HPHP {
   O(GetClsRGProp,    NA,               ONE(CV),         ONE(CV),    NF) \
   O(HasReifiedParent, NA,              ONE(CV),         ONE(CV),    NF) \
   O(CheckClsRGSoft,  NA,               ONE(CV),         NOV,        NF) \
+  O(ReifiedInit,     ONE(LA),          TWO(CV,CV),      NOV,        NF) \
   O(NativeImpl,      NA,               NOV,             NOV,        CF_TF) \
   O(CreateCl,        TWO(IVA,SA),      CUMANY,          ONE(CV),    NF) \
   O(CreateCont,      NA,               NOV,             ONE(CV),    CF) \
@@ -255,6 +259,7 @@ namespace HPHP {
                      NA,               NOV,             ONE(CV),    NF) \
   O(Await,           NA,               ONE(CV),         ONE(CV),    CF) \
   O(AwaitAll,        ONE(LAR),         NOV,             ONE(CV),    CF) \
+  O(AwaitLowPri,     NA,               NOV,             ONE(CV),    CF) \
   O(Idx,             NA,               THREE(CV,CV,CV), ONE(CV),    NF) \
   O(ArrayIdx,        NA,               THREE(CV,CV,CV), ONE(CV),    NF) \
   O(ArrayMarkLegacy,    NA,            TWO(CV,CV),      ONE(CV),    NF) \

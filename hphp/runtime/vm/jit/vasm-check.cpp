@@ -27,9 +27,7 @@
 #include "hphp/util/assertions.h"
 #include "hphp/util/dataflow-worklist.h"
 
-#include <boost/dynamic_bitset.hpp>
-
-TRACE_SET_MOD(vasm);
+TRACE_SET_MOD(vasm)
 
 namespace HPHP::jit {
 ///////////////////////////////////////////////////////////////////////////////

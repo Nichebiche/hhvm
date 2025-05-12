@@ -1,14 +1,14 @@
 // Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 #![feature(box_patterns)]
 
-use proc_macro2::token_stream::IntoIter;
 use proc_macro2::Delimiter;
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use proc_macro2::TokenTree;
+use proc_macro2::token_stream::IntoIter;
+use quote::ToTokens;
 use quote::quote;
 use quote::quote_spanned;
-use quote::ToTokens;
 
 type TokenIter = std::iter::Peekable<IntoIter>;
 
@@ -331,7 +331,7 @@ impl Ast {
         };
 
         // check for trailing comma
-        let pat = if it.peek().map_or(false, |t| t.is_punct(',')) {
+        let pat = if it.peek().is_some_and(|t| t.is_punct(',')) {
             it.next();
             let count = it.expect_tt()?;
             if count.is_punct('+') {
@@ -348,19 +348,19 @@ impl Ast {
         };
 
         // check for trailing +,*,?
-        let pat = if it.peek().map_or(false, |t| t.is_punct('+')) {
+        let pat = if it.peek().is_some_and(|t| t.is_punct('+')) {
             it.next();
             Ast::OneOrMore(Box::new(pat))
         } else {
             pat
         };
-        let pat = if it.peek().map_or(false, |t| t.is_punct('*')) {
+        let pat = if it.peek().is_some_and(|t| t.is_punct('*')) {
             it.next();
             Ast::ZeroOrMore(Box::new(pat))
         } else {
             pat
         };
-        let pat = if it.peek().map_or(false, |t| t.is_punct('?')) {
+        let pat = if it.peek().is_some_and(|t| t.is_punct('?')) {
             let t = it.next().unwrap();
             if !pat.is_predicate() {
                 return Err(t.error("Error: '?' only works with basic patterns"));
@@ -439,7 +439,7 @@ impl Ast {
         } else {
             // f
             // f(a, b, c)
-            if it.peek().map_or(false, TokenTree::is_group) {
+            if it.peek().is_some_and(TokenTree::is_group) {
                 let group = it.expect_group()?;
                 let stream = group.group_stream()?;
                 Ast::FnCall {

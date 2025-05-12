@@ -15,7 +15,7 @@
   limitations under the License.
 
 }}
-{{#service:rustFunctions}}{{^function:starts_interaction?}}{{^function:sink?}}
+{{#service:rustFunctions}}{{^function:starts_interaction?}}
 
 struct Args_{{service:rust_name}}_{{function:name}} {
     {{#function:args}}
@@ -26,7 +26,7 @@ struct Args_{{service:rust_name}}_{{function:name}} {
 impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_{{service:rust_name}}_{{function:name}} {
     #[inline]{{! No cost because there's only one caller; with luck will mitigate move cost of args. }}
     #[::tracing::instrument(skip_all, level = "trace", name = "deserialize_args", fields(method = "{{service:name}}.{{function:name}}"))]
-    fn read(p: &mut P) -> ::anyhow::Result<Self> {
+    fn rs_thrift_read(p: &mut P) -> ::anyhow::Result<Self> {
         static ARGS: &[::fbthrift::Field] = &[
             {{#function:args_by_name}}
             ::fbthrift::Field::new("{{field:name}}", {{#field:type}}{{> lib/ttype}}{{/field:type}}, {{field:key}}),
@@ -44,7 +44,7 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_{{
                 ({{#field:type}}{{> lib/ttype}}{{/field:type}}, {{field:key}}) => {{!
                     }}field_{{field:name}} = ::std::option::Option::Some({{!
                     }}{{#field:has_adapter?}}{{> lib/adapter/qualified}}::from_thrift_field::<fbthrift::metadata::NoThriftAnnotations>({{/field:has_adapter?}}{{!
-                    }}{{#field:type}}{{#field:type_annotation?}}{{> lib/annfieldread}}{{/field:type_annotation?}}{{^field:type_annotation?}}{{> lib/read}}{{/field:type_annotation?}}{{/field:type}}(p)?{{!
+                    }}{{#field:type}}::anyhow::Context::context({{#field:type_annotation?}}{{> lib/annfieldread}}{{/field:type_annotation?}}{{^field:type_annotation?}}{{> lib/read}}{{/field:type_annotation?}}{{/field:type}}(p), ::fbthrift::errors::DeserializingArgError { arg: "{{field:name}}", function: "{{function:name}}"})?{{!
                     }}{{#field:has_adapter?}}, {{field:key}})?{{/field:has_adapter?}}{{!
                     }}),{{!
                 }}{{/function:args}}
@@ -62,4 +62,4 @@ impl<P: ::fbthrift::ProtocolReader> ::fbthrift::Deserialize<P> for self::Args_{{
     }
 }
 
-{{/function:sink?}}{{/function:starts_interaction?}}{{/service:rustFunctions}}
+{{/function:starts_interaction?}}{{/service:rustFunctions}}

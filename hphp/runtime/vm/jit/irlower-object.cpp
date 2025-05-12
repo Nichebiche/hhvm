@@ -41,7 +41,7 @@
 
 namespace HPHP::jit::irlower {
 
-TRACE_SET_MOD(irlower);
+TRACE_SET_MOD(irlower)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -168,7 +168,7 @@ void cgConstructClosure(IRLS& env, const IRInstruction* inst) {
 
 IMPL_OPCODE_CALL(Clone)
 
-IMPL_OPCODE_CALL(FuncCred);
+IMPL_OPCODE_CALL(FuncCred)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -301,6 +301,9 @@ void cgHasReifiedParent(IRLS& env, const IRInstruction* inst) {
   v << testbim{(int32_t)Class::reifiedParentMask(), cls[Class::allFlagsOff()], sf};
   v << setcc{CC_NZ, sf, dst};
 }
+
+
+IMPL_OPCODE_CALL(ReifiedInit)
 
 IMPL_OPCODE_CALL(GetClsRGProp)
 

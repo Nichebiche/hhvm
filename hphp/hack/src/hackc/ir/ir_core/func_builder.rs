@@ -5,15 +5,6 @@
 
 use hash::HashMap;
 
-use crate::instr::BaseOp;
-use crate::instr::FinalOp;
-use crate::instr::HasLoc;
-use crate::instr::HasOperands;
-use crate::instr::Hhbc;
-use crate::instr::IntermediateOp;
-use crate::instr::MemberKey;
-use crate::instr::MemberOp;
-use crate::instr::Special;
 use crate::Block;
 use crate::BlockId;
 use crate::Func;
@@ -30,6 +21,15 @@ use crate::QueryMOp;
 use crate::ReadonlyOp;
 use crate::SrcLoc;
 use crate::ValueId;
+use crate::instr::BaseOp;
+use crate::instr::FinalOp;
+use crate::instr::HasLoc;
+use crate::instr::HasOperands;
+use crate::instr::Hhbc;
+use crate::instr::IntermediateOp;
+use crate::instr::MemberKey;
+use crate::instr::MemberOp;
+use crate::instr::Special;
 
 pub struct FuncBuilder {
     pub func: Func,
@@ -262,7 +262,7 @@ impl FuncBuilder {
     fn num_selects(instr: &Instr) -> u32 {
         let num_rets = match instr {
             Instr::Call(call) => call.num_rets,
-            Instr::Hhbc(Hhbc::ClassGetTS(..)) => 2,
+            Instr::Hhbc(Hhbc::ClassGetTSWithGenerics(..)) => 2,
             Instr::MemberOp(ref op) => op.num_values() as u32,
             _ => 1,
         };

@@ -20,7 +20,7 @@
 #include <queue>
 #include <functional>
 
-#include <boost/variant.hpp>
+#include <variant>
 
 #include <folly/String.h>
 
@@ -42,7 +42,7 @@
 
 namespace HPHP {
 
-TRACE_SET_MOD(disas);
+TRACE_SET_MOD(disas)
 
 namespace {
 
@@ -139,7 +139,7 @@ std::string opt_escaped_long(const StringData* sd) {
 
 struct EHCatchLegacy { std::string label; };
 struct EHCatch { Offset end; };
-using EHInfo = boost::variant<EHCatchLegacy, EHCatch>;
+using EHInfo = std::variant<EHCatchLegacy, EHCatch>;
 using UBMap =
   std::unordered_map<const StringData*, TypeIntersectionConstraint>;
 struct FuncInfo {
@@ -234,7 +234,7 @@ std::string jmp_label(const FuncInfo& finfo, Offset tgt) {
   auto const it  = finfo.labels.find(tgt);
   always_assert(it != end(finfo.labels));
   return it->second;
-};
+}
 
 void print_instr(Output& out, const FuncInfo& finfo, PC pc) {
   auto const startPc = pc;
@@ -483,7 +483,7 @@ void print_func_body(Output& out, const FuncInfo& finfo) {
     for (; ehIter != ehStop && ehIter->first == off; ++ehIter) {
       auto const info = finfo.ehInfo.find(ehIter->second);
       always_assert(info != end(finfo.ehInfo));
-      match<void>(
+      match(
         info->second,
         [&] (const EHCatch& ehCatch) {
           assertx(ehIter->second->m_past == ehIter->second->m_handler);
@@ -536,7 +536,7 @@ std::string opt_type_constraint(const TypeConstraint& tc) {
 std::string type_info(const StringData* userType,
                       const TypeIntersectionConstraint& tcs) {
   std::string utype = userType ? escaped(userType) : "N";
-  std::string constraints = "";
+  std::string constraints;
   for (auto const& tc : tcs.range()) {
     if (constraints != "") constraints += ", ";
     constraints += opt_type_constraint(tc);
@@ -578,14 +578,14 @@ std::string func_param_list(const FuncInfo& finfo) {
       ret += "readonly ";
     }
     ret += type_info(
-      func->params()[i].userType,
+      func->params()[i].userType.ptr(func->unit()),
       func->params()[i].typeConstraints
     );
     ret += folly::format("{}", loc_name(finfo, i)).str();
     if (func->params()[i].hasDefaultValue()) {
       auto const off = func->params()[i].funcletOff;
       ret += folly::format(" = {}", jmp_label(finfo, off)).str();
-      if (auto const code = func->params()[i].phpCode) {
+      if (auto const code = func->params()[i].phpCode.ptr(func->unit())) {
         ret += folly::format("({})", escaped_long(code)).str();
       }
     }
@@ -790,15 +790,6 @@ void print_cls(Output& out, const PreClass* cls) {
     auto const p = name.find(';');
     if (p != std::string::npos) {
       name = name.substr(0, p);
-    }
-  }
-  UBMap cls_ubs;
-  for (auto const& prop : cls->allProperties()) {
-    if (prop.typeConstraints().ubs().empty()) continue;
-    auto const key = prop.typeConstraints().main().typeName();
-    auto& v = cls_ubs[key];
-    if (v.isTop()) {
-      v = prop.typeConstraints();
     }
   }
 

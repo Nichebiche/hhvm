@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<fa5b6344fee6fd29456b543a76c37bd9>>
+// @generated SignedSource<<84d5e5620eb9e3567cf1f5a85b9433df>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -355,8 +355,8 @@ pub enum PrjAsymm {
     PrjAsymmArraykey,
     #[rust_to_ocaml(name = "Prj_asymm_num")]
     PrjAsymmNum,
-    #[rust_to_ocaml(name = "Prj_rewrite_classname")]
-    PrjRewriteClassname,
+    #[rust_to_ocaml(name = "Prj_asymm_contains")]
+    PrjAsymmContains,
 }
 impl TrivialDrop for PrjAsymm {}
 arena_deserializer::impl_deserialize_in_arena!(PrjAsymm);
@@ -596,6 +596,8 @@ pub enum WitnessDecl {
     IllegalRecursiveType(pos_or_decl::PosOrDecl, String),
     #[rust_to_ocaml(name = "Support_dynamic_type_assume")]
     SupportDynamicTypeAssume(pos_or_decl::PosOrDecl),
+    #[rust_to_ocaml(name = "Polymorphic_type_param")]
+    PolymorphicTypeParam(pos_or_decl::PosOrDecl, String, String, isize),
 }
 
 /// Axioms are information about types provided by the user in class or type

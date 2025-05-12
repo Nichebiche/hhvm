@@ -42,13 +42,11 @@
 #include <folly/Format.h>
 #include <folly/Range.h>
 
-#include <sstream>
-
 namespace HPHP::jit::irlower {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 namespace {
 

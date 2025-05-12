@@ -103,74 +103,7 @@ module Pretty : sig
     Typing_env_types.env ->
     Typing_defs.internal_type ->
     string
-
-  val _strip_existential :
-    ity_sub:Typing_defs.internal_type ->
-    ity_sup:Typing_defs.internal_type ->
-    (Typing_defs.internal_type * Typing_defs.internal_type) option
 end = struct
-  let strip_existential_help ty =
-    let strip ty k =
-      match deref ty with
-      | (_, Tdependent (_, ty)) -> Some (k ty)
-      | (r, Tgeneric (nm, tys)) when DependentKind.is_generic_dep_ty nm ->
-        Option.map ~f:(fun nm -> k @@ mk (r, Tgeneric (nm, tys)))
-        @@ DependentKind.strip_generic_dep_ty nm
-      | _ -> None
-    in
-    (* We only want to recurse to a fixed depth so have a flag here to control
-       recursion into unions and intersections *)
-    let rec strip_nested ty ~recurse =
-      match deref ty with
-      | (r, Taccess (inner_ty, pos)) ->
-        strip inner_ty (fun ty -> mk (r, Taccess (ty, pos)))
-      | (r, Toption inner_ty) -> strip inner_ty (fun ty -> mk (r, Toption ty))
-      | (r, Tunion ts) when recurse ->
-        strip_all ts (fun ts -> mk (r, Tunion ts))
-      | (r, Tintersection ts) when recurse ->
-        strip_all ts (fun ts -> mk (r, Tintersection ts))
-      | _ -> strip ty (fun ty -> ty)
-    and strip_all tys k =
-      let (tys_rev, stripped) =
-        List.fold_left tys ~init:([], false) ~f:(fun (tys, stripped) ty ->
-            match strip_nested ty ~recurse:false with
-            | None -> (ty :: tys, stripped)
-            | Some ty -> (ty :: tys, true))
-      in
-      if stripped then
-        Some (k @@ List.rev tys_rev)
-      else
-        None
-    in
-    strip_nested ty ~recurse:true
-
-  (* For reporting purposes we remove top-level existential types and
-     existentials in type accesses when they don't occur on both subtype and
-     supertype since they don't contribute to underlying error *)
-  let _strip_existential ~ity_sub ~ity_sup =
-    match (ity_sub, ity_sup) with
-    | (LoclType lty_sub, LoclType lty_sup) ->
-      (match
-         (strip_existential_help lty_sub, strip_existential_help lty_sup)
-       with
-      (* We shouldn't remove if both sub and supertype are existentially quantified *)
-      | (Some _, Some _)
-      (* There is nothing to do if neither side was existentially quantified *)
-      | (None, None) ->
-        None
-      (* If we have an existential one only side we remove it *)
-      | (Some lty_sub, _) -> Some (LoclType lty_sub, ity_sup)
-      | (_, Some lty_sup) -> Some (ity_sub, LoclType lty_sup))
-    (* The only type to appear in 'ConstraintType' is null so we can always remove
-       if we have one LoclType and on ConstraintType, for some reason *)
-    | (LoclType lty_sub, ConstraintType _) ->
-      Option.map ~f:(fun lty_sub -> (LoclType lty_sub, ity_sup))
-      @@ strip_existential_help lty_sub
-    | (ConstraintType _, LoclType lty_sup) ->
-      Option.map ~f:(fun lty_sup -> (ity_sub, LoclType lty_sup))
-      @@ strip_existential_help lty_sup
-    | (ConstraintType _, ConstraintType _) -> None
-
   let describe_ty_default env ty =
     Typing_print.full_strip_ns_i ~hide_internals:true env ty
 
@@ -321,6 +254,7 @@ module Subtype_env = struct
             class_sub_classname typechecker option, but it is unconditionally
             false for type well-formedness checks. *)
     recursion_tracker: Subtype_recursion_tracker.t;
+    check_rank: bool;
   }
 
   let set_on_error t on_error = { t with on_error }
@@ -350,6 +284,7 @@ module Subtype_env = struct
       ?(is_coeffect = false)
       ?(in_transitive_closure = false)
       ?(ignore_likes = false)
+      ?(check_rank = false)
       ~class_sub_classname
       ~(log_level : int)
       on_error =
@@ -369,6 +304,7 @@ module Subtype_env = struct
       ignore_likes;
       class_sub_classname;
       recursion_tracker = Subtype_recursion_tracker.empty;
+      check_rank;
     }
 
   let possibly_add_violated_constraint subtype_env ~r_sub ~r_super =
@@ -396,15 +332,13 @@ module Subtype_env = struct
       =
     match tparam_constraints with
     | [] ->
-      let stripped_existential = false in
       Typing_error.Secondary.Subtyping_error
-        { ty_sub; ty_sup = ty_super; is_coeffect; stripped_existential }
+        { ty_sub; ty_sup = ty_super; is_coeffect }
     | cstrs ->
       Typing_error.Secondary.Violated_constraint
         { cstrs; ty_sub; ty_sup = ty_super; is_coeffect }
 
-  let fail t ~ty_sub ~ty_super =
-    let secondary_error = mk_secondary_error t ty_sub ty_super in
+  let fail_with_secondary_error t secondary_error =
     match t.tparam_constraints with
     | [] ->
       Option.map
@@ -421,6 +355,9 @@ module Subtype_env = struct
         ~f:
           Typing_error.(
             (fun on_error -> apply_reasons ~on_error secondary_error))
+
+  let fail t ~ty_sub ~ty_super =
+    fail_with_secondary_error t (mk_secondary_error t ty_sub ty_super)
 
   let fail_with_suffix t ~ty_sub ~ty_super suffix =
     let secondary_error = mk_secondary_error t ty_sub ty_super in
@@ -453,9 +390,54 @@ module Subtype_env = struct
       op
     |> Result.map ~f:(fun recursion_tracker ->
            { subtype_env with recursion_tracker })
+
+  let set_check_rank t check_rank = { t with check_rank }
+
+  let get_check_rank { check_rank; _ } = check_rank
 end
 
-module Logging = struct
+module Logging : sig
+  val log_subtype :
+    this_ty:Typing_defs.locl_ty option ->
+    function_name:string ->
+    Typing_env_types.env ->
+    Typing_defs.locl_ty ->
+    Typing_defs.locl_ty ->
+    (unit -> 'a) ->
+    'a
+
+  val log_subtype_i :
+    this_ty:Typing_defs.locl_ty option ->
+    function_name:string ->
+    Typing_env_types.env ->
+    Typing_defs.internal_type ->
+    Typing_defs.internal_type ->
+    (unit -> 'a) ->
+    'a
+
+  val log_subtype_prop :
+    Typing_env_types.env ->
+    Typing_defs.locl_ty ->
+    Typing_defs.locl_ty ->
+    this_ty:Typing_defs.locl_ty option ->
+    function_name:string ->
+    (unit -> Typing_env_types.env * TL.subtype_prop) ->
+    Typing_env_types.env * TL.subtype_prop
+
+  val should_log_subtype :
+    Typing_env_types.env ->
+    level:Core__Int.t ->
+    Typing_defs.locl_ty ->
+    Typing_defs.locl_ty ->
+    bool
+
+  val should_log_subtype_i :
+    Typing_env_types.env ->
+    level:Core__Int.t ->
+    Typing_defs.internal_type ->
+    Typing_defs.internal_type ->
+    bool
+end = struct
   (* Given a pair of types `ty_sub` and `ty_super` attempt to apply simplifications
    * and add to the accumulated constraints in `constraints` any necessary and
    * sufficient [(t1,ck1,u1);...;(tn,ckn,un)] such that
@@ -486,7 +468,7 @@ module Logging = struct
    *)
 
   let log_subtype_i_
-      ~(this_ty : locl_ty option) ~function_name ~result env ty_sub ty_super =
+      ~(this_ty : locl_ty option) ~function_name ~result env ty_sub ty_super f =
     Typing_log.log_function
       (Reason.to_pos (reason ty_sub))
       ~function_name
@@ -500,13 +482,27 @@ module Logging = struct
             | Some ty -> Typing_print.debug env ty );
         ]
       ~result
+      f
 
-  let log_subtype_i_prop =
-    log_subtype_i_ ~result:(fun (env, prop) ->
+  let log_subtype_i_prop ~this_ty ~function_name env ty_sub ty_super f =
+    log_subtype_i_
+      ~this_ty
+      ~function_name
+      ~result:(fun (env, prop) ->
         Some (TL.print (Typing_print.debug_i env) prop))
+      env
+      ty_sub
+      ty_super
+      f
 
-  let log_subtype_prop env ty_sub ty_super =
-    log_subtype_i_prop env (LoclType ty_sub) (LoclType ty_super)
+  let log_subtype_prop env ty_sub ty_super ~this_ty ~function_name f =
+    log_subtype_i_prop
+      env
+      (LoclType ty_sub)
+      (LoclType ty_super)
+      ~this_ty
+      ~function_name
+      f
 
   let should_log_subtype_i env ~level ty_sub ty_super =
     let level =
@@ -520,18 +516,28 @@ module Logging = struct
     in
     Typing_log.should_log env ~category:"sub" ~level
 
-  let log_subtype_i = log_subtype_i_ ~result:(fun _ -> None)
+  let log_subtype_i
+      ~(this_ty : locl_ty option) ~function_name env ty_sub ty_super f =
+    log_subtype_i_
+      ~result:(fun _ -> None)
+      ~this_ty
+      ~function_name
+      env
+      ty_sub
+      ty_super
+      f
 
   let should_log_subtype env ~level ty_sub ty_super =
     should_log_subtype_i env ~level (LoclType ty_sub) (LoclType ty_super)
 
-  let log_subtype ~this_ty ~function_name env ty_sub ty_super =
+  let log_subtype ~this_ty ~function_name env ty_sub ty_super f =
     log_subtype_i
       ~this_ty
       ~function_name
       env
       (LoclType ty_sub)
       (LoclType ty_super)
+      f
 end
 
 module Subtype_negation = struct
@@ -573,35 +579,21 @@ module Subtype_negation = struct
     else
       match (Env.get_class env c1, Env.get_class env c2) with
       | (Decl_entry.Found c1_def, Decl_entry.Found c2_def) ->
-        let is_disjoint =
-          if Cls.final c1_def then
-            (* if c1 is final, then c3 would have to be equal to c1 *)
-            not (Cls.has_ancestor c1_def c2)
-          else if Cls.final c2_def then
-            (* if c2 is final, then c3 would have to be equal to c2 *)
-            not (Cls.has_ancestor c2_def c1)
-          else
-            (* Given two non-final classes, if either is an interface or trait, then
-               there could be a c3, and so we consider the classes to not be disjoint.
-               However, if they are both classes, then c3 must be either c1 or c2 since
-               we don't have multiple inheritance. *)
-            (not (is_interface_or_trait c1_def))
-            && (not (is_interface_or_trait c2_def))
-            && (not (Cls.has_ancestor c2_def c1))
-            && not (Cls.has_ancestor c1_def c2)
-        in
-        if is_disjoint then (
-          (* We've used the facts that 'c1 is not a subtype of c2'
-           * and 'c2 is not a subtype of c1' to conclude that a type is nothing
-           * and therefore a bunch of things typecheck.
-           * If these facts get invalidated by a decl change,
-           * e.g. adding c2 as a parent of c1, we'd therefore need
-           * to recheck the current def. *)
-          Typing_env.add_not_subtype_dep env c1;
-          Typing_env.add_not_subtype_dep env c2;
-          ()
-        );
-        is_disjoint
+        if Cls.final c1_def then
+          (* if c1 is final, then c3 would have to be equal to c1 *)
+          not (Cls.has_ancestor c1_def c2)
+        else if Cls.final c2_def then
+          (* if c2 is final, then c3 would have to be equal to c2 *)
+          not (Cls.has_ancestor c2_def c1)
+        else
+          (* Given two non-final classes, if either is an interface or trait, then
+             there could be a c3, and so we consider the classes to not be disjoint.
+             However, if they are both classes, then c3 must be either c1 or c2 since
+             we don't have multiple inheritance. *)
+          (not (is_interface_or_trait c1_def))
+          && (not (is_interface_or_trait c2_def))
+          && (not (Cls.has_ancestor c2_def c1))
+          && not (Cls.has_ancestor c1_def c2)
       | _ ->
         (* This is a decl error that should have already been caught *)
         false
@@ -859,6 +851,27 @@ end = struct
         ty_super
   end
 
+  (* Find the first generic occurring in [ty] with a rank higher than [rank]  *)
+  let find_higher_rank_generic env subtype_env ty rank =
+    (* To avoid this potentially expensive check we record when the sub- or
+       supertype _may_ contain a higher rank type parameter. *)
+    if Subtype_env.get_check_rank subtype_env then
+      let p ty =
+        match get_node ty with
+        | Tgeneric name -> Env.rank_of_tparam env name > rank
+        | _ -> false
+      in
+      let ty_opt = Typing_defs_core.find_locl_ty ty ~p in
+      Option.map ty_opt ~f:(fun ty ->
+          match deref ty with
+          | (r, Tgeneric name) -> (r, name)
+          | _ ->
+            (* We are guaranteed that if the result if [Some(...)] then the type
+               is a [Tgeneric] so something is seriously wrong here *)
+            failwith "find_higher_rank_generic: unexpected type")
+    else
+      None
+
   let is_final_and_invariant env id =
     let class_def = Env.get_class env id in
     match class_def with
@@ -939,8 +952,8 @@ end = struct
           Typing_set.fold
             (fun ty add_set ->
               match get_node ty with
-              | Tgeneric (name, targs) ->
-                let gen_bounds = Env.get_lower_bounds env name targs in
+              | Tgeneric name ->
+                let gen_bounds = Env.get_lower_bounds env name in
                 Typing_set.union add_set gen_bounds
               | _ -> add_set)
             new_set
@@ -956,7 +969,7 @@ end = struct
     Typing_set.fold
       (fun bound_ty (g_set, o_set) ->
         match get_node bound_ty with
-        | Tgeneric (name, []) -> (SSet.add name g_set, o_set)
+        | Tgeneric name -> (SSet.add name g_set, o_set)
         | _ -> (g_set, Typing_set.add bound_ty o_set))
       lower_bounds
       (SSet.empty, Typing_set.empty)
@@ -971,7 +984,6 @@ end = struct
     | Toption _
     | Tvar _
     | Taccess _
-    | Tunapplied_alias _
     | Tneg _
     | Tintersection _ ->
       false
@@ -1089,39 +1101,57 @@ end = struct
         (sub_supportdyn, tyl)
         rhs
         env
-    | (_, Tvar id) ->
-      (* For subtyping queries of the form
-       *
-       *   Tvar #id <: (Tvar #id | ...)
-       *
-       * `remove_tyvar_from_upper_bound` simplifies the union to
-       * `mixed`. This indicates that the query is discharged. If we find
-       * any other upper bound, we leave the subtyping query as it is.
-       *)
-      let (env, simplified_super_ty) =
-        Typing_solver_utils.remove_tyvar_from_upper_bound
-          env
-          id
-          (LoclType ty_super)
-      in
-      (* If the type is already in the upper bounds of the type variable,
-       * then we already know that this subtype assertion is valid
-       *)
-      if ITySet.mem simplified_super_ty (Env.get_tyvar_upper_bounds env id) then
-        valid env
-      else
-        let mixed = MakeType.mixed Reason.none in
-        (match simplified_super_ty with
-        | LoclType simplified_super_ty when ty_equal simplified_super_ty mixed
-          ->
-          valid env
-        | _ ->
-          mk_issubtype_prop
-            ~sub_supportdyn
-            ~coerce:subtype_env.Subtype_env.coerce
+    | (r_sub, Tvar id) -> begin
+      (* Ensure that higher-ranked type parameters don't escape their scope *)
+      let tvar_rank = Env.rank_of_tvar env id in
+      match find_higher_rank_generic env subtype_env ty_super tvar_rank with
+      | Some (generic_reason, generic_name) ->
+        let error =
+          Typing_error.Secondary.Higher_rank_tparam_escape
+            {
+              tvar_pos = Typing_reason.to_pos r_sub;
+              pos_with_generic = Typing_reason.to_pos (get_reason ty_super);
+              generic_reason;
+              generic_name;
+            }
+        in
+        let fail = Subtype_env.fail_with_secondary_error subtype_env error in
+        invalid ~fail env
+      | _ ->
+        (* For subtyping queries of the form
+         *
+         *   Tvar #id <: (Tvar #id | ...)
+         *
+         * `remove_tyvar_from_upper_bound` simplifies the union to
+         * `mixed`. This indicates that the query is discharged. If we find
+         * any other upper bound, we leave the subtyping query as it is.
+         *)
+        let (env, simplified_super_ty) =
+          Typing_solver_utils.remove_tyvar_from_upper_bound
             env
-            (LoclType lty_sub)
-            (LoclType ty_super))
+            id
+            (LoclType ty_super)
+        in
+        (* If the type is already in the upper bounds of the type variable,
+         * then we already know that this subtype assertion is valid
+         *)
+        if ITySet.mem simplified_super_ty (Env.get_tyvar_upper_bounds env id)
+        then
+          valid env
+        else
+          let mixed = MakeType.mixed Reason.none in
+          (match simplified_super_ty with
+          | LoclType simplified_super_ty when ty_equal simplified_super_ty mixed
+            ->
+            valid env
+          | _ ->
+            mk_issubtype_prop
+              ~sub_supportdyn
+              ~coerce:subtype_env.Subtype_env.coerce
+              env
+              (LoclType lty_sub)
+              (LoclType ty_super))
+    end
     | (r_sub, Tintersection tyl) ->
       (* A & B <: C iif A <: C | !B *)
       (match Subtype_negation.find_type_with_exact_negation env tyl with
@@ -1159,34 +1189,49 @@ end = struct
         env
         (LoclType lty_sub)
         (LoclType ty_super)
-    | (r_generic, Tgeneric (name_sub, tyargs)) -> begin
-      match
-        VisitedGoals.try_add_visited_generic_sub
-          subtype_env.Subtype_env.visited
-          name_sub
-          ty_super
-      with
-      | None ->
-        (* If we've seen this type parameter before then we must have gone
-             * round a cycle so we fail
-        *)
-        invalid ~fail env
-      | Some new_visited -> begin
-        let subtype_env = Subtype_env.set_visited subtype_env new_visited in
-
-        let mk_prop ~subtype_env ~this_ty ~lhs ~rhs env =
-          simplify ~subtype_env ~this_ty ~lhs ~rhs env
+    | (r_generic, Tgeneric name_sub) -> begin
+      match deref ty_super with
+      | (r_super, Tvar id)
+        when Env.rank_of_tparam env name_sub > Env.rank_of_tvar env id ->
+        let error =
+          Typing_error.Secondary.Higher_rank_tparam_escape
+            {
+              tvar_pos = Typing_reason.to_pos r_super;
+              pos_with_generic = Typing_reason.to_pos r_generic;
+              generic_reason = r_generic;
+              generic_name = name_sub;
+            }
         in
-        Common.simplify_generic_l
-          ~subtype_env
-          ~this_ty
-          ~fail
-          ~mk_prop
-          (sub_supportdyn, r_generic, name_sub, tyargs)
-          { super_like; super_supportdyn = false; ty_super }
-          { super_like = false; super_supportdyn = false; ty_super }
-          env
-      end
+        let fail = Subtype_env.fail_with_secondary_error subtype_env error in
+        invalid ~fail env
+      | _ ->
+        (match
+           VisitedGoals.try_add_visited_generic_sub
+             subtype_env.Subtype_env.visited
+             name_sub
+             ty_super
+         with
+        | None ->
+          (* If we've seen this type parameter before then we must have gone
+               * round a cycle so we fail
+          *)
+          invalid ~fail env
+        | Some new_visited -> begin
+          let subtype_env = Subtype_env.set_visited subtype_env new_visited in
+
+          let mk_prop ~subtype_env ~this_ty ~lhs ~rhs env =
+            simplify ~subtype_env ~this_ty ~lhs ~rhs env
+          in
+          Common.simplify_generic_l
+            ~subtype_env
+            ~this_ty
+            ~fail
+            ~mk_prop
+            (sub_supportdyn, r_generic, name_sub)
+            { super_like; super_supportdyn = false; ty_super }
+            { super_like = false; super_supportdyn = false; ty_super }
+            env
+        end)
     end
     | (_, Tdynamic) when Subtype_env.coercing_from_dynamic subtype_env ->
       valid env
@@ -1374,8 +1419,8 @@ end = struct
              *)
             let ty =
               match get_node ty with
-              | Tgeneric (name, targs) ->
-                let bounds = Env.get_lower_bounds env name targs in
+              | Tgeneric name ->
+                let bounds = Env.get_lower_bounds env name in
                 MakeType.union (get_reason ty) (Typing_set.elements bounds)
               | _ -> ty
             in
@@ -1857,8 +1902,11 @@ end = struct
                         }))
       else
         Ok ()
-    and arity_min_err =
-      if (not splat_super) && not (arity_min ft_sub <= arity_min ft_super) then
+    and arity_required_err =
+      if
+        (not splat_super)
+        && not (arity_required ft_sub <= arity_required ft_super)
+      then
         Error
           (Option.map
              subtype_env.Subtype_env.on_error
@@ -1868,8 +1916,8 @@ end = struct
                    apply_reasons ~on_error
                    @@ Secondary.Fun_too_many_args
                         {
-                          expected = arity_min ft_super;
-                          actual = arity_min ft_sub;
+                          expected = arity_required ft_super;
+                          actual = arity_required ft_sub;
                           pos = p_sub;
                           decl_pos = p_super;
                         }))
@@ -1945,7 +1993,7 @@ end = struct
           readonly_ret_err;
           package_err;
           return_disposable_err;
-          arity_min_err;
+          arity_required_err;
           variadic_err;
         ]
     in
@@ -3100,6 +3148,22 @@ end = struct
         (env, ty_sub)
     in
     match (deref ty_sub, deref ty_super) with
+    (* (...t) <: t *)
+    | ((_, Ttuple { t_required = []; t_extra = Tsplat ty_sub }), _) ->
+      env
+      |> simplify
+           ~subtype_env
+           ~this_ty:None
+           ~lhs:{ sub_supportdyn; ty_sub }
+           ~rhs:{ super_like; super_supportdyn; ty_super }
+      (* t <: (...t) *)
+    | (_, (_, Ttuple { t_required = []; t_extra = Tsplat ty_super })) ->
+      env
+      |> simplify
+           ~subtype_env
+           ~this_ty:None
+           ~lhs:{ sub_supportdyn; ty_sub }
+           ~rhs:{ super_like; super_supportdyn; ty_super }
     (* First come all the rewrites.
        By "rewrite", we mean stuff like A <: ?B ---> A & nonnull <: B *)
     (* -- Rewrite: x <: Tunion[t] ---> x <: t *)
@@ -3141,10 +3205,9 @@ end = struct
     (* -- Rewrite: x <: ?supportdyn<t> ---> x <: supportdyn<?t> *)
     | ( ( _,
           ( Tany _ | Tnonnull | Toption _ | Tdynamic | Tprim _ | Tfun _
-          | Ttuple _ | Tshape _ | Tvec_or_dict _ | Taccess _
-          | Tunapplied_alias _ | Tgeneric _ | Tnewtype _ | Tdependent _
-          | Tclass _ | Tneg _ | Tunion _ | Tintersection _ | Tvar _
-          | Tclass_ptr _ ) ),
+          | Ttuple _ | Tshape _ | Tvec_or_dict _ | Taccess _ | Tgeneric _
+          | Tnewtype _ | Tdependent _ | Tclass _ | Tneg _ | Tunion _
+          | Tintersection _ | Tvar _ | Tclass_ptr _ ) ),
         (r_super, Toption ty_inner) )
       when expands_to_supportdyn ty_inner ~env ->
       let (env, ty_inner) = Env.expand_type env ty_inner in
@@ -3206,42 +3269,6 @@ end = struct
         { rhs with super_supportdyn = false; ty_super = ty_inner_super }
       in
       simplify ~subtype_env ~this_ty ~lhs ~rhs env
-    (* -- Rewrite: class<T> <: C = XHPChild or Stringish
-          ---> classname<T> <: C *)
-    | ( (r_sub, Tclass_ptr ty_sub),
-        (_r_super, Tclass ((_, class_nm_super), exact_super, _)) )
-      when subtype_env.Subtype_env.class_sub_classname
-           && is_nonexact exact_super
-           && (String.equal class_nm_super SN.Classes.cXHPChild
-              || String.equal class_nm_super SN.Classes.cStringish) ->
-      let ty_classname = MakeType.classname r_sub [ty_sub] in
-      let t =
-        Typing_env.update_reason env ty_classname ~f:(fun r_sub_prj ->
-            Typing_reason.prj_rewrite_classname ~sub:r_sub ~sub_prj:r_sub_prj)
-      in
-      simplify
-        ~subtype_env
-        ~this_ty
-        ~lhs:{ sub_supportdyn; ty_sub = t }
-        ~rhs:{ super_like; super_supportdyn; ty_super }
-        env
-    (* -- Rewrite: class<T> <: N ---> classname<T> <: N
-          instead of e.g. considering class<T> as an element in a case type *)
-    | ((r_sub, Tclass_ptr ty_sub), (_r_super, Tnewtype _))
-    (* -- Rewrite: class<T> <: prim ---> classname<T> <: prim *)
-    | ((r_sub, Tclass_ptr ty_sub), (_r_super, Tprim _))
-      when subtype_env.Subtype_env.class_sub_classname ->
-      let ty_classname = MakeType.classname r_sub [ty_sub] in
-      let t =
-        Typing_env.update_reason env ty_classname ~f:(fun r_sub_prj ->
-            Typing_reason.prj_rewrite_classname ~sub:r_sub ~sub_prj:r_sub_prj)
-      in
-      simplify
-        ~subtype_env
-        ~this_ty
-        ~lhs:{ sub_supportdyn; ty_sub = t }
-        ~rhs:{ super_like; super_supportdyn; ty_super }
-        env
     (* -- C-Var-R ----------------------------------------------------------- *)
     | ((_, Tunion _), (_, Tvar _)) ->
       default_subtype
@@ -3298,54 +3325,71 @@ end = struct
     | ((_, Tvar var_sub), (_, Tvar var_super)) when Tvid.equal var_sub var_super
       ->
       valid env
-    | ( ( _,
+    | ( ( r_sub,
           ( Tany _ | Tnonnull | Tdynamic | Tprim _ | Tvar _ | Tfun _ | Ttuple _
           | Tshape _ | Tgeneric _ | Tintersection _ | Tvec_or_dict _ | Taccess _
-          | Tnewtype _ | Tunapplied_alias _ | Tdependent _ | Tclass _ | Tneg _
-          | Tlabel _ | Tclass_ptr _ ) ),
-        (_r_super, Tvar var_super_id) ) -> begin
-      let (env, simplified_sub_ty) =
-        Typing_solver_utils.remove_tyvar_from_lower_bound
-          env
-          var_super_id
-          (LoclType ty_sub)
-      in
-      match simplified_sub_ty with
-      | LoclType simplified_sub_ty
-      (* Better than checking nothing like this might be to change
-         remove_tyvar_from_lower_bound to return an Option to distinguish
-         whether a simplification was actually done.
-         And then we can recursively do a subtype check to check this.
-      *)
-        when ty_equal simplified_sub_ty (MakeType.nothing Reason.none) ->
-        valid env
-      | _ ->
-        (match subtype_env.Subtype_env.coerce with
-        | Some cd ->
-          mk_issubtype_prop
-            ~sub_supportdyn
-            ~coerce:(Some cd)
+          | Tnewtype _ | Tdependent _ | Tclass _ | Tneg _ | Tlabel _
+          | Tclass_ptr _ ) ),
+        (r_super, Tvar var_super_id) ) -> begin
+      (* Ensure that higher-ranked type parameters don't escape their scope *)
+      let tvar_rank = Env.rank_of_tvar env var_super_id in
+      match find_higher_rank_generic env subtype_env ty_sub tvar_rank with
+      | Some (generic_reason, generic_name) ->
+        let error =
+          Typing_error.Secondary.Higher_rank_tparam_escape
+            {
+              tvar_pos = Typing_reason.to_pos r_super;
+              pos_with_generic = Typing_reason.to_pos r_sub;
+              generic_reason;
+              generic_name;
+            }
+        in
+        let fail = Subtype_env.fail_with_secondary_error subtype_env error in
+        invalid ~fail env
+      | _ -> begin
+        let (env, simplified_sub_ty) =
+          Typing_solver_utils.remove_tyvar_from_lower_bound
             env
+            var_super_id
             (LoclType ty_sub)
-            (LoclType ty_super)
-        | None ->
-          if super_like then
-            let (env, ty_sub) =
-              Typing_dynamic.strip_covariant_like env ty_sub
-            in
-            simplify
-              ~subtype_env
-              ~this_ty
-              ~lhs:{ sub_supportdyn; ty_sub }
-              ~rhs:{ super_like = false; super_supportdyn = false; ty_super }
-              env
-          else
+        in
+        match simplified_sub_ty with
+        | LoclType simplified_sub_ty
+        (* Better than checking nothing like this might be to change
+           remove_tyvar_from_lower_bound to return an Option to distinguish
+           whether a simplification was actually done.
+           And then we can recursively do a subtype check to check this.
+        *)
+          when ty_equal simplified_sub_ty (MakeType.nothing Reason.none) ->
+          valid env
+        | _ ->
+          (match subtype_env.Subtype_env.coerce with
+          | Some cd ->
             mk_issubtype_prop
               ~sub_supportdyn
-              ~coerce:subtype_env.Subtype_env.coerce
+              ~coerce:(Some cd)
               env
               (LoclType ty_sub)
-              (LoclType ty_super))
+              (LoclType ty_super)
+          | None ->
+            if super_like then
+              let (env, ty_sub) =
+                Typing_dynamic.strip_covariant_like env ty_sub
+              in
+              simplify
+                ~subtype_env
+                ~this_ty
+                ~lhs:{ sub_supportdyn; ty_sub }
+                ~rhs:{ super_like = false; super_supportdyn = false; ty_super }
+                env
+            else
+              mk_issubtype_prop
+                ~sub_supportdyn
+                ~coerce:subtype_env.Subtype_env.coerce
+                env
+                (LoclType ty_sub)
+                (LoclType ty_super))
+      end
     end
     (* -- C-Inter-R --------------------------------------------------------- *)
     | ((r_sub, Tunion ty_subs), (_r_super, Tintersection _)) ->
@@ -3365,8 +3409,8 @@ end = struct
     | ( ( _r_sub,
           ( Tany _ | Tnonnull | Toption _ | Tdynamic | Tprim _ | Tvar _ | Tfun _
           | Ttuple _ | Tshape _ | Tgeneric _ | Tintersection _ | Tvec_or_dict _
-          | Taccess _ | Tnewtype _ | Tunapplied_alias _ | Tdependent _
-          | Tclass _ | Tneg _ | Tlabel _ | Tclass_ptr _ ) ),
+          | Taccess _ | Tnewtype _ | Tdependent _ | Tclass _ | Tneg _ | Tlabel _
+          | Tclass_ptr _ ) ),
         (r_super, Tintersection tyl) ) ->
       (* t <: (t1 & ... & tn)
        *   if and only if
@@ -3438,7 +3482,7 @@ end = struct
         env
         (LoclType ty_sub)
         (LoclType ty_super)
-    | ((r_generic, Tgeneric (name_sub, tyargs)), (_, Tunion [])) -> begin
+    | ((r_generic, Tgeneric name_sub), (_, Tunion [])) -> begin
       match
         VisitedGoals.try_add_visited_generic_sub
           subtype_env.Subtype_env.visited
@@ -3461,7 +3505,7 @@ end = struct
           ~this_ty
           ~fail
           ~mk_prop
-          (sub_supportdyn, r_generic, name_sub, tyargs)
+          (sub_supportdyn, r_generic, name_sub)
           { super_like; super_supportdyn = false; ty_super }
           { super_like = false; super_supportdyn = false; ty_super }
           env
@@ -3499,8 +3543,7 @@ end = struct
         (LoclType ty_super)
     | ( ( _,
           ( Tnonnull | Toption _ | Tdynamic | Tprim _ | Tfun _ | Ttuple _
-          | Tshape _ | Tvec_or_dict _ | Taccess _ | Tunapplied_alias _
-          | Tclass _ | Tneg _ ) ),
+          | Tshape _ | Tvec_or_dict _ | Taccess _ | Tclass _ | Tneg _ ) ),
         (_, Tunion []) ) ->
       invalid env ~fail
     (* -- C-Union-R --------------------------------------------------------- *)
@@ -3695,8 +3738,7 @@ end = struct
       | ( _,
           ( Tany _ | Tprim _ | Tnonnull | Tdynamic | Tfun _ | Ttuple _
           | Tshape _ | Tgeneric _ | Tvec_or_dict _ | Taccess _ | Tnewtype _
-          | Tunapplied_alias _ | Tdependent _ | Tclass _ | Tneg _ | Tlabel _
-          | Tclass_ptr _ ) ) ->
+          | Tdependent _ | Tclass _ | Tneg _ | Tlabel _ | Tclass_ptr _ ) ) ->
         simplify_sub_union
           ~subtype_env
           ~sub_supportdyn
@@ -3711,9 +3753,9 @@ end = struct
     (* `Toption(Tnonnull)` encodes mixed, which is our top type *)
     | ( ( _,
           ( Tany _ | Tnonnull | Toption _ | Tdynamic | Tprim _ | Tfun _
-          | Ttuple _ | Tshape _ | Tvec_or_dict _ | Taccess _
-          | Tunapplied_alias _ | Tgeneric _ | Tnewtype _ | Tdependent _
-          | Tclass _ | Tneg _ | Tunion _ | Tintersection _ | Tvar _ ) ),
+          | Ttuple _ | Tshape _ | Tvec_or_dict _ | Taccess _ | Tgeneric _
+          | Tnewtype _ | Tdependent _ | Tclass _ | Tneg _ | Tunion _
+          | Tintersection _ | Tvar _ ) ),
         (_, Toption ty_inner) )
       when expands_to_nonnull ty_inner ~env ->
       valid env
@@ -3829,8 +3871,6 @@ end = struct
               ~fail
               ~lhs:{ sub_supportdyn; ty_sub }
               ~rhs:{ super_like; super_supportdyn = false; ty_super }
-    | ((_, Tunapplied_alias _), (_, Toption _)) ->
-      Typing_defs.error_Tunapplied_alias_in_illegal_context ()
     | ( ( _r_sub,
           ( Tdynamic | Tprim _ | Tnonnull | Tfun _ | Ttuple _ | Tshape _
           | Tclass _ | Tvec_or_dict _ | Tany _ | Taccess _ | Tlabel _
@@ -3923,7 +3963,7 @@ end = struct
           ( Tany _ | Tunion _ | Toption _ | Tintersection _ | Tgeneric _
           | Taccess _ | Tnewtype _ | Tprim _ | Tnonnull | Tclass _
           | Tvec_or_dict _ | Ttuple _ | Tshape _ | Tdynamic | Tneg _ | Tfun _
-          | Tvar _ | Tunapplied_alias _ | Tlabel _ | Tclass_ptr _ ) ),
+          | Tvar _ | Tlabel _ | Tclass_ptr _ ) ),
         (_, Tdependent _) ) ->
       default_subtype
         ~subtype_env
@@ -3935,38 +3975,32 @@ end = struct
     (* -- C-Access-R -------------------------------------------------------- *)
     | (_, (_, Taccess _)) -> invalid ~fail env
     (* -- C-Generic-R ------------------------------------------------------- *)
-    | ( (r_sub, Tgeneric (name_sub, tyargs_sub)),
-        (r_super, Tgeneric (name_super, tyargs_super)) )
+    | ((_, Tgeneric name_sub), (_, Tgeneric name_super))
       when String.equal name_sub name_super ->
-      if List.is_empty tyargs_super then
-        valid env
-      else
-        (* TODO(T69931993) Type parameter env must carry variance information *)
-        let variance_reifiedl =
-          List.map tyargs_sub ~f:(fun _ -> (Ast_defs.Invariant, Aast.Erased))
-        in
-        (* Unfortunately, we have to expose this function for proto-HKTs *)
-        simplify_subtype_variance_for_non_injective
-          ~subtype_env
-          ~sub_supportdyn
-          ~super_like
-          name_sub
-          None
-          variance_reifiedl
-          (r_sub, tyargs_sub)
-          (r_super, tyargs_super)
-          ty_sub
-          ty_super
-          env
-    | ((_r_sub, Tgeneric (name_sub, _)), (_, Tgeneric _))
+      valid env
+    | ((_r_sub, Tgeneric name_sub), (_, Tgeneric _))
       when let (generic_lower_bounds, _other_lower_bounds) =
              generic_lower_bounds env ty_super
            in
            SSet.mem name_sub generic_lower_bounds ->
       valid env
-      (* When decomposing subtypes for the purpose of adding bounds on generic
-       * parameters to the context, (so seen_generic_params = None), leave
-       * subtype so that the bounds get added *)
+    (* Ensure that higher-ranked type parameters don't escape their scope *)
+    | ((r_sub, Tvar tv_sub), (r_super, Tgeneric tp_sup))
+      when Env.rank_of_tparam env tp_sup > Env.rank_of_tvar env tv_sub ->
+      let error =
+        Typing_error.Secondary.Higher_rank_tparam_escape
+          {
+            tvar_pos = Typing_reason.to_pos r_sub;
+            pos_with_generic = Typing_reason.to_pos r_super;
+            generic_reason = r_super;
+            generic_name = tp_sup;
+          }
+      in
+      let fail = Subtype_env.fail_with_secondary_error subtype_env error in
+      invalid env ~fail
+    (* When decomposing subtypes for the purpose of adding bounds on generic
+     * parameters to the context, (so seen_generic_params = None), leave
+     * subtype so that the bounds get added *)
     | ((_, (Tvar _ | Tunion _)), (_, Tgeneric _)) ->
       default_subtype
         ~subtype_env
@@ -3977,9 +4011,9 @@ end = struct
         env
     | ( ( _,
           ( Tany _ | Toption _ | Tnonnull | Tdynamic | Tprim _ | Tfun _
-          | Ttuple _ | Tshape _ | Tintersection _ | Tunapplied_alias _
-          | Tvec_or_dict _ | Taccess _ | Tnewtype _ | Tdependent _ | Tclass _
-          | Tneg _ | Tgeneric _ | Tlabel _ | Tclass_ptr _ ) ),
+          | Ttuple _ | Tshape _ | Tintersection _ | Tvec_or_dict _ | Taccess _
+          | Tnewtype _ | Tdependent _ | Tclass _ | Tneg _ | Tgeneric _
+          | Tlabel _ | Tclass_ptr _ ) ),
         (_, Tgeneric _) )
       when subtype_env.Subtype_env.require_completeness ->
       mk_issubtype_prop
@@ -3990,10 +4024,10 @@ end = struct
         (LoclType ty_super)
     | ( ( _r_sub,
           ( Tany _ | Toption _ | Tnonnull | Tdynamic | Tprim _ | Tfun _
-          | Ttuple _ | Tshape _ | Tintersection _ | Tunapplied_alias _
-          | Tvec_or_dict _ | Taccess _ | Tnewtype _ | Tdependent _ | Tclass _
-          | Tneg _ | Tgeneric _ | Tlabel _ | Tclass_ptr _ ) ),
-        (r_super, Tgeneric (name_super, _tyargs_super)) ) ->
+          | Ttuple _ | Tshape _ | Tintersection _ | Tvec_or_dict _ | Taccess _
+          | Tnewtype _ | Tdependent _ | Tclass _ | Tneg _ | Tgeneric _
+          | Tlabel _ | Tclass_ptr _ ) ),
+        (r_super, Tgeneric name_super) ) ->
       (* If we've seen this type parameter before then we must have gone
        * round a cycle so we fail
        *)
@@ -4100,8 +4134,7 @@ end = struct
     | ( ( _,
           ( Tany _ | Tunion _ | Toption _ | Tintersection _ | Tdynamic
           | Tprim Aast.(Tvoid | Tnull)
-          | Tvar _ | Tgeneric _ | Tnewtype _ | Tunapplied_alias _ | Tdependent _
-            ) ),
+          | Tvar _ | Tgeneric _ | Tnewtype _ | Tdependent _ ) ),
         (_, Tnonnull) ) ->
       default_subtype
         ~subtype_env
@@ -4175,7 +4208,6 @@ end = struct
         | (_, (Tdynamic | Tprim Ast_defs.Tnull)) -> valid env
         | (_, Tnonnull)
         | (_, Tvar _)
-        | (_, Tunapplied_alias _)
         | (_, Tnewtype _)
         | (_, Tdependent _)
         | (_, Taccess _)
@@ -4269,14 +4301,15 @@ end = struct
                 ~this_ty:None
                 ~lhs:{ sub_supportdyn; ty_sub = unknown_fields_type }
                 ~rhs:{ super_like = false; super_supportdyn = false; ty_super }
+        (* class<T> <D: dynamic by exposure to string *)
+        | (_, Tclass_ptr _) when subtype_env.Subtype_env.class_sub_classname ->
+          valid env
+        (* class<T> <D: dynamic if T <D: dynamic (class is SDT) *)
         | (_, Tclass_ptr ty) ->
-          (* TODO(T199606542) May need to change this for migration, but
-           * conceptually a class pointer for class C should only <D: dynamic
-           * if C is <<__SDT>> *)
           simplify
             ~subtype_env
             ~this_ty:None
-            ~lhs:{ sub_supportdyn; ty_sub = ty }
+            ~lhs:{ sub_supportdyn = None; ty_sub = ty }
             ~rhs:{ super_like = false; super_supportdyn = false; ty_super }
             env
         | (_, Tclass ((_, class_id), _exact, tyargs)) ->
@@ -4492,6 +4525,10 @@ end = struct
         env
     (* -- C-Prim-R ---------------------------------------------------------- *)
     | ((_, Tprim (Nast.Tint | Nast.Tfloat)), (_, Tprim Nast.Tnum)) -> valid env
+    (* class<T> <: string because of typename's bound *)
+    | ((_, Tclass_ptr _), (_, Tprim (Nast.Tstring | Nast.Tarraykey)))
+      when subtype_env.Subtype_env.class_sub_classname ->
+      valid env
     | ((_, Tprim (Nast.Tint | Nast.Tstring)), (_, Tprim Nast.Tarraykey)) ->
       valid env
     | ((_, Tprim prim_sub), (_, Tprim prim_sup))
@@ -4512,8 +4549,8 @@ end = struct
     | ( ( _,
           ( Tany _ | Tdynamic | Tunion _ | Toption _ | Tintersection _
           | Tdependent _ | Taccess _ | Tgeneric _ | Tnonnull | Tfun _ | Ttuple _
-          | Tshape _ | Tvec_or_dict _ | Tclass _ | Tnewtype _ | Tneg _
-          | Tunapplied_alias _ | Tvar _ | Tlabel _ | Tclass_ptr _ ) ),
+          | Tshape _ | Tvec_or_dict _ | Tclass _ | Tnewtype _ | Tneg _ | Tvar _
+          | Tlabel _ | Tclass_ptr _ ) ),
         (_, Tprim _) ) ->
       default_subtype
         ~subtype_env
@@ -4542,6 +4579,29 @@ end = struct
     | (_, (_, Tany _)) -> valid env
     (* -- C-Fun ------------------------------------------------------------- *)
     | ((r_sub, Tfun ft_sub), (r_super, Tfun ft_super)) ->
+      (* If one or both function types are polymorphic we need to ensure that
+         any higher-rank type parameters do not escape into the bounds of any
+         lower ranked type variables. To do this we increase the rank of
+         any fresh type variables and type parameters generated when we move
+         through a binder then check that ranks are compatible when subtyping
+         type parameters against type variables and that ranks are equal when
+         when subtyping two type variables *)
+      let either_polymorphic =
+        not (ft_sub.ft_instantiated && ft_super.ft_instantiated)
+      in
+      let subtype_env =
+        let check_rank_outer = Subtype_env.get_check_rank subtype_env in
+        Subtype_env.set_check_rank
+          subtype_env
+          (check_rank_outer || either_polymorphic)
+      in
+      let env =
+        if either_polymorphic then
+          Typing_env_types.increment_rank env
+        else
+          env
+      in
+      let rank = Typing_env_types.get_rank env in
       let ((env, err_opt), ft_sub) =
         if ft_sub.ft_instantiated then
           ((env, None), ft_sub)
@@ -4551,7 +4611,7 @@ end = struct
           in
           (* Replace all quantifiers with fresh type variables adding any declared
              bounds *)
-          Instantiate.instantiate_fun_type pos ft_sub ~env
+          Instantiate.instantiate_fun_type pos ft_sub rank ~env
       in
       (* Handle any error - we can fail to instantiate if the function type has
          unsatisfiable bounds *)
@@ -4567,24 +4627,35 @@ end = struct
             Instantiate.freshen_and_bind_fun_type_quantifiers
               r_super
               ft_super
+              rank
               ~env
         in
         (* Simplify the subtype proposition between the instantiated subtype
            and the the supertype in the modified context *)
-        simplify_funs
-          ~subtype_env
-          ~check_return:true
-          ~for_override:false
-          ~super_like
-          (r_sub, ft_sub)
-          (r_super, ft_super)
-          env
+        let (env, prop) =
+          simplify_funs
+            ~subtype_env
+            ~check_return:true
+            ~for_override:false
+            ~super_like
+            (r_sub, ft_sub)
+            (r_super, ft_super)
+            env
+        in
+        (* If we incremented the rank during the instantiation of polymorphic
+           function types we need to decrement it here *)
+        let env =
+          if either_polymorphic then
+            Typing_env_types.decrement_rank env
+          else
+            env
+        in
+        (env, prop)
     | ( ( _,
           ( Tany _ | Tunion _ | Toption _ | Tintersection _ | Tgeneric _
           | Taccess _ | Tnewtype _ | Tprim _ | Tnonnull | Tclass _
           | Tvec_or_dict _ | Ttuple _ | Tshape _ | Tdynamic | Tneg _
-          | Tdependent _ | Tvar _ | Tunapplied_alias _ | Tlabel _ | Tclass_ptr _
-            ) ),
+          | Tdependent _ | Tvar _ | Tlabel _ | Tclass_ptr _ ) ),
         (_, Tfun _) ) ->
       default_subtype
         ~subtype_env
@@ -4812,7 +4883,7 @@ end = struct
           ( Tany _ | Tunion _ | Toption _ | Tintersection _ | Tfun _
           | Tgeneric _ | Taccess _ | Tprim _ | Tnonnull | Tclass _
           | Tvec_or_dict _ | Ttuple _ | Tdynamic | Tneg _ | Tdependent _
-          | Tvar _ | Tunapplied_alias _ | Tlabel _ | Tclass_ptr _ ) ),
+          | Tvar _ | Tlabel _ | Tclass_ptr _ ) ),
         (_, Tshape _) ) ->
       default_subtype
         ~subtype_env
@@ -4905,7 +4976,7 @@ end = struct
           ( Tany _ | Tunion _ | Toption _ | Tintersection _ | Tfun _
           | Tgeneric _ | Taccess _ | Tprim _ | Tnonnull | Tclass _ | Ttuple _
           | Tshape _ | Tnewtype _ | Tdynamic | Tneg _ | Tdependent _ | Tvar _
-          | Tunapplied_alias _ | Tlabel _ | Tclass_ptr _ ) ),
+          | Tlabel _ | Tclass_ptr _ ) ),
         (_, Tvec_or_dict _) ) ->
       default_subtype
         ~subtype_env
@@ -4985,6 +5056,18 @@ end = struct
           ~lhs:{ sub_supportdyn; ty_sub = ty_from }
           ~rhs:{ reason_super = r_sub; name; ty }
           env)
+    (* When flag enabled, class<T> <: classname<T>, which is bounded by
+     * typename<T> *)
+    | ((_r_sub, Tclass_ptr ty_sub), (_r_super, Tnewtype (name, [ty_super], _)))
+      when subtype_env.Subtype_env.class_sub_classname
+           && (String.equal name SN.Classes.cClassname
+              || String.equal name SN.Classes.cTypename) ->
+      simplify
+        ~subtype_env
+        ~this_ty:None
+        ~lhs:{ sub_supportdyn = None; ty_sub }
+        ~rhs:{ super_like = false; super_supportdyn = false; ty_super }
+        env
     | (_, (r_super, Tnewtype (name_super, lty_supers, _bound_super))) -> begin
       match deref ty_sub with
       | (_, Tclass ((_, name_sub), _, _))
@@ -5098,7 +5181,7 @@ end = struct
               Aast.(
                 ( Tnull | Tvoid | Tint | Tbool | Tfloat | Tstring | Tresource
                 | Tnoreturn ))
-          | Tunapplied_alias _ | Tvar _ | Tlabel _ | Tclass_ptr _ ) ) -> begin
+          | Tvar _ | Tlabel _ | Tclass_ptr _ ) ) -> begin
         match
           Subtype_env.check_infinite_recursion
             subtype_env
@@ -5214,27 +5297,17 @@ end = struct
               env)
       end
     end
-    (* -- C-unapplied-alias-R --------------------------------------------------- *)
-    | (_, (_, Tunapplied_alias n_sup)) ->
-      (match deref ty_sub with
-      | (_, Tunapplied_alias n_sub) when String.equal n_sub n_sup -> valid env
-      | _ ->
-        default_subtype
-          ~subtype_env
-          ~this_ty
-          ~fail
-          ~lhs:{ sub_supportdyn; ty_sub }
-          ~rhs:{ super_supportdyn; super_like; ty_super }
-          env)
     (* -- C-Neg-R ----------------------------------------------------------- *)
-    | (_, (r_super, Tneg (r_pred, IsTag (ClassTag c_super)))) -> begin
+    | (_, (r_super, Tneg (r_pred, IsTag (ClassTag (c_super, c_super_args))))) ->
+    begin
       match deref ty_sub with
-      | (_, Tneg (_, IsTag (ClassTag c_sub))) ->
+      | (_, Tneg (_, IsTag (ClassTag (c_sub, c_sub_args))))
+        when List.is_empty c_sub_args ->
         if TUtils.is_sub_class_refl env c_super c_sub then
           valid env
         else
           invalid ~fail env
-      | (_, Tclass ((_, c_sub), _, _)) ->
+      | (_, Tclass ((_, c_sub), _, _)) when List.is_empty c_super_args ->
         if Subtype_negation.is_class_disjoint env c_sub c_super then
           valid env
         else
@@ -5254,7 +5327,10 @@ end = struct
             {
               super_like;
               super_supportdyn = false;
-              ty_super = mk (r_super, Tneg (r_pred, IsTag (ClassTag c_super)));
+              ty_super =
+                mk
+                  ( r_super,
+                    Tneg (r_pred, IsTag (ClassTag (c_super, c_super_args))) );
             }
           env
     end
@@ -5416,6 +5492,13 @@ end = struct
         when String.equal class_nm_super SN.Classes.cStringish
              && is_nonexact exact_super ->
         valid env
+      (* same as prior two cases by typename's string bound *)
+      | (_, Tclass_ptr _)
+        when subtype_env.Subtype_env.class_sub_classname
+             && is_nonexact exact_super
+             && (String.equal class_nm_super SN.Classes.cXHPChild
+                || String.equal class_nm_super SN.Classes.cStringish) ->
+        valid env
       (* Match what's done in unify for non-strict code *)
       | (r_sub, Tclass (class_id_sub, exact_sub, tyl_sub)) ->
         (match deref ty_super with
@@ -5520,7 +5603,7 @@ end = struct
           ( Tany _ | Tdynamic | Tunion _ | Toption _ | Tintersection _
           | Tdependent _ | Taccess _ | Tgeneric _ | Tnonnull | Tfun _ | Ttuple _
           | Tshape _ | Tvec_or_dict _ | Tclass _ | Tnewtype _ | Tneg _ | Tprim _
-          | Tunapplied_alias _ | Tvar _ | Tclass_ptr _ ) ),
+          | Tvar _ | Tclass_ptr _ ) ),
         (_, Tlabel _) ) ->
       default_subtype
         ~subtype_env
@@ -5533,15 +5616,15 @@ end = struct
     | ((_r_sub, Tclass_ptr ty_sub), (_r_super, Tclass_ptr ty_super)) ->
       simplify
         ~subtype_env
-        ~this_ty
-        ~lhs:{ sub_supportdyn; ty_sub }
-        ~rhs:{ super_like; super_supportdyn; ty_super }
+        ~this_ty:None
+        ~lhs:{ sub_supportdyn = None; ty_sub }
+        ~rhs:{ super_like = false; super_supportdyn = false; ty_super }
         env
     | ( ( _,
           ( Tany _ | Tunion _ | Toption _ | Tintersection _ | Tgeneric _
           | Taccess _ | Tnewtype _ | Tprim _ | Tnonnull | Tclass _
           | Tvec_or_dict _ | Ttuple _ | Tshape _ | Tdynamic | Tneg _
-          | Tdependent _ | Tvar _ | Tunapplied_alias _ | Tlabel _ | Tfun _ ) ),
+          | Tdependent _ | Tvar _ | Tlabel _ | Tfun _ ) ),
         (_, Tclass_ptr _) ) ->
       default_subtype
         ~subtype_env
@@ -5951,13 +6034,13 @@ end = struct
             (sub_supportdyn, ty_subs)
             rhs
             env)
-      | ((r_generic, Tgeneric (generic_nm, generic_ty_args)), _) ->
+      | ((r_generic, Tgeneric generic_nm), _) ->
         Common.simplify_generic_l
           ~subtype_env
           ~this_ty
           ~fail
           ~mk_prop:simplify
-          (sub_supportdyn, r_generic, generic_nm, generic_ty_args)
+          (sub_supportdyn, r_generic, generic_nm)
           rhs
           rhs
           env
@@ -5997,7 +6080,7 @@ end = struct
       | ( ( _,
             ( Tany _ | Tnonnull | Toption _ | Tprim _ | Tfun _ | Tshape _
             | Tvec_or_dict _ | Taccess _ | Tclass _ | Tneg _ | Tlabel _
-            | Tunapplied_alias _ | Tclass_ptr _ ) ),
+            | Tclass_ptr _ ) ),
           ListDestructure ) ->
         let ty_sub_descr =
           lazy (Typing_print.full_strip_ns ~hide_internals:true env ty_sub)
@@ -6254,13 +6337,13 @@ end = struct
             (sub_supportdyn, ty_subs)
             rhs
             env)
-      | (r_sub, Tgeneric (generic_nm, generic_ty_args)) ->
+      | (r_sub, Tgeneric generic_nm) ->
         Common.simplify_generic_l
           ~subtype_env
           ~this_ty
           ~fail
           ~mk_prop
-          (sub_supportdyn, r_sub, generic_nm, generic_ty_args)
+          (sub_supportdyn, r_sub, generic_nm)
           rhs
           rhs
           env
@@ -6288,8 +6371,7 @@ end = struct
       | (_, Ttuple _)
       | (_, Tshape _)
       | (_, Taccess _)
-      | (_, Tlabel _)
-      | (_, Tunapplied_alias _) ->
+      | (_, Tlabel _) ->
         invalid ~fail env
       | (_, Tclass_ptr _) ->
         (* TODO(T199606542) confirm CanTraverse behavior for class pointers *)
@@ -6481,8 +6563,8 @@ end = struct
         &&& simplify_subtype_bound `Super ~bound:memloty loty)
     | (_r_sub, Tdependent (DTexpr eid, bndty)) ->
       concrete_rigid_tvar_access env (Typing_type_member.EDT eid) [bndty]
-    | (_r_sub, Tgeneric (s, ty_args)) when String.equal s SN.Typehints.this ->
-      let bnd_tys = Typing_set.elements (Env.get_upper_bounds env s ty_args) in
+    | (_r_sub, Tgeneric s) when String.equal s SN.Typehints.this ->
+      let bnd_tys = Typing_set.elements (Env.get_upper_bounds env s) in
       concrete_rigid_tvar_access env Typing_type_member.This bnd_tys
     | (_, Tvar _) ->
       mk_issubtype_prop
@@ -6514,7 +6596,7 @@ end = struct
         (sub_supportdyn, ty_subs)
         rhs
         env
-    | (r_generic, Tgeneric (generic_nm, generic_ty_args)) ->
+    | (r_generic, Tgeneric generic_nm) ->
       (match
          VisitedGoalsInternal.try_add_visited_generic_sub
            subtype_env.Subtype_env.visited_internal
@@ -6531,14 +6613,14 @@ end = struct
           ~this_ty
           ~fail
           ~mk_prop:simplify
-          (sub_supportdyn, r_generic, generic_nm, generic_ty_args)
+          (sub_supportdyn, r_generic, generic_nm)
           rhs
           rhs
           env)
     | ( _,
         ( Tany _ | Tdynamic | Tnonnull | Toption _ | Tprim _ | Tneg _ | Tfun _
         | Ttuple _ | Tshape _ | Tvec_or_dict _ | Taccess _ | Tnewtype _
-        | Tlabel _ | Tunapplied_alias _ ) ) ->
+        | Tlabel _ ) ) ->
       invalid ~fail env
     | (_, Tclass_ptr _) ->
       (* TODO(T199606542) Confirm if class pointers appear in HasTypeMember positions *)
@@ -6811,8 +6893,7 @@ end = struct
     | ( _,
         ( Toption _ | Tdynamic | Tnonnull | Tany _ | Tprim _ | Tfun _ | Ttuple _
         | Tshape _ | Tgeneric _ | Tdependent _ | Tvec_or_dict _ | Taccess _
-        | Tunapplied_alias _ | Tclass _ | Tneg _ | Tlabel _ | Tclass_ptr _ ) )
-      ->
+        | Tclass _ | Tneg _ | Tlabel _ | Tclass_ptr _ ) ) ->
       typing_obj_get
         ~subtype_env
         ~this_ty
@@ -7036,13 +7117,13 @@ end = struct
           (sub_supportdyn, ty_subs)
           rhs
           env)
-    | (r_generic, Tgeneric (generic_nm, generic_ty_args)) ->
+    | (r_generic, Tgeneric generic_nm) ->
       Common.simplify_generic_l
         ~subtype_env
         ~this_ty:(Some this_ty)
         ~fail
         ~mk_prop:simplify
-        (sub_supportdyn, r_generic, generic_nm, generic_ty_args)
+        (sub_supportdyn, r_generic, generic_nm)
         rhs
         rhs
         env
@@ -7064,8 +7145,7 @@ end = struct
         env
     | ( _,
         ( Toption _ | Tdynamic | Tnonnull | Tany _ | Tprim _ | Tfun _ | Ttuple _
-        | Tshape _ | Tvec_or_dict _ | Taccess _ | Tunapplied_alias _ | Tneg _
-        | Tlabel _ ) ) ->
+        | Tshape _ | Tvec_or_dict _ | Taccess _ | Tneg _ | Tlabel _ ) ) ->
       invalid ~fail env
     | (_, Tclass_ptr _) ->
       (* TODO(T199606542) Check if this can be used to improve inference for $c::FOO *)
@@ -7148,13 +7228,16 @@ end = struct
       let (env, partition) =
         Typing_refinement.partition_ty env ty_sub predicate
       in
-      let intersect tyl = MakeType.intersection reason_super tyl in
+      let intersect env tyl =
+        Typing_intersection.intersect_list env reason_super tyl
+      in
       let simplify_subtype ~f tyl ty_super env =
+        let (env, ty_sub) = f env tyl in
         Subtype.(
           simplify
             ~subtype_env
             ~this_ty
-            ~lhs:{ sub_supportdyn; ty_sub = f tyl }
+            ~lhs:{ sub_supportdyn; ty_sub }
             ~rhs:{ super_supportdyn = false; super_like; ty_super }
             env)
       in
@@ -7166,23 +7249,24 @@ end = struct
       let simplify_split
           ~init
           ~refine
+          ~refine_span
           (subset : Typing_refinement.dnf_ty)
           (span : Typing_refinement.dnf_ty)
           ty_sup =
         let init =
           List.fold_left subset ~init ~f:(fun res tyl ->
-              res &&& simplify_subtype ~f:intersect tyl ty_sup)
+              res &&& simplify_subtype ~f:refine tyl ty_sup)
         in
         List.fold_left span ~init ~f:(fun res tyl ->
-            res &&& simplify_subtype ~f:refine tyl ty_sup)
+            res &&& simplify_subtype ~f:refine_span tyl ty_sup)
       in
 
-      let refine_true tyl =
-        intersect (Typing_refinement.TyPredicate.to_ty predicate :: tyl)
+      let refine_true_span env tyl =
+        intersect env (Typing_refinement.TyPredicate.to_ty predicate :: tyl)
       in
-      let refine_false tyl =
+      let refine_false_span env tyl =
         let neg = MakeType.neg reason_super predicate in
-        intersect (neg :: tyl)
+        intersect env (neg :: tyl)
       in
       let left = partition.Typing_refinement.left in
       let span = partition.Typing_refinement.span in
@@ -7214,14 +7298,16 @@ end = struct
       in
       let (env, props) =
         simplify_split
-          ~refine:refine_true
+          ~refine:refine_true_span
+          ~refine_span:refine_true_span
           ~init:(env, TL.valid)
           left
           span
           ty_true
       in
       simplify_split
-        ~refine:refine_false
+        ~refine:intersect
+        ~refine_span:refine_false_span
         ~init:(env, props)
         right
         span_for_false
@@ -7273,7 +7359,7 @@ and Common : sig
       rhs:'rhs ->
       env ->
       env * TL.subtype_prop) ->
-    Reason.t option * locl_phase Reason.t_ * string * locl_ty list ->
+    Reason.t option * locl_phase Reason.t_ * string ->
     'rhs ->
     'rhs ->
     env ->
@@ -7407,14 +7493,12 @@ end = struct
       ~this_ty
       ~fail
       ~mk_prop
-      (sub_supportdyn, reason_generic, generic_nm, generic_ty_args)
+      (sub_supportdyn, reason_generic, generic_nm)
       rhs
       rhs_for_mixed
       env =
     begin
-      let lty_sub =
-        mk (reason_generic, Tgeneric (generic_nm, generic_ty_args))
-      in
+      let lty_sub = mk (reason_generic, Tgeneric generic_nm) in
       let (env, prop) =
         (* If the generic is actually an expression dependent type,
            we need to update this_ty
@@ -7466,8 +7550,7 @@ end = struct
         in
 
         let upper_bounds =
-          Typing_set.elements
-            (Env.get_upper_bounds env generic_nm generic_ty_args)
+          Typing_set.elements (Env.get_upper_bounds env generic_nm)
         in
         (* TODO(mjt) We reverse bounds here to match the evaluation order
            of older code; not doing so triggers errors due to incompleteness *)
@@ -7662,28 +7745,46 @@ end = struct
             env)
       in
       mk_subty_prop env &&& mk_cstr_prop
-    | (r_generic, Tgeneric (nm, tyargs)) ->
-      let mk_prop_generic
-          ~subtype_env ~this_ty ~lhs:{ sub_supportdyn; ty_sub } ~rhs env =
-        simplify_disj_r
+    | (r_generic, Tgeneric nm) ->
+      (match deref rhs_subtype.Subtype.ty_super with
+      (* Before using the upper bounds of the generic in a call to
+         [simplify_generic_l] we need to check if the super type is a type
+         variable and, if so, ensure the two have compatible ranks *)
+      | (r_super, Tvar tv_sup)
+        when Env.rank_of_tparam env nm > Env.rank_of_tvar env tv_sup ->
+        let error =
+          Typing_error.Secondary.Higher_rank_tparam_escape
+            {
+              tvar_pos = Typing_reason.to_pos r_super;
+              pos_with_generic = Typing_reason.to_pos r_generic;
+              generic_reason = r_generic;
+              generic_name = nm;
+            }
+        in
+        let fail = Subtype_env.fail_with_secondary_error subtype_env error in
+        invalid ~fail env
+      | _ ->
+        let mk_prop_generic
+            ~subtype_env ~this_ty ~lhs:{ sub_supportdyn; ty_sub } ~rhs env =
+          simplify_disj_r
+            ~subtype_env
+            ~this_ty
+            ~fail
+            ~lift_rhs
+            ~mk_prop
+            (sub_supportdyn, ty_sub)
+            rhs
+            env
+        in
+        simplify_generic_l
           ~subtype_env
           ~this_ty
           ~fail
-          ~lift_rhs
-          ~mk_prop
-          (sub_supportdyn, ty_sub)
+          ~mk_prop:mk_prop_generic
+          (sub_supportdyn, r_generic, nm)
           rhs
-          env
-      in
-      simplify_generic_l
-        ~subtype_env
-        ~this_ty
-        ~fail
-        ~mk_prop:mk_prop_generic
-        (sub_supportdyn, r_generic, nm, tyargs)
-        rhs
-        rhs
-        env
+          rhs
+          env)
     | (r_dep, Tdependent (dep_ty, ty_sub_inner)) ->
       let mk_prop_dependent
           ~subtype_env ~this_ty ~lhs:{ sub_supportdyn; ty_sub } ~rhs env =
@@ -7739,9 +7840,9 @@ end = struct
     | (_, Tdynamic) when Subtype_env.coercing_from_dynamic subtype_env ->
       valid env
     | ( _,
-        ( Tany _ | Tdynamic | Tprim _ | Tneg _ | Tnonnull | Tunapplied_alias _
-        | Tfun _ | Ttuple _ | Tshape _ | Tvec_or_dict _ | Taccess _ | Tclass _
-        | Tlabel _ | Tclass_ptr _ ) ) ->
+        ( Tany _ | Tdynamic | Tprim _ | Tneg _ | Tnonnull | Tfun _ | Ttuple _
+        | Tshape _ | Tvec_or_dict _ | Taccess _ | Tclass _ | Tlabel _
+        | Tclass_ptr _ ) ) ->
       let ( ||| ) = ( ||| ) ~fail in
       mk_prop
         ~subtype_env
@@ -8766,6 +8867,7 @@ and Instantiate : sig
   val bind_tparams :
     Typing_reason.t ->
     Typing_defs.locl_ty Typing_defs.tparam list ->
+    int ->
     Typing_env_types.env ->
     Type_parameter_env.t ->
     Typing_env_types.env * Type_parameter_env.t
@@ -8773,16 +8875,18 @@ and Instantiate : sig
   val instantiate_fun_type :
     Pos.t ->
     Typing_defs.locl_fun_type ->
+    int ->
     env:Typing_env_types.env ->
     (Typing_env_types.env * Typing_error.t option) * Typing_defs.locl_fun_type
 
   val freshen_and_bind_fun_type_quantifiers :
     Typing_reason.t ->
     Typing_defs.locl_fun_type ->
+    int ->
     env:Typing_env_types.env ->
     Typing_env_types.env * Typing_defs.locl_fun_type
 end = struct
-  let freshen_fun_ty fun_ty env =
+  let freshen_fun_ty fun_ty env rank =
     let (env, ft_tparams_rev, subst) =
       List.fold_left
         fun_ty.ft_tparams
@@ -8792,16 +8896,19 @@ end = struct
           let (env, new_name) = Typing_env.fresh_param_name env old_name in
           let tparam = { tparam with tp_name = (pos, new_name) } in
           let ty =
-            mk (Typing_reason.witness_from_decl pos, Tgeneric (new_name, []))
+            mk
+              ( Typing_reason.polymorphic_type_param
+                  (pos, new_name, old_name, rank),
+                Tgeneric new_name )
           in
           (env, tparam :: acc, SMap.add old_name ty subst))
     in
     let ft_tparams = List.rev ft_tparams_rev in
-    let combine_reasons ~src ~dest:_ = src in
+    let combine_reasons ~src:_ ~dest = dest in
     ( env,
       Locl_subst.apply_fun { fun_ty with ft_tparams } ~subst ~combine_reasons )
 
-  let bind_tparams r tparams env tp_env =
+  let bind_tparams r tparams rank env tp_env =
     List.fold_left
       tparams
       ~init:(env, tp_env)
@@ -8879,12 +8986,20 @@ end = struct
               newable;
               require_dynamic;
               parameters = [];
+              rank;
             }
         in
         (env, Type_parameter_env.add ~def_pos name info tp_env))
 
-  let bind_quantifiers r { ft_tparams; _ } env tp_env =
-    bind_tparams r ft_tparams env tp_env
+  let freshen_and_bind_fun_type_quantifiers reason fun_ty rank ~env =
+    let (env, fun_ty) = freshen_fun_ty fun_ty env rank in
+    let fun_ty = { fun_ty with ft_instantiated = true } in
+    let env =
+      let { ft_tparams; _ } = fun_ty in
+      let (env, tpenv) = bind_tparams reason ft_tparams rank env env.tpenv in
+      Typing_env_types.{ env with tpenv }
+    in
+    (env, fun_ty)
 
   let add_constraint (env, err_opts) pos (ty_subj, constraint_kind, ty_cstr) =
     let callback = Some (Typing_error.Reasons_callback.unify_error_at pos) in
@@ -8904,7 +9019,7 @@ end = struct
 
   (** Instantiate a polymorphic function type with fresh type variables and
     assert subtype constraints from type parameter bounds and where constraints*)
-  let instantiate_fun_type pos fun_ty ~env =
+  let instantiate_fun_type pos fun_ty rank ~env =
     (* We need to build the substitution before generating constraints because
        type parameters may appear as upper / lower bounds of other type
        parameters, e.g.
@@ -8919,7 +9034,7 @@ end = struct
             let (_, name) = tp_name in
             (* We don't want to solve these type variable so we create them as
                invariant *)
-            let (env, ty) = Env.fresh_type_invariant env pos in
+            let (env, ty) = Env.fresh_type_invariant_with_rank env rank pos in
             (env, (name, ty) :: subst))
       in
       (env, SMap.of_list name_tys)
@@ -8949,15 +9064,6 @@ end = struct
     in
     let err_opt = Typing_error.multiple_opt @@ List.filter_opt err_opts in
     ((env, err_opt), { fun_ty with ft_instantiated = true })
-
-  let freshen_and_bind_fun_type_quantifiers reason fun_ty ~env =
-    let (env, fun_ty) = freshen_fun_ty fun_ty env in
-    let fun_ty = { fun_ty with ft_instantiated = true } in
-    let env =
-      let (env, tpenv) = bind_quantifiers reason fun_ty env env.tpenv in
-      Typing_env_types.{ env with tpenv }
-    in
-    (env, fun_ty)
 end
 
 (* == API =================================================================== *)
@@ -8974,11 +9080,11 @@ let decompose_subtype_add_bound
   match (get_node ty_sub, get_node ty_super) with
   | (_, Tany _) -> env
   (* name_sub <: ty_super so add an upper bound on name_sub *)
-  | (Tgeneric (name_sub, targs), _) when not (phys_equal ty_sub ty_super) ->
+  | (Tgeneric name_sub, _) when not (phys_equal ty_sub ty_super) ->
     let ty_super = Sd.transform_dynamic_upper_bound ~coerce env ty_super in
     (* TODO(T69551141) handle type arguments. Passing targs to get_lower_bounds,
        but the add_upper_bound call must be adapted *)
-    let tys = Env.get_upper_bounds env name_sub targs in
+    let tys = Env.get_upper_bounds env name_sub in
     (* Don't add the same type twice! *)
     if Typing_set.mem ty_super tys then
       env
@@ -8989,10 +9095,8 @@ let decompose_subtype_add_bound
         name_sub
         ty_super
   (* ty_sub <: name_super so add a lower bound on name_super *)
-  | (_, Tgeneric (name_super, targs)) when not (phys_equal ty_sub ty_super) ->
-    (* TODO(T69551141) handle type arguments. Passing targs to get_lower_bounds,
-       but the add_lower_bound call must be adapted *)
-    let tys = Env.get_lower_bounds env name_super targs in
+  | (_, Tgeneric name_super) when not (phys_equal ty_sub ty_super) ->
+    let tys = Env.get_lower_bounds env name_super in
     (* Don't add the same type twice! *)
     if Typing_set.mem ty_sub tys then
       env
@@ -9051,11 +9155,9 @@ let decompose_subtype_add_bound_err
   match (get_node ty_sub, get_node ty_super) with
   | (_, Tany _) -> (env, None)
   (* name_sub <: ty_super so add an upper bound on name_sub *)
-  | (Tgeneric (name_sub, targs), _) when not (phys_equal ty_sub ty_super) ->
+  | (Tgeneric name_sub, _) when not (phys_equal ty_sub ty_super) ->
     let ty_super = Sd.transform_dynamic_upper_bound ~coerce env ty_super in
-    (* TODO(T69551141) handle type arguments. Passing targs to get_lower_bounds,
-       but the add_upper_bound call must be adapted *)
-    let tys = Env.get_upper_bounds env name_sub targs in
+    let tys = Env.get_upper_bounds env name_sub in
     (* Don't add the same type twice! *)
     if Typing_set.mem ty_super tys then
       (env, None)
@@ -9067,10 +9169,8 @@ let decompose_subtype_add_bound_err
           ty_super,
         None )
   (* ty_sub <: name_super so add a lower bound on name_super *)
-  | (_, Tgeneric (name_super, targs)) when not (phys_equal ty_sub ty_super) ->
-    (* TODO(T69551141) handle type arguments. Passing targs to get_lower_bounds,
-       but the add_lower_bound call must be adapted *)
-    let tys = Env.get_lower_bounds env name_super targs in
+  | (_, Tgeneric name_super) when not (phys_equal ty_sub ty_super) ->
+    let tys = Env.get_lower_bounds env name_super in
     (* Don't add the same type twice! *)
     if Typing_set.mem ty_sub tys then
       (env, None)
@@ -9277,13 +9377,11 @@ let add_constraint
             ~init:env
             ~f:(fun env x ->
               List.fold_left
-                (* TODO(T70068435) always using [] as args for now *)
-                (Typing_set.elements (Env.get_lower_bounds env x []))
+                (Typing_set.elements (Env.get_lower_bounds env x))
                 ~init:env
                 ~f:(fun env ty_sub' ->
                   List.fold_left
-                    (* TODO(T70068435) always using [] as args for now *)
-                    (Typing_set.elements (Env.get_upper_bounds env x []))
+                    (Typing_set.elements (Env.get_upper_bounds env x))
                     ~init:env
                     ~f:(fun env ty_super' ->
                       decompose_subtype env ty_sub' ty_super' on_error)))
@@ -9339,11 +9437,11 @@ let add_constraint_err
             ~init:(env, err_opts)
             ~f:(fun (env, err_opts) x ->
               List.fold_left
-                (Typing_set.elements (Env.get_lower_bounds env x []))
+                (Typing_set.elements (Env.get_lower_bounds env x))
                 ~init:(env, err_opts)
                 ~f:(fun (env, err_opts) ty_sub' ->
                   List.fold_left
-                    (Typing_set.elements (Env.get_upper_bounds env x []))
+                    (Typing_set.elements (Env.get_upper_bounds env x))
                     ~init:(env, err_opts)
                     ~f:(fun (env, err_opts) ty_super' ->
                       let (env, err_opt) =
@@ -9392,8 +9490,8 @@ let apply_where_constraints pos def_pos tparams where_constraints ~env =
         ~init:(env, [], [], [])
         ~f:(fun (env, fwds, bwds, nms) { tp_name = (_, orig_nm); _ } ->
           let (env, new_nm) = Typing_env.fresh_param_name env orig_nm in
-          let new_ty = mk (Typing_reason.none, Tgeneric (new_nm, [])) in
-          let old_ty = mk (Typing_reason.none, Tgeneric (orig_nm, [])) in
+          let new_ty = mk (Typing_reason.none, Tgeneric new_nm) in
+          let old_ty = mk (Typing_reason.none, Tgeneric orig_nm) in
           ( env,
             (orig_nm, new_ty) :: fwds,
             (new_nm, old_ty) :: bwds,
@@ -9422,6 +9520,7 @@ let apply_where_constraints pos def_pos tparams where_constraints ~env =
       Instantiate.bind_tparams
         (Reason.witness_from_decl def_pos)
         tparams
+        0
         env
         tpenv
     in
@@ -9607,6 +9706,17 @@ let is_sub_type_ignore_generic_params env ty1 ty2 =
     (LoclType ty2)
   = Some true
 
+let is_sub_type_opt_ignore_generic_params env ty1 ty2 =
+  Subtype_ask.is_sub_type_alt_i
+  (* TODO(T121047839): Should this set a dedicated ignore_generic_param flag instead? *)
+    ~require_completeness:true
+    ~no_top_bottom:true
+    ~coerce:None
+    ~sub_supportdyn:None
+    env
+    (LoclType ty1)
+    (LoclType ty2)
+
 (* -- can_sub_type entry point ---------------------------------------------- *)
 let can_sub_type env ty1 ty2 =
   let ( <> ) a b = not (Option.equal Bool.equal a b) in
@@ -9627,8 +9737,8 @@ let rec is_type_disjoint_help visited env ty1 ty2 =
   let (env, ty1) = Env.expand_type env ty1 in
   let (env, ty2) = Env.expand_type env ty2 in
   match (get_node ty1, get_node ty2) with
-  | (_, (Tany _ | Tdynamic | Taccess _ | Tunapplied_alias _))
-  | ((Tany _ | Tdynamic | Taccess _ | Tunapplied_alias _), _) ->
+  | (_, (Tany _ | Tdynamic | Taccess _))
+  | ((Tany _ | Tdynamic | Taccess _), _) ->
     false
   | (Tshape _, Tshape _) ->
     (* This could be more precise, e.g., if we have two closed shapes with different fields.
@@ -9686,14 +9796,14 @@ let rec is_type_disjoint_help visited env ty1 ty2 =
       env
       ty1
       MakeType.(union r [vec r tyv; dict r tyk tyv])
-  | (Tgeneric (name, []), _) -> is_generic_disjoint visited env name ty1 ty2
-  | (_, Tgeneric (name, [])) -> is_generic_disjoint visited env name ty2 ty1
-  | ((Tgeneric _ | Tnewtype _ | Tdependent _ | Tintersection _), _) ->
+  | (Tgeneric name, _) -> is_generic_disjoint visited env name ty1 ty2
+  | (_, Tgeneric name) -> is_generic_disjoint visited env name ty2 ty1
+  | ((Tnewtype _ | Tdependent _ | Tintersection _), _) ->
     let (env, bounds) =
       TUtils.get_concrete_supertypes ~abstract_enum:false env ty1
     in
     is_intersection_type_disjoint visited env bounds ty2
-  | (_, (Tgeneric _ | Tnewtype _ | Tdependent _ | Tintersection _)) ->
+  | (_, (Tnewtype _ | Tdependent _ | Tintersection _)) ->
     let (env, bounds) =
       TUtils.get_concrete_supertypes ~abstract_enum:false env ty2
     in
@@ -9714,8 +9824,8 @@ let rec is_type_disjoint_help visited env ty1 ty2 =
     is_sub_type_for_union_help env ty2 (MakeType.null Reason.none)
   | (_, Tnonnull) ->
     is_sub_type_for_union_help env ty1 (MakeType.null Reason.none)
-  | (Tneg (_, IsTag (ClassTag c1)), Tclass ((_, c2), _, _tyl))
-  | (Tclass ((_, c2), _, _tyl), Tneg (_, IsTag (ClassTag c1))) ->
+  | (Tneg (_, IsTag (ClassTag (c1, []))), Tclass ((_, c2), _, _tyl))
+  | (Tclass ((_, c2), _, _tyl), Tneg (_, IsTag (ClassTag (c1, [])))) ->
     (* These are disjoint iff for all objects o, o in c2<_tyl> implies that
        o notin (complement (Union tyl'. c1<tyl'>)), which is just that
        c2<_tyl> subset Union tyl'. c1<tyl'>. If c2 is a subclass of c1, then
@@ -9744,6 +9854,13 @@ let rec is_type_disjoint_help visited env ty1 ty2 =
   | (Tprim (Aast.Tarraykey | Aast.Tstring), Tclass ((_, cname), ex, _))
     when String.equal cname SN.Classes.cStringish && is_nonexact ex ->
     false
+  (* Same as above case, runtime conflates equality of "A" === A::class *)
+  | (Tprim (Aast.Tarraykey | Aast.Tstring), Tclass_ptr _)
+  | (Tclass_ptr _, Tprim (Aast.Tarraykey | Aast.Tstring)) ->
+    false
+  | (Tprim _, Tclass_ptr _)
+  | (Tclass_ptr _, Tprim _) ->
+    true
   (* A function type can be an instance of a Closure *)
   | (Tfun _, Tclass ((_, closure), _, _))
   | (Tclass ((_, closure), _, _), Tfun _)
@@ -9819,7 +9936,9 @@ let is_type_disjoint env ty1 ty2 =
 
 (* == Polymorphic type instatiation ========================================= *)
 
-include Instantiate
+(* Expose for use from typing but ensure tyvar ranks are 0 *)
+let instantiate_fun_type pos fun_ty ~env =
+  Instantiate.instantiate_fun_type pos fun_ty 0 ~env
 
 (* -- Set function references ----------------------------------------------- *)
 let set_fun_refs () =
@@ -9832,6 +9951,8 @@ let set_fun_refs () =
   TUtils.is_sub_type_for_union_i_ref := is_sub_type_for_union_i;
   TUtils.is_sub_type_ignore_generic_params_ref :=
     is_sub_type_ignore_generic_params;
+  TUtils.is_sub_type_opt_ignore_generic_params_ref :=
+    is_sub_type_opt_ignore_generic_params;
   TUtils.is_type_disjoint_ref := is_type_disjoint;
   TUtils.can_sub_type_ref := can_sub_type
 

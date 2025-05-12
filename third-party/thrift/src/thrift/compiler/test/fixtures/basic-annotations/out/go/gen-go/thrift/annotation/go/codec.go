@@ -11,7 +11,7 @@ import (
 )
 
 // (needed to ensure safety because of naive import list construction)
-var _ = thrift.ZERO
+var _ = thrift.VOID
 
 // Premade codec specs
 var (
@@ -42,6 +42,28 @@ var (
     ScopedName: "go.Tag",
     IsUnion:    false,
     NewFunc:    func() thrift.Struct { return NewTag() },
+},
+
+        }
+    }()
+    premadeCodecTypeSpec_go_MinimizePadding = func() *thrift.TypeSpec {
+        return &thrift.TypeSpec{
+            FullName: "go.MinimizePadding",
+            CodecStructSpec: &thrift.CodecStructSpec{
+    ScopedName: "go.MinimizePadding",
+    IsUnion:    false,
+    NewFunc:    func() thrift.Struct { return NewMinimizePadding() },
+},
+
+        }
+    }()
+    premadeCodecTypeSpec_go_UseReflectCodec = func() *thrift.TypeSpec {
+        return &thrift.TypeSpec{
+            FullName: "go.UseReflectCodec",
+            CodecStructSpec: &thrift.CodecStructSpec{
+    ScopedName: "go.UseReflectCodec",
+    IsUnion:    false,
+    NewFunc:    func() thrift.Struct { return NewUseReflectCodec() },
 },
 
         }
@@ -98,6 +120,34 @@ var (
     },
 }
     }()
+    premadeStructSpec_MinimizePadding = func() *thrift.StructSpec {
+        return &thrift.StructSpec{
+    Name:                 "MinimizePadding",
+    ScopedName:           "go.MinimizePadding",
+    IsUnion:              false,
+    IsException:          false,
+    FieldSpecs:           []thrift.FieldSpec{
+    },
+    FieldSpecIDToIndex:   map[int16]int{
+    },
+    FieldSpecNameToIndex: map[string]int{
+    },
+}
+    }()
+    premadeStructSpec_UseReflectCodec = func() *thrift.StructSpec {
+        return &thrift.StructSpec{
+    Name:                 "UseReflectCodec",
+    ScopedName:           "go.UseReflectCodec",
+    IsUnion:              false,
+    IsException:          false,
+    FieldSpecs:           []thrift.FieldSpec{
+    },
+    FieldSpecIDToIndex:   map[int16]int{
+    },
+    FieldSpecNameToIndex: map[string]int{
+    },
+}
+    }()
 )
 
 // Premade slice of all struct specs
@@ -105,6 +155,8 @@ var premadeStructSpecs = func() []*thrift.StructSpec {
     fbthriftResults := make([]*thrift.StructSpec, 0)
     fbthriftResults = append(fbthriftResults, premadeStructSpec_Name)
     fbthriftResults = append(fbthriftResults, premadeStructSpec_Tag)
+    fbthriftResults = append(fbthriftResults, premadeStructSpec_MinimizePadding)
+    fbthriftResults = append(fbthriftResults, premadeStructSpec_UseReflectCodec)
     return fbthriftResults
 }()
 
@@ -113,6 +165,8 @@ var premadeCodecSpecsMap = func() map[string]*thrift.TypeSpec {
     fbthriftTypeSpecsMap[premadeCodecTypeSpec_string.FullName] = premadeCodecTypeSpec_string
     fbthriftTypeSpecsMap[premadeCodecTypeSpec_go_Name.FullName] = premadeCodecTypeSpec_go_Name
     fbthriftTypeSpecsMap[premadeCodecTypeSpec_go_Tag.FullName] = premadeCodecTypeSpec_go_Tag
+    fbthriftTypeSpecsMap[premadeCodecTypeSpec_go_MinimizePadding.FullName] = premadeCodecTypeSpec_go_MinimizePadding
+    fbthriftTypeSpecsMap[premadeCodecTypeSpec_go_UseReflectCodec.FullName] = premadeCodecTypeSpec_go_UseReflectCodec
     return fbthriftTypeSpecsMap
 }()
 

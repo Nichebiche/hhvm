@@ -3,27 +3,9 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 
-use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
-use ir_core::func::ExFrame;
-use ir_core::instr;
-use ir_core::instr::BaseOp;
-use ir_core::instr::CallDetail;
-use ir_core::instr::CmpOp;
-use ir_core::instr::FinalOp;
-use ir_core::instr::Hhbc;
-use ir_core::instr::IncludeEval;
-use ir_core::instr::IncludeKind;
-use ir_core::instr::Instr;
-use ir_core::instr::IntermediateOp;
-use ir_core::instr::MemberKey;
-use ir_core::instr::MemberOp;
-use ir_core::instr::MemoGet;
-use ir_core::instr::MemoGetEager;
-use ir_core::instr::Predicate;
-use ir_core::instr::Special;
-use ir_core::instr::Terminator;
+use anyhow::anyhow;
 use ir_core::Block;
 use ir_core::BlockId;
 use ir_core::BytesId;
@@ -60,6 +42,24 @@ use ir_core::UnnamedLocalId;
 use ir_core::UpperBound;
 use ir_core::ValueId;
 use ir_core::Visibility;
+use ir_core::func::ExFrame;
+use ir_core::instr;
+use ir_core::instr::BaseOp;
+use ir_core::instr::CallDetail;
+use ir_core::instr::CmpOp;
+use ir_core::instr::FinalOp;
+use ir_core::instr::Hhbc;
+use ir_core::instr::IncludeEval;
+use ir_core::instr::IncludeKind;
+use ir_core::instr::Instr;
+use ir_core::instr::IntermediateOp;
+use ir_core::instr::MemberKey;
+use ir_core::instr::MemberOp;
+use ir_core::instr::MemoGet;
+use ir_core::instr::MemoGetEager;
+use ir_core::instr::Predicate;
+use ir_core::instr::Special;
+use ir_core::instr::Terminator;
 use itertools::Itertools;
 use parse_macro_ir::parse;
 
@@ -524,10 +524,7 @@ impl FunctionParser<'_> {
                                 "?->": "?->" { ObjMethodOp::NullSafe }]> );
                 operands.push(obj);
                 let next = tokenizer.peek_expect_token()?;
-                if next
-                    .get_identifier()
-                    .map_or(false, |n| is_vid(n.as_bytes()))
-                {
+                if next.get_identifier().is_some_and(|n| is_vid(n.as_bytes())) {
                     // vid->vid => FCallObjMethod
                     let method = self.vid(tokenizer)?;
                     operands_suffix.push(method);
@@ -1336,6 +1333,7 @@ impl FunctionParser<'_> {
             "async_call" => self.parse_call(tok, true, loc)?,
             "await" => I::Hhbc(H::Await(self.vid(tok)?, loc)),
             "await_all" => parse_instr!(tok, I::Hhbc(H::AwaitAll(p0.into(), loc)), "[" <p0:self.lid,*> "]"),
+            "await_low_pri" => I::Hhbc(H::AwaitLowPri(loc)),
             "bare_this" => I::Hhbc(H::BareThis(parse_bare_this_op(tok)?, loc)),
             "bit_and" => I::Hhbc(H::BitAnd(self.vid2(tok)?, loc)),
             "bit_not" => I::Hhbc(H::BitNot(self.vid(tok)?, loc)),
@@ -1355,8 +1353,8 @@ impl FunctionParser<'_> {
             "check_prop" => I::Hhbc(H::CheckProp(parse_prop_id(tok)?, loc)),
             "check_this" => I::Hhbc(H::CheckThis(loc)),
             "class_get_c" => parse_instr!(tok, I::Hhbc(H::ClassGetC(p1, p0, loc)), <p0:parse_class_get_c_kind> <p1:self.vid>),
-
             "class_get_ts" => I::Hhbc(H::ClassGetTS(self.vid(tok)?, loc)),
+            "class_get_ts_with_generics" => I::Hhbc(H::ClassGetTSWithGenerics(self.vid(tok)?, loc)),
             "class_has_reified_generics" => I::Hhbc(H::ClassHasReifiedGenerics(self.vid(tok)?, loc)),
             "class_name" => I::Hhbc(H::ClassName(self.vid(tok)?, loc)),
             "clone" => I::Hhbc(H::Clone(self.vid(tok)?, loc)),
@@ -1433,6 +1431,7 @@ impl FunctionParser<'_> {
             "querym" => self.parse_member_op(tok, mnemonic, loc)?,
             "raise_class_string_conversion_notice" => I::Hhbc(H::RaiseClassStringConversionNotice(loc)),
             "record_reified_generic" => I::Hhbc(H::RecordReifiedGeneric(self.vid(tok)?, loc)),
+            "reified_init" => parse_instr!(tok, I::Hhbc(H::ReifiedInit(p0, p1, loc)), <p1:self.lid> "," <p0:self.vid2>),
             "require" => I::Hhbc(H::IncludeEval(IncludeEval { kind: IncludeKind::Require, vid: self.vid(tok)?, loc })),
             "require_once" => I::Hhbc(H::IncludeEval(IncludeEval { kind: IncludeKind::RequireOnce, vid: self.vid(tok)?, loc })),
             "require_once_doc" => I::Hhbc(H::IncludeEval(IncludeEval { kind: IncludeKind::RequireOnceDoc, vid: self.vid(tok)?, loc })),
@@ -1478,6 +1477,7 @@ impl FunctionParser<'_> {
             "verify_param_type_ts" => parse_instr!(tok, I::Hhbc(Hhbc::VerifyParamTypeTS(p0, p1, loc)), <p0:self.vid> "," <p1:self.lid>),
             "verify_ret_type_c" => I::Hhbc(H::VerifyRetTypeC(self.vid(tok)?, loc)),
             "verify_ret_type_ts" => I::Hhbc(H::VerifyRetTypeTS(self.vid2(tok)?, loc)),
+            "verify_type_ts" => I::Hhbc(H::VerifyTypeTS(self.vid2(tok)?, loc)),
             "wh_result" => I::Hhbc(H::WHResult(self.vid(tok)?, loc)),
             "yield" => self.parse_yield(tok, loc)?,
             _ => {

@@ -38,10 +38,12 @@ type ('prim_pos, 'pos) t = {
   quickfixes: 'prim_pos Quickfix.t list; [@hash.ignore]
   custom_msgs: string list;
   is_fixmed: bool;
-  flags: User_error_flags.t;
   function_pos: 'prim_pos option;
 }
 [@@deriving eq, hash, ord, show]
+
+external hash_error_for_saved_state : (Pos.t, Pos_or_decl.t) t -> int
+  = "hash_error_for_saved_state"
 
 let make
     severity
@@ -49,7 +51,6 @@ let make
     ?(is_fixmed = false)
     ?(quickfixes = [])
     ?(custom_msgs = [])
-    ?(flags = User_error_flags.empty)
     ?function_pos
     claim
     reasons
@@ -63,7 +64,6 @@ let make
     quickfixes;
     custom_msgs;
     is_fixmed;
-    flags;
     function_pos;
   }
 
@@ -72,7 +72,6 @@ let make_err
     ?is_fixmed
     ?quickfixes
     ?custom_msgs
-    ?flags
     ?function_pos
     claim
     reasons
@@ -83,20 +82,18 @@ let make_err
     ?is_fixmed
     ?quickfixes
     ?custom_msgs
-    ?flags
     ?function_pos
     claim
     reasons
     explanation
 
-let make_warning code ?is_fixmed ?quickfixes ?custom_msgs ?flags claim reasons =
+let make_warning code ?is_fixmed ?quickfixes ?custom_msgs claim reasons =
   make
     Warning
     code
     ?is_fixmed
     ?quickfixes
     ?custom_msgs
-    ?flags
     claim
     reasons
     Explanation.empty
@@ -124,7 +121,6 @@ let to_absolute
       quickfixes;
       custom_msgs;
       is_fixmed;
-      flags;
       function_pos;
     } =
   let pos_or_decl_to_absolute_pos pos_or_decl =
@@ -150,7 +146,6 @@ let to_absolute
     quickfixes;
     custom_msgs;
     is_fixmed;
-    flags;
     function_pos;
   }
 
@@ -176,7 +171,6 @@ let make_absolute severity code = function
       quickfixes = [];
       custom_msgs = [];
       is_fixmed = false;
-      flags = User_error_flags.empty;
       function_pos = None;
     }
 
@@ -190,7 +184,6 @@ let to_absolute_for_test
       quickfixes;
       custom_msgs;
       is_fixmed;
-      flags;
       function_pos;
     } =
   let f (p, s) =
@@ -225,7 +218,6 @@ let to_absolute_for_test
     quickfixes;
     custom_msgs;
     is_fixmed;
-    flags;
     function_pos;
   }
 
@@ -287,7 +279,7 @@ let to_string { severity; code; claim; reasons; custom_msgs; _ } =
 
 let to_json ~(human_formatter : (_ -> string) option) ~filename_to_string error
     =
-  let { severity; code; claim; reasons; flags; custom_msgs; function_pos; _ } =
+  let { severity; code; claim; reasons; custom_msgs; function_pos; _ } =
     error
   in
   let msgl = claim :: reasons in
@@ -307,13 +299,11 @@ let to_json ~(human_formatter : (_ -> string) option) ~filename_to_string error
   let custom_msgs =
     List.map ~f:(fun msg -> Hh_json.JSON_String msg) custom_msgs
   in
-  let flags = User_error_flags.to_json flags in
   let human_format = Option.map ~f:(fun f -> f error) human_formatter in
   let obj =
     ("severity", Hh_json.JSON_String (Severity.to_string severity))
     :: ("message", Hh_json.JSON_Array elts)
     :: ("custom_messages", Hh_json.JSON_Array custom_msgs)
-    :: ("flags", flags)
     :: List.filter_opt
          [
            Option.map human_format ~f:(fun human_format ->
@@ -334,3 +324,11 @@ let to_json ~(human_formatter : (_ -> string) option) ~filename_to_string error
          ]
   in
   Hh_json.JSON_Object obj
+
+let claim_message { claim; _ } = claim
+
+let reason_messages { reasons; _ } = reasons
+
+let function_pos { function_pos; _ } = function_pos
+
+let custom_errors { custom_msgs; _ } = custom_msgs

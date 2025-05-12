@@ -11,11 +11,9 @@ import apache.thrift.metadata.thrift_types as _fbthrift_metadata
 import thrift.python.types as _fbthrift_python_types
 import typing as _std_python_typing
 
-class _fbthrift_compatible_with_Result:
-    pass
 
 
-class Result(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_Result):
+class Result(_fbthrift_python_types.Enum, int):
     OK = 0
     SO_SO = 1
     GOOD = 2
@@ -34,10 +32,8 @@ class Result(_fbthrift_python_types.Enum, int, _fbthrift_compatible_with_Result)
     def _to_python(self) -> "Result":
         return self
 
-    def _to_py3(self) -> "module.types.Result": # type: ignore
-        import importlib
-        py3_types = importlib.import_module("module.types")
-        return py3_types.Result(self.value)
+    def _to_py3(self) -> "Result":
+        return self
 
     def _to_py_deprecated(self) -> int:
         return self.value

@@ -15,7 +15,6 @@
 */
 #include "hphp/hhbbc/representation.h"
 
-#include <sstream>
 #include <boost/algorithm/string.hpp>
 #include <memory>
 #include <vector>
@@ -78,7 +77,7 @@ std::string escaped_string(SString str) {
   auto const sl = str->slice();
   folly::toAppend("\"", folly::cEscape<std::string>(sl), "\"", &ret);
   return ret;
-};
+}
 
 std::string array_string(SArray arr) {
   std::string str;
@@ -101,7 +100,7 @@ std::string local_string(const Func& func, LocalId lid) {
   return loc.name
     ? folly::to<std::string>("$", loc.name->data())
     : folly::to<std::string>("$<unnamed:", lid, ">");
-};
+}
 
 std::string show(const Func& func, const Bytecode& bc) {
   std::string ret;

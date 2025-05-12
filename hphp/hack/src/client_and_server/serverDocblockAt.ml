@@ -36,7 +36,7 @@ let get_docblock_for_member ctx class_info member_name =
     ServerSymbolDefinition.get_definition_cst_node_ctx
       ~ctx
       ~entry
-      ~kind:SymbolDefinition.Method
+      ~kind:SymbolDefinition.(Member { member_kind = Method; class_name = "" })
       ~pos
     >>= Docblock_finder.get_docblock
   | _ -> None
@@ -112,7 +112,7 @@ let go_comments_from_source_text
     ~(ctx : Provider_context.t)
     ~(entry : Provider_context.entry)
     pos
-    ~(kind : SymbolDefinition.kind) : string option =
+    ~(kind : 'a SymbolDefinition.kind) : string option =
   let _ = ctx in
   let filename = Relative_path.to_absolute entry.Provider_context.path in
   let lp =
@@ -154,7 +154,8 @@ let go_comments_for_symbol_ctx
       | Some db -> Some (clean_comments db)
       | None ->
         (match (def.SymbolDefinition.kind, base_class_name) with
-        | (SymbolDefinition.Method, Some base_class_name) ->
+        | ( SymbolDefinition.(Member { member_kind = Method; _ }),
+            Some base_class_name ) ->
           fallback ctx base_class_name def.SymbolDefinition.name
         | _ -> None)))
 
@@ -189,24 +190,32 @@ let go_locate_symbol
       }
 
 let symboldefinition_kind_from_si_kind (kind : FileInfo.si_kind) :
-    SymbolDefinition.kind =
+    'a SymbolDefinition.kind =
   match kind with
-  | FileInfo.SI_Class -> SymbolDefinition.Class
-  | FileInfo.SI_Interface -> SymbolDefinition.Interface
-  | FileInfo.SI_Enum -> SymbolDefinition.Enum
-  | FileInfo.SI_Trait -> SymbolDefinition.Trait
-  | FileInfo.SI_Unknown -> SymbolDefinition.Class
+  | FileInfo.SI_Class
+  | FileInfo.SI_Unknown
+  | FileInfo.SI_XHP ->
+    SymbolDefinition.(Classish { members = []; classish_kind = Class })
+  | FileInfo.SI_Interface ->
+    SymbolDefinition.(Classish { members = []; classish_kind = Interface })
+  | FileInfo.SI_Enum ->
+    SymbolDefinition.(Classish { members = []; classish_kind = Enum })
+  | FileInfo.SI_Trait ->
+    SymbolDefinition.(Classish { members = []; classish_kind = Trait })
   | FileInfo.SI_Mixed -> SymbolDefinition.LocalVar
   | FileInfo.SI_Function -> SymbolDefinition.Function
   | FileInfo.SI_Typedef -> SymbolDefinition.Typedef
   | FileInfo.SI_GlobalConstant -> SymbolDefinition.GlobalConst
-  | FileInfo.SI_XHP -> SymbolDefinition.Class
-  | FileInfo.SI_ClassMethod -> SymbolDefinition.Method
+  | FileInfo.SI_ClassMethod ->
+    SymbolDefinition.(Member { class_name = ""; member_kind = Method })
   | FileInfo.SI_Literal -> SymbolDefinition.LocalVar
-  | FileInfo.SI_ClassConstant -> SymbolDefinition.ClassConst
-  | FileInfo.SI_Property -> SymbolDefinition.Property
+  | FileInfo.SI_ClassConstant ->
+    SymbolDefinition.(Member { class_name = ""; member_kind = ClassConst })
+  | FileInfo.SI_Property ->
+    SymbolDefinition.(Member { class_name = ""; member_kind = Property })
   | FileInfo.SI_LocalVariable -> SymbolDefinition.LocalVar
-  | FileInfo.SI_Constructor -> SymbolDefinition.Method
+  | FileInfo.SI_Constructor ->
+    SymbolDefinition.(Member { class_name = ""; member_kind = Method })
   | FileInfo.SI_Keyword -> failwith "Cannot look up a keyword"
   | FileInfo.SI_Namespace -> failwith "Cannot look up a namespace"
 

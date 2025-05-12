@@ -28,9 +28,9 @@
 #include <thrift/compiler/ast/t_const.h>
 #include <thrift/compiler/ast/t_enum.h>
 #include <thrift/compiler/ast/t_exception.h>
+#include <thrift/compiler/ast/t_global_scope.h>
 #include <thrift/compiler/ast/t_program.h>
 #include <thrift/compiler/ast/t_program_bundle.h>
-#include <thrift/compiler/ast/t_scope.h>
 #include <thrift/compiler/ast/t_service.h>
 #include <thrift/compiler/ast/t_structured.h>
 #include <thrift/compiler/ast/t_typedef.h>
@@ -53,16 +53,6 @@ std::unique_ptr<t_const_value> val(std::string_view s) {
   return val(std::string{s});
 }
 
-std::string uri_or_name(const t_named& node) {
-  if (!node.uri().empty()) {
-    return node.uri();
-  }
-  if (node.program()) {
-    return node.program()->scope_name(node);
-  }
-  return node.name();
-}
-
 // Returns the ProtocolObject ValueType of a t_const_value
 t_type::value_type from_const_value_type(
     t_const_value::t_const_value_kind kind) {
@@ -82,23 +72,34 @@ t_type::value_type from_const_value_type(
     case t_const_value::t_const_value_kind::CV_IDENTIFIER:
       return t_type::value_type::STRING;
   }
+  abort();
 }
 } // namespace
 
 t_type_ref schematizer::std_type(std::string_view uri) {
   return t_type_ref::from_req_ptr(
-      static_cast<const t_type*>(scope_.find_by_uri(uri)));
+      static_cast<const t_type*>(global_scope_.find_by_uri(uri)));
+}
+
+// Returns the `TypeUri` type & the corresponding Uri value for the given node
+schematizer::resolved_uri schematizer::calculate_uri(
+    const t_named& node, const bool use_hash) {
+  if (use_hash) {
+    return {"definitionKey", identify_definition(node)};
+  }
+  if (!node.uri().empty()) {
+    return {"uri", node.uri()};
+  }
+  if (node.program()) {
+    return {"scopedName", node.program()->scoped_name(node)};
+  }
+  return {"scopedName", node.name()};
 }
 
 std::unique_ptr<t_const_value> schematizer::type_uri(const t_type& type) {
   auto ret = t_const_value::make_map();
-  if (opts_.use_hash) {
-    ret->add_map(val("definitionKey"), val(identify_definition(type)));
-  } else if (!type.uri().empty()) {
-    ret->add_map(val("uri"), val(type.uri()));
-  } else {
-    ret->add_map(val("scopedName"), val(type.get_scoped_name()));
-  }
+  auto uri = calculate_uri(type, opts_.use_hash);
+  ret->add_map(val(uri.uri_type), val(std::move(uri.value)));
   ret->set_ttype(std_type("facebook.com/thrift/type/TypeUri"));
   return ret;
 }
@@ -123,6 +124,7 @@ void schematizer::add_definition(
       !structured.empty() && opts_.include_annotations) {
     auto annots = t_const_value::make_map();
     auto structured_annots = t_const_value::make_list();
+    auto annots_by_key = t_const_value::make_map();
 
     for (const auto& item : structured) {
       auto annot = t_const_value::make_map();
@@ -154,7 +156,14 @@ void schematizer::add_definition(
       }
 
       annot->set_ttype(std_type("facebook.com/thrift/type/Annotation"));
-      annots->add_map(val(uri_or_name(*item.type())), std::move(annot));
+      auto unhashed_uri = calculate_uri(*item.type(), false /*use_hash*/);
+      // We're not hashing & ignoring the UriType here, as annotations are
+      // stored as map<string, Annotation>.
+      annots->add_map(val(std::move(unhashed_uri.value)), annot->clone());
+
+      auto hashed_uri = calculate_uri(*item.type(), true /*use_hash*/);
+      annots_by_key->add_map(
+          val(std::move(hashed_uri.value)), std::move(annot));
     }
 
     // Double write to deprecated externed path (T161963504).
@@ -162,10 +171,12 @@ void schematizer::add_definition(
       definition->add_map(
           val("structuredAnnotations"), std::move(structured_annots));
     }
+
     definition->add_map(val("annotations"), std::move(annots));
+    definition->add_map(val("annotationsByKey"), std::move(annots_by_key));
   }
 
-  if (auto unstructured = node.annotations();
+  if (auto unstructured = node.unstructured_annotations();
       !unstructured.empty() && opts_.include_annotations) {
     auto annots = t_const_value::make_map();
 
@@ -405,9 +416,9 @@ void schematize_recursively(
 
 const t_enum* find_enum(const t_program* program, const std::string& enum_uri) {
   // May be null in unit tests.
-  return program
-      ? dynamic_cast<const t_enum*>(program->scope()->find_by_uri(enum_uri))
-      : nullptr;
+  return program ? dynamic_cast<const t_enum*>(
+                       program->global_scope()->find_by_uri(enum_uri))
+                 : nullptr;
 }
 
 void add_qualifier(const t_enum* t_enum, t_const_value& schema, int enum_val) {
@@ -502,7 +513,7 @@ std::unique_ptr<t_const_value> schematizer::gen_full_schema(
   for (const auto& func : node.functions()) {
     const t_type_ref& ret = func.return_type();
     // TODO: Handle sink, stream, interactions
-    if (!func.sink_or_stream() && !ret->is_service()) {
+    if (!func.sink_or_stream()) {
       schematize_recursively(
           this, node.program(), dfns_schema.get(), *ret->get_true_type());
     }
@@ -770,6 +781,7 @@ const char* protocol_value_type_name(t_type::value_type ty) {
     case t_type::value_type::MAP:
       return "mapValue";
   }
+  abort();
 }
 
 protocol_value_builder::protocol_value_builder(const t_type& struct_ty)
@@ -793,7 +805,7 @@ protocol_value_builder::protocol_value_builder() : ty_{nullptr} {}
         // extend the look-up to any sealed key type.
         return protocol_value_builder{*map.get_val_type()};
       },
-      [&](const t_struct& strct) {
+      [&](const t_structured& strct) {
         assert(
             key.kind() == t_const_value::CV_STRING &&
             "A struct only has named fields");
@@ -815,7 +827,7 @@ protocol_value_builder::protocol_value_builder() : ty_{nullptr} {}
   }
 
   return ty_->visit(
-      [&](const t_struct&) {
+      [&](const t_structured&) {
         assert(
             key.kind() == t_const_value::CV_STRING &&
             "A struct only has named fields");
@@ -1003,7 +1015,7 @@ int64_t schematizer::identify_program(const t_program& node) {
 
 std::string schematizer::name_schema(
     source_manager& sm, const t_program& node) {
-  schematizer s(*node.scope(), sm, {});
+  schematizer s(*node.global_scope(), sm, {});
   return fmt::format(
       "_fbthrift_schema_{:x}", static_cast<uint64_t>(s.identify_program(node)));
 }

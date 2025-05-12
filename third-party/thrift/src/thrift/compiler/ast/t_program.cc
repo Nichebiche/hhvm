@@ -17,8 +17,6 @@
 #include <boost/algorithm/string.hpp>
 #include <thrift/compiler/ast/t_program.h>
 
-#include <cctype>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -29,14 +27,20 @@ namespace apache::thrift::compiler {
 void t_program::add_definition(std::unique_ptr<t_named> definition) {
   assert(definition != nullptr);
 
-  scope_->add_definition(scope_name(*definition), definition.get());
+  program_scope_.add_definition(
+      scope::scoped_id{name(), definition->name()}, definition.get());
+
+  // [TEMPORARY] Add global definition for <scope>.<name>
+  global_scope_->add_definition(*definition, definition->name());
 
   if (!definition->explicit_uri()) {
     // Resolve Thrift URI.
     if (auto* cnst = definition->find_structured_annotation_or_null(kUriUri)) {
       auto* val = cnst->get_value_from_structured_annotation_or_null("value");
       definition->set_uri(val ? val->get_string() : "");
-    } else if (auto* uri = definition->find_annotation_or_null("thrift.uri")) {
+    } else if (
+        auto* uri =
+            definition->find_unstructured_annotation_or_null("thrift.uri")) {
       definition->set_uri(*uri); // Explicit from annotation.
     } else { // Inherit from package.
       definition->set_uri(
@@ -44,7 +48,7 @@ void t_program::add_definition(std::unique_ptr<t_named> definition) {
     }
   }
 
-  scope_->add_def(*definition);
+  global_scope_->add_def_by_uri(*definition);
 
   // Index the node.
   auto* ptr = definition.get();
@@ -71,6 +75,14 @@ void t_program::add_definition(std::unique_ptr<t_named> definition) {
 
   // Transfer ownership of the definition.
   definitions_.push_back(std::move(definition));
+}
+
+void t_program::add_enum_definition(
+    scope::enum_id id, const t_const& constant) {
+  program_scope_.add_definition(id, &constant);
+
+  // [TEMPORARY] Add global definition for <scope>.<enum_name>.<value_name>
+  global_scope_->add_definition(constant, id.enum_name, id.value_name);
 }
 
 const std::string& t_program::get_namespace(const std::string& language) const {
@@ -136,6 +148,86 @@ std::string t_program::compute_name_from_file_path(std::string path) {
     path = path.substr(0, dot);
   }
   return path;
+}
+
+t_program::resolved_node t_program::find_by_id(scope::identifier id) const {
+  return id.visit(
+      [&](scope::unscoped_id&& id) {
+        // Unscoped identifiers, e.g. `Bar` can only be local to the current
+        // program.
+        return resolved_node{program_scope_.find_by_name(id.name), false};
+      },
+      [&](scope::scoped_id&& id) {
+        // Note: We can't distinguish between a scoped identifier e.g.
+        // `foo.Bar` & an unscoped enum identifier `e.g. `Foo.Bar`
+
+        // Check if the full identifier is available in the current program.
+        // e.g. for enum values `Foo.Bar`
+        if (const auto* local_node =
+                program_scope_.find_by_name(id.scope, id.name)) {
+          return resolved_node{local_node, false};
+        }
+
+        // Otherwise check for an include with the provided scope name, and if
+        // so, use that to resolve the identifier.
+        if (const auto scope_it = available_scopes_.find(id.scope);
+            scope_it != available_scopes_.end()) {
+          for (const scope_by_priority& scope_prio : scope_it->second) {
+            if (auto* res = scope_prio.scope->find_by_name(id.name)) {
+              return resolved_node{res, scope_prio.is_alias()};
+            }
+
+            // If this scope was an alias, don't fall back to checking other
+            // scopes
+            if (scope_prio.is_alias()) {
+              break;
+            }
+          }
+        }
+
+        return resolved_node{nullptr, false};
+      },
+      [&](scope::enum_id&& id) {
+        // Enum IDs always have a program scope, so if we can't find an
+        // available program, fail the resolution.
+        if (const auto scope_it = available_scopes_.find(id.scope);
+            scope_it != available_scopes_.end()) {
+          for (const scope_by_priority& scope_prio : scope_it->second) {
+            if (auto* res = scope_prio.scope->find_by_name(
+                    id.enum_name, id.value_name)) {
+              return resolved_node{res, scope_prio.is_alias()};
+            }
+          }
+        }
+
+        return resolved_node{nullptr, false};
+      });
+}
+
+const t_named* t_program::find_global_by_id(scope::identifier id) const {
+  return id.visit(
+      [&](scope::unscoped_id&& id) -> const t_named* {
+        // [TEMPORARY] Find any unscoped identifiers as scoped by the local
+        // program name. E.g. `common.Foo` can be resolved within
+        // `common.thrift` as `Foo`, even if it's not defined in the local
+        // program.
+        return global_scope_->find(
+            scope::identifier{scope::scoped_id{name(), id.name}});
+      },
+      [&](scope::scoped_id&& id) -> const t_named* {
+        // This could be a scoped external definition
+        if (const auto* node = global_scope_->find(id)) {
+          return node;
+        }
+
+        // Or an unscoped definition with the same scope name as the local
+        // program.
+        return global_scope_->find(
+            scope::identifier{scope::enum_id{name(), id.scope, id.name}});
+      },
+      [&](scope::enum_id&& id) -> const t_named* {
+        return global_scope_->find(id);
+      });
 }
 
 } // namespace apache::thrift::compiler

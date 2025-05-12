@@ -22,7 +22,7 @@ import unittest
 
 import pkg_resources
 
-from thrift.compiler.codemod.test_utils import read_file, run_binary, write_file
+from xplat.thrift.compiler.codemod.test_utils import read_file, run_binary, write_file
 
 
 class StructureAnnotations(unittest.TestCase):
@@ -161,7 +161,6 @@ class StructureAnnotations(unittest.TestCase):
                 enum U16 {} (cpp.enum_type="unsigned short")
                 enum U32 {} (cpp.enum_type="::std::uint32_t", cpp.declare_bitwise_ops)
 
-                interaction I {} (process_in_event_base)
                 interaction J {} (serial)
                 service S {
                     void f() (thread = "eb", priority = "HIGH")
@@ -226,10 +225,9 @@ class StructureAnnotations(unittest.TestCase):
                 @cpp.EnumType{type = cpp.EnumUnderlyingType.U16}
                 enum U16 {}
                 @cpp.EnumType{type = cpp.EnumUnderlyingType.U32}
-                enum U32 {} ( cpp.declare_bitwise_ops)
+                @thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.declare_bitwise_ops": "1"}}
+                enum U32 {}
 
-                @cpp.ProcessInEbThreadUnsafe
-                interaction I {}
                 @thrift.Serial
                 interaction J {}
                 service S {
@@ -512,7 +510,11 @@ class StructureAnnotations(unittest.TestCase):
                     1: i32 field1 (foo, quote = '"', both_quotes = "'\\"'");
                 }(foo, bar = "baz")
 
-                typedef i32 (foo, hs.type = "hs") T (bar = "baz", hs.category = "value")
+                typedef i32 (
+                    foo,
+                    thriftx.v8.i32 = "Number",
+                    hs.type = "hs",
+                ) T (bar = "baz", hs.category = "value")
 
                 enum E {QUX = 1} (foo, bar = "baz")
 
@@ -559,7 +561,10 @@ class StructureAnnotations(unittest.TestCase):
                 }
 
                 @thrift.DeprecatedUnvalidatedAnnotations{items = {"bar": "baz", "foo": "1"}}
-                typedef i32 ( hs.type = "hs") T ( hs.category = "value")
+                typedef i32 (
+                    thriftx.v8.i32 = "Number",
+                    hs.type = "hs",
+                ) T ( hs.category = "value")
 
                 @thrift.DeprecatedUnvalidatedAnnotations{items = {"bar": "baz", "foo": "1"}}
                 enum E {QUX = 1}

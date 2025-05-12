@@ -35,7 +35,7 @@ let widen_for_refine_shape ~expr_pos field_name env ty =
     | None ->
       let (env, element_ty) = Env.fresh_type_invariant env expr_pos in
       let sft = { sft_optional = true; sft_ty = element_ty } in
-      ( (env, None),
+      ( env,
         Some
           (mk
              ( r,
@@ -45,9 +45,9 @@ let widen_for_refine_shape ~expr_pos field_name env ty =
                    s_unknown_value = shape_kind;
                    s_fields = TShapeMap.add field_name sft fields;
                  } )) )
-    | Some _ -> ((env, None), Some ty)
+    | Some _ -> (env, Some ty)
   end
-  | _ -> ((env, None), None)
+  | _ -> (env, None)
 
 let tshape_field_name_with_ty_err env (_, pos, field) =
   let resolve_self env =
@@ -118,7 +118,7 @@ let mixed_for_refinement env r ty =
 
 (** Refine a shape with the knowledge that field_name
   exists. We do this by intersecting with
-  shape(field_name => mixed, ...) *)
+ shape(field_name => mixed, ...) *)
 let refine_key_exists field_name pos env shape =
   let ((env, e1), shape) =
     Typing_solver.expand_type_and_narrow
@@ -291,40 +291,42 @@ let shapes_idx_not_null_with_ty_err field_p env ~shape_ty field =
       field_p
       shape_ty
   in
-  let rec refine_type env shape_ty =
-    let (env, shape_ty) = Env.expand_type env shape_ty in
-    match deref shape_ty with
-    | (r, Tnewtype (n, _, ty))
-      when String.equal n Naming_special_names.Classes.cSupportDyn ->
-      let (env, ty) = refine_type env ty in
-      TUtils.make_supportdyn r env ty
-    | (r, Tshape { s_origin = _; s_fields = ftm; s_unknown_value = shape_kind })
-      ->
-      let (env, field_type) =
-        let sft_ty =
-          match TShapeMap.find_opt field ftm with
-          | Some { sft_ty; _ } -> sft_ty
-          | None -> shape_kind
-        in
-        let (env, sft_ty) =
-          Typing_solver.non_null env (Pos_or_decl.of_raw_pos field_p) sft_ty
-        in
-        (env, { sft_optional = false; sft_ty })
-      in
-      let ftm = TShapeMap.add field field_type ftm in
-      ( env,
-        mk
-          ( r,
+  let refine_type env shape_ty =
+    Typing_utils.map_supportdyn env shape_ty (fun env shape_ty ->
+        let (env, shape_ty) = Env.expand_type env shape_ty in
+        match deref shape_ty with
+        | ( r,
             Tshape
-              {
-                s_origin = Missing_origin;
-                s_fields = ftm;
-                s_unknown_value = shape_kind;
-              } ) )
-    | _ ->
-      (* This should be an error, but it is already raised when
-         typechecking the call to Shapes::idx *)
-      (env, shape_ty)
+              { s_origin = _; s_fields = ftm; s_unknown_value = shape_kind } )
+          ->
+          let (env, field_type) =
+            let sft_ty =
+              match TShapeMap.find_opt field ftm with
+              | Some { sft_ty; _ } -> sft_ty
+              | None -> shape_kind
+            in
+            let (env, sft_ty) =
+              Typing_intersection.intersect_with_nonnull
+                env
+                (Pos_or_decl.of_raw_pos field_p)
+                sft_ty
+            in
+            (env, { sft_optional = false; sft_ty })
+          in
+          let ftm = TShapeMap.add field field_type ftm in
+          ( env,
+            mk
+              ( r,
+                Tshape
+                  {
+                    s_origin = Missing_origin;
+                    s_fields = ftm;
+                    s_unknown_value = shape_kind;
+                  } ) )
+        | _ ->
+          (* This should be an error, but it is already raised when
+             typechecking the call to Shapes::idx *)
+          (env, shape_ty))
   in
   match deref shape_ty with
   | (r, Tunion tyl) ->

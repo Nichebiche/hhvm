@@ -20,10 +20,6 @@
 #include "hphp/runtime/base/array-iterator.h"
 #include "hphp/runtime/base/vanilla-dict.h"
 
-#include <folly/Format.h>
-
-#include <cassert>
-#include <cmath>
 #include <string>
 #include <sstream>
 

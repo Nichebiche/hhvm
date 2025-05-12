@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <gtest/gtest.h>
 
 #include <thrift/lib/cpp2/debug_thrift_data_difference/debug.h>
 #include <thrift/lib/cpp2/debug_thrift_data_difference/diff.h>
@@ -63,7 +63,6 @@ TEST_GROUP(nested_ref_unique, kNestedRefUniqueExample)
 TEST_GROUP(nested_ref_shared, kNestedRefSharedExample)
 TEST_GROUP(nested_ref_shared_const, kNestedRefSharedConstExample)
 TEST_GROUP(nested_box, kNestedBoxExample)
-TEST_GROUP(indirection, kIndirectionExample)
 TEST_GROUP(union_1, kBasicUnionExample1)
 TEST_GROUP(union_2, kBasicUnionExample2)
 TEST_GROUP(union_3, kBasicUnionExample3)

@@ -19,6 +19,7 @@ let logger_handlers =
     ("nothing_property", Nothing_property_logger.create_handler);
     ("fbid_igid_type", Fbid_igid_type_logger.create_handler);
     ("type_driven_code_health", Type_driven_code_health_logger.create_handler);
+    ("safe_abstract", Safe_abstract_logger.create_handler);
   ]
 
 (* Handlers that are enabled through 'log_levels' configuration. *)
@@ -79,14 +80,7 @@ let visitor ctx =
           Some Tautology_check.handler;
           Some Enforceable_hint_check.handler;
           Some Const_write_check.handler;
-          (if tcopt.GlobalOptions.tco_strict_switch then
-            Some Strict_switch_check.handler
-          else
-            Some Switch_check.handler);
-          (if tcopt.GlobalOptions.tco_strict_switch then
-            Some Strict_switch_int_literal_check.handler
-          else
-            None);
+          Some Switch_exhaustivity_check.handler;
           Some Void_return_check.handler;
           Some Rvalue_check.handler;
           Some Callconv_check.handler;
@@ -121,6 +115,12 @@ let visitor ctx =
           else
             None);
           Some Class_pointer_check.handler;
+          (if TypecheckerOptions.safe_abstract tcopt then
+            Some Safe_abstract_check.handler
+          else
+            None);
+          Some No_disjoint_union_check.handler;
+          Some Simplihack_check.handler;
         ]
   in
   let handlers =

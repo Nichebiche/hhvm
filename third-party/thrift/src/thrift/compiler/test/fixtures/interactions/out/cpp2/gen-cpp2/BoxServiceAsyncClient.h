@@ -27,6 +27,7 @@ namespace apache::thrift {
 
 template <>
 class Client<::cpp2::BoxService> : public apache::thrift::GeneratedAsyncClient {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::BoxService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
  public:
   using apache::thrift::GeneratedAsyncClient::GeneratedAsyncClient;
 
@@ -99,7 +100,7 @@ class BoxedInteraction final : public apache::thrift::InteractionHandle {
     auto wrappedCallback = apache::thrift::RequestClientCallback::Ptr(cancellableCallback ? (apache::thrift::RequestClientCallback*)cancellableCallback.get() : &callback);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie();
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_getABox(*rpcOptions, header, ctx.get(), std::move(wrappedCallback));
@@ -146,7 +147,7 @@ class BoxedInteraction final : public apache::thrift::InteractionHandle {
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_getABox(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack);
   template <typename RpcOptions>
-  void fbthrift_send_getABox(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback);
+  void fbthrift_send_getABox(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> getABoxCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<::cpp2::ShouldBeBoxed> fbthrift_semifuture_getABox(apache::thrift::RpcOptions& rpcOptions);
@@ -212,7 +213,7 @@ class BoxedInteraction final : public apache::thrift::InteractionHandle {
     BoxedInteraction interactionHandle(channel_, "BoxedInteraction", ctx ? ctx->getClientInterceptors() : nullptr);
     if (ctx != nullptr) {
       auto argsAsRefs = std::tie(p_req);
-      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get()).throwUnlessValue();
+      ctx->processClientInterceptorsOnRequest(apache::thrift::ClientInterceptorOnRequestArguments(argsAsRefs), header.get(), hasRpcOptions ? *rpcOptions : *defaultRpcOptions).throwUnlessValue();
     }
     if constexpr (hasRpcOptions) {
       fbthrift_serialize_and_send_getABoxSession(*rpcOptions, header, ctx.get(), std::move(wrappedCallback), interactionHandle, p_req);
@@ -259,7 +260,7 @@ class BoxedInteraction final : public apache::thrift::InteractionHandle {
  private:
   apache::thrift::SerializedRequest fbthrift_serialize_getABoxSession(const RpcOptions& rpcOptions, apache::thrift::transport::THeader& header, apache::thrift::ContextStack* contextStack, const ::cpp2::ShouldBeBoxed& p_req);
   template <typename RpcOptions>
-  void fbthrift_send_getABoxSession(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, const apache::thrift::InteractionHandle& handle);
+  void fbthrift_send_getABoxSession(apache::thrift::SerializedRequest&& request, RpcOptions&& rpcOptions, std::shared_ptr<apache::thrift::transport::THeader> header, apache::thrift::RequestClientCallback::Ptr callback, std::unique_ptr<folly::IOBuf> interceptorFrameworkMetadata, const apache::thrift::InteractionHandle& handle);
   std::pair<::apache::thrift::ContextStack::UniquePtr, std::shared_ptr<::apache::thrift::transport::THeader>> getABoxSessionCtx(apache::thrift::RpcOptions* rpcOptions);
   template <typename CallbackType>
   folly::SemiFuture<std::pair<apache::thrift::Client<::cpp2::BoxService>::BoxedInteraction, ::cpp2::ShouldBeBoxed>> fbthrift_semifuture_getABoxSession(apache::thrift::RpcOptions& rpcOptions, const ::cpp2::ShouldBeBoxed& p_req);

@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-#include <folly/portability/GTest.h>
+#include <string_view>
+
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/DebugProtocol.h>
 #include <thrift/lib/cpp2/protocol/FieldMask.h>
 #include <thrift/lib/cpp2/protocol/Object.h>
@@ -23,11 +25,13 @@
 
 using apache::thrift::protocol::allMask;
 using apache::thrift::protocol::asValueStruct;
+using apache::thrift::protocol::DynamicMaskBuilder;
 using apache::thrift::protocol::Mask;
 using apache::thrift::protocol::MaskBuilder;
 using apache::thrift::protocol::MaskRef;
 using apache::thrift::protocol::noneMask;
 using namespace apache::thrift::protocol::detail;
+using namespace std::literals;
 
 namespace apache::thrift::test {
 
@@ -226,6 +230,12 @@ TEST(FieldMaskTest, IsAllMapMask) {
     EXPECT_FALSE((MaskRef{m, false}).isAllMapMask());
     EXPECT_FALSE((MaskRef{m, true}).isAllMapMask());
   }
+  {
+    Mask m;
+    m.includes_type_ref().emplace()[type::infer_tag<Foo>{}] = allMask();
+    EXPECT_THROW((MaskRef{m, true}).isAllMapMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).isAllMapMask(), std::runtime_error);
+  }
 }
 
 TEST(FieldMaskTest, IsNoneMapMask) {
@@ -265,6 +275,104 @@ TEST(FieldMaskTest, IsNoneMapMask) {
         .emplace();
     EXPECT_FALSE((MaskRef{m, false}).isNoneMapMask());
     EXPECT_FALSE((MaskRef{m, true}).isNoneMapMask());
+  }
+  {
+    Mask m;
+    m.includes_type_ref().emplace()[type::infer_tag<Foo>{}] = allMask();
+    EXPECT_THROW((MaskRef{m, true}).isNoneMapMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).isNoneMapMask(), std::runtime_error);
+  }
+}
+
+TEST(FieldMaskTest, IsAllTypeMask) {
+  auto allTypeMask = [] {
+    Mask m;
+    m.excludes_type_ref().emplace();
+    return m;
+  };
+
+  auto noneTypeMask = [] {
+    Mask m;
+    m.includes_type_ref().emplace();
+    return m;
+  };
+
+  EXPECT_TRUE((MaskRef{allTypeMask(), false}).isAllTypeMask());
+  EXPECT_TRUE((MaskRef{noneTypeMask(), true}).isAllTypeMask());
+  EXPECT_FALSE((MaskRef{noneTypeMask(), false}).isAllTypeMask());
+  EXPECT_FALSE((MaskRef{allTypeMask(), true}).isAllTypeMask());
+  {
+    Mask m;
+    m.excludes_ref().emplace()[5] = noneMask();
+    EXPECT_THROW((MaskRef{m, false}).isAllTypeMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).isAllTypeMask(), std::runtime_error);
+  }
+  {
+    Mask m;
+    m.includes_map_ref().emplace()[3].includes_map_ref().emplace();
+    EXPECT_THROW((MaskRef{m, false}).isAllTypeMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).isAllTypeMask(), std::runtime_error);
+  }
+  {
+    Mask m;
+    m.includes_string_map_ref()
+        .emplace()["3"]
+        .includes_string_map_ref()
+        .emplace();
+    EXPECT_THROW((MaskRef{m, false}).isAllTypeMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).isAllTypeMask(), std::runtime_error);
+  }
+  {
+    Mask m;
+    m.includes_type_ref().emplace()[type::infer_tag<Foo>{}] = allMask();
+    EXPECT_FALSE((MaskRef{m, false}).isAllTypeMask());
+    EXPECT_FALSE((MaskRef{m, true}).isAllTypeMask());
+  }
+}
+
+TEST(FieldMaskTest, IsNoneTypeMask) {
+  auto allTypeMask = [] {
+    Mask m;
+    m.excludes_type_ref().emplace();
+    return m;
+  };
+
+  auto noneTypeMask = [] {
+    Mask m;
+    m.includes_type_ref().emplace();
+    return m;
+  };
+
+  EXPECT_TRUE((MaskRef{noneTypeMask(), false}).isNoneTypeMask());
+  EXPECT_TRUE((MaskRef{allTypeMask(), true}).isNoneTypeMask());
+  EXPECT_FALSE((MaskRef{allTypeMask(), false}).isNoneTypeMask());
+  EXPECT_FALSE((MaskRef{noneTypeMask(), true}).isNoneTypeMask());
+  {
+    Mask m;
+    m.excludes_ref().emplace()[5] = noneMask();
+    EXPECT_THROW((MaskRef{m, false}).isNoneTypeMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).isNoneTypeMask(), std::runtime_error);
+  }
+  {
+    Mask m;
+    m.includes_map_ref().emplace()[3].includes_map_ref().emplace();
+    EXPECT_THROW((MaskRef{m, false}).isNoneTypeMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).isNoneTypeMask(), std::runtime_error);
+  }
+  {
+    Mask m;
+    m.includes_string_map_ref()
+        .emplace()["3"]
+        .includes_string_map_ref()
+        .emplace();
+    EXPECT_THROW((MaskRef{m, false}).isNoneTypeMask(), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).isNoneTypeMask(), std::runtime_error);
+  }
+  {
+    Mask m;
+    m.includes_type_ref().emplace()[type::infer_tag<Foo>{}] = allMask();
+    EXPECT_FALSE((MaskRef{m, false}).isNoneTypeMask());
+    EXPECT_FALSE((MaskRef{m, true}).isNoneTypeMask());
   }
 }
 
@@ -547,6 +655,7 @@ void testMaskRefGetIncludes(const Mask& mask, const Mask& nested) {
   MaskRef ref{mask, false};
   MaskRef refExclusion{mask, true};
 
+  // MaskRef::get
   EXPECT_TRUE(ref.get(getId<Id>(7)).isNoneMask()); // doesn't exist
   EXPECT_TRUE(refExclusion.get(getId<Id>(7)).isAllMask()); // doesn't exist
   EXPECT_TRUE(ref.get(getId<Id>(8)).isAllMask());
@@ -562,6 +671,26 @@ void testMaskRefGetIncludes(const Mask& mask, const Mask& nested) {
   EXPECT_TRUE(refExclusion.get(getId<Id>(9))
                   .get(getId<Id>(5))
                   .isAllMask()); // doesn't exist
+
+  // MaskRef::tryGet
+  EXPECT_FALSE(ref.tryGet(getId<Id>(7)).has_value()); // doesn't exist
+  EXPECT_FALSE(refExclusion.tryGet(getId<Id>(7)).has_value()); // doesn't exist
+  EXPECT_TRUE(ref.tryGet(getId<Id>(8))->isAllMask());
+  EXPECT_TRUE(refExclusion.tryGet(getId<Id>(8))->isNoneMask());
+  EXPECT_TRUE(literallyEqual(
+      ref.tryGet(getId<Id>(9)).value(), (MaskRef{nested, false})));
+  EXPECT_TRUE(literallyEqual(
+      refExclusion.tryGet(getId<Id>(9)).value(), (MaskRef{nested, true})));
+  // recursive calls to MaskRef::tryGet
+  EXPECT_TRUE(ref.tryGet(getId<Id>(9))->tryGet(getId<Id>(4))->isAllMask());
+  EXPECT_TRUE(
+      refExclusion.tryGet(getId<Id>(9))->tryGet(getId<Id>(4))->isNoneMask());
+  EXPECT_FALSE(ref.tryGet(getId<Id>(9))
+                   ->tryGet(getId<Id>(5))
+                   .has_value()); // doesn't exist
+  EXPECT_FALSE(refExclusion.tryGet(getId<Id>(9))
+                   ->tryGet(getId<Id>(5))
+                   .has_value()); // doesn't exist
 }
 
 TEST(FieldMaskTest, MaskRefGetIncludes) {
@@ -603,6 +732,7 @@ void testMaskRefGetExcludes(const Mask& mask, const Mask& nested) {
   MaskRef ref{mask, false};
   MaskRef refExclusion{mask, true};
 
+  // MaskRef::get
   EXPECT_TRUE(ref.get(getId<Id>(7)).isAllMask()); // doesn't exist
   EXPECT_TRUE(refExclusion.get(getId<Id>(7)).isNoneMask()); // doesn't exist
   EXPECT_TRUE(ref.get(getId<Id>(8)).isNoneMask());
@@ -610,7 +740,7 @@ void testMaskRefGetExcludes(const Mask& mask, const Mask& nested) {
   EXPECT_TRUE(literallyEqual(ref.get(getId<Id>(9)), (MaskRef{nested, true})));
   EXPECT_TRUE(
       literallyEqual(refExclusion.get(getId<Id>(9)), (MaskRef{nested, false})));
-  // recursive calls to MaskRef Get
+  // recursive calls to MaskRef::get
   EXPECT_TRUE(ref.get(getId<Id>(9)).get(getId<Id>(4)).isNoneMask());
   EXPECT_TRUE(refExclusion.get(getId<Id>(9)).get(getId<Id>(4)).isAllMask());
   EXPECT_TRUE(
@@ -618,6 +748,26 @@ void testMaskRefGetExcludes(const Mask& mask, const Mask& nested) {
   EXPECT_TRUE(refExclusion.get(getId<Id>(9))
                   .get(getId<Id>(5))
                   .isNoneMask()); // doesn't exist
+
+  // MaskRef::tryGet
+  EXPECT_FALSE(ref.tryGet(getId<Id>(7)).has_value()); // doesn't exist
+  EXPECT_FALSE(refExclusion.tryGet(getId<Id>(7)).has_value()); // doesn't exist
+  EXPECT_TRUE(ref.tryGet(getId<Id>(8))->isNoneMask());
+  EXPECT_TRUE(refExclusion.tryGet(getId<Id>(8))->isAllMask());
+  EXPECT_TRUE(literallyEqual(
+      ref.tryGet(getId<Id>(9)).value(), (MaskRef{nested, true})));
+  EXPECT_TRUE(literallyEqual(
+      refExclusion.tryGet(getId<Id>(9)).value(), (MaskRef{nested, false})));
+  // recursive calls to MaskRef::tryGet
+  EXPECT_TRUE(ref.tryGet(getId<Id>(9))->tryGet(getId<Id>(4))->isNoneMask());
+  EXPECT_TRUE(
+      refExclusion.tryGet(getId<Id>(9))->tryGet(getId<Id>(4))->isAllMask());
+  EXPECT_FALSE(ref.tryGet(getId<Id>(9))
+                   ->tryGet(getId<Id>(5))
+                   .has_value()); // doesn't exist
+  EXPECT_FALSE(refExclusion.tryGet(getId<Id>(9))
+                   ->tryGet(getId<Id>(5))
+                   .has_value()); // doesn't exist
 }
 
 TEST(FieldMaskTest, MaskRefGetExcludes) {
@@ -658,25 +808,25 @@ TEST(FieldMaskTest, MaskRefGetAllMaskNoneMask) {
     MaskRef ref{allMask(), false};
     EXPECT_TRUE(ref.get(FieldId{1}).isAllMask());
     EXPECT_TRUE(ref.get(MapId{1}).isAllMask());
-    EXPECT_TRUE(ref.get("1").isAllMask());
+    EXPECT_TRUE(ref.get("1"sv).isAllMask());
   }
   {
     MaskRef ref{allMask(), true};
     EXPECT_TRUE(ref.get(FieldId{1}).isNoneMask());
     EXPECT_TRUE(ref.get(MapId{1}).isNoneMask());
-    EXPECT_TRUE(ref.get("1").isNoneMask());
+    EXPECT_TRUE(ref.get("1"sv).isNoneMask());
   }
   {
     MaskRef ref{noneMask(), false};
     EXPECT_TRUE(ref.get(FieldId{1}).isNoneMask());
     EXPECT_TRUE(ref.get(MapId{1}).isNoneMask());
-    EXPECT_TRUE(ref.get("1").isNoneMask());
+    EXPECT_TRUE(ref.get("1"sv).isNoneMask());
   }
   {
     MaskRef ref{noneMask(), true};
     EXPECT_TRUE(ref.get(FieldId{1}).isAllMask());
     EXPECT_TRUE(ref.get(MapId{1}).isAllMask());
-    EXPECT_TRUE(ref.get("1").isAllMask());
+    EXPECT_TRUE(ref.get("1"sv).isAllMask());
   }
 }
 
@@ -687,40 +837,40 @@ TEST(FieldMaskTest, MaskRefGetException) {
     EXPECT_THROW((MaskRef{m, true}).get(FieldId{1}), std::runtime_error);
     EXPECT_THROW((MaskRef{m, false}).get(MapId{1}), std::runtime_error);
     EXPECT_THROW((MaskRef{m, true}).get(MapId{1}), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, false}).get("1"), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, true}).get("1"), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).get("1"sv), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).get("1"sv), std::runtime_error);
   }
   {
     Mask m;
     m.includes_map_ref().emplace()[4] = allMask();
     EXPECT_THROW((MaskRef{m, false}).get(FieldId{4}), std::runtime_error);
     EXPECT_THROW((MaskRef{m, true}).get(FieldId{4}), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, false}).get("4"), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, true}).get("4"), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).get("4"sv), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).get("4"sv), std::runtime_error);
   }
   {
     Mask m;
     m.excludes_map_ref().emplace()[4] = allMask();
     EXPECT_THROW((MaskRef{m, false}).get(FieldId{4}), std::runtime_error);
     EXPECT_THROW((MaskRef{m, true}).get(FieldId{4}), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, false}).get("4"), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, true}).get("4"), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).get("4"sv), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).get("4"sv), std::runtime_error);
   }
   {
     Mask m;
     m.includes_ref().emplace()[4] = allMask();
     EXPECT_THROW((MaskRef{m, false}).get(MapId{4}), std::runtime_error);
     EXPECT_THROW((MaskRef{m, true}).get(MapId{4}), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, false}).get("4"), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, true}).get("4"), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).get("4"sv), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).get("4"sv), std::runtime_error);
   }
   {
     Mask m;
     m.excludes_ref().emplace()[4] = allMask();
     EXPECT_THROW((MaskRef{m, false}).get(MapId{4}), std::runtime_error);
     EXPECT_THROW((MaskRef{m, true}).get(MapId{4}), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, false}).get("4"), std::runtime_error);
-    EXPECT_THROW((MaskRef{m, true}).get("4"), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, false}).get("4"sv), std::runtime_error);
+    EXPECT_THROW((MaskRef{m, true}).get("4"sv), std::runtime_error);
   }
   {
     Mask m;
@@ -988,6 +1138,7 @@ T testFilter(const Mask& mask, const T& src) {
 TEST(FieldMaskTest, FilterSimple) {
   {
     Foo src;
+
     MaskBuilder<Foo> m(noneMask());
     auto filtered = testFilter(m.toThrift(), src);
     EXPECT_EQ(src, filtered);
@@ -1038,7 +1189,7 @@ TEST(FieldMaskTest, FilterSimple) {
     filtered = testFilter(m.toThrift(), src);
     EXPECT_EQ(filtered.field_3_ref().value().field_1_ref().value(), 1);
 
-    m.reset_and_includes<ident::field_3, ident::field_2>();
+    m.reset_to_none().includes<ident::field_3, ident::field_2>();
     filtered = testFilter(m.toThrift(), src);
     // No sub field filtered, so field_3 should be null
     EXPECT_FALSE(filtered.field_3_ref().has_value());
@@ -1243,7 +1394,7 @@ TEST(FieldMaskTest, FilterUnion) {
   // Filter failed, union-ref should remain empty
   EXPECT_EQ(dst.getType(), RecursiveUnion::Type::__EMPTY__);
 
-  m.reset_and_includes<ident::recurse, ident::foo, ident::field1>();
+  m.reset_to_none().includes<ident::recurse, ident::foo, ident::field1>();
   dst = m.filter(parent);
   EXPECT_EQ(*dst.recurse_ref().value().foo_ref().value().field1(), 1);
   EXPECT_EQ(
@@ -2735,333 +2886,371 @@ TEST(FieldMaskTest, MaskBuilderIncludeExcludeEmpty) {
   }
 }
 
-void testMaskBuilderSimple(bool testFieldName) {
+template <typename T>
+struct MaskBuilderTester {
+  explicit MaskBuilderTester(const Mask& m)
+      : builder_by_ident(m), builder_by_name(m), builder_by_field_id{m} {}
+
+  MaskBuilderTester& reset_to_none() {
+    builder_by_ident.reset_to_none();
+    builder_by_name.reset_to_none();
+    builder_by_field_id.reset_to_none();
+    return *this;
+  }
+
+  MaskBuilderTester& reset_to_all() {
+    builder_by_ident.reset_to_all();
+    builder_by_name.reset_to_all();
+    builder_by_field_id.reset_to_all();
+    return *this;
+  }
+
+  MaskBuilderTester& invert() {
+    builder_by_ident.invert();
+    builder_by_name.invert();
+    builder_by_field_id.invert();
+    return *this;
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& includes(const Mask& mask = allMask()) {
+    builder_by_ident.template includes<Id...>(mask);
+    builder_by_name.includes(identToFieldName<T, Id...>(), mask);
+    builder_by_field_id.includes(identToFieldPath<T, Id...>(), mask);
+    return *this;
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& includes_map_element(
+      int64_t key, const Mask& mask = allMask()) {
+    Mask map;
+    map.includes_map_ref().emplace()[key] = mask;
+    return includes<Id...>(map);
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& includes_map_element(
+      std::string key, const Mask& mask = allMask()) {
+    Mask map;
+    map.includes_string_map_ref().emplace().emplace(std::move(key), mask);
+    return includes<Id...>(map);
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& includes_type(
+      type::Type type, const Mask& mask = allMask()) {
+    Mask typeMap;
+    typeMap.includes_type_ref().emplace().emplace(std::move(type), mask);
+    return includes<Id...>(typeMap);
+  }
+  template <typename... Id>
+  MaskBuilderTester& excludes(const Mask& mask = allMask()) {
+    builder_by_ident.template excludes<Id...>(mask);
+    builder_by_name.excludes(identToFieldName<T, Id...>(), mask);
+    builder_by_field_id.excludes(identToFieldPath<T, Id...>(), mask);
+    return *this;
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& excludes_map_element(
+      int64_t key, const Mask& mask = allMask()) {
+    Mask map;
+    map.includes_map_ref().emplace()[key] = mask;
+    return excludes<Id...>(map);
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& excludes_map_element(
+      std::string key, const Mask& mask = allMask()) {
+    Mask map;
+    map.includes_string_map_ref().emplace().emplace(std::move(key), mask);
+    return excludes<Id...>(map);
+  }
+
+  template <typename... Id>
+  MaskBuilderTester& excludes_type(
+      type::Type type, const Mask& mask = allMask()) {
+    Mask typeMap;
+    typeMap.includes_type_ref().emplace().emplace(std::move(type), mask);
+    return excludes<Id...>(typeMap);
+  }
+
+  void check(const Mask& expected) {
+    EXPECT_EQ(builder_by_ident.toThrift(), expected);
+    EXPECT_EQ(builder_by_name.toThrift(), expected);
+    EXPECT_EQ(builder_by_field_id.toThrift(), expected);
+  }
+
+ public:
+  MaskBuilder<T> builder_by_ident;
+  MaskBuilder<T> builder_by_name;
+  DynamicMaskBuilder builder_by_field_id;
+
+ private:
+  template <typename S>
+  void identToFieldNameImpl(std::vector<folly::StringPiece>&) {}
+  template <typename S, typename Id, typename... Ids>
+  void identToFieldNameImpl(std::vector<folly::StringPiece>& v) {
+    v.push_back(op::get_name_v<S, Id>);
+    identToFieldNameImpl<op::get_native_type<S, Id>, Ids...>(v);
+  }
+  template <typename S, typename... Ids>
+  std::vector<folly::StringPiece> identToFieldName() {
+    std::vector<folly::StringPiece> v;
+    v.reserve(sizeof...(Ids));
+    identToFieldNameImpl<S, Ids...>(v);
+    return v;
+  }
+
+  template <typename S>
+  void identToFieldPathImpl(FieldPath&) {}
+  template <typename S, typename Id, typename... Ids>
+  void identToFieldPathImpl(FieldPath& v) {
+    v.push_back(op::get_field_id_v<S, Id>);
+    identToFieldPathImpl<op::get_native_type<S, Id>, Ids...>(v);
+  }
+  template <typename S, typename... Ids>
+  FieldPath identToFieldPath() {
+    FieldPath v;
+    v.reserve(sizeof...(Ids));
+    identToFieldPathImpl<S, Ids...>(v);
+    return v;
+  }
+};
+
+TEST(FieldMaskTest, MaskBuilderSimple) {
   // Test includes
   {
     // includes{1: excludes{},
     //          3: excludes{}}
-    MaskBuilder<Foo> builder(noneMask());
-    if (testFieldName) {
-      builder.includes({"field1"});
-      builder.includes({"field2"});
-    } else {
-      builder.includes<ident::field1>();
-      builder.includes<ident::field2>();
-    }
+    MaskBuilderTester<Foo> builder(noneMask());
+    builder.includes<ident::field1>();
+    builder.includes<ident::field2>();
+
     Mask expected;
     auto& includes = expected.includes_ref().emplace();
     includes[1] = allMask();
     includes[3] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
-    MaskBuilder<Foo> builder(allMask());
-    if (testFieldName) {
-      builder.includes({"field1"});
-      builder.includes({"field2"});
-    } else {
-      builder.includes<ident::field1>();
-      builder.includes<ident::field2>();
-    }
-    EXPECT_EQ(builder.toThrift(), allMask());
+    MaskBuilderTester<Foo> builder(allMask());
+    builder.includes<ident::field1>();
+    builder.includes<ident::field2>();
+
+    builder.check(allMask());
   }
   {
     // includes{1: excludes{}}
-    MaskBuilder<Foo> builder(noneMask());
+    MaskBuilderTester<Foo> builder(noneMask());
     // including twice is fine
-    if (testFieldName) {
-      builder.includes({"field1"});
-      builder.includes({"field1"});
-    } else {
-      builder.includes<ident::field1>();
-      builder.includes<ident::field1>();
-    }
+    builder.includes<ident::field1>();
+    builder.includes<ident::field1>();
+
     Mask expected;
     expected.includes_ref().emplace()[1] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
 
   // Test excludes
   {
     // excludes{3: excludes{}}
-    MaskBuilder<Foo> builder(allMask());
-    if (testFieldName) {
-      builder.excludes({"field1"}, noneMask());
-      builder.excludes({"field2"});
-    } else {
-      builder.excludes<ident::field1>(noneMask());
-      builder.excludes<ident::field2>();
-    }
+    MaskBuilderTester<Foo> builder(allMask());
+    builder.excludes<ident::field1>(noneMask());
+    builder.excludes<ident::field2>();
+
     Mask expected;
     expected.excludes_ref().emplace()[3] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
-    MaskBuilder<Foo> builder(noneMask());
-    if (testFieldName) {
-      builder.excludes({"field1"});
-      builder.excludes({"field2"});
-    } else {
-      builder.excludes<ident::field1>();
-      builder.excludes<ident::field2>();
-    }
-    EXPECT_EQ(builder.toThrift(), noneMask());
+    MaskBuilderTester<Foo> builder(noneMask());
+    builder.excludes<ident::field1>();
+    builder.excludes<ident::field2>();
+
+    builder.check(noneMask());
   }
   {
     // excludes{3: excludes{}}
-    MaskBuilder<Foo> builder(allMask());
+    MaskBuilderTester<Foo> builder(allMask());
     // excluding twice is fine
-    if (testFieldName) {
-      builder.excludes({"field2"});
-      builder.excludes({"field2"});
-    } else {
-      builder.excludes<ident::field2>();
-      builder.excludes<ident::field2>();
-    }
+    builder.excludes<ident::field2>();
+    builder.excludes<ident::field2>();
+
     Mask expected;
     expected.excludes_ref().emplace()[3] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
 
   // Test includes and excludes
   {
-    MaskBuilder<Foo> builder(noneMask());
+    MaskBuilderTester<Foo> builder(noneMask());
     // excluding the field we included
-    if (testFieldName) {
-      builder.includes({"field2"});
-      builder.excludes({"field2"});
-    } else {
-      builder.includes<ident::field2>();
-      builder.excludes<ident::field2>();
-    }
-    EXPECT_EQ(builder.toThrift(), noneMask());
+    builder.includes<ident::field2>();
+    builder.excludes<ident::field2>();
+
+    builder.check(noneMask());
   }
   {
-    MaskBuilder<Foo> builder(allMask());
+    MaskBuilderTester<Foo> builder(allMask());
     // including the field we excluded
-    if (testFieldName) {
-      builder.excludes({"field2"});
-      builder.includes({"field2"});
-    } else {
-      builder.excludes<ident::field2>();
-      builder.includes<ident::field2>();
-    }
-    EXPECT_EQ(builder.toThrift(), allMask());
+    builder.excludes<ident::field2>();
+    builder.includes<ident::field2>();
+
+    builder.check(allMask());
   }
 }
 
-void testMaskBuilderNested(bool testFieldName) {
+TEST(FieldMaskTest, MaskBuilderNested) {
   // Test includes
   {
     // includes{1: includes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(noneMask());
-    if (testFieldName) {
-      builder.includes({"field_3", "field_1"});
-    } else {
-      builder.includes<ident::field_3, ident::field_1>();
-    }
+    MaskBuilderTester<Bar2> builder(noneMask());
+    builder.includes<ident::field_3, ident::field_1>();
+
     Mask expected;
     expected.includes_ref().emplace()[1].includes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // includes{1: includes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(noneMask());
+    MaskBuilderTester<Bar2> builder(noneMask());
     // including twice is fine
-    if (testFieldName) {
-      builder.includes({"field_3", "field_1"});
-      builder.includes({"field_3", "field_1"});
-    } else {
-      builder.includes<ident::field_3, ident::field_1>();
-      builder.includes<ident::field_3, ident::field_1>();
-    }
+    builder.includes<ident::field_3, ident::field_1>();
+    builder.includes<ident::field_3, ident::field_1>();
+
     Mask expected;
     expected.includes_ref().emplace()[1].includes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // includes{1: includes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(noneMask());
+    MaskBuilderTester<Bar2> builder(noneMask());
     Mask nestedMask;
     nestedMask.includes_ref().emplace()[1] = allMask();
-    if (testFieldName) {
-      builder.includes({"field_3"}, nestedMask);
-    } else {
-      builder.includes<ident::field_3>(nestedMask);
-    }
+    builder.includes<ident::field_3>(nestedMask);
+
     Mask expected;
     expected.includes_ref().emplace()[1].includes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // includes{1: includes{1: excludes{},
     //                      2: excludes{}},
     //          2: excludes{}}
-    MaskBuilder<Bar2> builder(noneMask());
-    if (testFieldName) {
-      builder.includes({"field_4"});
-      builder.includes({"field_3", "field_1"});
-      builder.includes({"field_3", "field_2"});
-    } else {
-      builder.includes<ident::field_4>();
-      builder.includes<ident::field_3, ident::field_1>();
-      builder.includes<ident::field_3, ident::field_2>();
-    }
+    MaskBuilderTester<Bar2> builder(noneMask());
+    builder.includes<ident::field_4>();
+    builder.includes<ident::field_3, ident::field_1>();
+    builder.includes<ident::field_3, ident::field_2>();
+
     Mask expected;
     auto& includes = expected.includes_ref().emplace();
     includes[2] = allMask();
     auto& includes2 = includes[1].includes_ref().emplace();
     includes2[1] = allMask();
     includes2[2] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // includes{1: excludes{}}
-    MaskBuilder<Bar2> builder(noneMask());
-    if (testFieldName) {
-      builder.includes({"field_3", "field_1"});
-      builder.includes({"field_3"});
-    } else {
-      builder.includes<ident::field_3, ident::field_1>();
-      builder.includes<ident::field_3>();
-    }
+    MaskBuilderTester<Bar2> builder(noneMask());
+    builder.includes<ident::field_3, ident::field_1>();
+    builder.includes<ident::field_3>();
+
     Mask expected;
     expected.includes_ref().emplace()[1] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
 
   // Test excludes
   {
     // excludes{1: includes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(allMask());
-    if (testFieldName) {
-      builder.excludes({"field_3", "field_1"});
-    } else {
-      builder.excludes<ident::field_3, ident::field_1>();
-    }
+    MaskBuilderTester<Bar2> builder(allMask());
+    builder.excludes<ident::field_3, ident::field_1>();
+
     Mask expected;
     expected.excludes_ref().emplace()[1].includes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // excludes{1: includes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(allMask());
+    MaskBuilderTester<Bar2> builder(allMask());
     // excluding twice is fine
-    if (testFieldName) {
-      builder.excludes({"field_3", "field_1"});
-      builder.excludes({"field_3", "field_1"});
-    } else {
-      builder.excludes<ident::field_3, ident::field_1>();
-      builder.excludes<ident::field_3, ident::field_1>();
-    }
+    builder.excludes<ident::field_3, ident::field_1>();
+    builder.excludes<ident::field_3, ident::field_1>();
+
     Mask expected;
     expected.excludes_ref().emplace()[1].includes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // excludes{1: includes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(allMask());
+    MaskBuilderTester<Bar2> builder(allMask());
     Mask nestedMask;
     nestedMask.includes_ref().emplace()[1] = allMask();
-    if (testFieldName) {
-      builder.excludes({"field_3"}, nestedMask);
-    } else {
-      builder.excludes<ident::field_3>(nestedMask);
-    }
+    builder.excludes<ident::field_3>(nestedMask);
+
     Mask expected;
     expected.excludes_ref().emplace()[1].includes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // excludes{1: includes{1: excludes{},
     //                      2: excludes{}},
     //          2: excludes{}}
-    MaskBuilder<Bar2> builder(allMask());
-    if (testFieldName) {
-      builder.excludes({"field_4"});
-      builder.excludes({"field_3", "field_1"});
-      builder.excludes({"field_3", "field_2"});
-    } else {
-      builder.excludes<ident::field_4>();
-      builder.excludes<ident::field_3, ident::field_1>();
-      builder.excludes<ident::field_3, ident::field_2>();
-    }
+    MaskBuilderTester<Bar2> builder(allMask());
+    builder.excludes<ident::field_4>();
+    builder.excludes<ident::field_3, ident::field_1>();
+    builder.excludes<ident::field_3, ident::field_2>();
+
     Mask expected;
     auto& excludes = expected.excludes_ref().emplace();
     excludes[2] = allMask();
     auto& includes = excludes[1].includes_ref().emplace();
     includes[1] = allMask();
     includes[2] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // excludes{1: excludes{}}
-    MaskBuilder<Bar2> builder(allMask());
-    if (testFieldName) {
-      builder.excludes({"field_3", "field_1"});
-      builder.excludes({"field_3"});
-    } else {
-      builder.excludes<ident::field_3, ident::field_1>();
-      builder.excludes<ident::field_3>();
-    }
+    MaskBuilderTester<Bar2> builder(allMask());
+    builder.excludes<ident::field_3, ident::field_1>();
+    builder.excludes<ident::field_3>();
+
     Mask expected;
     expected.excludes_ref().emplace()[1] = allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
 
   // Test includes and excludes
   {
     // includes{1: excludes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(noneMask());
-    if (testFieldName) {
-      builder.includes({"field_3"});
-      builder.excludes({"field_3", "field_1"});
-    } else {
-      builder.includes<ident::field_3>();
-      builder.excludes<ident::field_3, ident::field_1>();
-    }
+    MaskBuilderTester<Bar2> builder(noneMask());
+    builder.includes<ident::field_3>();
+    builder.excludes<ident::field_3, ident::field_1>();
+
     Mask expected;
     expected.includes_ref().emplace()[1].excludes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // excludes{1: excludes{1: excludes{}}}
-    MaskBuilder<Bar2> builder(allMask());
-    if (testFieldName) {
-      builder.excludes({"field_3"});
-      builder.includes({"field_3", "field_1"});
-    } else {
-      builder.excludes<ident::field_3>();
-      builder.includes<ident::field_3, ident::field_1>();
-    }
+    MaskBuilderTester<Bar2> builder(allMask());
+    builder.excludes<ident::field_3>();
+    builder.includes<ident::field_3, ident::field_1>();
+
     Mask expected;
     expected.excludes_ref().emplace()[1].excludes_ref().emplace()[1] =
         allMask();
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
-}
-
-TEST(FieldMaskTest, MaskBuilderSimple) {
-  testMaskBuilderSimple(false);
-}
-
-TEST(FieldMaskTest, MaskBuilderNested) {
-  testMaskBuilderNested(false);
-}
-
-TEST(FieldMaskTest, MaskBuilderSimpleWithFieldName) {
-  testMaskBuilderSimple(true);
-}
-
-TEST(FieldMaskTest, MaskBuilderNestedWithFieldName) {
-  testMaskBuilderNested(true);
 }
 
 TEST(FieldMaskTest, MaskBuilderUnion) {
@@ -3070,12 +3259,9 @@ TEST(FieldMaskTest, MaskBuilderUnion) {
     Mask expected;
     expected.includes_ref().emplace()[1] = allMask();
 
-    MaskBuilder<RecursiveUnion> builder(noneMask());
+    MaskBuilderTester<RecursiveUnion> builder(noneMask());
     builder.includes<ident::foo>();
-    EXPECT_EQ(builder.toThrift(), expected);
-
-    builder.reset_and_includes({"foo"});
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // nested
@@ -3085,12 +3271,9 @@ TEST(FieldMaskTest, MaskBuilderUnion) {
     Mask expected;
     expected.includes_ref().emplace()[1] = nested;
 
-    MaskBuilder<RecursiveUnion> builder(noneMask());
+    MaskBuilderTester<RecursiveUnion> builder(noneMask());
     builder.includes<ident::foo>(nested);
-    EXPECT_EQ(builder.toThrift(), expected);
-
-    builder.reset_and_includes({"foo"}, nested);
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
   {
     // recurse
@@ -3098,14 +3281,12 @@ TEST(FieldMaskTest, MaskBuilderUnion) {
     expected.includes_ref().emplace()[4].includes_ref().emplace()[1] =
         allMask();
 
-    MaskBuilder<RecursiveUnion> builder(noneMask());
+    MaskBuilderTester<RecursiveUnion> builder(noneMask());
     builder.includes<ident::recurse, ident::foo>();
-    EXPECT_EQ(builder.toThrift(), expected);
-
-    builder.reset_and_includes({"recurse", "foo"});
-    EXPECT_EQ(builder.toThrift(), expected);
+    builder.check(expected);
   }
 }
+
 TEST(FieldMaskTest, MaskBuilderAny) {
   MaskBuilder<Foo> fooMask(noneMask());
   fooMask.includes<ident::field1>();
@@ -3122,13 +3303,37 @@ TEST(FieldMaskTest, MaskBuilderAny) {
       .includes_type_ref()
       .emplace()[type::infer_tag<StructWithAny>{}] = simpleExpected;
 
-  MaskBuilder<StructWithAny> b(noneMask());
+  MaskBuilderTester<StructWithAny> b(noneMask());
   b.includes_type<ident::rawAny>(type::infer_tag<Foo>{}, fooMask.toThrift());
-  EXPECT_EQ(b.toThrift(), simpleExpected);
+  b.check(simpleExpected);
 
   b.reset_to_none().includes_type<ident::rawAny>(
       type::infer_tag<StructWithAny>{}, simpleExpected);
-  EXPECT_EQ(b.toThrift(), nestedExpected);
+  b.check(nestedExpected);
+
+  b.reset_to_none().includes_type<ident::rawAny>(
+      type::Type::get<type::infer_tag<Foo>>(), fooMask.toThrift());
+  b.check(simpleExpected);
+
+  b.reset_to_none().includes_type<ident::rawAny>(
+      type::Type::get<type::infer_tag<StructWithAny>>(), simpleExpected);
+  b.check(nestedExpected);
+
+  b.reset_to_all().excludes_type<ident::rawAny>(
+      type::infer_tag<Foo>{}, fooMask.toThrift());
+  b.invert().check(simpleExpected);
+
+  b.reset_to_all().excludes_type<ident::rawAny>(
+      type::infer_tag<StructWithAny>{}, simpleExpected);
+  b.invert().check(nestedExpected);
+
+  b.reset_to_all().excludes_type<ident::rawAny>(
+      type::Type::get<type::infer_tag<Foo>>(), fooMask.toThrift());
+  b.invert().check(simpleExpected);
+
+  b.reset_to_all().excludes_type<ident::rawAny>(
+      type::Type::get<type::infer_tag<StructWithAny>>(), simpleExpected);
+  b.invert().check(nestedExpected);
 }
 
 TEST(FieldMaskTest, MaskBuilderAdaptedAny) {
@@ -3147,14 +3352,14 @@ TEST(FieldMaskTest, MaskBuilderAdaptedAny) {
       .includes_type_ref()
       .emplace()[type::infer_tag<StructWithAny>{}] = simpleExpected;
 
-  MaskBuilder<StructWithAny> b(noneMask());
+  MaskBuilderTester<StructWithAny> b(noneMask());
   b.includes_type<ident::adaptedAny>(
       type::infer_tag<Foo>{}, fooMask.toThrift());
-  EXPECT_EQ(b.toThrift(), simpleExpected);
+  b.check(simpleExpected);
 
   b.reset_to_none().includes_type<ident::adaptedAny>(
       type::infer_tag<StructWithAny>{}, simpleExpected);
-  EXPECT_EQ(b.toThrift(), nestedExpected);
+  b.check(nestedExpected);
 }
 
 TEST(FieldMaskTest, MaskBuilderWithFieldNameError) {
@@ -3216,55 +3421,56 @@ TEST(FieldMaskTest, MaskBuilderOtherTypes) {
 }
 
 TEST(FieldMaskTest, MaskBuilderMap) {
-  MaskBuilder<HasMap> builder(noneMask());
+  MaskBuilderTester<HasMap> builder(noneMask());
   Mask expected;
 
   builder.includes_map_element<ident::foos>(1);
   expected.includes_ref().ensure()[1].includes_map_ref().ensure()[1] =
       allMask();
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 
   builder.includes<ident::foo>();
   expected.includes_ref().ensure()[2] = allMask();
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
+  ;
 
   builder.includes_map_element<ident::foos>(2);
   expected.includes_ref().ensure()[1].includes_map_ref().ensure()[2] =
       allMask();
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 
   builder.excludes_map_element<ident::foos>(2);
   expected.includes_ref().ensure()[1].includes_map_ref().ensure().erase(2);
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 
   builder.excludes_map_element<ident::foos>(1);
   expected.includes_ref().ensure()[1].includes_map_ref().ensure().erase(1);
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 }
 
 TEST(FieldMaskTest, MaskBuilderStringMap) {
-  MaskBuilder<HasMap> builder(noneMask());
+  MaskBuilderTester<HasMap> builder(noneMask());
   Mask expected;
 
   builder.includes_map_element<ident::string_map>("1");
   expected.includes_ref().ensure()[3].includes_string_map_ref().ensure()["1"] =
       allMask();
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 
   builder.includes_map_element<ident::string_map>("2");
   expected.includes_ref().ensure()[3].includes_string_map_ref().ensure()["2"] =
       allMask();
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 
   builder.excludes_map_element<ident::string_map>("2");
   expected.includes_ref().ensure()[3].includes_string_map_ref().ensure().erase(
       "2");
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 
   builder.excludes_map_element<ident::string_map>("1");
   expected.includes_ref().ensure()[3].includes_string_map_ref().ensure().erase(
       "1");
-  EXPECT_EQ(builder.toThrift(), expected);
+  builder.check(expected);
 }
 
 TEST(FieldMaskTest, ReverseMask) {
@@ -3491,64 +3697,28 @@ TEST(FieldMaskTest, MaskAdapter) {
 TEST(FieldMaskTest, MaskBuilderReset) {
   // reset to none
   {
-    MaskBuilder<Bar2> builder;
+    MaskBuilderTester<Bar2> builder(allMask());
     builder.reset_to_none();
-    EXPECT_EQ(builder.toThrift(), noneMask());
+    builder.check(noneMask());
     builder.includes<ident::field_3>().reset_to_none();
-    EXPECT_EQ(builder.toThrift(), noneMask());
+    builder.check(noneMask());
   }
 
   // reset to all
   {
-    MaskBuilder<Bar2> builder;
+    MaskBuilderTester<Bar2> builder(noneMask());
     builder.reset_to_all();
-    EXPECT_EQ(builder.toThrift(), allMask());
+    builder.check(allMask());
     builder.includes<ident::field_3>().reset_to_all();
-    EXPECT_EQ(builder.toThrift(), allMask());
-  }
-
-  // reset and includes
-  {
-    MaskBuilder<Bar2> expected(noneMask());
-    expected.includes<ident::field_4>();
-    {
-      MaskBuilder<Bar2> builder;
-      builder.reset_and_includes<ident::field_4>();
-      EXPECT_EQ(builder.toThrift(), expected.toThrift());
-    }
-    {
-      MaskBuilder<Bar2> builder;
-      builder.reset_to_all()
-          .includes({"field_3"})
-          .reset_and_includes({"field_4"});
-      EXPECT_EQ(builder.toThrift(), expected.toThrift());
-    }
-  }
-
-  // reset and excludes
-  {
-    MaskBuilder<Bar2> expected(allMask());
-    expected.excludes<ident::field_3, ident::field_1>();
-    {
-      MaskBuilder<Bar2> builder;
-      builder.reset_and_excludes<ident::field_3, ident::field_1>();
-      EXPECT_EQ(builder.toThrift(), expected.toThrift());
-    }
-    {
-      MaskBuilder<Bar2> builder;
-      builder.reset_to_none()
-          .includes({"field_3"})
-          .reset_and_excludes({"field_3", "field_1"});
-      EXPECT_EQ(builder.toThrift(), expected.toThrift());
-    }
+    builder.check(allMask());
   }
 }
 
 TEST(FieldMaskTest, MaskBuilderMaskAPIs) {
   Bar2 src, dst;
 
-  MaskBuilder<Bar2> builder;
-  builder.reset_and_includes({"field_3", "field_1"}).includes({"field_4"});
+  MaskBuilder<Bar2> builder(noneMask());
+  builder.includes({"field_3", "field_1"}).includes({"field_4"});
   // test invert
   Mask expectedMask = reverseMask(builder.toThrift());
   EXPECT_EQ(builder.invert().toThrift(), expectedMask);
@@ -3907,6 +4077,73 @@ TEST(FieldMaskTest, getValueAsString) {
 
   // Invalid `as`
   EXPECT_THROW(getValueAs("1", byteVal), std::runtime_error);
+}
+
+// TODO(dokwon): Consider providing isEmpty method in MaskRef.
+// Currently, empty mask does not have any semantic meaning.
+TEST(FieldMaskTest, emptyMask) {
+  Mask mask;
+  MaskRef maskRef{mask, false};
+  EXPECT_FALSE(maskRef.isAllMask());
+  EXPECT_FALSE(maskRef.isNoneMask());
+  EXPECT_THROW(maskRef.isAllMapMask(), std::runtime_error);
+  EXPECT_THROW(maskRef.isNoneMapMask(), std::runtime_error);
+  EXPECT_THROW(maskRef.isAllTypeMask(), std::runtime_error);
+  EXPECT_THROW(maskRef.isNoneTypeMask(), std::runtime_error);
+  EXPECT_FALSE(maskRef.isExclusive());
+  EXPECT_FALSE(maskRef.isFieldMask());
+  EXPECT_FALSE(maskRef.isIntegerMapMask());
+  EXPECT_FALSE(maskRef.isStringMapMask());
+  EXPECT_FALSE(maskRef.isTypeMask());
+
+  // get fails with empty mask
+  EXPECT_THROW(maskRef.get(FieldId{42}), std::runtime_error);
+  EXPECT_THROW(maskRef.get(MapId{42}), std::runtime_error);
+  EXPECT_THROW(maskRef.get("42"sv), std::runtime_error);
+  EXPECT_THROW(maskRef.get(type::Type::get<type::i32_t>()), std::runtime_error);
+}
+
+// Demonstration of difference between MaskRef::get and MaskRef::tryGet
+TEST(FieldMaskTest, MaskRefGetAndTryGet) {
+  MaskBuilder<Bar2> mb(noneMask());
+  // field_3 is specied with noneMask.
+  mb.includes<ident::field_3>(noneMask());
+
+  auto mr = MaskRef{mb.toThrift()};
+
+  // field_2 not included.
+  EXPECT_TRUE(mr.get(op::get_field_id_v<Bar2, ident::field_2>).isNoneMask());
+
+  // field_3 not included.
+  EXPECT_TRUE(mr.get(op::get_field_id_v<Bar2, ident::field_3>).isNoneMask());
+
+  // field_2 not included.
+  auto field2 = mr.tryGet(op::get_field_id_v<Bar2, ident::field_2>);
+  EXPECT_FALSE(field2.has_value());
+
+  // field_3 included but specified with noneMask.
+  auto field3 = mr.tryGet(op::get_field_id_v<Bar2, ident::field_3>);
+  EXPECT_TRUE(field3.has_value());
+  EXPECT_TRUE(field3->isNoneMask());
+}
+
+TEST(FieldMaskTest, DynamicMaskBuilderInvalid) {
+  {
+    // Empty
+    DynamicMaskBuilder builder(noneMask());
+    EXPECT_THROW(builder.includes({}), std::runtime_error);
+    EXPECT_THROW(builder.excludes({}), std::runtime_error);
+    EXPECT_THROW(builder.includes_map_element({}, 42), std::runtime_error);
+    EXPECT_THROW(builder.excludes_map_element({}, 42), std::runtime_error);
+    EXPECT_THROW(builder.includes_map_element({}, "key"), std::runtime_error);
+    EXPECT_THROW(builder.excludes_map_element({}, "key"), std::runtime_error);
+    EXPECT_THROW(
+        builder.includes_type({}, type::Type::get<type::i32_t>()),
+        std::runtime_error);
+    EXPECT_THROW(
+        builder.excludes_type({}, type::Type::get<type::i32_t>()),
+        std::runtime_error);
+  }
 }
 
 } // namespace apache::thrift::test

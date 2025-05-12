@@ -40,9 +40,6 @@ module Dep : sig
         (** Represents another class depending on a class via an
           inheritance-like mechanism (`extends`, `implements`, `use`, `require
           extends`, `require implements`, etc.) *)
-    | RequireExtends : string -> dependency variant
-        (** Whenever a type A has `require extends B` or `require implements B`
-          or `require class B`, we add an edge from `RequireExtends B` to `Type A` *)
     | NotSubtype : string -> dependency variant
         (** Whenever we use the fact that 'A is not a subtype of X' to conclude that
           a def F typechecks, we add an edge from `NotSubtype A` to the variant for F.
@@ -74,6 +71,11 @@ module Dep : sig
           this module *)
     | Declares : 'a variant
         (** An edge `Method(c, m) -> Declares` means that class c declares m. *)
+    | File : Relative_path.t -> dependency variant
+        (** Represents a dependency on the contents of a file.
+            This is currently used by the SimpliHack interpreter. The interpreter
+            cares about the body of functions/methods and not just their declaration.
+            Files read during evaluation will be dependencies. *)
 
   val dependency_of_variant : 'a variant -> dependency variant
 
@@ -82,7 +84,6 @@ module Dep : sig
     | KFun
     | KType
     | KExtends
-    | KRequireExtends
     | KConst
     | KConstructor
     | KProp
@@ -94,6 +95,7 @@ module Dep : sig
     | KModule
     | KDeclares
     | KNotSubtype
+    | KFile
   [@@deriving enum]
 
   val dep_kind_of_variant : 'a variant -> dep_kind
@@ -131,9 +133,6 @@ module Dep : sig
   val to_int : t -> int
 
   val is_class : t -> bool
-
-  (** Return the 'Extends' and 'RequireExtends' deps for a class from its 'Type' dep  *)
-  val extends_and_req_extends_of_class : t -> t * t
 
   val compare : t -> t -> int
 
@@ -247,6 +246,9 @@ val merge_dep_edges : dep_edges -> dep_edges -> dep_edges
 (** Register the provided dep edges in the dep table delta in [typing_deps.rs] *)
 val register_discovered_dep_edges : dep_edges -> unit
 
+(** Depending on mode, flush deps to disk or to in-memory depgraph delta *)
+val flush_deps : Mode.t -> unit
+
 (** Remove edges `dep -> Declares` for each `dep` in provided dep set *)
 val remove_declared_tags : Mode.t -> DepSet.t -> unit
 
@@ -259,17 +261,6 @@ val remove_declared_tags : Mode.t -> DepSet.t -> unit
   [typing_deps.rs]. *)
 val save_discovered_edges :
   Mode.t -> dest:string -> reset_state_after_saving:bool -> int
-
-(** Load discovered edges from a binary file.
-
-  - If mode is [InMemoryMode], the binary file is assumed to contain 64-bit
-    hashes and they will be added to the dep table delta in [typing_deps.rs].
-    If we have an existing table attached, we will first filter out edges
-    that are already present in the attached table.
-  - If mode is [SaveToDiskMode], the file is assumed to contain 64-bit
-    hashes and they will be added ot the current worker's on-disk
-    dependency edge file. *)
-val load_discovered_edges : Mode.t -> string -> int
 
 val get_ideps_from_hash : Mode.t -> Dep.t -> DepSet.t
 

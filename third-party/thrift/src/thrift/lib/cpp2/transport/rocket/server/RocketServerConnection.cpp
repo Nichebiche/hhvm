@@ -100,7 +100,7 @@ RocketServerConnection::RocketServerConnection(
     if (cfg.socketOptions != nullptr) {
       auto sockfd = rawSocket_->getNetworkSocket();
       for (auto& [option, value] : *cfg.socketOptions) {
-        if (auto err = option.apply(sockfd, value)) {
+        if (option.apply(sockfd, value)) {
           folly::SocketAddress address;
           rawSocket_->getAddress(&address);
           FB_LOG_EVERY_MS(WARNING, 60 * 1000) << fmt::format(
@@ -307,8 +307,7 @@ void RocketServerConnection::closeIfNeeded() {
           .ensure()
           .drainCompleteCode_ref()
           .from_optional(drainCompleteCode_);
-      sendMetadataPush(
-          PayloadSerializer::getInstance()->packCompact(serverMeta));
+      sendMetadataPush(getPayloadSerializer()->packCompact(serverMeta));
       // Send CONNECTION_ERROR error in case client doesn't support
       // DrainCompletePush
       sendError(StreamId{0}, RocketException(ErrorCode::CONNECTION_ERROR));
@@ -352,7 +351,7 @@ void RocketServerConnection::closeIfNeeded() {
                 callback->getStreamId(),
                 RocketException(
                     ErrorCode::CANCELED,
-                    PayloadSerializer::getInstance()->packCompact(
+                    getPayloadSerializer()->packCompact(
                         getStreamConnectionClosingError())));
           }
           callback->onStreamCancel();
@@ -529,7 +528,7 @@ void RocketServerConnection::handleUntrackedFrame(
       MetadataPushFrame metadataFrame(std::move(frame));
       ClientPushMetadata clientMeta;
       try {
-        PayloadSerializer::getInstance()->unpack(
+        getPayloadSerializer()->unpack(
             clientMeta, metadataFrame.metadata(), false);
       } catch (...) {
         close(folly::make_exception_wrapper<RocketException>(
@@ -674,9 +673,8 @@ void RocketServerConnection::handleSinkFrame(
     if (auto fullPayload = bufferOrGetFullPayload(std::move(payloadFrame))) {
       bool notViolateContract = true;
       if (next) {
-        auto streamPayload =
-            PayloadSerializer::getInstance()->unpack<StreamPayload>(
-                std::move(*fullPayload), decodeMetadataUsingBinary_.value());
+        auto streamPayload = getPayloadSerializer()->unpack<StreamPayload>(
+            std::move(*fullPayload), decodeMetadataUsingBinary_.value());
         if (streamPayload.hasException()) {
           notViolateContract =
               clientCallback.onSinkError(std::move(streamPayload.exception()));

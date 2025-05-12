@@ -39,6 +39,8 @@ class FactoriesServiceInfoHolder : public apache::thrift::ServiceInfoHolder {
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::Factories> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::Factories>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "Factories"; }
 
@@ -200,6 +202,13 @@ class SerialInteractionIf : public apache::thrift::SerialInteractionTile, public
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_serialize{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::Factories, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = 5169293820847068718;
+  static constexpr ::std::string_view definitionKey = {"\x0f\x20\xd4\x50\x5f\x35\x5a\x42\xd2\xe6\xc4\xd8\x79\x92\xfa\xdf", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

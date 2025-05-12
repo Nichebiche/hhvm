@@ -25,7 +25,7 @@
 #include <tuple>
 #include <type_traits>
 
-#include <boost/variant.hpp>
+#include <variant>
 
 #include <tbb/concurrent_hash_map.h>
 
@@ -55,7 +55,7 @@ namespace HPHP::HHBBC {
 
 namespace {
 
-TRACE_SET_MOD(hhbbc_stats);
+TRACE_SET_MOD(hhbbc_stats)
 
 //////////////////////////////////////////////////////////////////////
 

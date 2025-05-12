@@ -16,8 +16,8 @@
 
 #include <thrift/lib/cpp2/protocol/CursorBasedSerializer.h>
 
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/test/gen-cpp2/cursor_clients.h>
 #include <thrift/lib/cpp2/protocol/test/gen-cpp2/cursor_handlers.h>
 #include <thrift/lib/cpp2/protocol/test/gen-cpp2/cursor_types.h>
@@ -68,7 +68,7 @@ TEST(CursorSerializer, QualifierRead) {
   auto reader = wrapper.beginRead();
   EXPECT_EQ(reader.read<ident::opt>(), 3);
   EXPECT_EQ(reader.read<ident::unq>(), 1);
-  EXPECT_EQ(reader.read<ident::terse>(), 2);
+  EXPECT_EQ(reader.read<ident::terse>(), 0);
   wrapper.endRead(std::move(reader));
 
   // Reading from a serialized empty object applies the appropriate default
@@ -643,6 +643,50 @@ TEST(CursorSerializer, NestedStructWrite) {
   EXPECT_THAT(*obj.list_field(), ElementsAre(42));
 }
 
+TEST(CursorSerializer, NestedStructWriteWithSeparateCursor) {
+  CursorSerializationWrapper<Meal> mealCursor;
+  CursorSerializationWrapper<Cookie> cookieCursor;
+  CursorSerializationWrapper<Struct> structCursor;
+
+  auto cookieWriter = cookieCursor.beginWrite();
+  cookieWriter.write<ident::id>(42);
+  cookieWriter.write<ident::fortune>("Meaning of life...");
+  cookieWriter.write<ident::flavor>("None");
+  cookieCursor.endWrite(std::move(cookieWriter));
+
+  auto structWriter = structCursor.beginWrite();
+  structWriter.write<ident::i32_field>(42);
+  structCursor.endWrite(std::move(structWriter));
+
+  auto mealWriter = mealCursor.beginWrite();
+  mealWriter.write<ident::appetizer>(2);
+  mealWriter.write<ident::main>(4);
+  mealWriter.writeSerialized<ident::cookie>(std::move(cookieCursor));
+  // Doesn't compile
+  // mealWriter.writeSerialized<ident::cookie>(std::move(structCursor));
+  mealCursor.endWrite(std::move(mealWriter));
+
+  auto deserialized = mealCursor.deserialize();
+  EXPECT_EQ(*deserialized.appetizer(), 2);
+  EXPECT_EQ(*deserialized.main(), 4);
+  EXPECT_EQ(*deserialized.cookie()->flavor(), "None");
+  EXPECT_EQ(*deserialized.cookie()->id(), 42);
+  EXPECT_EQ(*deserialized.cookie()->fortune(), "Meaning of life...");
+
+  {
+    auto mealReader = mealCursor.beginRead();
+    EXPECT_EQ(mealReader.read<ident::appetizer>(), 2);
+    EXPECT_EQ(mealReader.read<ident::main>(), 4);
+
+    auto cookieReader = mealReader.beginRead<ident::cookie>();
+    EXPECT_EQ(cookieReader.read<ident::id>(), 42);
+    EXPECT_EQ(cookieReader.read<ident::fortune>(), "Meaning of life...");
+    EXPECT_EQ(cookieReader.read<ident::flavor>(), "None");
+    mealReader.endRead(std::move(cookieReader));
+    mealCursor.endRead(std::move(mealReader));
+  }
+}
+
 TEST(CursorSerializer, CursorWriteInContainer) {
   StructCursor wrapper;
   auto writer = wrapper.beginWrite();
@@ -699,6 +743,26 @@ void doCursorReadRemainEndTest(int count) {
   }
 }
 
+TEST(CursorSerializer, Refs) {
+  Refs wrapper;
+
+  auto writer = wrapper.beginWrite();
+  writer.write<ident::unique>(Empty{});
+  writer.write<ident::shared>(Empty{});
+  writer.write<ident::shared_mutable>(Empty{});
+  writer.write<ident::box>(Empty{});
+  writer.write<ident::intern_box>(Empty{});
+  wrapper.endWrite(std::move(writer));
+
+  auto reader = wrapper.beginRead();
+  EXPECT_EQ(reader.read<ident::unique>(), Empty{});
+  EXPECT_EQ(reader.read<ident::shared>(), Empty{});
+  EXPECT_EQ(reader.read<ident::shared_mutable>(), Empty{});
+  EXPECT_EQ(reader.read<ident::box>(), Empty{});
+  EXPECT_EQ(reader.read<ident::intern_box>(), Empty{});
+  wrapper.endRead(std::move(reader));
+}
+
 TEST(CursorBasedSerializer, CursorReadRemainingEndOne) {
   doCursorReadRemainEndTest(1);
 }
@@ -720,4 +784,30 @@ TEST(CursorBasedSerializer, ConcurrentAccess) {
   EXPECT_EQ(wrapper.deserialize(), Empty{});
   EXPECT_THROW(wrapper.beginWrite(), std::runtime_error);
   wrapper.endRead(std::move(reader));
+}
+
+TEST(CursorSerializer, AbandonedWrite) {
+  CursorSerializationWrapper<Qualifiers> wrapper;
+  auto writer = wrapper.beginWrite();
+  writer.write<ident::opt>(3);
+  wrapper.abandonWrite(std::move(writer));
+}
+
+TEST(CursorSerializer, MoveActiveWrapper) {
+  // @lint-ignore-all CLANGTIDY bugprone-use-after-move
+  CursorSerializationWrapper<Qualifiers> wrapper;
+  auto writer = wrapper.beginWrite();
+  std::optional<CursorSerializationWrapper<Qualifiers>> wrapper2;
+  EXPECT_THROW(wrapper2.emplace(std::move(wrapper)), std::runtime_error);
+  wrapper2.emplace();
+  EXPECT_THROW((*wrapper2 = std::move(wrapper)), std::runtime_error);
+  wrapper.abandonWrite(std::move(writer));
+
+  wrapper2.emplace(std::move(wrapper));
+
+  auto writer2 = wrapper2->beginWrite();
+  EXPECT_THROW((*wrapper2 = std::move(wrapper)), std::runtime_error);
+  wrapper2->abandonWrite(std::move(writer2));
+
+  *wrapper2 = std::move(wrapper);
 }

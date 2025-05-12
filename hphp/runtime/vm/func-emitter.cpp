@@ -17,42 +17,31 @@
 #include "hphp/runtime/vm/func-emitter.h"
 
 #include "hphp/runtime/base/array-iterator.h"
-#include "hphp/runtime/base/coeffects-config.h"
+#include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/unit-cache.h"
 #include "hphp/runtime/base/record-replay.h"
 #include "hphp/runtime/base/runtime-option.h"
 
 #include "hphp/runtime/ext/extension.h"
 
-#include "hphp/runtime/vm/bytecode.h"
 #include "hphp/runtime/vm/native.h"
 #include "hphp/runtime/vm/preclass-emitter.h"
 #include "hphp/runtime/vm/reified-generics.h"
 #include "hphp/runtime/vm/repo-autoload-map-builder.h"
 #include "hphp/runtime/vm/repo-file.h"
-#include "hphp/runtime/vm/runtime.h"
-
-#include "hphp/runtime/vm/jit/types.h"
-
-#include "hphp/runtime/vm/verifier/cfg.h"
-
 #include "hphp/system/systemlib.h"
 
-#include "hphp/util/atomic-vector.h"
 #include "hphp/util/blob-encoder.h"
 #include "hphp/util/configs/eval.h"
 #include "hphp/util/file.h"
-#include "hphp/util/trace.h"
-#include <iterator>
 
 namespace HPHP {
 
 ///////////////////////////////////////////////////////////////////////////////
 // FuncEmitter.
 
-FuncEmitter::FuncEmitter(UnitEmitter& ue, int sn, Id id, const StringData* n)
-  : m_ue(ue)
-  , m_pce(nullptr)
+FuncEmitter::FuncEmitter(int sn, Id id, const StringData* n)
+  : m_pce(nullptr)
   , m_sn(sn)
   , m_id(id)
   , m_bc()
@@ -60,9 +49,9 @@ FuncEmitter::FuncEmitter(UnitEmitter& ue, int sn, Id id, const StringData* n)
   , m_bcmax(0)
   , name(n)
   , maxStackCells(0)
-  , retUserType(nullptr)
+  , retUserType()
   , docComment(nullptr)
-  , originalFilename(nullptr)
+  , originalUnit(nullptr)
   , originalModuleName(nullptr)
   , memoizePropName(nullptr)
   , memoizeGuardPropName(nullptr)
@@ -74,10 +63,8 @@ FuncEmitter::FuncEmitter(UnitEmitter& ue, int sn, Id id, const StringData* n)
   , m_ehTabSorted(false)
 {}
 
-FuncEmitter::FuncEmitter(UnitEmitter& ue, int sn, const StringData* n,
-                         PreClassEmitter* pce)
-  : m_ue(ue)
-  , m_pce(pce)
+FuncEmitter::FuncEmitter(int sn, const StringData* n, PreClassEmitter* pce)
+  : m_pce(pce)
   , m_sn(sn)
   , m_id(kInvalidId)
   , m_bc()
@@ -85,9 +72,9 @@ FuncEmitter::FuncEmitter(UnitEmitter& ue, int sn, const StringData* n,
   , m_bcmax(0)
   , name(n)
   , maxStackCells(0)
-  , retUserType(nullptr)
+  , retUserType()
   , docComment(nullptr)
-  , originalFilename(nullptr)
+  , originalUnit(nullptr)
   , originalModuleName(nullptr)
   , memoizePropName(nullptr)
   , memoizeGuardPropName(nullptr)
@@ -189,13 +176,13 @@ void FuncEmitter::recordSourceLocation(const Location::Range& sLoc,
 // Initialization and execution.
 
 void FuncEmitter::init(int l1, int l2, Attr attrs_,
-                       const StringData* docComment_) {
+                       const StringData* docComment_, bool isSystemLib) {
   line1 = l1;
   line2 = l2;
   docComment = docComment_;
   attrs = attrs_;
 
-  assertx(!ue().isASystemLib() || attrs & AttrBuiltin);
+  assertx(IMPLIES(isSystemLib, attrs & AttrBuiltin));
 }
 
 void FuncEmitter::finish() {
@@ -226,18 +213,32 @@ namespace {
       if (Cfg::Jit::BuiltinsInterceptableByDefault) {
         return true;
       } else {
-        return (Cfg::Eval::InterceptableBuiltins.count(fullname) == 1);
+        return (Cfg::Eval::InterceptableBuiltins.contains(fullname));
       }
     } else {
-      return Cfg::Eval::NonInterceptableFunctions.count(fullname) == 0;
+      return !Cfg::Eval::NonInterceptableFunctions.contains(fullname);
     }
   }
 }
 
+static Func* allocFunc(Unit& unit, const StringData* name, Attr attrs,
+                     int numParams) {
+  Func *func = nullptr;
+  if (attrs & AttrIsMethCaller) {
+    auto const pair = Func::getMethCallerNames(name);
+    func = new (Func::allocFuncMem(numParams)) Func(
+      unit, name, attrs, pair.first, pair.second);
+  } else {
+    func = new (Func::allocFuncMem(numParams)) Func(unit, name, attrs);
+  }
+  return func;
+}
+
 Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
   auto attrs = this->attrs;
+  assertx(IMPLIES(unit.isSystemLib(), attrs & AttrBuiltin));
 
-  auto persistent = Cfg::Repo::Authoritative || (ue().isASystemLib() && (!RO::funcIsRenamable(name) || preClass));
+  auto persistent = Cfg::Repo::Authoritative || (unit.isSystemLib() && (!RO::funcIsRenamable(name) || preClass));
   assertx(IMPLIES(attrs & AttrPersistent, persistent));
   attrSetter(attrs, persistent, AttrPersistent);
 
@@ -280,7 +281,7 @@ Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
   }();
 
   assertx(!m_pce == !preClass);
-  auto f = m_ue.newFunc(this, unit, name, attrs, params.size());
+  auto f = allocFunc(unit, name, attrs, params.size());
 
   f->m_isPreFunc = !!preClass;
 
@@ -368,12 +369,12 @@ Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
 
   std::vector<Func::ParamInfo> fParams = params;
   auto const originalFullName =
-    (!originalFilename ||
+    (!originalUnit ||
      !Cfg::Repo::Authoritative ||
-     FileUtil::isAbsolutePath(originalFilename->slice())) ?
-    originalFilename :
+     FileUtil::isAbsolutePath(originalUnit->slice())) ?
+    originalUnit :
     makeStaticString(Cfg::Server::SourceRoot +
-                     originalFilename->toCppString());
+                     originalUnit->toCppString());
 
   f->shared()->m_localNames.create(m_localNames);
   f->shared()->m_numLocals = m_numLocals;
@@ -387,7 +388,7 @@ Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
   f->shared()->m_userAttributes = userAttributes;
   f->shared()->m_retTypeConstraints = retTypeConstraints;
   f->shared()->m_retUserType = retUserType;
-  f->shared()->m_originalFilename = originalFullName;
+  f->shared()->m_originalUnit = originalFullName;
   f->shared()->m_allFlags.m_isGenerated = HPHP::is_generated(name);
   f->shared()->m_repoReturnType = repoReturnType;
   f->shared()->m_repoAwaitedReturnType = repoAwaitedReturnType;
@@ -429,10 +430,18 @@ Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
   }
 
   if (isNative) {
+    auto ext = unit.extension();
+    assertx(ext);
+    auto const info = [&]() {
+      return Native::getNativeFunction(
+        ext->nativeFuncs(),
+        name,
+        m_pce ? m_pce->name() : nullptr,
+        (attrs & AttrStatic)
+      );
+    }();
+
     auto const ex = f->extShared();
-
-    auto const info = getNativeInfo();
-
     Attr dummy = AttrNone;
     auto nativeAttributes = parseNativeAttributes(dummy);
     Native::getFunctionPointers(
@@ -465,23 +474,46 @@ Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
       int extra = isMethod() ? 1 : 0;
       assertx(info.sig.args.size() == params.size() + extra);
       for (auto i = params.size(); i--; ) {
-        switch (info.sig.args[extra + i]) {
-          case Native::NativeSig::Type::ObjectNN:
-          case Native::NativeSig::Type::StringNN:
-          case Native::NativeSig::Type::ArrayNN:
-          case Native::NativeSig::Type::ResourceArg:
-            fParams[i].setFlag(Func::ParamInfo::Flags::NativeArg);
-            break;
-          case Native::NativeSig::Type::MixedTV:
-            fParams[i].setFlag(Func::ParamInfo::Flags::NativeArg);
-            fParams[i].setFlag(Func::ParamInfo::Flags::AsTypedValue);
-            break;
-          case Native::NativeSig::Type::Mixed:
-            fParams[i].setFlag(Func::ParamInfo::Flags::AsVariant);
-            break;
-          default:
-            break;
-        }
+        fParams[i].builtinAbi = [&] {
+          switch (info.sig.args[extra + i]) {
+            case Native::NativeSig::Type::Int64:
+            case Native::NativeSig::Type::Bool:
+            case Native::NativeSig::Type::Func:
+            case Native::NativeSig::Type::Class:
+            case Native::NativeSig::Type::ClsMeth:
+            case Native::NativeSig::Type::ObjectNN:
+            case Native::NativeSig::Type::StringNN:
+            case Native::NativeSig::Type::ArrayNN:
+            case Native::NativeSig::Type::ResourceArg:
+            case Native::NativeSig::Type::This:
+              return Func::ParamInfo::BuiltinAbi::Value;
+            case Native::NativeSig::Type::Double:
+              return Func::ParamInfo::BuiltinAbi::FPValue;
+            case Native::NativeSig::Type::Object:
+            case Native::NativeSig::Type::String:
+            case Native::NativeSig::Type::Array:
+            case Native::NativeSig::Type::Resource:
+              return Func::ParamInfo::BuiltinAbi::ValueByRef;
+            case Native::NativeSig::Type::MixedTV:
+              return Func::ParamInfo::BuiltinAbi::TypedValue;
+            case Native::NativeSig::Type::Mixed:
+              return Func::ParamInfo::BuiltinAbi::TypedValueByRef;
+            case Native::NativeSig::Type::IntIO:
+            case Native::NativeSig::Type::DoubleIO:
+            case Native::NativeSig::Type::BoolIO:
+            case Native::NativeSig::Type::ObjectIO:
+            case Native::NativeSig::Type::StringIO:
+            case Native::NativeSig::Type::ArrayIO:
+            case Native::NativeSig::Type::ResourceIO:
+            case Native::NativeSig::Type::FuncIO:
+            case Native::NativeSig::Type::ClassIO:
+            case Native::NativeSig::Type::ClsMethIO:
+            case Native::NativeSig::Type::MixedIO:
+              return Func::ParamInfo::BuiltinAbi::InOutByRef;
+            case Native::NativeSig::Type::Void:
+              not_reached();
+          }
+        }();
       }
     }
   }
@@ -497,16 +529,6 @@ Func* FuncEmitter::create(Unit& unit, PreClass* preClass /* = NULL */) const {
 String FuncEmitter::nativeFullname() const {
   return Native::fullName(name, m_pce ? m_pce->name() : nullptr,
                           (attrs & AttrStatic));
-}
-
-Native::NativeFunctionInfo FuncEmitter::getNativeInfo() const {
-  assertx(m_ue.m_extension);
-  return Native::getNativeFunction(
-      m_ue.m_extension->nativeFuncs(),
-      name,
-      m_pce ? m_pce->name() : nullptr,
-      (attrs & AttrStatic)
-    );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -635,12 +657,12 @@ void FuncEmitter::setBcToken(Func::BCPtr::Token token, size_t bclen) {
   m_bc = Func::BCPtr::FromToken(token);
 }
 
-Optional<Func::BCPtr::Token> FuncEmitter::loadBc() {
+Optional<Func::BCPtr::Token> FuncEmitter::loadBc(int64_t unitSn) {
   if (m_bc.isPtr()) return std::nullopt;
   assertx(Cfg::Repo::Authoritative);
   auto const old = m_bc.token();
   auto bc = (unsigned char*)malloc(m_bclen);
-  RepoFile::readRawFromUnit(m_ue.m_sn, old, bc, m_bclen);
+  RepoFile::readRawFromUnit(unitSn, old, bc, m_bclen);
   m_bc = Func::BCPtr::FromPtr(bc);
   return old;
 }
@@ -731,7 +753,7 @@ void FuncEmitter::serdeMetaData(SerDe& sd) {
     (userAttributes)
     (retTypeConstraints)
     (retUserType)
-    (originalFilename)
+    (originalUnit)
     (originalModuleName)
     (coeffectRules)
     ;

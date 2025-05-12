@@ -15,9 +15,6 @@
 */
 #include "hphp/runtime/vm/jit/opt.h"
 
-#include <boost/dynamic_bitset.hpp>
-#include <sstream>
-
 #include "hphp/util/bitset-utils.h"
 #include "hphp/util/dataflow-worklist.h"
 #include "hphp/util/match.h"
@@ -218,7 +215,7 @@
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(hhir_sinkdefs);
+TRACE_SET_MOD(hhir_sinkdefs)
 
 namespace {
 
@@ -811,7 +808,7 @@ void rewrite_uses(State& state,
       }
       // We handled everything but the last instruction. Do the same
       // check for a different insertion for that.
-      if (insertions.back.count(block)) {
+      if (insertions.back.contains(block)) {
         ITRACE(4, "Back of block{} has a different insertion\n", block->id());
         return false;
       }
@@ -849,7 +846,7 @@ void rewrite_uses(State& state,
     block->forEachSucc(
       [&] (Block* succ) {
         // Already visited, so no need to enqueue
-        if (visited.count(succ)) {
+        if (visited.contains(succ)) {
           ITRACE(4, "Skipping enqueue of successor {} since already visited\n",
                  succ->id());
           return;
@@ -871,7 +868,7 @@ void rewrite_uses(State& state,
         if (succ->numPreds() > 1) {
           // We already inserted a phi here. We would have already
           // rewritten the Jmp source above, so nothing further to do.
-          if (phis.count(succ)) {
+          if (phis.contains(succ)) {
             ITRACE(
               4,
               "Skipping enqueue of successor {} since a phi has been "
@@ -986,7 +983,7 @@ void fixup_anticipated(State& state, SSATmp* tmp, Block& start) {
         begin.set(tmp->id());
         block->forEachPred(
           [&] (Block* pred) {
-            if (visited.count(pred)) return;
+            if (visited.contains(pred)) return;
             visited.emplace(pred);
             worklist.push(pred);
           }

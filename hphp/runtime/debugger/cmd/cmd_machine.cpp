@@ -16,16 +16,12 @@
 
 #include "hphp/runtime/debugger/cmd/cmd_machine.h"
 
-#include "hphp/runtime/base/array-init.h"
-#include "hphp/runtime/base/intercept.h"
-#include "hphp/runtime/debugger/cmd/cmd_signal.h"
 #include "hphp/runtime/debugger/debugger_client.h"
-#include "hphp/util/process.h"
 
 namespace HPHP::Eval {
 ///////////////////////////////////////////////////////////////////////////////
 
-TRACE_SET_MOD(debugger);
+TRACE_SET_MOD(debugger)
 
 void CmdMachine::sendImpl(DebuggerThriftBuffer &thrift) {
   DebuggerCommand::sendImpl(thrift);
@@ -203,7 +199,7 @@ void CmdMachine::onClient(DebuggerClient &client) {
     }
     std::string host = client.argValue(2);
     int port = 0;
-    size_t pos = host.find(":");
+    size_t pos = host.find(':');
     if (pos != std::string::npos) {
       if (!DebuggerClient::IsValidNumber(host.substr(pos + 1))) {
         client.error("Port needs to be a number");

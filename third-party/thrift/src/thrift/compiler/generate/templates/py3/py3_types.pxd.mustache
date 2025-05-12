@@ -57,9 +57,11 @@ cdef extern from "{{program:includePrefix}}gen-py3/{{program:name}}/types.h":
   pass
 {{#program:python_capi_converter?}}
 cdef extern from "{{program:includePrefix}}gen-python-capi/{{program:name}}/thrift_types_capi.h":
-  pass
+    cppclass _fbthrift__NamespaceTag "{{program:capi_module_prefix}}::NamespaceTag"
+
 {{/program:python_capi_converter?}}
 
+{{^program:inplace_migrate?}}
 {{#program:filtered_structs}}
 
 
@@ -121,6 +123,7 @@ cdef object {{type:flat_name}}__from_cpp(const {{> types/cython_cpp_type}}&) exc
 {{/program:auto_migrate?}}
 
 {{/program:containerTypes}}
+{{/program:inplace_migrate?}}
 
 {{#program:has_stream?}}{{! check if it's a stream case and if not short-circuit it to save get stream_types calls }}
 
@@ -158,3 +161,10 @@ cdef class ResponseAndServerStream__{{> stream/response_class_name_suffix}}(Resp
 
 {{/function:return_type}}{{/program:response_and_stream_functions}}
 {{/program:has_stream?}}
+{{#program:inplace_migrate?}}{{#program:needs_container_converters?}}
+{{#program:containerTypes}}
+cdef {{> types/cython_cpp_type}} {{type:flat_name}}__make_instance(object items) except *
+cdef object {{type:flat_name}}__from_cpp(const {{> types/cython_cpp_type}}&) except *
+
+{{/program:containerTypes}}
+{{/program:needs_container_converters?}}{{/program:inplace_migrate?}}

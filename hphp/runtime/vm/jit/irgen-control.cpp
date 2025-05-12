@@ -15,10 +15,8 @@
 */
 #include "hphp/runtime/vm/jit/irgen-control.h"
 
-#include "hphp/runtime/vm/resumable.h"
 #include "hphp/runtime/vm/unwind.h"
 
-#include "hphp/runtime/vm/jit/normalized-instruction.h"
 #include "hphp/runtime/vm/jit/switch-profile.h"
 #include "hphp/runtime/vm/jit/target-profile.h"
 
@@ -32,7 +30,7 @@
 
 namespace HPHP::jit::irgen {
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 void surpriseCheck(IRGS& env) {
   auto const exit = makeExitSlow(env);
@@ -299,37 +297,15 @@ void emitSelect(IRGS& env) {
 
 //////////////////////////////////////////////////////////////////////
 
-void emitHandleException(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc,
-                         Optional<IRSPRelOffset> vmspOffset) {
-  // Stublogues lack proper frames and need special configuration.
-  if (env.irb->fs().stublogue()) {
-    assertx(!isInlining(env));
-    assertx(mode == EndCatchData::CatchMode::UnwindOnly);
-    auto const data = EndCatchData {
-      spOffBCFromIRSP(env),
-      EndCatchData::CatchMode::UnwindOnly,
-      EndCatchData::FrameMode::Stublogue,
-      EndCatchData::Teardown::NA,
-      std::nullopt
-    };
-    gen(env, EndCatch, data, fp(env), sp(env));
-    return;
-  }
+namespace {
 
-  // Teardown::None can't be used without an empty stack.
-  assertx(IMPLIES(mode == EndCatchData::CatchMode::LocalsDecRefd,
-                  spOffBCFromStackBase(env) == spOffEmpty(env)));
-
-  // If we are unwinding from an inlined function, try a special logic that
-  // may eliminate the need to spill the current frame.
+void endCatchImpl(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc,
+                  Optional<IRSPRelOffset> vmspOffset) {
+  // If we are unwinding from an inlined function, route the exception
+  // to the shared sink.
   if (isInlining(env)) {
-    if (endCatchFromInlined(env, mode, exc)) return;
-  }
-
-  if (spillInlinedFrames(env)) {
-    gen(env, StVMFP, fp(env));
-    gen(env, StVMPC, cns(env, uintptr_t(curSrcKey(env).pc())));
-    gen(env, StVMReturnAddr, cns(env, 0));
+    endCatchFromInlined(env, mode, exc);
+    return;
   }
 
   auto const teardown = mode == EndCatchData::CatchMode::LocalsDecRefd
@@ -342,57 +318,210 @@ void emitHandleException(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc,
     teardown,
     vmspOffset
   };
-  gen(env, EndCatch, data, fp(env), sp(env));
+  gen(env, EndCatch, data, fp(env), sp(env), exc);
+}
+
+void emitExceptionHandler(IRGS& env, Offset ehOffset, SSATmp* exc) {
+  int locId = 0;
+
+  // Forget all frame state information that can't be shared between EHs.
+  env.irb->fs().clearForEH();
+
+  // Pop stack items on the top of the stack with unknown values. We don't
+  // share DecRefs of these values, as they might be unrelated to each other.
+  while (true) {
+    auto const curStackPos = spOffBCFromStackBase(env);
+    if (curStackPos == spOffEmpty(env)) break;
+    if (env.irb->fs().valueOf(Location::Stack{curStackPos}) != nullptr) break;
+
+    popDecRef(env, static_cast<DecRefProfileId>(locId++));
+    updateMarker(env);
+    env.irb->exceptionStackBoundary();
+  }
+
+  std::vector<Block*> ehBlocks;
+
+  auto const ehSrcKey = SrcKey{curSrcKey(env), ehOffset};
+  if (auto const block = env.irb->getEHBlock(ehSrcKey)) {
+    ehBlocks.push_back(block);
+  } else {
+    auto const newBlock = defBlock(env, Block::Hint::Unused);
+    env.irb->setEHBlock(ehSrcKey, newBlock);
+    ehBlocks.push_back(newBlock);
+  }
+
+  for (auto i = spOffEmpty(env) + 1; i <= spOffBCFromStackBase(env); ++i) {
+    auto const prev = ehBlocks.back();
+    auto const value = env.irb->fs().valueOf(Location::Stack{i});
+    if (auto const block = env.irb->getEHDecRefBlock(prev, value)) {
+      ehBlocks.push_back(block);
+    } else {
+      auto const newBlock = defBlock(env, Block::Hint::Unused);
+      env.irb->setEHDecRefBlock(prev, value, newBlock);
+      ehBlocks.push_back(newBlock);
+    }
+  }
+
+  auto const startBlock = [&](Block* block) {
+    env.irb->appendBlock(block);
+    auto const label = env.unit.defLabel(1, block, env.irb->nextBCContext());
+    exc = label->dst(0);
+    exc->setType(Type::SubObj(SystemLib::getThrowableClass()) | TNullptr);
+  };
+
+  // Pop the remaining stack items via shared blocks.
+  while (true) {
+    auto const curStackPos = spOffBCFromStackBase(env);
+    if (curStackPos == spOffEmpty(env)) break;
+
+    assertx(!ehBlocks.empty());
+    auto const decRefBlock = ehBlocks.back();
+    ehBlocks.pop_back();
+
+    gen(env, Jmp, decRefBlock, exc);
+    if (!decRefBlock->empty()) return;
+
+    startBlock(decRefBlock);
+    popDecRef(env, static_cast<DecRefProfileId>(locId++));
+    updateMarker(env);
+    env.irb->exceptionStackBoundary();
+  }
+
+  assertx(spOffBCFromStackBase(env) == spOffEmpty(env));
+  assertx(ehBlocks.size() == 1);
+  auto const ehBlock = ehBlocks[0];
+
+  gen(env, Jmp, ehBlock, exc);
+  if (!ehBlock->empty()) return;
+
+  startBlock(ehBlock);
+
+  cond(
+    env,
+    [&](Block* taken) {
+      return gen(env, CheckNonNull, taken, exc);
+    },
+    [&](SSATmp* exception) {
+      // Route Hack exceptions to the exception handler.
+      push(env, exception);
+      jmpImpl(env, ehSrcKey);
+      return nullptr;
+    },
+    [&] {
+      // We are throwing a C++ exception, bypassing catch handlers, which would
+      // normally clean up iterators. Kill them here, so that once we reach
+      // EndInlining, it won't trigger assertions in load-elim.
+      auto const numIterators = curFunc(env)->numIterators();
+      for (auto i = 0U; i < numIterators; ++i) {
+        gen(env, KillIter, IterId{i}, fp(env));
+      }
+
+      // Route C++ exceptions to the frame unwinder.
+      auto constexpr mode = EndCatchData::CatchMode::UnwindOnly;
+      endCatchImpl(env, mode, cns(env, nullptr), std::nullopt);
+      return nullptr;
+    }
+  );
+}
+
+}
+
+void emitHandleException(IRGS& env, EndCatchData::CatchMode mode, SSATmp* exc,
+                         Optional<IRSPRelOffset> vmspOffset, bool sideEntry) {
+  // Stublogues lack proper frames and need special configuration.
+  if (env.irb->fs().stublogue()) {
+    assertx(!isInlining(env));
+    assertx(mode == EndCatchData::CatchMode::UnwindOnly);
+    assertx(!sideEntry);
+    auto const data = EndCatchData {
+      spOffBCFromIRSP(env),
+      EndCatchData::CatchMode::UnwindOnly,
+      EndCatchData::FrameMode::Stublogue,
+      EndCatchData::Teardown::NA,
+      std::nullopt
+    };
+    gen(env, EndCatch, data, fp(env), sp(env), exc);
+    return;
+  }
+
+  // Teardown::None can't be used without an empty stack.
+  assertx(IMPLIES(mode == EndCatchData::CatchMode::LocalsDecRefd,
+                  spOffBCFromStackBase(env) == spOffEmpty(env)));
+  assertx(IMPLIES(sideEntry, exc->isA(TObj)));
+
+  if (mode == EndCatchData::CatchMode::UnwindOnly) {
+    auto const ehOffset = findExceptionHandler(curFunc(env), bcOff(env));
+    if (ehOffset != kInvalidOffset) {
+      return emitExceptionHandler(env, ehOffset, exc);
+    }
+  }
+
+  if (sideEntry) {
+    gen(env, StUnwinderExn, exc);
+    gen(env, StVMFP, fixupFP(env));
+    gen(env, StVMPC, cns(env, uintptr_t(env.irb->curMarker().fixupSk().pc())));
+    gen(env, StVMReturnAddr, cns(env, 0));
+  }
+  endCatchImpl(env, mode, exc, std::move(vmspOffset));
 }
 
 //////////////////////////////////////////////////////////////////////
 
 void emitThrow(IRGS& env) {
-  auto const stackEmpty = spOffBCFromStackBase(env) == spOffEmpty(env) + 1;
-  auto const offset = findExceptionHandler(curFunc(env), bcOff(env));
   auto const srcTy = topC(env)->type();
-  auto const maybeThrowable =
-    srcTy.maybe(Type::SubObj(SystemLib::getExceptionClass())) ||
-    srcTy.maybe(Type::SubObj(SystemLib::getErrorClass()));
+  auto const excTy = Type::SubObj(SystemLib::getExceptionClass());
+  auto const errTy = Type::SubObj(SystemLib::getErrorClass());
+  auto const maybeThrowable = srcTy.maybe(excTy) || srcTy.maybe(errTy);
 
-  if (!stackEmpty || !maybeThrowable || !(srcTy <= TObj)) return interpOne(env);
+  if (!maybeThrowable) return interpOne(env);
 
   auto slowExit = makeExitSlow(env);
   if (Cfg::Debugger::EnableVSDebugger && Cfg::Eval::EmitDebuggerIntrCheck) {
     irgen::checkDebuggerExceptionIntr(env, slowExit);
   }
 
-  auto const handleThrow = [&] {
-    if (offset != kInvalidOffset) return jmpImpl(env, offset);
-    // There are no more catch blocks in this function, we are at the top
-    // level throw
-    auto const exn = popC(env);
+  auto const handleException = [&] (SSATmp* exc) {
+    popC(env);
     updateMarker(env);
 
-    spillInlinedFrames(env);
-
-    auto const spOff = spOffBCFromIRSP(env);
-    eagerVMSync(env, spOff);
-    auto const etcData = EnterTCUnwindData { spOff, true };
-    gen(env, EnterTCUnwind, etcData, exn);
+    auto constexpr mode = EndCatchData::CatchMode::UnwindOnly;
+    emitHandleException(env, mode, exc, std::nullopt, true /* sideEntry */);
   };
 
-  if (srcTy <= Type::SubObj(SystemLib::getThrowableClass())) return handleThrow();
+  if (srcTy <= Type::SubObj(SystemLib::getThrowableClass())) {
+    return handleException(topC(env));
+  }
 
-  ifThenElse(env,
-    [&] (Block* taken) {
-      assertx(srcTy <= TObj);
-      auto const srcClass = gen(env, LdObjClass, topC(env));
-      auto const ecdExc = ExtendsClassData { SystemLib::getExceptionClass() };
-      auto const isException = gen(env, ExtendsClass, ecdExc, srcClass);
-      gen(env, JmpNZero, taken, isException);
-      auto const ecdErr = ExtendsClassData { SystemLib::getErrorClass() };
-      auto const isError = gen(env, ExtendsClass, ecdErr, srcClass);
-      gen(env, JmpNZero, taken, isError);
+  handleException(cond(
+    env,
+    [&] (Block* taken) { return gen(env, CheckType, TObj, taken, topC(env)); },
+    [&] (SSATmp* obj) {
+      auto const cls = gen(env, LdObjClass, obj);
+      return cond(
+        env,
+        [&] (Block* taken) {
+          auto const ecd = ExtendsClassData { SystemLib::getExceptionClass() };
+          gen(env, JmpZero, taken, gen(env, ExtendsClass, ecd, cls));
+          return gen(env, AssertType, excTy, obj);
+        },
+        [&] (SSATmp* exc) { return exc; },
+        [&] (Block* taken) {
+          auto const ecd = ExtendsClassData { SystemLib::getErrorClass() };
+          gen(env, JmpZero, taken, gen(env, ExtendsClass, ecd, cls));
+          return gen(env, AssertType, errTy, obj);
+        },
+        [&] (SSATmp* exc) { return exc; },
+        [&] {
+          gen(env, Jmp, slowExit);
+          return cns(env, TBottom);
+        }
+      );
     },
-    [&] { gen(env, Jmp, slowExit); },
-    handleThrow
-  );
+    [&] {
+      gen(env, Jmp, slowExit);
+      return cns(env, TBottom);
+    }
+  ));
 }
 
 //////////////////////////////////////////////////////////////////////

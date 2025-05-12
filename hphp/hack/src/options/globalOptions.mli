@@ -195,13 +195,6 @@ type t = {
   tco_typeconst_concrete_concrete_error: bool;
       (** Raise an error when a concrete type constant is overridden by a concrete type constant
          in a child class. *)
-  tco_enable_strict_const_semantics: int;
-      (** When the value is 1, raises a 4734 error when an inherited constant comes from a conflicting
-         hierarchy, but not if the constant is locally defined. When the value is 2, raises a conflict
-         any time two parents declare concrete constants with the same name, matching HHVM
-         -vEval.TraitConstantInterfaceBehavior=1 *)
-  tco_strict_wellformedness: int;
-      (** Different levels here raise previously missing well-formedness errors (see Typing_type_wellformedness) *)
   tco_meth_caller_only_public_visibility: bool;
       (** meth_caller can only reference public methods *)
   tco_require_extends_implements_ancestors: bool;
@@ -227,6 +220,9 @@ type t = {
   tco_profile_top_level_definitions: bool;
       (** Measures and reports the time it takes to typecheck each top-level
          definition. *)
+  tco_typecheck_if_name_matches_regexp: string option;
+      (** When set, it checks if the identifier for the definition matches the
+        given regular expression and only then typechecks the definition. *)
   tco_allow_all_files_for_module_declarations: bool;
   tco_allowed_files_for_module_declarations: string list;
   tco_record_fine_grained_dependencies: bool;
@@ -248,7 +244,6 @@ type t = {
       (** Controls behavior of [Provider_utils.respect_but_quarantine_unsaved_changes] *)
   tco_lsp_invalidation: bool;
       (** Controls how [Provicer_utils.respect_but_quarantine_unsaved_changes] invalidates folded decls *)
-  invalidate_all_folded_decls_upon_file_change: bool;
   tco_autocomplete_sort_text: bool;
   tco_extended_reasons: extended_reasons_config option;
       (** Controls whether we retain the full path for reasons or only simple witnesses *)
@@ -256,14 +251,34 @@ type t = {
       (** If set to true, this disables the use of physical equality in subtyping *)
   hack_warnings: int none_or_all_except;  (** turn on hack warnings *)
   warnings_default_all: bool;
+  warnings_in_sandcastle: bool;
   tco_strict_switch: bool;
       (** Enable strict case checking in switch statements *)
   tco_allowed_files_for_ignore_readonly: string list;
   tco_package_v2_exclude_patterns: string list;
       (** Patterns for files excluded from the package boundary check. *)
-  tco_package_v2_bypass_package_check_for_class_const: bool;
+  tco_package_v2_allow_typedef_violations: bool;
+      (** Option for package v2 to bypass package boundary violation errors on typedefs to unblock V1 of
+          intern-prod separation *)
+  tco_package_v2_allow_classconst_violations: bool;
       (** Option for package v2 to bypass package boundary violation errors on ::class during
-          the ::class to nameof migration to unblock V0 of intern-prod separation *)
+          the ::class to nameof migration to unblock V1 of intern-prod separation *)
+  tco_package_v2_allow_reifiable_tconst_violations: bool;
+      (** Option for package v2 to bypass package boundary violation errors on definitions of
+          reifiable abstract type constants to unblock V1 of intern-prod separation *)
+  tco_package_v2_allow_all_tconst_violations: bool;
+      (** Option for package v2 to bypass package boundary violation errors on definitions of
+          all type constants to unblock V1 of intern-prod separation. This flag controls the
+          superset of violations controlled by `tco_package_v2_allow_reifiable_tconst_violations`
+          and will be switched off as a step further in tightening the packgage boundary endforcement. *)
+  tco_package_v2_allow_reified_generics_violations: bool;
+      (** Option for package v2 to bypass package boundary violation errors on reified generics
+          to unblock V1 of intern-prod separation. This flag controls the
+          superset of violations controlled by `tco_package_v2_allow_reified_generics_violations`
+          and will be switched off as a step further in tightening the packgage boundary endforcement. *)
+  tco_package_v2_allow_all_generics_violations: bool;
+      (** Option for package v2 to bypass package boundary violation errors on all generics
+          to unblock V1 of intern-prod separation.  *)
   re_no_cache: bool;
       (** Disable RE cache when calling hh_distc. Useful for performance testing.
         Corresponds to the `--no-cache` options of hh_distc. *)
@@ -277,6 +292,11 @@ type t = {
   recursive_case_types: bool;  (** Enable recursive case types *)
   class_sub_classname: bool;  (** Whether class<T> <: classname<T> *)
   class_class_type: bool;  (** When true, C::class : class<C> *)
+  safe_abstract: bool;
+      (** Enable Safe Abstract features https://fburl.com/hack-safe-abstract *)
+  needs_concrete: bool;
+      (** Enable __NeedsConcrete checking https://fburl.com/hack-needs-concrete *)
+  allow_class_string_cast: bool;  (** Admits (string)$c when $c: class<T>  *)
 }
 [@@deriving eq, show]
 
@@ -346,8 +366,6 @@ val set :
   ?tco_enable_function_references:bool ->
   ?tco_allowed_expression_tree_visitors:string list ->
   ?tco_typeconst_concrete_concrete_error:bool ->
-  ?tco_enable_strict_const_semantics:int ->
-  ?tco_strict_wellformedness:int ->
   ?tco_meth_caller_only_public_visibility:bool ->
   ?tco_require_extends_implements_ancestors:bool ->
   ?tco_strict_value_equality:bool ->
@@ -358,6 +376,7 @@ val set :
   ?tco_type_printer_fuel:int ->
   ?tco_specify_manifold_api_key:bool ->
   ?tco_profile_top_level_definitions:bool ->
+  ?tco_typecheck_if_name_matches_regexp:string ->
   ?tco_allow_all_files_for_module_declarations:bool ->
   ?tco_allowed_files_for_module_declarations:string list ->
   ?tco_record_fine_grained_dependencies:bool ->
@@ -369,16 +388,21 @@ val set :
   ?tco_log_exhaustivity_check:bool ->
   ?tco_sticky_quarantine:bool ->
   ?tco_lsp_invalidation:bool ->
-  ?invalidate_all_folded_decls_upon_file_change:bool ->
   ?tco_autocomplete_sort_text:bool ->
   ?tco_extended_reasons:extended_reasons_config ->
   ?tco_disable_physical_equality:bool ->
   ?hack_warnings:int none_or_all_except ->
   ?warnings_default_all:bool ->
+  ?warnings_in_sandcastle:bool ->
   ?tco_strict_switch:bool ->
   ?tco_allowed_files_for_ignore_readonly:string list ->
   ?tco_package_v2_exclude_patterns:string list ->
-  ?tco_package_v2_bypass_package_check_for_class_const:bool ->
+  ?tco_package_v2_allow_typedef_violations:bool ->
+  ?tco_package_v2_allow_classconst_violations:bool ->
+  ?tco_package_v2_allow_reifiable_tconst_violations:bool ->
+  ?tco_package_v2_allow_all_tconst_violations:bool ->
+  ?tco_package_v2_allow_reified_generics_violations:bool ->
+  ?tco_package_v2_allow_all_generics_violations:bool ->
   ?re_no_cache:bool ->
   ?hh_distc_should_disable_trace_store:bool ->
   ?hh_distc_exponential_backoff_num_retries:int ->
@@ -386,6 +410,9 @@ val set :
   ?recursive_case_types:bool ->
   ?class_sub_classname:bool ->
   ?class_class_type:bool ->
+  ?safe_abstract:bool ->
+  ?needs_concrete:bool ->
+  ?allow_class_string_cast:bool ->
   t ->
   t
 

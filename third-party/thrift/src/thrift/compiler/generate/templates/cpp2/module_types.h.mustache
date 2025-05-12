@@ -15,15 +15,15 @@
   limitations under the License.
 
 }}
+{{#import "types/schema_association" as schema_association}}
 {{> Autogen}}
+
 #pragma once
 
 #include <thrift/lib/cpp2/gen/module_types_h.h>
-
 {{#program:frozen?}}
 #include <thrift/lib/cpp/Frozen.h>
 {{/program:frozen?}}
-
 {{#program:thrift_includes}}
 #include "{{program:include_prefix}}{{program:name}}_types.h"
 {{/program:thrift_includes}}
@@ -32,8 +32,7 @@
 {{/program:cpp_includes}}
 
 {{#program:structs?}}
-namespace apache {
-namespace thrift {
+namespace apache::thrift {
 namespace ident {
 {{#program:structs}}
 {{#struct:fields}}
@@ -51,8 +50,7 @@ APACHE_THRIFT_DEFINE_ACCESSOR({{field:cpp_name}});
 {{/struct:fields}}
 {{/program:structs}}
 } // namespace detail
-} // namespace thrift
-} // namespace apache
+} // namespace apache::thrift
 
 {{/program:structs?}}
 {{> module_types_h/declare_enums}}
@@ -105,7 +103,7 @@ using ::apache::thrift::detail::operator>=;
 {{#program:structs_and_typedefs}}
 {{^is_struct?}}
 {{> common/typedef_docblock }}
-typedef {{typedef:cpp_type}} {{typedef:name}};
+using {{typedef:name}} = {{typedef:cpp_type}};
 {{/is_struct?}}
 {{#is_struct?}}
 
@@ -259,7 +257,7 @@ class {{#struct:exception?}}FOLLY_EXPORT {{/struct:exception?}}{{struct:cpp_unde
 {{/struct:cpp_noncopyable}}
 
 {{#struct:cpp_allocator}}
-{{> module_types_h/alloc_extended_ctors}}
+{{> module_types_h/alloc_extended_ctors_decl}}
 {{/struct:cpp_allocator}}
 
 {{#struct:is_eligible_for_constexpr?}}
@@ -383,12 +381,19 @@ using {{struct:cpp_name}} = {{struct:cpp_underlying_type}};
 {{> module_types_h/frozen}}
 
 {{/program:structs}}{{/program:frozen?}}
-{{> module_types_h/declare_union_types}}{{!
+{{> module_types_h/declare_union_types}}
 
-}}{{#program:tablebased?}}
-namespace apache {
-namespace thrift {
-namespace detail {
+namespace apache::thrift::detail {
+{{#program:structs}}
+{{#partial schema_association.declaration node=struct:self}}
+{{/program:structs}}
+{{#program:enums}}
+{{#partial schema_association.declaration node=enum:self}}
+{{/program:enums}}
+} // namespace apache::thrift::detail
+{{#program:tablebased?}}
+
+namespace apache::thrift::detail {
 {{#program:structs}}
 template <>
 struct TypeToInfo<
@@ -401,9 +406,9 @@ struct TypeToInfo<
   template <>
     struct TypeToInfo<
         ::apache::thrift::type_class::enumeration,
-        ::{{program:qualified_namespace}}::{{enum:cpp_name}}> {
+        ::{{program:qualified_namespace}}::{{enum:self.cpp_name}}> {
     static const ::apache::thrift::detail::TypeInfo typeInfo;
   };
 {{/program:enums}}
-}}} // namespace apache::thrift::detail
+} // namespace apache::thrift::detail
 {{/program:tablebased?}}

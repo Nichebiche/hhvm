@@ -18,33 +18,29 @@ package thrift
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
-	"os"
 	"runtime"
 	"testing"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/dummy"
 	"github.com/facebook/fbthrift/thrift/lib/go/thrift/types"
+	dummyif "github.com/facebook/fbthrift/thrift/test/go/if/dummy"
+	"github.com/stretchr/testify/require"
 )
 
-func TestClient(t *testing.T) {
+func TestNewClientConnectionScenarios(t *testing.T) {
 	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	processor := dummy.NewDummyProcessor(&dummy.DummyHandler{})
+	require.NoError(t, err)
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
 	server := NewServer(processor, listener, TransportIDRocket)
-	serverCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		err := server.ServeContext(serverCtx)
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("unexpected error in ServeContext: %v", err)
-		}
-	}()
+	serverCtx, serverCancel := context.WithCancel(context.Background())
+	var serverEG errgroup.Group
+	serverEG.Go(func() error {
+		return server.ServeContext(serverCtx)
+	})
 
 	addr := listener.Addr()
 
@@ -59,13 +55,9 @@ func TestClient(t *testing.T) {
 			return net.Dial(addr.Network(), addr.String())
 		}),
 	)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	require.NoError(t, err)
 	err = client.Close()
-	if err != nil {
-		t.Fatalf("failed to close client: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Testing unsuccessful client connection (cannot connect at all)
 	client, err = NewClient(
@@ -75,15 +67,10 @@ func TestClient(t *testing.T) {
 		}),
 	)
 	expectedErrMsg := "dial unix /tmp/non_existent_garbage_socket_12345: connect: no such file or directory"
-	if err.Error() != expectedErrMsg {
-		t.Fatalf("unexpected error when creating client: %v", err)
-	}
+	require.ErrorContains(t, err, expectedErrMsg)
 
 	// Testing unsuccessful client connection (can connect, but cannot create client)
-	fdCountBefore, err := getNumFileDesciptors()
-	if err != nil {
-		t.Fatal(fmt.Sprintf("failed to get FD count: %#v", err))
-	}
+	fdCountBefore := getNumFileDesciptors(t)
 	client, err = NewClient(
 		WithRocket(),
 		// Invalid protocol that intentionally breaks client creation
@@ -93,34 +80,76 @@ func TestClient(t *testing.T) {
 		}),
 	)
 	expectedErrMsg = "Unknown protocol id: 12345"
-	if err.Error() != expectedErrMsg {
-		t.Fatalf("unexpected error when creating client: %v", err)
-	}
+	require.ErrorContains(t, err, expectedErrMsg)
 	// IMPORTANT!
 	// Even though we perform an explicit call to Close() in NewClient()
 	// upon protocol error, actual FD closing is done by the garbage collector.
 	// Without the GC call below - the FD may still linger and affect test results.
 	runtime.GC()
-	fdCountAfter, err := getNumFileDesciptors()
-	if err != nil {
-		t.Fatalf("failed to get FD count: %v", err)
-	}
-	if fdCountAfter > fdCountBefore {
-		t.Fatalf("FDs got leaked: %d (before), %d (after)", fdCountBefore, fdCountAfter)
-	}
+	fdCountAfter := getNumFileDesciptors(t)
+	require.LessOrEqual(t, fdCountAfter, fdCountBefore, "FDs got leaked: %d (before), %d (after)", fdCountBefore, fdCountAfter)
+
+	// Shut down server.
+	serverCancel()
+	err = serverEG.Wait()
+	require.ErrorIs(t, err, context.Canceled)
 }
 
-func getNumFileDesciptors() (int, error) {
-	fdDir, err := os.Open(fmt.Sprintf("/proc/%d/fd", os.Getpid()))
-	if err != nil {
-		return -1, err
-	}
-	defer fdDir.Close()
+func TestNewClientCreation(t *testing.T) {
+	listener, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	processor := dummyif.NewDummyProcessor(&dummy.DummyHandler{})
+	server := NewServer(processor, listener, TransportIDRocket)
+	serverCtx, serverCancel := context.WithCancel(context.Background())
+	var serverEG errgroup.Group
+	serverEG.Go(func() error {
+		return server.ServeContext(serverCtx)
+	})
 
-	files, err := fdDir.Readdirnames(-1)
-	if err != nil {
-		return -1, err
-	}
+	addr := listener.Addr()
 
-	return len(files), nil
+	t.Run("Rocket", func(t *testing.T) {
+		channel, err := NewClient(
+			WithRocket(),
+			WithDialer(func() (net.Conn, error) {
+				return net.Dial(addr.Network(), addr.String())
+			}),
+		)
+		require.NoError(t, err)
+		require.IsType(t, &rocketClient{}, channel)
+
+		err = channel.Close()
+		require.NoError(t, err)
+	})
+
+	t.Run("UpgradeToRocket", func(t *testing.T) {
+		channel, err := NewClient(
+			WithUpgradeToRocket(),
+			WithDialer(func() (net.Conn, error) {
+				return net.Dial(addr.Network(), addr.String())
+			}),
+		)
+		require.NoError(t, err)
+		require.IsType(t, &SerialChannel{}, channel)
+		err = channel.Close()
+		require.NoError(t, err)
+	})
+
+	t.Run("Header", func(t *testing.T) {
+		channel, err := NewClient(
+			WithHeader(),
+			WithDialer(func() (net.Conn, error) {
+				return net.Dial(addr.Network(), addr.String())
+			}),
+		)
+		require.NoError(t, err)
+		require.IsType(t, &SerialChannel{}, channel)
+		err = channel.Close()
+		require.NoError(t, err)
+	})
+
+	// Shut down server.
+	serverCancel()
+	err = serverEG.Wait()
+	require.ErrorIs(t, err, context.Canceled)
 }

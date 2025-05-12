@@ -18,25 +18,18 @@ import thrift.python.exceptions as _fbthrift_python_exceptions
 from test.fixtures.enums.module.thrift_enums import (
     Metasyntactic,
     Metasyntactic as _fbthrift_Metasyntactic,
-    _fbthrift_compatible_with_Metasyntactic,
     MyEnum1,
     MyEnum1 as _fbthrift_MyEnum1,
-    _fbthrift_compatible_with_MyEnum1,
     MyEnum2,
     MyEnum2 as _fbthrift_MyEnum2,
-    _fbthrift_compatible_with_MyEnum2,
     MyEnum3,
     MyEnum3 as _fbthrift_MyEnum3,
-    _fbthrift_compatible_with_MyEnum3,
     MyEnum4,
     MyEnum4 as _fbthrift_MyEnum4,
-    _fbthrift_compatible_with_MyEnum4,
     MyBitmaskEnum1,
     MyBitmaskEnum1 as _fbthrift_MyBitmaskEnum1,
-    _fbthrift_compatible_with_MyBitmaskEnum1,
     MyBitmaskEnum2,
     MyBitmaskEnum2 as _fbthrift_MyBitmaskEnum2,
-    _fbthrift_compatible_with_MyBitmaskEnum2,
 )
 
 
@@ -108,26 +101,26 @@ class SomeStruct(metaclass=_fbthrift_python_types.StructMeta):
         return self
 
     def _to_mutable_python(self):
-        import thrift.python.mutable_converter
+        from thrift.python import mutable_converter
         import importlib
         mutable_types = importlib.import_module("test.fixtures.enums.module.thrift_mutable_types")
-        return thrift.python.mutable_converter.to_mutable_python_struct_or_union(mutable_types.SomeStruct, self)
+        return mutable_converter.to_mutable_python_struct_or_union(mutable_types.SomeStruct, self)
 
     def _to_py3(self):
         import importlib
         py3_types = importlib.import_module("test.fixtures.enums.module.types")
-        import thrift.py3.converter
-        return thrift.py3.converter.to_py3_struct(py3_types.SomeStruct, self)
+        from thrift.py3 import converter
+        return converter.to_py3_struct(py3_types.SomeStruct, self)
 
     def _to_py_deprecated(self):
         import importlib
-        import thrift.util.converter
+        from thrift.util import converter
         try:
             py_deprecated_types = importlib.import_module("module.ttypes")
-            return thrift.util.converter.to_py_struct(py_deprecated_types.SomeStruct, self)
+            return converter.to_py_struct(py_deprecated_types.SomeStruct, self)
         except ModuleNotFoundError:
             py_asyncio_types = importlib.import_module("module.ttypes")
-            return thrift.util.converter.to_py_struct(py_asyncio_types.SomeStruct, self)
+            return converter.to_py_struct(py_asyncio_types.SomeStruct, self)
 
 _fbthrift_ABCMeta.register(_fbthrift_abstract_types.SomeStruct, SomeStruct)
 _fbthrift_SomeStruct = SomeStruct
@@ -200,26 +193,26 @@ class MyStruct(metaclass=_fbthrift_python_types.StructMeta):
         return self
 
     def _to_mutable_python(self):
-        import thrift.python.mutable_converter
+        from thrift.python import mutable_converter
         import importlib
         mutable_types = importlib.import_module("test.fixtures.enums.module.thrift_mutable_types")
-        return thrift.python.mutable_converter.to_mutable_python_struct_or_union(mutable_types.MyStruct, self)
+        return mutable_converter.to_mutable_python_struct_or_union(mutable_types.MyStruct, self)
 
     def _to_py3(self):
         import importlib
         py3_types = importlib.import_module("test.fixtures.enums.module.types")
-        import thrift.py3.converter
-        return thrift.py3.converter.to_py3_struct(py3_types.MyStruct, self)
+        from thrift.py3 import converter
+        return converter.to_py3_struct(py3_types.MyStruct, self)
 
     def _to_py_deprecated(self):
         import importlib
-        import thrift.util.converter
+        from thrift.util import converter
         try:
             py_deprecated_types = importlib.import_module("module.ttypes")
-            return thrift.util.converter.to_py_struct(py_deprecated_types.MyStruct, self)
+            return converter.to_py_struct(py_deprecated_types.MyStruct, self)
         except ModuleNotFoundError:
             py_asyncio_types = importlib.import_module("module.ttypes")
-            return thrift.util.converter.to_py_struct(py_asyncio_types.MyStruct, self)
+            return converter.to_py_struct(py_asyncio_types.MyStruct, self)
 
 _fbthrift_ABCMeta.register(_fbthrift_abstract_types.MyStruct, MyStruct)
 _fbthrift_MyStruct = MyStruct

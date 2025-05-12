@@ -75,12 +75,13 @@ add_library(
   ast/t_package.cc
   ast/t_paramlist.cc
   ast/t_program.cc
-  ast/t_scope.cc
+  ast/t_global_scope.cc
   ast/t_set.cc
   ast/t_structured.cc
   ast/t_type.cc
   ast/t_typedef.cc
   ast/t_union.cc
+  ast/scope_identifier.cc
 )
 target_link_libraries(
   compiler_ast
@@ -103,6 +104,7 @@ target_link_libraries(
   compiler_base
   fmt::fmt
   Boost::boost
+  shared
   ${FBTHRIFT_COMPILER_LINK_CXXFS}
 )
 
@@ -127,6 +129,7 @@ add_library(
   sema/schematizer.cc
   sema/standard_validator.cc
 )
+target_compile_definitions(compiler_lib PRIVATE THRIFT_OSS)
 target_link_libraries(
   compiler_lib
   compiler_base
@@ -157,9 +160,9 @@ add_library(
   whisker
   STATIC
 
-  whisker/detail/string.cc
   whisker/ast.cc
   whisker/dsl.cc
+  whisker/detail/string.cc
   whisker/eval_context.cc
   whisker/lexer.cc
   whisker/mstch_compat.cc
@@ -169,7 +172,6 @@ add_library(
   whisker/render.cc
   whisker/standard_library.cc
   whisker/token.cc
-  whisker/tree_printer.cc
 )
 target_link_libraries(
   whisker
@@ -195,7 +197,6 @@ add_executable(
   main.cc
   compiler.cc
 )
-target_compile_definitions(thrift1 PRIVATE THRIFT_OSS)
 target_link_libraries(
   thrift1
   compiler_ast
@@ -231,6 +232,7 @@ install(
     compiler_lib
     compiler
     whisker
+    shared
   EXPORT fbthrift-exports
   RUNTIME DESTINATION ${BIN_INSTALL_DIR}
   LIBRARY DESTINATION ${LIB_INSTALL_DIR}

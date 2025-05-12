@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <common/logging/logging.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/synchronization/Baton.h>
@@ -25,6 +24,26 @@
 #include "squangle/mysql_client/PoolStorage.h"
 #include "squangle/mysql_client/ResetOperation.h"
 #include "squangle/mysql_client/SpecialOperation.h"
+
+// The normal LOG_EVERY_N() macro is not thread safe, so we need to use this
+#define SQUANGLE_LOG_EVERY_N_ATOMIC(severity, n)                            \
+  DCHECK(n > 1);                                                            \
+  /* For performance reasons, let's require a power of 2 for `n` to make */ \
+  /* the `%` operation a simpler operation. */                              \
+  DCHECK_EQ(n&(n - 1), 0);                                                  \
+  static std::atomic<int> LOG_OCCURRENCES = 0;                              \
+  auto val = LOG_OCCURRENCES.fetch_add(1, std::memory_order_relaxed);       \
+  /* We can just rely on the `%` operator here.  It will work regardless */ \
+  /* of what `n` is, but if `n` is a power of 2 (like we check above), */   \
+  /* the compiler will replace it with `if (val & (n - 1) == 0) {` */       \
+  if (val % n == 0)                                                         \
+  google::LogMessage(                                                       \
+      __FILE__,                                                             \
+      __LINE__,                                                             \
+      google::GLOG_##severity,                                              \
+      LOG_OCCURRENCES,                                                      \
+      &google::LogMessage::SendToLog)                                       \
+      .stream()
 
 namespace facebook::common::mysql_client {
 namespace mysql_protocol {
@@ -739,7 +758,7 @@ class ConnectionPool
     // Check server_status for in_transaction bit
     if (mysql_conn->inTransaction()) {
       // To avoid complication, we are just going to close the connection
-      LOG_EVERY_N_ATOMIC(INFO, 1000)
+      SQUANGLE_LOG_EVERY_N_ATOMIC(INFO, 1024)
           << "Closing connection during a transaction."
           << " Transaction will rollback.";
       return;

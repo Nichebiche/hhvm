@@ -17,7 +17,7 @@
 package types
 
 ///////////////////////////////////////////////////////////////////////////////
-// This file is home to helpers that convert from various base types to
+// This file is home to a helper that converts from various base types to
 // respective pointer types. This is necessary because Go does not permit
 // references to constants, nor can a pointer type to base type be allocated
 // and initialized in a single expression.
@@ -28,25 +28,19 @@ package types
 //
 // But this *is* allowed:
 //
-//    func IntPtr(i int) *int { return &i }
-//    var ip *int = IntPtr(5)
+//    var ip *int = Pointerize(5)
 //
 // Since pointers to base types are commonplace as [optional] fields in
 // exported thrift structs, we factor such helpers here.
 ///////////////////////////////////////////////////////////////////////////////
 
-func Float32Ptr(v float32) *float32 { return &v }
-func Float64Ptr(v float64) *float64 { return &v }
-func IntPtr(v int) *int             { return &v }
-func Int8Ptr(v int8) *int8          { return &v }
-func Int16Ptr(v int16) *int16       { return &v }
-func Int32Ptr(v int32) *int32       { return &v }
-func Int64Ptr(v int64) *int64       { return &v }
-func StringPtr(v string) *string    { return &v }
-func Uint8Ptr(v uint8) *uint8       { return &v }
-func Uint16Ptr(v uint16) *uint16    { return &v }
-func Uint32Ptr(v uint32) *uint32    { return &v }
-func Uint64Ptr(v uint64) *uint64    { return &v }
-func BoolPtr(v bool) *bool          { return &v }
-func BytePtr(v byte) *byte          { return &v }
-func ByteSlicePtr(v []byte) *[]byte { return &v }
+// ThriftPointerizable is a type constraint meant to prevent Pointerize() API abuse.
+// e.g. using outside of Thrift context or with non-Thrift types
+type ThriftPointerizable interface {
+	bool | int8 | int16 | ~int32 | int64 | float32 | float64 | string
+}
+
+// Pointerize returns a pointer to the given value.
+func Pointerize[T ThriftPointerizable](val T) *T {
+	return &val
+}

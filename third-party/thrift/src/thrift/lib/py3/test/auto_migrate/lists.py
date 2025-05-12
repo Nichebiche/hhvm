@@ -95,7 +95,11 @@ class ListTests(unittest.TestCase):
 
     def test_no_dict(self) -> None:
         with self.assertRaises(AttributeError):
-            I32List().__dict__
+            List__i32().__dict__
+
+    def test_default_ctor(self) -> None:
+        self.assertEqual(I32List(), [])
+        self.assertEqual(List__i32(), [])
 
     @brokenInAutoMigrate()
     def test_list_add(self) -> None:
@@ -204,6 +208,14 @@ class ListTests(unittest.TestCase):
         self.assertNotEqual(t_list, easy())
         self.assertNotEqual(easy(), t_list)
 
+    def test_list_from_iterable(self) -> None:
+        colors = map(Color, range(3))
+        self.assertEqual(
+            # pyre-ignore[6]: deliberately incompatible parameter type
+            ColorGroups(color_list=colors).color_list,
+            [Color.red, Color.blue, Color.green],
+        )
+
     @brokenInAutoMigrate()
     def test_is_container(self) -> None:
         self.assertIsInstance(int_list, Container)
@@ -263,6 +275,9 @@ class ListTests(unittest.TestCase):
         self.assertEqual(list(y), x)
 
     # thrift-python doesn't believe in flat-name containers
-    @brokenInAutoMigrate()
     def test_list_module(self) -> None:
-        self.assertEqual(I32List.__module__, "testing.types")
+        # typedefs are ListTypeFactory in auto-migrate
+        if not is_auto_migrated():
+            self.assertEqual(I32List.__module__, "testing.types")
+        # flat name containers are always .types
+        self.assertEqual(List__i32.__module__, "testing.types")

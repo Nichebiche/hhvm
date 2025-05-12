@@ -44,7 +44,6 @@
 #include "hphp/runtime/base/request-id.h"
 #include "hphp/runtime/base/runtime-error.h"
 #include "hphp/runtime/base/runtime-option.h"
-#include "hphp/runtime/base/stat-cache.h"
 #include "hphp/runtime/base/stream-wrapper-registry.h"
 #include "hphp/runtime/base/surprise-flags.h"
 #include "hphp/runtime/base/thread-safe-setlocale.h"
@@ -53,15 +52,8 @@
 #include "hphp/runtime/base/variable-serializer.h"
 #include "hphp/runtime/base/verify-types.h"
 #include "hphp/runtime/debugger/debugger.h"
-#include "hphp/runtime/debugger/debugger_client.h"
 #include "hphp/runtime/debugger/debugger_hook_handler.h"
-#include "hphp/runtime/ext/apc/ext_apc.h"
 #include "hphp/runtime/ext/extension-registry.h"
-#include "hphp/runtime/ext/json/ext_json.h"
-#include "hphp/runtime/ext/server/ext_server.h"
-#include "hphp/runtime/ext/std/ext_std_file.h"
-#include "hphp/runtime/ext/std/ext_std_function.h"
-#include "hphp/runtime/ext/std/ext_std_variable.h"
 #include "hphp/runtime/ext/string/ext_string.h"
 #include "hphp/runtime/ext/strobelight/ext_strobelight.h"
 #include "hphp/runtime/ext/xenon/ext_xenon.h"
@@ -69,7 +61,6 @@
 #include "hphp/runtime/server/cli-server.h"
 #include "hphp/runtime/server/http-request-handler.h"
 #include "hphp/runtime/server/http-server.h"
-#include "hphp/runtime/server/log-writer.h"
 #include "hphp/runtime/server/pagelet-server.h"
 #include "hphp/runtime/server/replay-transport.h"
 #include "hphp/runtime/server/xbox-request-handler.h"
@@ -78,9 +69,7 @@
 #include "hphp/runtime/server/static-content-cache.h"
 #include "hphp/runtime/server/warmup-request-handler.h"
 #include "hphp/runtime/server/xbox-server.h"
-#include "hphp/runtime/vm/builtin-symbol-map.h"
 #include "hphp/runtime/vm/debug/debug.h"
-#include "hphp/runtime/vm/jit/code-cache.h"
 #include "hphp/runtime/vm/jit/mcgen-async.h"
 #include "hphp/runtime/vm/jit/mcgen-translate.h"
 #include "hphp/runtime/vm/jit/mcgen.h"
@@ -100,7 +89,6 @@
 #include "hphp/util/boot-stats.h"
 #include "hphp/util/build-info.h"
 #include "hphp/util/capability.h"
-#include "hphp/util/compatibility.h"
 #include "hphp/util/configs/adminserver.h"
 #include "hphp/util/configs/debug.h"
 #include "hphp/util/configs/debugger.h"
@@ -165,7 +153,6 @@
 // https://github.com/kkos/oniguruma/commit/e79406479b6be4a56e40ede6c1a87b51fba073a2
 #undef UChar
 #include <signal.h>
-#include <libxml/parser.h>
 
 #include <chrono>
 #include <exception>
@@ -474,7 +461,7 @@ static void handle_exception_append_bt(std::string& errorMsg,
   }
 }
 
-void bump_counter_and_rethrow(bool isPsp) {
+void bump_counter_and_rethrow(bool isPsp, ExecutionContext* context) {
   try {
     throw;
   } catch (const RequestTimeoutException&) {
@@ -489,6 +476,7 @@ void bump_counter_and_rethrow(bool isPsp) {
       requestTimeoutCounter->addValue(1);
       ServerStats::Log("request.timed_out.non_psp", 1);
     }
+    context->markTimedOut();
     throw;
   } catch (const RequestCPUTimeoutException&) {
     if (isPsp) {
@@ -502,6 +490,7 @@ void bump_counter_and_rethrow(bool isPsp) {
       requestCPUTimeoutCounter->addValue(1);
       ServerStats::Log("request.cpu_timed_out.non_psp", 1);
     }
+    context->markTimedOut();
     throw;
   } catch (const RequestMemoryExceededException&) {
     if (isPsp) {
@@ -533,11 +522,10 @@ void bump_counter_and_rethrow(bool isPsp) {
       StructuredLogEntry entry;
       entry.setInt("mem_used", e.m_usedBytes);
       entry.setInt("is_psp", static_cast<int>(isPsp));
-      if (g_context) {
-        entry.setStr("url", g_context->getRequestUrl());
-      }
+      entry.setStr("url", context->getRequestUrl());
       StructuredLog::log("hhvm_oom_killed", entry);
     }
+    context->markOOMKilled();
     throw;
   }
 }
@@ -557,7 +545,7 @@ static void handle_exception_helper(bool& ret,
   };
 
   try {
-    bump_counter_and_rethrow(false /* isPsp */);
+    bump_counter_and_rethrow(false /* isPsp */, context);
   } catch (const Eval::DebuggerException&) {
     throw;
   } catch (const ExitException& e) {
@@ -1674,7 +1662,7 @@ static int execute_program_impl(int argc, char** argv) {
       // Process the options
       store(opts, vm);
       notify(vm);
-      if (vm.count("interactive") /* or -a */) {
+      if (vm.contains("interactive") /* or -a */) {
         po.mode = ExecutionMode::DEBUG;
       }
 
@@ -1732,7 +1720,7 @@ static int execute_program_impl(int argc, char** argv) {
     cout << desc << "\n";
     return 0;
   }
-  if (vm.count("version")) {
+  if (vm.contains("version")) {
     cout << "HipHop VM";
     cout << " " << HHVM_VERSION;
     cout << " (" << (debug ? "dbg" : "rel") << ")";
@@ -1741,7 +1729,9 @@ static int execute_program_impl(int argc, char** argv) {
     cout << "Repo schema: " << repoSchemaId() << "\n";
     return 0;
   }
-  if (vm.count("modules")) {
+  if (vm.contains("modules")) {
+    rds::local::init();
+    SCOPE_EXIT { rds::local::fini(); };
     tl_heap.getCheck();
     Array exts = ExtensionRegistry::getLoaded();
     cout << "[PHP Modules]" << "\n";
@@ -1750,12 +1740,12 @@ static int execute_program_impl(int argc, char** argv) {
     }
     return 0;
   }
-  if (vm.count("compiler-id")) {
+  if (vm.contains("compiler-id")) {
     cout << compilerId() << "\n";
     return 0;
   }
 
-  if (vm.count("repo-schema")) {
+  if (vm.contains("repo-schema")) {
     cout << repoSchemaId() << "\n";
     return 0;
   }
@@ -1866,7 +1856,7 @@ static int execute_program_impl(int argc, char** argv) {
       printf("%s\n", value.toString().data());
       return 0;
     }
-    if (vm.count("repo-option-hash")) {
+    if (vm.contains("repo-option-hash")) {
       rds::local::init();
       SCOPE_EXIT { rds::local::fini(); };
 
@@ -2027,8 +2017,7 @@ static int execute_program_impl(int argc, char** argv) {
 #if USE_JEMALLOC_EXTENT_HOOKS
   if (Cfg::Server::Mode) {
     purge_all();
-    setup_arena0({Cfg::Eval::Num1GPagesForA0,
-                  Cfg::Eval::Num2MPagesForA0});
+    setup_auto_arenas({Cfg::Eval::Num1GPagesForA0, Cfg::Eval::Num2MPagesForA0});
   }
   if (Cfg::Eval::FileBackedColdArena) {
     set_cold_file_dir(Cfg::Eval::ColdArenaFileDir.c_str());
@@ -2089,7 +2078,7 @@ static int execute_program_impl(int argc, char** argv) {
     exit(HPHP_EXIT_FAILURE);
   }
 
-  if (vm.count("check-repo")) {
+  if (vm.contains("check-repo")) {
     hphp_thread_init();
     always_assert(Cfg::Repo::Authoritative);
     init_repo_file();
@@ -2098,7 +2087,7 @@ static int execute_program_impl(int argc, char** argv) {
     return 0;
   }
 
-  if (vm.count("verify-resolutions")) {
+  if (vm.contains("verify-resolutions")) {
     if (po.args.size() < 2) {
       fprintf(stderr,
               "Usage: %s --verify-resolutions [hhbc-repo] [src-root]\n",
@@ -2521,6 +2510,10 @@ void cli_client_init() {
   InitFiniNode::ThreadInit();
   hphp_memory_cleanup();
   g_context.getCheck();
+  if (!registrationComplete) {
+    folly::SingletonVault::singleton()->registrationComplete();
+    registrationComplete = true;
+  }
   AsioSession::Init();
   Socket::clearLastError();
   RI().onSessionInit(RequestId::allocate());

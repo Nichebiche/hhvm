@@ -23,7 +23,6 @@
 #include "hphp/runtime/vm/jit/call-target-profile.h"
 #include "hphp/runtime/vm/jit/guard-constraint.h"
 #include "hphp/runtime/vm/jit/meth-profile.h"
-#include "hphp/runtime/vm/jit/normalized-instruction.h"
 #include "hphp/runtime/vm/jit/target-profile.h"
 #include "hphp/runtime/vm/jit/translate-region.h"
 #include "hphp/runtime/vm/jit/type.h"
@@ -35,15 +34,12 @@
 #include "hphp/runtime/vm/jit/irgen-create.h"
 #include "hphp/runtime/vm/jit/irgen-exit.h"
 #include "hphp/runtime/vm/jit/irgen-func-prologue.h"
-#include "hphp/runtime/vm/jit/irgen-minstr.h"
 #include "hphp/runtime/vm/jit/irgen-inlining.h"
 #include "hphp/runtime/vm/jit/irgen-internal.h"
 #include "hphp/runtime/vm/jit/irgen-interpone.h"
-#include "hphp/runtime/vm/jit/irgen-types.h"
 
 #include "hphp/util/configs/debugger.h"
 #include "hphp/util/configs/eval.h"
-#include "hphp/util/configs/hhir.h"
 #include "hphp/util/configs/jit.h"
 #include "hphp/util/configs/sandbox.h"
 
@@ -405,7 +401,7 @@ void speculateTargetFunction(IRGS& env, SSATmp* callee,
   const Func* profiledFunc = choices[attempts].func;
   double probability = choices[attempts].probability / remainingProb;
   // Don't emit the check if the probability of it succeeding is below the
-  // threshold.  
+  // threshold.
   if (probability * 100 < Cfg::Jit::PGOCalledFuncCheckThreshold) {
     return indirectCall();
   }
@@ -434,7 +430,7 @@ void speculateTargetFunction(IRGS& env, SSATmp* callee,
  * is the given profiled function and if so, emit a code to invoke it directly.
  */
 template<class TKnown, class TUnknown>
-void callProfiledFunc(IRGS& env, SSATmp* callee,
+void callProfiledFunc(IRGS& env, SSATmp* callee, SSATmp* objOrClass,
                       TKnown callKnown, TUnknown callUnknown) {
   if (!Cfg::Repo::Authoritative) return callUnknown(false);
 
@@ -456,8 +452,21 @@ void callProfiledFunc(IRGS& env, SSATmp* callee,
       folly::sformat("BC={} FN={}: {}\n", bcOff(env), fnName, data.toString())
     );
   }
+  auto choices = [&]() {
+    jit::vector<CallTargetProfile::Choice> result;
+    const Class* targetClass = objOrClass ? objOrClass->type().clsSpec().cls() : nullptr;
+    for (auto const& choice: data.choose()) {
+      auto const choiceClass = choice.func->implCls();
+      bool includeChoice = !targetClass || !choiceClass || choiceClass->classof(targetClass) ||
+                           targetClass->lookupMethod(choice.func->name()) == choice.func;
+      if (includeChoice) {
+        result.push_back(choice);
+      }
+    }
+    return result;
+  }();
 
-  speculateTargetFunction(env, callee, callKnown, callUnknown, data.choose(), 
+  speculateTargetFunction(env, callee, callKnown, callUnknown, choices,
                           0, Cfg::Jit::PGOCalledFuncCheckNumSpeculations);
 }
 
@@ -506,12 +515,47 @@ constParamCacheLink(IRGS& env, const Func* callee, SSATmp* cls,
   return rds::bindConstMemoCache(callee, clsVal, paramVals, asyncEagerReturn);
 }
 
+SSATmp* refineKnownFuncCtx(IRGS& env, const Func* callee, SSATmp* ctx) {
+  if (callee->isClosureBody()) {
+    return gen(env, AssertType, Type::ExactObj(callee->implCls()), ctx);
+  }
+
+  if (!callee->cls()) {
+    assertx(ctx == nullptr);
+    return ctx;
+  }
+  assertx(!ctx->type().maybe(TNullptr));
+
+  if (ctx->isA(TBottom)) return ctx;
+
+  if (callee->isStatic()) {
+    if (!ctx->type().maybe(TCls)) return cns(env, TBottom);
+    if (ctx->hasConstVal(TCls)) return ctx;
+
+    auto const ty = ctx->type() & Type::SubCls(callee->cls());
+    if (ctx->type() <= ty) return ctx;
+    return gen(env, AssertType, ty, ctx);
+  }
+
+  if (!ctx->type().maybe(TObj)) return cns(env, TBottom);
+
+  auto const ty = ctx->type() & thisTypeFromFunc(callee);
+  if (ctx->type() <= ty) return ctx;
+  return gen(env, AssertType, ty, ctx);
+}
+
 void prepareAndCallKnown(IRGS& env, const Func* callee, const FCallArgs& fca,
                          SSATmp* objOrClass, bool dynamicCall,
                          bool suppressDynCallCheck) {
   assertx(callee);
 
   updateStackOffset(env);
+
+  objOrClass = refineKnownFuncCtx(env, callee, objOrClass);
+  if (objOrClass != nullptr && objOrClass->isA(TBottom)) {
+    gen(env, Unreachable, ASSERT_REASON);
+    return;
+  }
 
   // Caller checks
   if (!emitCallerInOutChecksKnown(env, callee, fca)) return;
@@ -726,7 +770,7 @@ void prepareAndCallProfiled(IRGS& env, SSATmp* callee, const FCallArgs& fca,
                           dynamicCall, suppressDynCallCheck,
                           unlikely);
   };
-  callProfiledFunc(env, callee, handleKnown, handleUnknown);
+  callProfiledFunc(env, callee, objOrClass, handleKnown, handleUnknown);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -839,7 +883,7 @@ inline SSATmp* ldCtxForClsMethod(IRGS& env,
 
   auto gen_missing_this = [&] {
     gen(env, ThrowMissingThis, cns(env, callee));
-    return callCtx;
+    return cns(env, TBottom);
   };
 
   if (!hasThis(env)) {
@@ -2123,6 +2167,8 @@ void fcallClsMethodCommon(IRGS& env,
 
     auto const ctx = forward ? ldCtxCls(env) : clsVal;
     decRef(env, methVal);
+    // For dynamic methods such as $c::$foo(), numExtraInputs describes the
+    // number of stack values representing the callee that need to be discarded.
     discard(env, numExtraInputs);
     if (noCallProfiling) {
       prepareAndCallUnknown(env, func, fca, ctx,
@@ -2210,13 +2256,15 @@ void emitFCallClsMethodM(IRGS& env, FCallArgs fca, const StringData* clsHint,
   }
   auto const cls = [&] {
     if (name->isA(TCls)) return name;
-    if (name->isA(TStr) &&
-      Cfg::Eval::RaiseStrToClsConversionNoticeSampleRate > 0) {
-      gen(env, RaiseStrToClassNotice, name);
-    }
     auto const ret = name->isA(TObj) ?
       gen(env, LdObjClass, name) : ldCls(env, name);
-    if (name->isA(TStr)) emitModuleBoundaryCheck(env, ret, false);
+    if (name->isA(TStr)) {
+      emitModuleBoundaryCheck(env, ret, false);
+
+      if(Cfg::Eval::RaiseStrToClsConversionNoticeSampleRate > 0) {
+        gen(env, RaiseStrToClassNotice, name);
+      }
+    }
     decRef(env, name);
     return ret;
   }();

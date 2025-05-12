@@ -11,12 +11,6 @@ use std::fmt::Display;
 
 use analysis::PredecessorFlags;
 use analysis::Predecessors;
-use ir_core::instr::HasEdges;
-use ir_core::instr::HasOperands;
-use ir_core::instr::Hhbc;
-use ir_core::instr::IrToBc;
-use ir_core::instr::Special;
-use ir_core::instr::Terminator;
 use ir_core::Block;
 use ir_core::BlockId;
 use ir_core::BlockIdMap;
@@ -26,6 +20,12 @@ use ir_core::Instr;
 use ir_core::InstrId;
 use ir_core::InstrIdSet;
 use ir_core::ValueId;
+use ir_core::instr::HasEdges;
+use ir_core::instr::HasOperands;
+use ir_core::instr::Hhbc;
+use ir_core::instr::IrToBc;
+use ir_core::instr::Special;
+use ir_core::instr::Terminator;
 use itertools::Itertools;
 use print::FmtBid;
 use print::FmtRawVid;
@@ -426,7 +426,7 @@ impl<'b> VerifyFunc<'b> {
             // instruction.
             let expects_select = match *prev_instr {
                 Instr::Call(ref call) => call.num_rets >= 2,
-                Instr::Hhbc(Hhbc::ClassGetTS(..)) => true,
+                Instr::Hhbc(Hhbc::ClassGetTSWithGenerics(..)) => true,
                 Instr::MemberOp(ref op) => op.num_values() >= 2,
                 _ => false,
             };
@@ -484,7 +484,7 @@ impl<'b> VerifyFunc<'b> {
                     self.verify_selects(call.num_rets as usize, block, iid, iid_idx);
                 }
             }
-            Instr::Hhbc(Hhbc::ClassGetTS(..)) => {
+            Instr::Hhbc(Hhbc::ClassGetTSWithGenerics(..)) => {
                 self.verify_selects(2, block, iid, iid_idx);
             }
             Instr::MemberOp(ref op) => {

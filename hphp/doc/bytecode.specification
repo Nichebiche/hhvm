@@ -1357,15 +1357,26 @@ ClassGetC <mode>                   [C]  ->  [C:Class]
   sampled notice otherwise. If the target class fails to load, we throw a
   catchable InvalidArgumentException.
 
-ClassGetTS                         [C:Dict]  ->  [C:Class, C:StaticVec|Null]
+  UnsafeBackdoor mode:
+  Same as the last mode but skips the <<__DynamicallyReferenced>> check. Not
+  valid in repo mode and asserts in HHBBC.
+
+ClassGetTS                         [C:Dict]  ->  [C:Class]
 
   Fetch class from type-structure. This instruction checks if $1 is a valid
-  type-structure (darray or dict). If not, this instruction throws a fatal
-  error. Otherwise, $1['classname'] is loaded, and mangled as dictated by the
+  type-structure (dict). If not, this instruction throws a fatal error.
+  Otherwise, $1['classname'] is loaded as with ClassGetC in Normal mode
+  and the resulting class is pushed.
+
+ClassGetTSWithGenerics             [C:Dict]  ->  [C:Class, C:StaticVec]
+
+  Fetch class from type-structure. This instruction checks if $1 is a valid
+  type-structure (dict). If not, this instruction throws a fatal error.
+  Otherwise, $1['classname'] is loaded, and mangled as dictated by the
   type-structure's generics information (if present). The possibly mangled
   classname is then processed like ClassGetC and the resulting class is
   pushed. If present, the type-structure's generics information is processed as
-  in RecordReifiedGeneric and pushed. If not present, null is pushed.
+  in RecordReifiedGeneric and pushed. If not present, an empty vec is pushed.
 
 
 6. Isset and type querying instructions
@@ -2935,6 +2946,15 @@ VerifyRetTypeTS [C C]  ->  [C]
   an error is raised. This instruction also verifies the reified generic type
   parameters of $2.
 
+VerifyTypeTS [C C]  ->  [C]
+
+  VerifyTypeTS pops a type structure from the stack and checks whether
+  $2 is compatible with this type structure, checking tuples and shape elements,
+  and enum values, in contrast to other Verify instructions that only do
+  shallow checking. In case of a mismatch, a warning is issued. If the popped cell
+  is not a type structure, an error is raised. This instruction also verifies
+  the reified generic type parameters of $2.
+
 SelfCls                  []  ->  [C:Class]
 
   Push a class that refers to the class in which the current function is
@@ -2999,6 +3019,12 @@ NativeImpl    []  ->  []
   Native implementation. This instruction invokes the native implementation
   associated with current function and returns the return value to the caller
   of the current function.
+
+ReifiedInit <local variable id> [C:Class|LazyClass C:Obj] -> []
+
+  Checks if the class in $1 or its parent has reified generics. If yes, assigns vec %1
+  to the reified generics of object $2. Throws a fatal error if $1 is not a class
+  or lazy class.
 
 AKExists    [C C] -> [C:Bool]
 
@@ -3357,6 +3383,15 @@ AwaitAll<local-range>    []  ->  [C:Null]
   encountered. The stack must be empty. Should all of the Awaitables in %1
   already be complete a null will be pushed to the stack without suspending
   the current function.
+
+AwaitLowPri []  ->  [C:Null]
+
+  This instruction may only appear in bodies of async functions, and there
+  cannot be another await instruction before this one. This instruction suspends
+  execution into a new low priority AsyncFunctionWaitHandle. Moves all local
+  variables from the current frame into the object, sets resume offset at the
+  next opcode and suspends execution by transferring control flow back to the
+  caller.
 
 Basic statement transformations
 -------------------------------

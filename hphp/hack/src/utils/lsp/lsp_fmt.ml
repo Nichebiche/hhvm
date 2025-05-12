@@ -490,6 +490,7 @@ let print_diagnostic (diagnostic : PublishDiagnostics.diagnostic) : json =
           Some
             (JSON_Array (List.map diagnostic.relatedLocations ~f:print_related))
         );
+        ("data", diagnostic.data);
       ])
 
 let print_diagnostic_list (ds : PublishDiagnostics.diagnostic list) : json =
@@ -553,6 +554,7 @@ let parse_diagnostic (j : json option) : PublishDiagnostics.diagnostic =
         |> List.map ~f:parse_info;
       relatedLocations =
         Jget.array_d j "relatedLocations" ~default:[] |> List.map ~f:parse_info;
+      data = Jget.val_opt j "data";
     })
 
 let parse_kind json : CodeActionKind.t option =
@@ -1848,10 +1850,8 @@ let print_lsp_notification (notification : lsp_notification) : json =
     | FindReferencesPartialResultNotification (token, r) ->
       print_findReferencesPartialResult token r
     | TelemetryNotification (r, extras) -> print_telemetryNotification r extras
-    | LogMessageNotification r ->
-      print_logMessage r.LogMessage.type_ r.LogMessage.message
-    | ShowMessageNotification r ->
-      print_showMessage r.ShowMessage.type_ r.ShowMessage.message
+    | LogMessageNotification r -> print_logMessage r.type_ r.message
+    | ShowMessageNotification r -> print_showMessage r.type_ r.message
     | ConnectionStatusNotificationFB r -> print_connectionStatus r
     | ExitNotification
     | InitializedNotification

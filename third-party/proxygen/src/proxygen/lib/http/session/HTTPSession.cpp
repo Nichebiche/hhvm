@@ -218,8 +218,6 @@ void HTTPSession::setupCodec() {
   if (codec_->supportsSessionFlowControl() && !connFlowControl_) {
     connFlowControl_ = new FlowControlFilter(*this, writeBuf_, codec_.call());
     codec_.addFilters(std::unique_ptr<FlowControlFilter>(connFlowControl_));
-    // if we really support switching from spdy <-> h2, we need to update
-    // existing flow control filter
   }
   if (codec_->supportsParallelRequests() && sock_ &&
       codec_->getTransportDirection() == TransportDirection::DOWNSTREAM) {
@@ -437,6 +435,10 @@ void HTTPSession::closeWhenIdle() {
   if (!isBusy() && !hasMoreWrites()) {
     // if we're already idle, close now
     dropConnection();
+  } else if (isDownstream() && !readsShutdown()) {
+    auto to = getDrainTimeout();
+    VLOG(4) << "Starting drain timer t=" << to.count();
+    resetTimeoutTo(to);
   }
 }
 
@@ -583,7 +585,7 @@ void HTTPSession::readEOF() noexcept {
   VLOG(4) << "EOF on " << *this;
   // for SSL only: error without any bytes from the client might happen
   // due to client-side issues with the SSL cert. Note that it can also
-  // happen if the client sends a SPDY frame header but no body.
+  // happen if the client sends a H2 frame header but no body.
   if (infoCallback_ && transportInfo_.secure && getNumTxnServed() == 0 &&
       readBuf_.empty()) {
     infoCallback_->onIngressError(*this, kErrorClientSilent);
@@ -637,10 +639,6 @@ HTTPTransaction* HTTPSession::newPushedTransaction(
 
   if (outgoingStreams_ >= maxConcurrentOutgoingStreamsRemote_) {
     // This session doesn't support any more push transactions
-    // This could be an actual problem - since a single downstream SPDY session
-    // might be connected to N upstream hosts, each of which send M pushes,
-    // which exceeds the limit.
-    // should we queue?
     SET_PROXYGEN_ERROR_IF(
         error, ProxygenError::kErrorMaxConcurrentOutgoingStreamLimitReached);
     return nullptr;
@@ -705,26 +703,6 @@ size_t HTTPSession::getCodecSendWindowSize() const {
   return codec_->getDefaultWindowSize();
 }
 
-http2::PriorityUpdate HTTPSession::getMessagePriority(const HTTPMessage* msg) {
-  http2::PriorityUpdate h2Pri = http2::DefaultPriority;
-
-  // if HTTP2 priorities are enabled, get them from the message
-  // and ignore otherwise
-  if (getHTTP2PrioritiesEnabled() && msg) {
-    auto res = msg->getHTTP2Priority();
-    if (res) {
-      h2Pri.streamDependency = std::get<0>(*res);
-      h2Pri.exclusive = std::get<1>(*res);
-      h2Pri.weight = std::get<2>(*res);
-    } else {
-      // HTTPMessage with setPriority called explicitly
-      h2Pri.streamDependency =
-          codec_->mapPriorityToDependency(msg->getPriority());
-    }
-  }
-  return h2Pri;
-}
-
 void HTTPSession::onMessageBegin(HTTPCodec::StreamID streamID,
                                  HTTPMessage* msg) {
   VLOG(4) << "processing new msg streamID=" << streamID << " " << *this;
@@ -746,11 +724,8 @@ void HTTPSession::onMessageBegin(HTTPCodec::StreamID streamID,
     infoCallback_->onRequestBegin(*this);
   }
 
-  http2::PriorityUpdate messagePriority = getMessagePriority(msg);
-  txn = createTransaction(streamID,
-                          HTTPCodec::NoStream,
-                          HTTPCodec::NoExAttributes,
-                          messagePriority);
+  txn = createTransaction(
+      streamID, HTTPCodec::NoStream, HTTPCodec::NoExAttributes);
   if (!txn) {
     return; // This could happen if the socket is bad.
   }
@@ -816,9 +791,8 @@ void HTTPSession::onPushMessageBegin(HTTPCodec::StreamID streamID,
     return;
   }
 
-  http2::PriorityUpdate messagePriority = getMessagePriority(msg);
-  auto txn = createTransaction(
-      streamID, assocStreamID, HTTPCodec::NoExAttributes, messagePriority);
+  auto txn =
+      createTransaction(streamID, assocStreamID, HTTPCodec::NoExAttributes);
   if (!txn) {
     return; // This could happen if the socket is bad.
   }
@@ -857,12 +831,10 @@ void HTTPSession::onExMessageBegin(HTTPCodec::StreamID streamID,
     return;
   }
 
-  http2::PriorityUpdate messagePriority = getMessagePriority(msg);
   auto txn =
       createTransaction(streamID,
                         HTTPCodec::NoStream,
-                        HTTPCodec::ExAttributes(controlStream, unidirectional),
-                        messagePriority);
+                        HTTPCodec::ExAttributes(controlStream, unidirectional));
   if (!txn) {
     return; // This could happen if the socket is bad.
   }
@@ -1048,9 +1020,8 @@ void HTTPSession::onMessageComplete(HTTPCodec::StreamID streamID,
   }
 
   if (upgrade) {
-    /* Send the upgrade callback to the transaction and the handler.
-     * Currently we support upgrades for only HTTP sessions and not SPDY
-     * sessions.
+    /* Send the upgrade callback to the transaction and the handler. Only
+     * relevant for HTTP/1.1.
      */
     ingressUpgraded_ = true;
     txn->onIngressUpgrade(UpgradeProtocol::TCP);
@@ -1063,8 +1034,7 @@ void HTTPSession::onMessageComplete(HTTPCodec::StreamID streamID,
   // The codec knows, based on the semantics of whatever protocol it
   // supports, whether it's valid for any more ingress messages to arrive
   // after this one.  For example, an HTTP/1.1 request containing
-  // "Connection: close" indicates the end of the ingress, whereas a
-  // SPDY session generally can handle more messages at any time.
+  // "Connection: close" indicates the end of the ingress.
   //
   // If the connection is not reusable, we close the read side of it
   // but not the write side.  There are two reasons why more writes
@@ -1299,12 +1269,6 @@ void HTTPSession::onWindowUpdate(HTTPCodec::StreamID streamID,
           << amount << " bytes.";
   HTTPTransaction* txn = findTransaction(streamID);
   if (!txn) {
-    // We MUST be using SPDY/3+ if we got WINDOW_UPDATE. The spec says that -
-    //
-    // A sender should ignore all the WINDOW_UPDATE frames associated with the
-    // stream after it send the last frame for the stream.
-    //
-    // TODO: Only ignore if this is from some past transaction
     return;
   }
   txn->onIngressWindowUpdate(amount);
@@ -1339,23 +1303,12 @@ void HTTPSession::onSettingsAck() {
 }
 
 void HTTPSession::onPriority(HTTPCodec::StreamID streamID,
-                             const HTTPMessage::HTTP2Priority& pri) {
-  if (!getHTTP2PrioritiesEnabled()) {
-    return;
+                             const HTTPPriority&) {
+  if (getNumIncomingStreams() >= codec_->getEgressSettings()->getSetting(
+                                     SettingsId::MAX_CONCURRENT_STREAMS,
+                                     std::numeric_limits<int32_t>::max())) {
+    invalidStream(streamID, ErrorCode::PROTOCOL_ERROR);
   }
-  http2::PriorityUpdate h2Pri{
-      std::get<0>(pri), std::get<1>(pri), std::get<2>(pri)};
-  HTTPTransaction* txn = findTransaction(streamID);
-  if (txn) {
-    // existing txn, change pri
-    txn->onPriorityUpdate(h2Pri);
-  } else {
-    // virtual node
-    txnEgressQueue_.addOrUpdatePriorityNode(streamID, h2Pri);
-  }
-}
-
-void HTTPSession::onPriority(HTTPCodec::StreamID, const HTTPPriority&) {
 }
 
 void HTTPSession::onCertificateRequest(uint16_t requestId,
@@ -1607,22 +1560,11 @@ void HTTPSession::sendHeaders(HTTPTransaction* txn,
   if (draining_ && isUpstream() && codec_->isReusable() &&
       allTransactionsStarted()) {
     // For HTTP/1.1, add Connection: close
-    // For SPDY/H2, save the goaway for AFTER the request
+    // For H2, save the goaway for AFTER the request
     auto writeBuf = writeBuf_.move();
     drainImpl();
     goawayBuf = writeBuf_.move();
     writeBuf_.append(std::move(writeBuf));
-  }
-  if (isUpstream() || (txn->isPushed() && headers.isRequest())) {
-    // upstream picks priority
-    if (getHTTP2PrioritiesEnabled()) {
-      auto pri = getMessagePriority(&headers);
-      if (pri.streamDependency == txn->getID()) {
-        LOG(ERROR) << "Attempted to create circular dependency txn=" << *this;
-      } else {
-        txn->onPriorityUpdate(pri);
-      }
-    }
   }
 
   const bool wasReusable = codec_->isReusable();
@@ -1846,13 +1788,8 @@ size_t HTTPSession::sendEOM(HTTPTransaction* txn,
   size_t encodedSize = 0;
   if (trailers) {
     encodedSize = codec_->generateTrailers(writeBuf_, txn->getID(), *trailers);
-  }
-
-  // Don't send EOM for HTTP2, when trailers sent.
-  // sendTrailers already flagged end of stream.
-  bool http2Trailers = trailers && isHTTP2CodecProtocol(codec_->getProtocol());
-  if (!http2Trailers) {
-    encodedSize += codec_->generateEOM(writeBuf_, txn->getID());
+  } else {
+    encodedSize = codec_->generateEOM(writeBuf_, txn->getID());
   }
 
   commonEom(txn, encodedSize, false);
@@ -1881,11 +1818,6 @@ size_t HTTPSession::sendAbort(HTTPTransaction* txn,
   bool sendTcpRstFallback = !rstStreamSize;
   onEgressMessageFinished(txn, sendTcpRstFallback);
   return rstStreamSize;
-}
-
-size_t HTTPSession::sendPriority(HTTPTransaction* txn,
-                                 const http2::PriorityUpdate& pri) noexcept {
-  return sendPriorityImpl(txn->getID(), pri);
 }
 
 size_t HTTPSession::changePriority(HTTPTransaction* /*txn*/,
@@ -2198,7 +2130,7 @@ unique_ptr<IOBuf> HTTPSession::getNextToSend(bool* cork,
       }
       toSend = std::min(toSend, connFlowControl_->getAvailableSend());
     }
-    txnEgressQueue_.nextEgress(nextEgressResults_, false);
+    txnEgressQueue_.nextEgress(nextEgressResults_);
     CHECK(!nextEgressResults_.empty()); // Queue was non empty, so this must be
     // The maximum we will send for any transaction in this loop
     uint32_t txnMaxToSend = toSend * nextEgressResults_.front().second;
@@ -2729,36 +2661,6 @@ void HTTPSession::PingProber::onPingReply(uint64_t pingVal) {
   VLOG(4) << "Received expected ping, rescheduling";
   pingVal_.reset();
   refreshTimeout(/*onIngress=*/false);
-}
-
-HTTPCodec::StreamID HTTPSession::sendPriority(http2::PriorityUpdate pri) {
-  if (!codec_->supportsParallelRequests()) {
-    // For HTTP/1.1, don't call createStream()
-    return 0;
-  }
-  auto id = codec_->createStream();
-  sendPriority(id, pri);
-  return id;
-}
-
-size_t HTTPSession::sendPriority(HTTPCodec::StreamID id,
-                                 http2::PriorityUpdate pri) {
-  auto res = sendPriorityImpl(id, pri);
-  txnEgressQueue_.addOrUpdatePriorityNode(id, pri);
-  return res;
-}
-
-size_t HTTPSession::sendPriorityImpl(HTTPCodec::StreamID id,
-                                     http2::PriorityUpdate pri) {
-  CHECK_NE(id, 0);
-  const size_t bytes = codec_->generatePriority(
-      writeBuf_,
-      id,
-      std::make_tuple(pri.streamDependency, pri.exclusive, pri.weight));
-  if (bytes) {
-    scheduleWrite();
-  }
-  return bytes;
 }
 
 HTTPTransaction* HTTPSession::findTransaction(HTTPCodec::StreamID streamID) {

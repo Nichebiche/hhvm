@@ -98,6 +98,7 @@ typedef set<i32> AdaptedSet
 @python.Py3EnableCppAdapter
 typedef map<i32, i32> AdaptedMap
 
+@python.MigrationBlockingAllowInheritance
 exception UnusedError {
   @thrift.ExceptionMessage
   1: string message;
@@ -109,9 +110,17 @@ exception HardError {
   2: i32 code;
 }
 
+exception NestedHardError {
+  1: HardError error;
+}
+
 exception UnfriendlyError {
   1: string errortext;
   2: i32 code;
+}
+
+struct NestedError {
+  1: HardError val_error;
 }
 
 enum Color {
@@ -175,6 +184,7 @@ struct File {
   3: Kind type = Kind.REGULAR;
 }
 
+@python.MigrationBlockingAllowInheritance
 struct OptionalFile {
   1: optional string name;
   3: optional i32 type;
@@ -184,6 +194,7 @@ struct Digits {
   1: optional list<Integers> data;
 }
 
+@cpp.ScopedEnumAsUnionType
 union Integers {
   1: byte tiny;
   2: i16 small;
@@ -252,6 +263,11 @@ union ComplexUnion {
   9: string text;
   10: binary raw;
   11: bool truthy;
+  12: list<float> float_list;
+  // @lint-ignore THRIFTCHECKS
+  13: set<float> float_set;
+  // @lint-ignore THRIFTCHECKS
+  14: map<float, float> float_map;
 }
 
 union IOBufUnion {
@@ -270,19 +286,29 @@ struct hard {
 struct Runtime {
   1: bool bool_val;
   2: Color enum_val;
+  6: string property;
   3: list<i64> int_list_val;
 }
 
 struct mixed {
+  // @lint-ignore THRIFTCHECKS
   1: optional string opt_field = "optional";
   3: string unq_field = "unqualified";
+  // @lint-ignore THRIFTCHECKS
   @cpp.Ref{type = cpp.RefType.Unique}
   4: optional easy opt_easy_ref;
+  // @lint-ignore THRIFTCHECKS
   @cpp.Ref{type = cpp.RefType.Shared}
   @cpp.AllowLegacyNonOptionalRef
   6: list<string> const_container_ref;
   @python.Name{name = "some_field_"}
   7: optional string some_field;
+  // @lint-ignore THRIFTCHECKS
+  8: optional float opt_float = 1.0;
+  // @lint-ignore THRIFTCHECKS
+  9: optional i32 opt_int = 1;
+  // @lint-ignore THRIFTCHECKS
+  10: optional Color opt_enum = Color.red;
 }
 
 struct numerical {
@@ -360,7 +386,7 @@ struct Reserved {
   9: i64 __mangled_int;
 }
 
-struct __Reserved {
+struct _Reserved {
   1: string __mangled_str;
   2: i64 __mangled_int;
 }
@@ -507,6 +533,13 @@ struct ListNode {
   2: optional ListNode next;
 }
 
+union Misordered {
+  4: i32 val32;
+  3: string s1;
+  2: i64 val64;
+  1: string s2;
+}
+
 @cpp.Type{name = "folly::IOBuf"}
 typedef binary IOBuf
 
@@ -535,6 +568,11 @@ service ClientMetadataTestingService {
   string getAgent();
   string getHostname();
   string getMetadaField(1: string key);
+}
+
+union _UnderscoreUnion {
+  1: string _a;
+  2: i64 _b;
 }
 
 struct EmptyStruct {}

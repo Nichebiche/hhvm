@@ -28,14 +28,7 @@
 #include <folly/IPAddress.h>
 #include <folly/ScopeGuard.h>
 
-#include "hphp/runtime/base/builtin-functions.h"
-#include "hphp/runtime/base/file.h"
-#include "hphp/runtime/ext/sockets/ext_sockets.h"
-#include "hphp/runtime/ext/std/ext_std_function.h"
-#include "hphp/runtime/ext/string/ext_string.h"
 #include "hphp/runtime/server/server-stats.h"
-#include "hphp/util/lock.h"
-#include "hphp/util/network.h"
 
 
 namespace HPHP {
@@ -112,10 +105,10 @@ bool HHVM_FUNCTION(checkdnsrr, const String& host,
   return (i >= 0);
 }
 
-typedef union {
+union querybuf {
   HEADER qb1;
   u_char qb2[65536];
-} querybuf;
+};
 
 const StaticString
   s_host("host"),

@@ -146,10 +146,6 @@ trait RaiserClientBase {
    *   doBland();
    */
   public async function doBland(): Awaitable<void> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Raiser_doBland_args::withDefaultValues();
     await $this->asyncHandler_->genBefore(RaiserStaticMetadata::THRIFT_SVC_NAME, "doBland", $args);
@@ -166,10 +162,6 @@ trait RaiserClientBase {
    *           3: Serious s);
    */
   public async function doRaise(): Awaitable<void> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Raiser_doRaise_args::withDefaultValues();
     await $this->asyncHandler_->genBefore(RaiserStaticMetadata::THRIFT_SVC_NAME, "doRaise", $args);
@@ -183,15 +175,11 @@ trait RaiserClientBase {
    *   get200();
    */
   public async function get200(): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Raiser_get200_args::withDefaultValues();
     await $this->asyncHandler_->genBefore(RaiserStaticMetadata::THRIFT_SVC_NAME, "get200", $args);
     $currentseqid = $this->sendImplHelper($args, "get200", false, RaiserStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Raiser_get200_result::class, "get200", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Raiser_get200_result::class, "get200", false, $currentseqid, $rpc_options))[0];
   }
 
   /**
@@ -203,15 +191,11 @@ trait RaiserClientBase {
    *           3: Serious s);
    */
   public async function get500(): Awaitable<string> {
-    $hh_frame_metadata = $this->getHHFrameMetadata();
-    if ($hh_frame_metadata !== null) {
-      \HH\set_frame_metadata($hh_frame_metadata);
-    }
     $rpc_options = $this->getAndResetOptions() ?? \ThriftClientBase::defaultOptions();
     $args = Raiser_get500_args::withDefaultValues();
     await $this->asyncHandler_->genBefore(RaiserStaticMetadata::THRIFT_SVC_NAME, "get500", $args);
     $currentseqid = $this->sendImplHelper($args, "get500", false, RaiserStaticMetadata::THRIFT_SVC_NAME );
-    return await $this->genAwaitResponse(Raiser_get500_result::class, "get500", false, $currentseqid, $rpc_options);
+    return (await $this->genAwaitResponse(Raiser_get500_result::class, "get500", false, $currentseqid, $rpc_options))[0];
   }
 
 }

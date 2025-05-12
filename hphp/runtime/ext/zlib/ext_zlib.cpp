@@ -16,11 +16,9 @@
 */
 
 #include "hphp/runtime/ext/zlib/ext_zlib.h"
-#include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/comparisons.h"
 #include "hphp/runtime/base/file.h"
 #include "hphp/runtime/base/file-util.h"
-#include "hphp/runtime/base/mem-file.h"
 #include "hphp/runtime/ext/zlib/zip-file.h"
 #include "hphp/runtime/base/stream-wrapper.h"
 #include "hphp/runtime/base/stream-wrapper-registry.h"
@@ -29,12 +27,6 @@
 #include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/vm/native-data.h"
 #include "hphp/runtime/vm/vm-regs.h"
-#include "hphp/util/gzip.h"
-#include "hphp/util/logger.h"
-#include <folly/String.h>
-#include <memory>
-#include <algorithm>
-#include <vector>
 
 #define PHP_ZLIB_MODIFIER 1000
 
@@ -381,11 +373,11 @@ Variant HHVM_FUNCTION(gzfile, const String& filename,
    of the uncompressed object.  The magic number is stored to make sure
    bad values do not cause us to allocate bogus or extremely large amounts
    of memory when encountering an object with the new format. */
-typedef struct nzlib_format_s {
+struct nzlib_format_t {
     uint32_t magic;
     uint32_t uncompressed_sz;
     Bytef buf[0];
-} nzlib_format_t;
+};
 
 Variant HHVM_FUNCTION(nzcompress, const String& uncompressed) {
   uLong len = compressBound(uncompressed.size());
@@ -501,16 +493,12 @@ struct ChunkedDecompressor {
       } else {
         m_eof = true;
         inflateEnd(&m_zstream);
-        throw_object(
-          "Exception",
-          make_vec_array(
-            folly::sformat("zlib error status={} msg=\"{}\"",
-              status,
-              m_zstream.msg
-            )
+        SystemLib::throwExceptionObject(
+          folly::sformat("zlib error status={} msg=\"{}\"",
+            status,
+            m_zstream.msg
           )
         );
-        return empty_string();
       }
     }
 
@@ -520,11 +508,7 @@ struct ChunkedDecompressor {
     }
     if (!completed) {
       // output too large
-      throw_object(
-        "Exception",
-        make_vec_array("inflate failed: output too large")
-      );
-      return empty_string();
+      SystemLib::throwExceptionObject("inflate failed: output too large");
     }
     return result;
   }
@@ -553,8 +537,8 @@ struct ChunkedDecompressor {
 //  "... windowBits can also be greater than 15 for optional gzip encoding.
 //  Add 16 to windowBits to write a simple gzip header and trailer around
 //  the compressed data instead of a zlib wrapper ..."
-typedef ChunkedDecompressor<-MAX_WBITS> ChunkedInflator;
-typedef ChunkedDecompressor<16 + MAX_WBITS> ChunkedGunzipper;
+using ChunkedInflator = ChunkedDecompressor<-MAX_WBITS>;
+using ChunkedGunzipper = ChunkedDecompressor<16 + MAX_WBITS>;
 
 #define FETCH_CHUNKED_INFLATOR(dest, src) \
   auto dest = Native::data<ChunkedInflator>(src);

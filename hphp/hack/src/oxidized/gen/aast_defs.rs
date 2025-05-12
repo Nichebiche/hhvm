@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the "hack" directory of this source tree.
 //
-// @generated SignedSource<<2facd3cbe46b61fbc2db60418f88e85d>>
+// @generated SignedSource<<3ec2ee24a6d1f105984078594c1d19e4>>
 //
 // To regenerate this file, run:
 //   hphp/hack/src/oxidized_regen.sh
@@ -645,6 +645,9 @@ pub struct ExpressionTree<Ex, En> {
     ///
     ///     Foo::makeTree($v ==> $v->visitBinOp(...))
     pub runtime_expr: Expr<Ex, En>,
+    /// For nested expression trees, what variables they use that should
+    /// be defined in the the enclosing environment.
+    pub free_vars: Option<Vec<Lid>>,
 }
 
 #[derive(
@@ -692,11 +695,15 @@ pub struct EtSplice<Ex, En> {
     pub extract_client_type: bool,
     /// Does the spliced_expr contain an await expression
     pub contains_await: bool,
-    /// Should the splice be interpreted as a "macro". That is, if spliced_expr has type
+    /// Some if the splice be interpreted as a "macro". That is, if spliced_expr has type
     /// Spliceable<t1, t2, t3>, in an enviroment with the macro variables bound to types
     /// Spliceable<t1, t2, u1>,..,Spliceable<t1, t2, un> then the splice should have
-    /// type Spliceable<t1, t2, (function (u1, .., un): t3)>
+    /// type Spliceable<t1, t2, (function (u1, .., un): t3)>.
+    /// None is the splice is not a macro.
     pub macro_variables: Option<Vec<Lid>>,
+    /// Splices are hoisted out and assigned to a temporary variable. This
+    /// records the name of the temporary
+    pub temp_lid: LocalId,
     pub spliced_expr: Expr<Ex, En>,
 }
 
@@ -1497,6 +1504,10 @@ pub struct Efun<Ex, En> {
     pub fun: Fun_<Ex, En>,
     pub use_: Vec<CaptureLid<Ex>>,
     pub closure_class_name: Option<String>,
+    /// An expression tree desugars into an expression containing an efun for
+    /// the virtualized expression. We need some special type checking support for
+    /// this case.
+    pub is_expr_tree_virtual_expr: bool,
 }
 
 /// Naming has two phases and the annotation helps to indicate the phase.
@@ -2639,6 +2650,7 @@ pub struct HfParamInfo {
 pub struct HintFun {
     #[rust_to_ocaml(attr = "transform.opaque")]
     pub is_readonly: Option<ast_defs::ReadonlyKind>,
+    pub tparams: Vec<HintTparam>,
     pub param_tys: Vec<Hint>,
     pub param_info: Vec<Option<HfParamInfo>>,
     pub variadic_ty: VariadicHint,
@@ -2647,6 +2659,29 @@ pub struct HintFun {
     pub return_ty: Hint,
     #[rust_to_ocaml(attr = "transform.opaque")]
     pub is_readonly_return: Option<ast_defs::ReadonlyKind>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Eq,
+    FromOcamlRep,
+    Hash,
+    NoPosHash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    ToOcamlRep
+)]
+#[rust_to_ocaml(and)]
+#[rust_to_ocaml(prefix = "htp_")]
+#[repr(C)]
+pub struct HintTparam {
+    pub name: Sid,
+    pub user_attributes: Vec<Sid>,
+    pub constraints: Vec<(ast_defs::ConstraintKind, Hint)>,
 }
 
 #[derive(

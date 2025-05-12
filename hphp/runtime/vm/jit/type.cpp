@@ -18,15 +18,10 @@
 
 #include "hphp/runtime/base/bespoke-array.h"
 #include "hphp/runtime/base/repo-auth-type.h"
-#include "hphp/runtime/base/tv-type.h"
+#include "hphp/runtime/base/variable-serializer.h"
 #include "hphp/runtime/vm/jit/guard-constraint.h"
-#include "hphp/runtime/vm/jit/ir-instruction.h"
-#include "hphp/runtime/vm/jit/ir-opcode.h"
-#include "hphp/runtime/vm/jit/print.h"
 #include "hphp/runtime/vm/jit/prof-data-sb.h"
 #include "hphp/runtime/vm/jit/prof-data-serialize.h"
-#include "hphp/runtime/vm/jit/ssa-tmp.h"
-#include "hphp/runtime/vm/jit/translator.h"
 
 #include "hphp/util/abi-cxx.h"
 #include "hphp/util/configs/eval.h"
@@ -38,13 +33,12 @@
 #include <folly/Conv.h>
 #include <folly/Format.h>
 #include <folly/MapUtil.h>
-#include <folly/gen/Base.h>
 
 #include <vector>
 
 namespace HPHP::jit {
 
-TRACE_SET_MOD(hhir);
+TRACE_SET_MOD(hhir)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1141,6 +1135,8 @@ Type typeFromPropTC(const HPHP::TypeIntersectionConstraint& tcs,
 
 Type typeFromFuncParam(const Func* func, uint32_t paramId) {
   assertx(paramId < func->numNonVariadicParams());
+
+  if (func->params()[paramId].isOutOnly()) return TInitCell;
 
   auto const getThisType = [&] {
     return func->cls() ? Type::SubObj(func->cls()) : TBottom;

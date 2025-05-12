@@ -37,6 +37,7 @@ from thrift.py3.types cimport (
     make_const_shared,
     constant_shared_ptr,
 )
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -51,7 +52,7 @@ import builtins as _builtins
 import importlib
 
 import test.fixtures.enumstrict.module.thrift_types as _fbthrift_python_types
-from test.fixtures.enumstrict.module.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
+from test.fixtures.enumstrict.module.thrift_enums import (
     EmptyEnum,
     MyEnum,
     MyUseIntrinsicDefaultEnum,
@@ -70,6 +71,7 @@ cdef object get_types_reflection():
     )
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class MyStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -133,10 +135,7 @@ cdef class MyStruct(thrift.py3.types.Struct):
 
 
     def __copy__(MyStruct self):
-        cdef shared_ptr[_test_fixtures_enumstrict_module_cbindings.cMyStruct] cpp_obj = make_shared[_test_fixtures_enumstrict_module_cbindings.cMyStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return MyStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)

@@ -21,8 +21,6 @@
 #include "hphp/runtime/base/type-structure-helpers-defs.h"
 
 #include "hphp/runtime/vm/hhbc-shared.h"
-#include "hphp/runtime/vm/repo-global-data.h"
-#include "hphp/runtime/vm/runtime.h"
 
 #include "hphp/runtime/vm/jit/is-type-struct-profile.h"
 #include "hphp/runtime/vm/jit/guard-constraint.h"
@@ -893,7 +891,7 @@ SSATmp* check_nullable(IRGS& env, SSATmp* res, SSATmp* var) {
     [&] { return gen(env, IsType, TNull, var); },
     [&] { return cns(env, true); }
   );
-};
+}
 
 void chain_is_type(IRGS& env, SSATmp* c, bool nullable, Type ty) {
   always_assert(false);
@@ -920,7 +918,7 @@ void chain_is_type(IRGS& env, SSATmp* c, bool nullable,
       push(env, cns(env, true));
     }
   );
-};
+}
 
 /*
  * This function tries to emit is type struct operations without resolving
@@ -1437,7 +1435,7 @@ void verifyRetTypeImpl(IRGS& env, int32_t id, int32_t ind,
         gen(
           env,
           VerifyRetCallable,
-          FuncParamData { func, id },
+          FuncParamWithTCData { func, id, &tc },
           val
         );
       },
@@ -1485,6 +1483,8 @@ void verifyRetTypeImpl(IRGS& env, int32_t id, int32_t ind,
 
 void verifyParamType(IRGS& env, const Func* func, int32_t id,
                      BCSPRelOffset offset, SSATmp* prologueCtx) {
+  if (func->params()[id].isOutOnly()) return;
+
   auto const verifyFunc = [&](const TypeConstraint& tc, SSATmp* inputVal) -> SSATmp* {
     return verifyTypeImpl(
       env,
@@ -1530,7 +1530,7 @@ void verifyParamType(IRGS& env, const Func* func, int32_t id,
         gen(
           env,
           VerifyParamCallable,
-          FuncParamData { func, id },
+          FuncParamWithTCData { func, id, &tc },
           val
         );
       },
@@ -1672,10 +1672,16 @@ void emitVerifyRetTypeTS(IRGS& env) {
   }
 }
 
+void emitVerifyTypeTS(IRGS& env) {
+  if (!topC(env)->isA(TDict)) return interpOne(env);
+  auto const ts = topC(env);
+  auto const cell = topC(env, BCSPRelOffset{1});
+  auto const funcData = FuncData { curFunc(env) };
+  gen(env, VerifyType, funcData, cell, ts, ldCtxCls(env));
+  popDecRef(env);
+}
+
 void emitVerifyRetNonNullC(IRGS& env) {
-  auto const func = curFunc(env);
-  auto const& tc = func->returnTypeConstraints().main();
-  always_assert(!tc.isNullable());
   verifyRetTypeImpl(env, TypeConstraint::ReturnId, 0, true);
 }
 

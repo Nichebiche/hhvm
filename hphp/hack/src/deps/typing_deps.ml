@@ -31,7 +31,6 @@ module Dep = struct
     | Fun : string -> 'a variant
     | Type : string -> 'a variant
     | Extends : string -> dependency variant
-    | RequireExtends : string -> dependency variant
     | NotSubtype : string -> dependency variant
     | Const : string * string -> dependency variant
     | Constructor : string -> dependency variant
@@ -43,6 +42,7 @@ module Dep = struct
     | GConstName : string -> 'a variant
     | Module : string -> 'a variant
     | Declares : 'a variant
+    | File : Relative_path.t -> dependency variant
 
   let dependency_of_variant : type a. a variant -> dependency variant = function
     | GConst s -> GConst s
@@ -58,9 +58,9 @@ module Dep = struct
     | Constructor s -> Constructor s
     | AllMembers s -> AllMembers s
     | Extends s -> Extends s
-    | RequireExtends s -> RequireExtends s
     | NotSubtype s -> NotSubtype s
     | Declares -> Declares
+    | File path -> File path
 
   (** NOTE: keep in sync with `typing_deps_hash.rs`. *)
   type dep_kind =
@@ -68,7 +68,6 @@ module Dep = struct
     | KFun [@value 1]
     | KType [@value 2]
     | KExtends [@value 3]
-    | KRequireExtends [@value 4]
     | KConst [@value 5]
     | KConstructor [@value 6]
     | KProp [@value 7]
@@ -80,6 +79,7 @@ module Dep = struct
     | KModule [@value 13]
     | KDeclares [@value 14]
     | KNotSubtype [@value 15]
+    | KFile [@value 16]
   [@@deriving enum]
 
   module Member = struct
@@ -156,7 +156,6 @@ module Dep = struct
     | Fun _ -> 1
     | Type _ -> 2
     | Extends _ -> 3
-    | RequireExtends _ -> 4
     | NotSubtype _ -> 15
     | Const _ -> 5
     | Constructor _ -> 6
@@ -168,6 +167,7 @@ module Dep = struct
     | GConstName _ -> 12
     | Module _ -> 13
     | Declares -> 14
+    | File _ -> 16
 
   let compare_variant (type a) (v1 : a variant) (v2 : a variant) : int =
     match (v1, v2) with
@@ -175,7 +175,6 @@ module Dep = struct
     | (Fun x1, Fun x2)
     | (Type x1, Type x2)
     | (Extends x1, Extends x2)
-    | (RequireExtends x1, RequireExtends x2)
     | (NotSubtype x1, NotSubtype x2)
     | (Constructor x1, Constructor x2)
     | (AllMembers x1, AllMembers x2)
@@ -191,11 +190,12 @@ module Dep = struct
         res
       else
         String.compare m1 m2
+    | (File p1, File p2) -> Relative_path.compare p1 p2
     | (Declares, Declares) -> 0
     | ( _,
-        ( GConst _ | Fun _ | Type _ | Extends _ | RequireExtends _
-        | NotSubtype _ | Const _ | Constructor _ | Prop _ | SProp _ | Method _
-        | SMethod _ | AllMembers _ | GConstName _ | Module _ | Declares ) ) ->
+        ( GConst _ | Fun _ | Type _ | Extends _ | NotSubtype _ | Const _
+        | Constructor _ | Prop _ | SProp _ | Method _ | SMethod _ | AllMembers _
+        | GConstName _ | Module _ | Declares | File _ ) ) ->
       ordinal_variant v1 - ordinal_variant v2
 
   let dep_kind_of_variant : type a. a variant -> dep_kind = function
@@ -211,21 +211,14 @@ module Dep = struct
     | Constructor _ -> KConstructor
     | AllMembers _ -> KAllMembers
     | Extends _ -> KExtends
-    | RequireExtends _ -> KRequireExtends
     | NotSubtype _ -> KNotSubtype
     | Module _ -> KModule
     | Declares -> KDeclares
+    | File _ -> KFile
 
   let make_member_dep_from_type_dep (type_dep : t) (member : Member.t) : t =
     let (dep_kind, member_name) = Member.to_dep_kind_and_name member in
     hash2 (dep_kind_to_enum dep_kind) type_dep member_name
-
-  (** Return the 'Extends' dep for a class from its 'Type' dep  *)
-  let extends_of_class class_dep = class_dep lxor 1
-
-  (** Return the 'RequireExtends' dep for a class from its 'Type' dep  *)
-  let require_extends_of_class class_dep =
-    hash2 (dep_kind_to_enum KRequireExtends) class_dep ""
 
   (** Return the 'NotSubtype' dep for a class from its 'Type' dep  *)
   let not_subtype_of_class class_dep =
@@ -240,7 +233,6 @@ module Dep = struct
     | Module mname -> hash1 (dep_kind_to_enum KModule) mname
     | Type name1 -> hash1 (dep_kind_to_enum KType) name1
     | Extends name1 -> hash1 (dep_kind_to_enum KExtends) name1
-    | RequireExtends name1 -> require_extends_of_class (make (Type name1))
     | NotSubtype name1 -> not_subtype_of_class (make (Type name1))
     (* Deps on members *)
     | Constructor name1 ->
@@ -258,11 +250,10 @@ module Dep = struct
     | AllMembers name1 ->
       make_member_dep_from_type_dep (make (Type name1)) Member.All
     | Declares -> hash1 (dep_kind_to_enum KDeclares) ""
+    | File path ->
+      hash1 (dep_kind_to_enum KFile) @@ Relative_path.storage_to_string path
 
   let is_class x = x land 1 = 1
-
-  let extends_and_req_extends_of_class class_dep =
-    (extends_of_class class_dep, require_extends_of_class class_dep)
 
   let compare = Int.compare
 
@@ -280,11 +271,11 @@ module Dep = struct
     | Constructor s
     | AllMembers s
     | Extends s
-    | RequireExtends s
     | NotSubtype s ->
       Utils.strip_ns s
     | Module m -> m
     | Declares -> "__declares__"
+    | File path -> Relative_path.storage_to_string path
 
   let extract_root_name : type a. ?strip_namespace:bool -> a variant -> string =
    fun ?(strip_namespace = true) variant ->
@@ -294,7 +285,6 @@ module Dep = struct
     | Constructor s
     | AllMembers s
     | Extends s
-    | RequireExtends s
     | NotSubtype s
     | Module s
     | Type s
@@ -309,6 +299,7 @@ module Dep = struct
       else
         s
     | Declares -> "__declares__"
+    | File p -> Relative_path.storage_to_string p
 
   let extract_member_name : type a. a variant -> string option = function
     | GConst _
@@ -316,11 +307,11 @@ module Dep = struct
     | Constructor _
     | AllMembers _
     | Extends _
-    | RequireExtends _
     | NotSubtype _
     | Module _
     | Type _
     | Fun _
+    | File _
     | Declares ->
       None
     | Const (_cls, s)
@@ -334,7 +325,6 @@ module Dep = struct
     | Type s
     | Const (s, _)
     | Extends s
-    | RequireExtends s
     | NotSubtype s
     | AllMembers s
     | Constructor s
@@ -349,6 +339,7 @@ module Dep = struct
     | Fun s -> Decl_reference.Function s
     | Module m -> Decl_reference.Module m
     | Declares -> failwith "No Decl_reference.t for Declares Dep.variant"
+    | File _ -> failwith "No Decl_reference.t for File Dep.variant"
 
   let to_debug_string = string_of_int
 
@@ -376,10 +367,10 @@ module Dep = struct
       | Constructor _ -> "Constructor"
       | AllMembers _ -> "AllMembers"
       | Extends _ -> "Extends"
-      | RequireExtends _ -> "RequireExtends"
       | NotSubtype _ -> "NotSubtype"
       | Module _ -> "Module"
       | Declares -> "Declares"
+      | File _ -> "File"
     in
     match dep with
     | Declares -> prefix
@@ -497,13 +488,10 @@ module CustomGraph = struct
   external hh_custom_dep_graph_register_custom_types : unit -> unit
     = "hh_custom_dep_graph_register_custom_types"
 
-  (* from hh_shared.h *)
-  external assert_master : unit -> unit = "hh_assert_master"
-
   let allow_reads_ref = ref false
 
   let allow_dependency_table_reads flag =
-    assert_master ();
+    assert (not (Worker_utils.is_worker_process ()));
     let prev = !allow_reads_ref in
     allow_reads_ref := flag;
     prev
@@ -550,9 +538,6 @@ module CustomGraph = struct
 
   external save_delta : string -> bool -> int = "hh_custom_dep_graph_save_delta"
 
-  external load_delta : Mode.t -> string -> int
-    = "hh_custom_dep_graph_load_delta"
-
   let add_all_deps mode x = x |> add_extend_deps mode |> add_typing_deps mode
 
   (** A batch of discovered dependency edges, of which some might
@@ -590,7 +575,7 @@ module CustomGraph = struct
 
   let register_discovered_dep_edges : DepEdgeSet.t -> unit =
    fun s ->
-    assert_master ();
+    assert (not (Worker_utils.is_worker_process ()));
     DepEdgeSet.iter
       begin
         fun { idependent; idependency } ->
@@ -600,7 +585,7 @@ module CustomGraph = struct
 
   let remove_edges : DepEdgeSet.t -> unit =
    fun s ->
-    assert_master ();
+    assert (not (Worker_utils.is_worker_process ()));
     DepEdgeSet.iter
       begin
         (fun { idependent; idependency } -> remove_edge idependent idependency)
@@ -734,15 +719,7 @@ module SaveCustomGraph : sig
 
   (** Write to disk the dep edges which are not already in the depgraph. *)
   val filter_discovered_deps_batch : flush:bool -> Mode.t -> unit
-
-  (** Move the source file to the worker's depgraph directory. *)
-  val save_delta : Typing_deps_mode.t -> source:string -> int
 end = struct
-  (** [hh_save_custom_dep_graph_save_delta src dest_dir]
-    moves the [src] file to the [dest_dir] directory. *)
-  external hh_save_custom_dep_graph_save_delta : string -> string -> int
-    = "hh_save_custom_dep_graph_save_delta"
-
   let discovered_deps_batch : (dep_edge, unit) Hashtbl.t = Hashtbl.create 1000
 
   let destination_file_handle_ref : Out_channel.t option ref = ref None
@@ -766,11 +743,6 @@ end = struct
       in
       destination_file_handle_ref := Some handle;
       handle
-
-  let destination_dir mode =
-    match mode with
-    | SaveToDiskMode { new_edges_dir; _ } -> new_edges_dir
-    | _ -> failwith "programming error: wrong mode"
 
   (** Write to disk the dep edges which are not already in the depgraph. *)
   let filter_discovered_deps_batch ~flush mode =
@@ -816,11 +788,6 @@ end = struct
       let () = SaveHumanReadableDepMap.add mode (dependent, idependent) in
       SaveHumanReadableDepMap.add mode (dependency, idependency)
     )
-
-  (** Move the source file to the worker's depgraph directory. *)
-  let save_delta mode ~source =
-    let dest = destination_dir mode in
-    hh_save_custom_dep_graph_save_delta source dest
 end
 
 (** Registers Rust custom types with the OCaml runtime, supporting deserialization *)
@@ -943,6 +910,8 @@ let register_discovered_dep_edges : dep_edges -> unit = function
   | None -> ()
   | Some batch -> CustomGraph.register_discovered_dep_edges batch
 
+let flush_deps mode = flush_ideps_batch mode |> register_discovered_dep_edges
+
 let remove_edges mode edges =
   match mode with
   | InMemoryMode _
@@ -962,11 +931,6 @@ let save_discovered_edges mode ~dest ~reset_state_after_saving =
   | InMemoryMode _ -> CustomGraph.save_delta dest reset_state_after_saving
   | SaveToDiskMode _ ->
     failwith "save_discovered_edges not supported for SaveToDiskMode"
-
-let load_discovered_edges mode source =
-  match mode with
-  | InMemoryMode _ -> CustomGraph.load_delta mode source
-  | SaveToDiskMode _ -> SaveCustomGraph.save_delta mode ~source
 
 let get_ideps_from_hash mode hash =
   match mode with

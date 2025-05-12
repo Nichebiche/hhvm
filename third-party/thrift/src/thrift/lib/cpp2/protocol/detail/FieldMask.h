@@ -79,6 +79,22 @@ inline bool isNoneMapMask(const Mask& mask) {
        mask.includes_string_map_ref()->empty());
 }
 
+// Checks whether it is ALL type mask.
+inline bool isAllTypeMask(const Mask& mask) {
+  if (!mask.excludes_type_ref() && !mask.includes_type_ref()) {
+    folly::throw_exception<std::runtime_error>("This is not a type mask.");
+  }
+  return mask.excludes_type_ref() && mask.excludes_type_ref()->empty();
+}
+
+// Checks whether it is NONE type mask.
+inline bool isNoneTypeMask(const Mask& mask) {
+  if (!mask.excludes_type_ref() && !mask.includes_type_ref()) {
+    folly::throw_exception<std::runtime_error>("This is not a type mask.");
+  }
+  return mask.includes_type_ref() && mask.includes_type_ref()->empty();
+}
+
 // If mask is a field mask, return it, otherwise return nullptr
 [[nodiscard]] const FieldIdToMask* FOLLY_NULLABLE
 getFieldMask(const Mask& mask);
@@ -163,26 +179,6 @@ Value getValueAs(MapId id, const Value& as);
 // Returns the Value of the given string with the corresponding type. If the
 // given type contains a non-integer value, it throws.
 Value getValueAs(std::string key, const Value& as);
-
-// Returns the MapId in map mask of the given Value key.
-// If it doesn't exist, it returns the new MapId (pointer to the key).
-// Assumes the map mask uses pointers to keys.
-MapId findMapIdByValueAddress(const Mask& mask, const Value& key);
-
-using ValueIndex = folly::F14FastSet<
-    std::reference_wrapper<const Value>,
-    std::hash<Value>,
-    std::equal_to<Value>>;
-
-// Indexes the values referred to by the given mask by their value. The address
-// of the value is preserved by the index.
-ValueIndex buildValueIndex(const Mask& mask);
-
-// Returns the MapId in value index of the given Value key.
-// If it isn't indexed, it returns the new MapId (pointer to the key).
-// Assumes the map mask uses pointers to keys.
-MapId getMapIdValueAddressFromIndex(
-    const ValueIndex& index, const Value& newKey);
 
 // Validate if a given mask expresses a single path to a field, map entry, or
 // type entry. The terminal field is indicated with allMask.

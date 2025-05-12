@@ -50,6 +50,7 @@ cdef extern from "thrift/lib/py3/types.h" namespace "::thrift::py3" nogil:
     string_view get_field_name_by_index[T](size_t idx) except +
     object init_unicode_from_cpp(...)
     T* get_union_field_value[T](...) except +
+    const T& deref_const[T](...)
 
     cdef cppclass set_iter[T]:
         set_iter()
@@ -104,6 +105,10 @@ cdef class StructFieldsSetter:
 
 
 cdef translate_cpp_enum_to_python(object EnumClass, int value)
+
+cpdef _ensure_py3_or_raise(object thrift_value, str field_name, object py3_type)
+cpdef _ensure_py3_container_or_raise(object thrift_value, object py3_container_type)
+cpdef _from_python_or_raise(object thrift_value, str field_name, object py3_type)
 
 
 # For cpp.type'd binary values we need a "string" that cython doesn't think
@@ -187,5 +192,5 @@ cdef extern from "thrift/lib/cpp2/FieldRef.h" namespace "apache::thrift" nogil:
 
 # Use python-types-capi to serialize of marshal _cpp_obj to thrift-python
 cdef extern from "thrift/lib/python/capi/py3_converter.h" namespace "apache::thrift::python::capi":
-    cdef object py3_to_python[T](shared_ptr[T] cppThrift)
-    cdef shared_ptr[T] python_to_py3[T](object obj) except *
+    cdef object py3_to_python[T, NamespaceTag](const shared_ptr[T]& cppThrift)
+    cdef shared_ptr[T] python_to_py3[T, NamespaceTag](object obj) except *

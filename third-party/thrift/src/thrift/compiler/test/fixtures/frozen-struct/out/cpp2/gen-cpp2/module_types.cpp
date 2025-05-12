@@ -111,7 +111,7 @@ ModuleA::ModuleA(apache::thrift::FragileConstructor, ::std::int32_t i32Field__ar
 void ModuleA::__fbthrift_clear() {
   // clear all fields
   this->__fbthrift_field_i32Field = ::std::int32_t();
-  this->__fbthrift_field_strField = apache::thrift::StringTraits<std::string>::fromStringLiteral("");
+  this->__fbthrift_field_strField = apache::thrift::StringTraits<::std::string>::fromStringLiteral("");
   this->__fbthrift_field_listField.clear();
   this->__fbthrift_field_mapField.clear();
   ::apache::thrift::clear(this->__fbthrift_field_inclAField);
@@ -187,6 +187,7 @@ void swap([[maybe_unused]] ModuleA& a, [[maybe_unused]] ModuleA& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ModuleA::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ModuleA::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ModuleA::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -195,6 +196,7 @@ template void ModuleA::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t ModuleA::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ModuleA::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ModuleA::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 static_assert(
     ::apache::thrift::detail::st::gen_check_json<
@@ -299,6 +301,7 @@ void swap([[maybe_unused]] ModuleB& a, [[maybe_unused]] ModuleB& b) {
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void ModuleB::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t ModuleB::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t ModuleB::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -307,6 +310,7 @@ template void ModuleB::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t ModuleB::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t ModuleB::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t ModuleB::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace some::ns
@@ -387,6 +391,7 @@ void swap([[maybe_unused]] DirectlyAdapted& a, [[maybe_unused]] DirectlyAdapted&
   swap(a.__isset, b.__isset);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void DirectlyAdapted::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t DirectlyAdapted::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t DirectlyAdapted::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -395,6 +400,7 @@ template void DirectlyAdapted::readNoXfer<>(apache::thrift::CompactProtocolReade
 template uint32_t DirectlyAdapted::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t DirectlyAdapted::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t DirectlyAdapted::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace detail
@@ -502,6 +508,7 @@ void swap([[maybe_unused]] CppRef& a, [[maybe_unused]] CppRef& b) {
   swap(a.__fbthrift_field_boxed_field, b.__fbthrift_field_boxed_field);
 }
 
+#ifndef __FBTHRIFT_INSTANTIATE_COMPACT_BINARY_PROTOCOL_IN_SEPARATE_TU
 template void CppRef::readNoXfer<>(apache::thrift::BinaryProtocolReader*);
 template uint32_t CppRef::write<>(apache::thrift::BinaryProtocolWriter*) const;
 template uint32_t CppRef::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
@@ -510,6 +517,7 @@ template void CppRef::readNoXfer<>(apache::thrift::CompactProtocolReader*);
 template uint32_t CppRef::write<>(apache::thrift::CompactProtocolWriter*) const;
 template uint32_t CppRef::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
 template uint32_t CppRef::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+#endif
 
 
 } // namespace some::ns

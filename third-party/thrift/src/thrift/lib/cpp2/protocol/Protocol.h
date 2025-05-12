@@ -52,6 +52,7 @@ FOLLY_GFLAGS_DECLARE_int32(thrift_protocol_max_depth);
 namespace apache::thrift {
 
 class BinaryProtocolReader;
+class BinaryProtocolWriter;
 
 namespace detail {
 
@@ -99,7 +100,7 @@ enum ExternalBufferSharing {
 
 using apache::thrift::protocol::TProtocolException;
 using apache::thrift::protocol::TType;
-typedef apache::thrift::protocol::PROTOCOL_TYPES ProtocolType;
+using ProtocolType = apache::thrift::protocol::PROTOCOL_TYPES;
 
 /*
  * Enumerated definition of the message types that the Thrift protocol

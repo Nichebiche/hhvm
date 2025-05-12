@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
-use ocamlrep::ptr::UnsafeOcamlPtr;
 use ocamlrep::ToOcamlRep;
+use ocamlrep::ptr::UnsafeOcamlPtr;
 use oxidized::naming_types;
 use pos::RelativePath;
 use rust_provider_backend_api::RustProviderBackend;
@@ -129,12 +129,24 @@ pub trait ProviderBackendFfi {
 
     /// Decl-parse the given file and cache the resulting decls in shallow decl
     /// stores. Return the decls and their hashes.
-    fn direct_decl_parse_and_cache<'a>(
+    fn direct_decl_parse_and_cache_obr<'a>(
         &self,
         _path: RelativePath,
         _text: UnsafeOcamlPtr,
         _arena: &'a bumpalo::Bump,
     ) -> oxidized_by_ref::direct_decl_parser::ParsedFileWithHashes<'a> {
+        unimplemented!(
+            "ProviderBackendFfi::direct_decl_parse_and_cache_obr: {UNIMPLEMENTED_MESSAGE}"
+        )
+    }
+
+    /// Decl-parse the given file and cache the resulting decls in shallow decl
+    /// stores. Return the decls and their hashes.
+    fn direct_decl_parse_and_cache(
+        &self,
+        _path: RelativePath,
+        _text: UnsafeOcamlPtr,
+    ) -> oxidized::direct_decl_parser::ParsedFileWithHashes {
         unimplemented!("ProviderBackendFfi::direct_decl_parse_and_cache: {UNIMPLEMENTED_MESSAGE}")
     }
 

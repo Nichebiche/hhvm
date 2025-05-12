@@ -31,6 +31,7 @@
 
 #include <folly/compression/Compression.h>
 #include <thrift/lib/cpp2/op/Sha256Hasher.h>
+#include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/CompactProtocol.h>
 #include <thrift/lib/cpp2/protocol/DebugProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -46,6 +47,7 @@ enum class ast_protocol {
   json,
   debug,
   compact,
+  binary,
 };
 
 template <typename Writer, typename T>
@@ -85,6 +87,8 @@ class t_ast_generator : public t_generator {
           protocol_ = ast_protocol::debug;
         } else if (pair.second == "compact") {
           protocol_ = ast_protocol::compact;
+        } else if (pair.second == "binary") {
+          protocol_ = ast_protocol::binary;
         } else {
           throw std::runtime_error(
               fmt::format("Unknown protocol `{}`", pair.second));
@@ -232,13 +236,15 @@ type::Schema t_ast_generator::gen_schema(
     }
   };
 
-  if (!root_program.scope()->find_by_uri("facebook.com/thrift/type/TypeUri")) {
+  if (!root_program.global_scope()->find_by_uri(
+          "facebook.com/thrift/type/TypeUri")) {
     throw std::runtime_error(
         "thrift/lib/thrift/schema.thrift must be present in one of the include paths.");
   }
 
   schema_opts.intern_value = intern_value;
-  schematizer schema_source(*root_program.scope(), source_mgr, schema_opts);
+  schematizer schema_source(
+      *root_program.global_scope(), source_mgr, schema_opts);
   const_ast_visitor visitor;
   bool is_root_program = true;
   visitor.add_program_visitor([&](const t_program& program) {
@@ -391,7 +397,7 @@ type::Schema t_ast_generator::gen_schema(
               ident.uri()->uri_ref() = uri;
             } else {
               ident.uri()->scopedName_ref() =
-                  enum_owner->program()->scope_name(*enum_owner);
+                  enum_owner->program()->scoped_name(*enum_owner);
             }
             ident.enumValue() = val->get_owner()->get_name();
             ast.identifierSourceRanges()->push_back(std::move(ident));
@@ -400,7 +406,7 @@ type::Schema t_ast_generator::gen_schema(
               ident.uri()->uri_ref() = uri;
             } else {
               ident.uri()->scopedName_ref() =
-                  owner->program()->scope_name(*owner);
+                  owner->program()->scoped_name(*owner);
             }
             ast.identifierSourceRanges()->push_back(std::move(ident));
           } else {
@@ -493,6 +499,13 @@ type::Schema t_ast_generator::gen_schema(
   return ast;
 }
 
+namespace {
+template <typename Writer>
+struct SortingProtocolWriter : Writer {
+  static constexpr bool kSortKeys() { return true; }
+};
+} // namespace
+
 void t_ast_generator::generate_program() {
   std::filesystem::create_directory(get_out_dir());
   std::string fname = fmt::format("{}/{}.ast", get_out_dir(), program_->name());
@@ -502,13 +515,16 @@ void t_ast_generator::generate_program() {
 
   switch (protocol_) {
     case ast_protocol::json:
-      f_out_ << serialize<SimpleJSONProtocolWriter>(ast);
+      f_out_ << serialize<SortingProtocolWriter<SimpleJSONProtocolWriter>>(ast);
       break;
     case ast_protocol::debug:
-      f_out_ << serialize<DebugProtocolWriter>(ast);
+      f_out_ << serialize<SortingProtocolWriter<DebugProtocolWriter>>(ast);
       break;
     case ast_protocol::compact:
-      f_out_ << serialize<CompactProtocolWriter>(ast);
+      f_out_ << serialize<SortingProtocolWriter<CompactProtocolWriter>>(ast);
+      break;
+    case ast_protocol::binary:
+      f_out_ << serialize<SortingProtocolWriter<BinaryProtocolWriter>>(ast);
       break;
   }
   f_out_.close();
@@ -533,9 +549,10 @@ std::string gen_schema(
     const t_program& root_program) {
   auto schema =
       t_ast_generator::gen_schema(schema_opts, source_mgr, root_program);
-  auto serialized = serialize<CompactProtocolWriter>(schema);
+  auto serialized =
+      serialize<SortingProtocolWriter<CompactProtocolWriter>>(schema);
   auto compressed = folly::compression::getCodec(
-                        folly::io::CodecType::ZSTD,
+                        folly::compression::CodecType::ZSTD,
                         folly::compression::COMPRESSION_LEVEL_BEST)
                         ->compress(serialized);
   return compressed;

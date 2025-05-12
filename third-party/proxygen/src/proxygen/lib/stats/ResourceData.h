@@ -18,6 +18,18 @@
 
 namespace proxygen {
 
+struct CpuStats {
+  double cpuUsageRatio;
+  std::vector<double> cpuCoreUsageRatios;
+  double cpuUtilPercentileConfigured = 0;
+  double cpuRatioUtilPercentile = 0;
+  double cpuSoftIrqUsageRatio = 0;
+  std::vector<double> softIrqCpuCoreRatioUtils;
+  // this field is only used to calculate
+  // pro-rate softirq of cgroup
+  double cpuSysUsageRatio = 0;
+};
+
 /**
  * Container struct to store various resource utilization data.
  */
@@ -311,18 +323,13 @@ struct ResourceData : public PeriodicStatsDataBase {
            pressureUdpMemLimit_ != 0 && minUdpMemLimit_ != 0;
   }
 
-  void setCpuStats(double cpuUsageRatio,
-                   std::vector<double>&& cpuCoreUsageRatios,
-                   double cpuUtilPercentileConfigured,
-                   double cpuRatioUtilPercentile,
-                   double cpuSoftIrqUsageRatio,
-                   std::vector<double>&& softIrqCpuCoreRatioUtils) {
-    cpuRatioUtil_ = cpuUsageRatio;
-    cpuCoreUsageRatios_ = std::move(cpuCoreUsageRatios);
-    cpuUtilPercentileConfigured_ = cpuUtilPercentileConfigured;
-    cpuRatioUtilPercentile_ = cpuRatioUtilPercentile;
-    cpuSoftIrqRatioUtil_ = cpuSoftIrqUsageRatio;
-    softIrqCpuCoreRatioUtils_ = std::move(softIrqCpuCoreRatioUtils);
+  void setCpuStats(CpuStats&& cpuStats) {
+    cpuRatioUtil_ = cpuStats.cpuUsageRatio;
+    cpuCoreUsageRatios_ = std::move(cpuStats.cpuCoreUsageRatios);
+    cpuUtilPercentileConfigured_ = cpuStats.cpuUtilPercentileConfigured;
+    cpuRatioUtilPercentile_ = cpuStats.cpuRatioUtilPercentile;
+    cpuSoftIrqRatioUtil_ = cpuStats.cpuSoftIrqUsageRatio;
+    softIrqCpuCoreRatioUtils_ = std::move(cpuStats.softIrqCpuCoreRatioUtils);
   }
 
   void setMemStats(uint64_t usedMemBytes, uint64_t totalMemBytes) {

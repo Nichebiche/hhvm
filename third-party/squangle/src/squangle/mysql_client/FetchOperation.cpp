@@ -87,6 +87,44 @@ const InternalConnection& FetchOperationImpl::getInternalConnection() const {
   return conn().getInternalConnection();
 }
 
+std::string FetchOperationImpl::generateTimeoutError(
+    std::string rowdata,
+    Millis elapsed) const {
+  auto cbDelay = client_.callbackDelayAvg();
+  bool stalled = cbDelay >= kCallbackDelayStallThreshold;
+
+  std::vector<std::string> parts;
+  parts.push_back(fmt::format(
+      "[{}]({}) Query timed out",
+      static_cast<uint16_t>(
+          stalled ? SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT_LOOP_STALLED
+                  : SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT),
+      kErrorPrefix));
+
+  parts.push_back(std::move(rowdata));
+  parts.push_back(timeoutMessage(elapsed));
+  if (stalled) {
+    parts.push_back(threadOverloadMessage(cbDelay));
+  }
+
+  return folly::join(" ", parts);
+}
+
+void FetchOperationImpl::cancel() {
+  // Free any allocated results before the connection is closed
+  // We need to do this in the mysql_thread for async versions as the
+  // mysql_thread _might_ be using that memory
+  auto cancelFn = [&]() {
+    current_row_stream_ = folly::none;
+    OperationBase::cancel();
+  };
+  if (client_.isInCorrectThread(true)) {
+    cancelFn();
+  } else {
+    client_.runInThread(std::move(cancelFn), true /*wait*/);
+  }
+}
+
 uint64_t FetchOperationImpl::currentLastInsertId() const {
   CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_last_insert_id_;
@@ -100,6 +138,16 @@ uint64_t FetchOperationImpl::currentAffectedRows() const {
 const std::string& FetchOperationImpl::currentRecvGtid() const {
   CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_recv_gtid_;
+}
+
+const std::optional<std::string>& FetchOperationImpl::currentMysqlInfo() const {
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
+  return current_mysql_info_;
+}
+
+const std::optional<uint64_t> FetchOperationImpl::currentRowsMatched() const {
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
+  return current_rows_matched_;
 }
 
 const AttributeMap& FetchOperationImpl::currentRespAttrs() const {
@@ -124,14 +172,6 @@ AttributeMap FetchOperationImpl::readResponseAttributes() {
 FetchOperation& FetchOperationImpl::getOp() const {
   DCHECK(op_ && dynamic_cast<FetchOperation*>(op_) != nullptr);
   return *(FetchOperation*)op_;
-}
-
-void FetchOperation::mustSucceed() {
-  run().wait();
-  if (!ok()) {
-    throw db::RequiredOperationFailedException(
-        "Query failed: " + mysql_error());
-  }
 }
 
 folly::StringPiece FetchOperationImpl::toString(FetchAction action) {

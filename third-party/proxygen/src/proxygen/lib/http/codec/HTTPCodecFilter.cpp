@@ -104,11 +104,6 @@ void PassThroughHTTPCodecFilter::onSettingsAck() {
   callback_->onSettingsAck();
 }
 
-void PassThroughHTTPCodecFilter::onPriority(
-    StreamID stream, const HTTPMessage::HTTP2Priority& pri) {
-  callback_->onPriority(stream, pri);
-}
-
 void PassThroughHTTPCodecFilter::onPriority(StreamID stream,
                                             const HTTPPriority& pri) {
   callback_->onPriority(stream, pri);
@@ -347,13 +342,6 @@ size_t PassThroughHTTPCodecFilter::generateWindowUpdate(folly::IOBufQueue& buf,
   return call_->generateWindowUpdate(buf, stream, delta);
 }
 
-size_t PassThroughHTTPCodecFilter::generatePriority(
-    folly::IOBufQueue& writeBuf,
-    StreamID stream,
-    const HTTPMessage::HTTP2Priority& pri) {
-  return call_->generatePriority(writeBuf, stream, pri);
-}
-
 size_t PassThroughHTTPCodecFilter::generatePriority(folly::IOBufQueue& writeBuf,
                                                     StreamID streamId,
                                                     HTTPPriority priority) {
@@ -404,17 +392,6 @@ HTTPCodec::StreamID PassThroughHTTPCodecFilter::getLastIncomingStreamID()
 
 uint32_t PassThroughHTTPCodecFilter::getDefaultWindowSize() const {
   return call_->getDefaultWindowSize();
-}
-
-size_t PassThroughHTTPCodecFilter::addPriorityNodes(PriorityQueue& queue,
-                                                    folly::IOBufQueue& writeBuf,
-                                                    uint8_t maxLevel) {
-  return call_->addPriorityNodes(queue, writeBuf, maxLevel);
-}
-
-HTTPCodec::StreamID PassThroughHTTPCodecFilter::mapPriorityToDependency(
-    uint8_t priority) const {
-  return call_->mapPriorityToDependency(priority);
 }
 
 int8_t PassThroughHTTPCodecFilter::mapDependencyToPriority(

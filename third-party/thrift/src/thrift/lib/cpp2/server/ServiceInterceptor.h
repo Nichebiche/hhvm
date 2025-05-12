@@ -16,7 +16,9 @@
 
 #pragma once
 
+#include <folly/stop_watch.h>
 #include <thrift/lib/cpp2/server/ServiceInterceptorBase.h>
+#include <thrift/lib/cpp2/server/ServiceInterceptorControl.h>
 #include <thrift/lib/cpp2/server/ServiceInterceptorStorage.h>
 
 #if FOLLY_HAS_COROUTINES
@@ -49,22 +51,47 @@ class ServiceInterceptor : public ServiceInterceptorBase {
   }
   virtual void onConnectionClosed(ConnectionState*, ConnectionInfo) noexcept {}
 
+  const ServiceInterceptorQualifiedName& getQualifiedName() const final {
+    return qualifiedName_;
+  }
+
  private:
-  void internal_onConnection(ConnectionInfo connectionInfo) final {
+  void internal_onConnection(
+      ConnectionInfo connectionInfo,
+      InterceptorMetricCallback& interceptorMetricCallback) final {
+    if (isDisabled()) {
+      return;
+    }
+    folly::stop_watch<std::chrono::microseconds> onConnectionTimer;
     auto* storage = connectionInfo.storage;
     if (auto value = onConnection(std::move(connectionInfo))) {
       storage->emplace<ConnectionState>(std::move(*value));
     }
+    interceptorMetricCallback.onConnectionComplete(
+        getQualifiedName(), onConnectionTimer.elapsed());
   }
   void internal_onConnectionClosed(
-      ConnectionInfo connectionInfo) noexcept final {
+      ConnectionInfo connectionInfo,
+      InterceptorMetricCallback& interceptorMetricCallback) noexcept final {
+    if (isDisabled()) {
+      return;
+    }
+    folly::stop_watch<std::chrono::microseconds> onConnectionClosedTimer;
     auto* connectionState =
         getValueAsType<ConnectionState>(*connectionInfo.storage);
     onConnectionClosed(connectionState, std::move(connectionInfo));
+    interceptorMetricCallback.onConnectionClosedComplete(
+        getQualifiedName(), onConnectionClosedTimer.elapsed());
   }
 
   folly::coro::Task<void> internal_onRequest(
-      ConnectionInfo connectionInfo, RequestInfo requestInfo) final {
+      ConnectionInfo connectionInfo,
+      RequestInfo requestInfo,
+      InterceptorMetricCallback& interceptorMetricCallback) final {
+    if (isDisabled()) {
+      co_return;
+    }
+    folly::stop_watch<std::chrono::microseconds> onRequestTimer;
     auto* connectionState =
         getValueAsType<ConnectionState>(*connectionInfo.storage);
     auto* storage = requestInfo.storage;
@@ -72,15 +99,34 @@ class ServiceInterceptor : public ServiceInterceptorBase {
             co_await onRequest(connectionState, std::move(requestInfo))) {
       storage->emplace<RequestState>(std::move(*value));
     }
+    interceptorMetricCallback.onRequestComplete(
+        getQualifiedName(), onRequestTimer.elapsed());
   }
 
   folly::coro::Task<void> internal_onResponse(
-      ConnectionInfo connectionInfo, ResponseInfo responseInfo) final {
+      ConnectionInfo connectionInfo,
+      ResponseInfo responseInfo,
+      InterceptorMetricCallback& interceptorMetricCallback) final {
+    if (isDisabled()) {
+      co_return;
+    }
+    folly::stop_watch<std::chrono::microseconds> onResponseTimer;
     auto* requestState = getValueAsType<RequestState>(*responseInfo.storage);
     auto* connectionState =
         getValueAsType<ConnectionState>(*connectionInfo.storage);
     co_await onResponse(requestState, connectionState, std::move(responseInfo));
+    interceptorMetricCallback.onResponseComplete(
+        getQualifiedName(), onResponseTimer.elapsed());
   }
+
+  void setModuleName(const std::string& moduleName) final {
+    qualifiedName_.setName(moduleName, getName());
+  }
+
+  bool isDisabled() const { return control_.isDisabled(); }
+
+  ServiceInterceptorQualifiedName qualifiedName_;
+  ServiceInterceptorControl control_{qualifiedName_};
 };
 
 } // namespace apache::thrift

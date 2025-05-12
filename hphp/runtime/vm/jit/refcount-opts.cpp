@@ -499,7 +499,6 @@ them when we shouldn't.
 #include <cstdio>
 #include <string>
 #include <limits>
-#include <sstream>
 #include <array>
 #include <tuple>
 
@@ -537,7 +536,7 @@ namespace HPHP { namespace jit {
 
 namespace {
 
-TRACE_SET_MOD(hhir_refcount);
+TRACE_SET_MOD(hhir_refcount)
 
 //////////////////////////////////////////////////////////////////////
 
@@ -887,7 +886,7 @@ struct PreAdderInfo {
       }
       assertx(it != inst.block()->begin());
     }
-  };
+  }
   void setAvlAnt(Block::iterator iter, bool avl) {
     auto& inst = *iter;
     auto const id = penv.env.asetMap[inst.src(0)];
@@ -1012,7 +1011,7 @@ void mrinfo_step_impl(Env& env,
   };
 
   auto const effects = memory_effects(inst);
-  match<void>(
+  match(
     effects,
     [&](const IrrelevantEffects&) {},
     [&](const ExitEffects&) {},
@@ -1183,7 +1182,7 @@ void weaken_decref_step(const Env& env, const IRInstruction& inst, Gen gen) {
     if (asetID == -1) continue;
     if (!checked) {
       auto const effects = memory_effects(inst);
-      if (boost::get<PureStore>(&effects)) return;
+      if (std::get_if<PureStore>(&effects)) return;
       checked = true;
     }
     gen(asetID);
@@ -1791,6 +1790,11 @@ void may_decref(Env& env, RCState& state, ASetID asetID, PreAdder add_node) {
          asetID, aset.lower_bound, aset.unsupported_refs);
 
   if (balanced) {
+    /*
+     * The intention here is to reduce just the assumed reference of may-alias sets by 1
+     * However, we don't distinguish which of the unsupported references are assumed
+     * Therefore, we conservatively decrease the unsupported reference by 1
+     */ 
     FTRACE(4, "    adding balanced decref: {}\n", asetID);
     if (!state.has_unsupported_refs) return;
     for (auto may_id : env.asets[asetID].may_alias) {
@@ -2056,7 +2060,7 @@ void analyze_mem_effects(Env& env,
                          PreAdder add_node) {
   auto const effects = canonicalize(memory_effects(inst));
   FTRACE(4, "    mem: {}\n", show(effects));
-  match<void>(
+  match(
     effects,
     [&] (const IrrelevantEffects&) {},
 
@@ -2174,6 +2178,7 @@ void rc_analyze_inst(Env& env,
         auto& dstSet = state.asets[*dstID];
         if (dstSet.lower_bound < srcSet.lower_bound) {
           auto const delta = srcSet.lower_bound - dstSet.lower_bound;
+          // Add assumed references to dstSet
           dstSet.unsupported_refs += delta;
           dstSet.lower_bound = srcSet.lower_bound;
           state.has_unsupported_refs = true;
@@ -2190,6 +2195,12 @@ void rc_analyze_inst(Env& env,
     if_aset(env, inst.src(0), [&] (ASetID asetID) {
       auto& aset = state.asets[asetID];
       if (!aset.lower_bound) {
+        /*
+         * We incref aset so there must be a ref to it, otherwise the input program is malformed.
+         * Therefore, we assume aset has atleast a single reference.
+         * This is a special unsupported ref because it may already be accounted for, 
+         * by the supported component of the aset's may-aliases.
+         */
         FTRACE(3, "    {} unsupported_refs += 1\n", asetID);
         assertx(!aset.unsupported_refs);
         aset.lower_bound = aset.unsupported_refs = 1;
@@ -2208,6 +2219,13 @@ void rc_analyze_inst(Env& env,
       if_aset(env, inst.src(0), [&] (ASetID asetID) {
         auto& aset = state.asets[asetID];
         if (inst.op() == DecRefNZ && aset.lower_bound < 2) {
+          /*
+           * We DecRefNZ aset so there must be at least 2 refs to it, otherwise the input program is malformed.
+           * Therefore, we add 2 assumed references to aset.
+           * These are special unsupported refs because they may already be accounted for, 
+           * by the supported component of the aset's may-aliases.
+           */
+
           FTRACE(3, "    {} unsupported_refs += {}\n",
                  asetID, 2 - aset.lower_bound);
           assertx(aset.unsupported_refs <= aset.lower_bound);
@@ -2278,6 +2296,7 @@ void rc_analyze_inst(Env& env,
         if (inst.movesReference(srcID)) {
           auto& aset = state.asets[asetID];
           if (!aset.lower_bound) {
+            // Add an assumed reference
             aset.lower_bound = aset.unsupported_refs = 1;
             state.has_unsupported_refs = true;
           } else if (aset.lower_bound > aset.unsupported_refs) {

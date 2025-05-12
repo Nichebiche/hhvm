@@ -234,6 +234,7 @@ add_library(
   async/HibernatingRequestChannel.cpp
   async/Interaction.cpp
   async/InteractionOverloadPolicy.cpp
+  async/InterceptorFlags.cpp
   async/MultiplexAsyncProcessor.cpp
   async/PooledRequestChannel.cpp
   async/ReconnectingRequestChannel.cpp
@@ -247,7 +248,6 @@ add_library(
   async/ServerGeneratorStream.cpp
   async/ServerRequestData.cpp
   async/ServerSinkBridge.cpp
-  async/ThreadBoundAdaptorChannel.cpp
   gen/module_constants_cpp.cpp
   gen/module_metadata_cpp.cpp
   gen/module_types_cpp.cpp
@@ -259,7 +259,6 @@ add_library(
   security/extensions/ThriftParametersContext.cpp
   security/extensions/Types.cpp
   server/AdaptiveConcurrency.cpp
-  server/ConcurrencyControllerInterface.cpp
   server/ConcurrencyControllerBase.cpp
   server/Cpp2ConnContext.cpp
   server/Cpp2Connection.cpp
@@ -273,11 +272,11 @@ add_library(
   server/MonitoringMethodNames.cpp
   server/ParallelConcurrencyController.cpp
   server/TokenBucketConcurrencyController.cpp
+  server/ServiceInterceptorQualifiedName.cpp
   server/StandardConcurrencyController.cpp
   server/ThreadManagerLoggingWrapper.cpp
   server/RequestDebugLog.cpp
   server/RequestPileBase.cpp
-  server/RequestPileInterface.cpp
   server/ReactiveToggle.cpp
   server/RequestsRegistry.cpp
   server/ResourcePool.cpp
@@ -290,6 +289,7 @@ add_library(
   server/ServerInstrumentation.cpp
   server/ServiceHealthPoller.cpp
   server/ServiceInterceptorBase.cpp
+  server/ServiceInterceptorQualifiedName.cpp
   server/ThriftProcessor.cpp
   server/ThriftServer.cpp
   server/ThriftServerConfig.cpp
@@ -309,6 +309,7 @@ add_library(
   transport/rocket/Types.cpp
   transport/rocket/compression/CompressionManager.cpp
   transport/rocket/compression/CompressionAlgorithmSelector.cpp
+  transport/rocket/compression/CustomCompressorRegistry.cpp
   transport/rocket/client/RequestContext.cpp
   transport/rocket/client/RequestContextQueue.cpp
   transport/rocket/client/RocketClient.cpp

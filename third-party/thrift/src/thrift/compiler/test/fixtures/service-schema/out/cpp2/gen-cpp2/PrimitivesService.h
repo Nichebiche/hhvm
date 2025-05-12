@@ -37,6 +37,8 @@ class PrimitivesServiceServiceInfoHolder : public apache::thrift::ServiceInfoHol
 namespace apache::thrift {
 template <>
 class ServiceHandler<::cpp2::PrimitivesService> : public apache::thrift::ServerInterface {
+  static_assert(!folly::is_detected_v<::apache::thrift::detail::st::detect_complete, ::cpp2::PrimitivesService>, "Definition collision with service tag. Either rename the Thrift service using @cpp.Name annotation or rename the conflicting C++ type.");
+
  public:
   std::string_view getGeneratedName() const override { return "PrimitivesService"; }
 
@@ -45,6 +47,7 @@ class ServiceHandler<::cpp2::PrimitivesService> : public apache::thrift::ServerI
   CreateMethodMetadataResult createMethodMetadata() override;
   #if defined(THRIFT_SCHEMA_AVAILABLE)
   std::optional<schema::DefinitionsSchema> getServiceSchema() override;
+  std::vector<folly::not_null<const schema::ServiceNode*>> getServiceSchemaNodes() override;
   #endif
   bool isThriftGenerated() const override final { return true; }
  private:
@@ -85,6 +88,13 @@ class ServiceHandler<::cpp2::PrimitivesService> : public apache::thrift::ServerI
   std::atomic<apache::thrift::detail::si::InvocationType> __fbthrift_invocation_return_void_method{apache::thrift::detail::si::InvocationType::AsyncTm};
 };
 
+namespace detail {
+template <> struct TSchemaAssociation<::cpp2::PrimitivesService, false> {
+  static ::folly::Range<const ::std::string_view*>(*bundle)();
+  static constexpr int64_t programId = -5240074935052059995;
+  static constexpr ::std::string_view definitionKey = {"\x0d\x05\x1d\xbc\xb2\xd5\x1d\x8f\x95\x45\xbb\x51\xfa\xcf\x0f\xfe", 16};
+};
+}
 } // namespace apache::thrift
 
 namespace cpp2 {

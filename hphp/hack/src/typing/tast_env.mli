@@ -38,6 +38,13 @@ val print_ty_with_identity :
   'b SymbolDefinition.t option ->
   string
 
+val print_decl_ty_with_identity :
+  env ->
+  Typing_defs.decl_ty ->
+  'b SymbolOccurrence.t ->
+  'b SymbolDefinition.t option ->
+  string
+
 (** Return a JSON representation of the given type. *)
 val ty_to_json :
   env -> ?show_like_ty:bool -> Typing_defs.locl_ty -> Hh_json.json
@@ -124,6 +131,9 @@ val is_disjoint :
 (** Strip supportdyn from type, return whether it was there or not *)
 val strip_supportdyn : env -> Tast.ty -> bool * Tast.ty
 
+val get_underlying_function_type :
+  env -> Tast.ty -> (Typing_reason.t * Tast.ty Typing_defs.fun_type) option
+
 (** Types that can have methods called on them. Usually a class but
     also includes dynamic types *)
 type receiver_identifier =
@@ -143,9 +153,8 @@ val get_class_ids : env -> Tast.ty -> string list
 (** For an `EnumClass\Label<T, _>` returns `T`. *)
 val get_label_receiver_ty : env -> Tast.ty -> env * Tast.ty
 
-(** Strip away all Toptions that we possibly can in a type, expanding type
-    variables along the way, turning ?T -> T. *)
-val non_null : env -> Pos_or_decl.t -> Tast.ty -> env * Tast.ty
+(** Intersect type with nonnull *)
+val intersect_with_nonnull : env -> Pos_or_decl.t -> Tast.ty -> env * Tast.ty
 
 (** Get the "as" constraints from an abstract type or generic parameter, or
     return the type itself if there is no "as" constraint. In the case of a
@@ -214,8 +223,7 @@ val localize_no_subst :
   during TAST checks, the Next continuation in the typing environment (which stores
   information about type parameters) is gone.
  *)
-val get_upper_bounds :
-  env -> string -> Typing_defs.locl_ty list -> Type_parameter_env.tparam_bounds
+val get_upper_bounds : env -> string -> Type_parameter_env.tparam_bounds
 
 (** Get the reification of the type parameter with the given name. *)
 val get_reified : env -> string -> Aast.reify_kind
@@ -353,6 +361,14 @@ val get_const :
 val consts :
   env -> Decl_provider.class_decl -> (string * Typing_defs.class_const) list
 
+(** Get static member declaration of a class from the appropriate backend and add dependency. *)
+val get_static_member :
+  bool ->
+  env ->
+  Decl_provider.class_decl ->
+  string ->
+  Typing_defs.class_elt option
+
 (** Check that the position is in the current decl and if it is, resolve
     it with the current file. *)
 val fill_in_pos_filename_if_in_current_decl :
@@ -366,3 +382,13 @@ val is_hhi : env -> bool
 val get_check_status : env -> Tast.check_status
 
 val get_current_decl_and_file : env -> Pos_or_decl.ctx
+
+val derive_instantiation :
+  env ->
+  Typing_defs.decl_ty ->
+  Typing_defs.locl_ty ->
+  env * Derive_type_instantiation.Instantiation.t
+
+val add_typing_error : Typing_error.t -> env:env -> unit
+
+val add_warning : env -> ('x, 'a) Typing_warning.t -> unit

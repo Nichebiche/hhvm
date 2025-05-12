@@ -22,6 +22,8 @@
 #include <sstream>
 #include <thread>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <folly/Format.h>
 #include <folly/ThreadLocal.h>
 #include <folly/coro/BlockingWait.h>
@@ -29,8 +31,6 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/Request.h>
-#include <folly/portability/GMock.h>
-#include <folly/portability/GTest.h>
 #include <folly/synchronization/Baton.h>
 #include <thrift/lib/cpp2/GeneratedCodeHelper.h>
 #include <thrift/lib/cpp2/PluggableFunction.h>
@@ -43,7 +43,6 @@
 #include <thrift/lib/cpp2/server/CPUConcurrencyController.h>
 #include <thrift/lib/cpp2/server/Cpp2Worker.h>
 #include <thrift/lib/cpp2/server/ParallelConcurrencyController.h>
-#include <thrift/lib/cpp2/server/RequestDebugLog.h>
 #include <thrift/lib/cpp2/server/RoundRobinRequestPile.h>
 #include <thrift/lib/cpp2/server/ServerFlags.h>
 #include <thrift/lib/cpp2/server/ServerInstrumentation.h>
@@ -432,8 +431,10 @@ TEST_F(RequestInstrumentationTest, simpleRocketRequestTest) {
       });
 
   for (size_t i = 0; i < reqNum; i++) {
-    client->semifuture_sendStreamingRequest();
-    client->semifuture_sendRequest();
+    apache::thrift::RpcOptions options;
+    options.setPriority(concurrency::PRIORITY::HIGH);
+    client->semifuture_sendStreamingRequest(options);
+    client->semifuture_sendRequest(options);
   }
   handler()->waitForRequests(2 * reqNum);
 
@@ -447,6 +448,7 @@ TEST_F(RequestInstrumentationTest, simpleRocketRequestTest) {
 
   for (auto& reqSnapshot : getRequestSnapshots(2 * reqNum)) {
     auto methodName = reqSnapshot.getMethodName();
+    EXPECT_EQ(reqSnapshot.rpcPriority(), RpcPriority::HIGH);
     EXPECT_NE(reqSnapshot.getRootRequestContextId(), 0);
     EXPECT_TRUE(
         methodName == "sendRequest" || methodName == "sendStreamingRequest");

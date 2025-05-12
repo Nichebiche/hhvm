@@ -15,7 +15,7 @@ import (
 
 var _ = test0.GoUnusedProtection__
 // (needed to ensure safety because of naive import list construction)
-var _ = thrift.ZERO
+var _ = thrift.VOID
 var _ = maps.Copy[map[int]int, map[int]int]
 var _ = metadata.GoUnusedProtection__
 
@@ -23,7 +23,7 @@ var _ = metadata.GoUnusedProtection__
 var (
     premadeThriftType_bool = func() *metadata.ThriftType {
         return metadata.NewThriftType().SetTPrimitive(
-            metadata.ThriftPrimitiveType_THRIFT_BOOL_TYPE.Ptr(),
+            thrift.Pointerize(metadata.ThriftPrimitiveType_THRIFT_BOOL_TYPE),
         )
     }()
 )
@@ -76,7 +76,7 @@ var serviceMetadatas = func() []*metadata.ThriftService {
     fbthriftResults := make([]*metadata.ThriftService, 0)
     fbthriftResults = append(fbthriftResults, metadata.NewThriftService().
     SetName("extend.ExtendTestService").
-    SetParent(thrift.StringPtr("hsmodule.HsTestService")).
+    SetParent(thrift.Pointerize("hsmodule.HsTestService")).
     SetFunctions(
         []*metadata.ThriftFunction{
             metadata.NewThriftFunction().
@@ -193,7 +193,7 @@ func getMetadataThriftPrimitiveType(s *thrift.CodecPrimitiveSpec) *metadata.Thri
 		value = metadata.ThriftPrimitiveType_THRIFT_STRING_TYPE
 	}
 
-	return value.Ptr()
+	return thrift.Pointerize(value)
 }
 
 func getMetadataThriftEnumType(s *thrift.CodecEnumSpec) *metadata.ThriftEnumType {

@@ -21,7 +21,7 @@
 #include <quic/codec/QuicInteger.h>
 #include <quic/codec/Types.h>
 
-namespace proxygen { namespace hq {
+namespace proxygen::hq {
 
 //////// Constants ////////
 // Frame headers have a variable length between 2 and 16 Bytes
@@ -37,7 +37,7 @@ const size_t kUnframedDataFrameLen = 0;
 using PushId = uint64_t;
 
 using ParseResult = folly::Optional<HTTP3::ErrorCode>;
-using WriteResult = folly::Expected<size_t, quic::TransportErrorCode>;
+using WriteResult = folly::Expected<size_t, quic::QuicError>;
 
 enum class UnidirectionalStreamType : uint64_t {
   CONTROL = 0x00,
@@ -384,4 +384,4 @@ WriteResult writeWTStreamPreface(folly::IOBufQueue& writeBuf,
  */
 WriteResult writeGreaseFrame(folly::IOBufQueue& writeBuf) noexcept;
 
-}} // namespace proxygen::hq
+} // namespace proxygen::hq

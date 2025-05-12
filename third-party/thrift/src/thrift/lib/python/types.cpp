@@ -22,6 +22,7 @@
 #include <folly/Indestructible.h>
 #include <folly/Range.h>
 #include <folly/ScopeGuard.h>
+#include <folly/io/IOBuf.h>
 #include <folly/lang/New.h>
 #include <folly/python/import.h>
 #include <thrift/lib/cpp2/protocol/TableBasedSerializer.h>
@@ -835,13 +836,14 @@ detail::OptionalThriftValue getString(
  *
  * @throws if `value` cannot be copied to a new `PyBytesObject`.
  */
-void setString(void* objectPtr, const std::string& value) {
+void* setString(void* objectPtr, const std::string& value) {
   UniquePyObjectPtr bytesObj{
       PyBytes_FromStringAndSize(value.data(), value.size())};
   if (bytesObj == nullptr) {
     THRIFT_PY3_CHECK_ERROR();
   }
   setPyObject(objectPtr, std::move(bytesObj));
+  return nullptr;
 }
 
 detail::OptionalThriftValue getIOBuf(
@@ -853,7 +855,7 @@ detail::OptionalThriftValue getIOBuf(
              : detail::OptionalThriftValue{};
 }
 
-void setIOBuf(void* objectPtr, const folly::IOBuf& value) {
+void* setIOBuf(void* objectPtr, const folly::IOBuf& value) {
   ensureImportOrThrow();
   PyObject* buf = create_IOBuf(value.clone());
   UniquePyObjectPtr iobufObj{buf};
@@ -861,6 +863,7 @@ void setIOBuf(void* objectPtr, const folly::IOBuf& value) {
     THRIFT_PY3_CHECK_ERROR();
   }
   setPyObject(objectPtr, std::move(iobufObj));
+  return nullptr;
 }
 
 // This helper method for `MutableMapTypeInfo::write()` sorts the map keys and
@@ -1076,8 +1079,9 @@ class PrimitiveTypeInfoHelper final {
    *        converted to the corresponding Python type and pointed to by the
    *        given `PyObject*`.
    */
-  static void set(void* objectPtr, TCppType value) {
+  static void* set(void* objectPtr, TCppType value) {
     setPyObject(objectPtr, primitiveCppToPython(value));
+    return nullptr;
   }
 };
 
@@ -1086,7 +1090,7 @@ const detail::TypeInfo
     PrimitiveTypeInfoHelper<TCppType, TThriftProtocolTypeEnum>::kTypeInfo{
         /* .type */ TThriftProtocolTypeEnum,
         /* .get */ get,
-        /* .set */ reinterpret_cast<detail::VoidFuncPtr>(set),
+        /* .set */ reinterpret_cast<detail::VoidPtrFuncPtr>(set),
         /* .typeExt */ nullptr,
     };
 
@@ -1267,7 +1271,7 @@ detail::TypeInfo createImmutableStructTypeInfo(
       /* .type */ protocol::TType::T_STRUCT,
       /* .get */ getStruct,
       /* .set */
-      reinterpret_cast<detail::VoidFuncPtr>(
+      reinterpret_cast<detail::VoidPtrFuncPtr>(
           dynamicStructInfo.isUnion() ? setImmutableUnion : setImmutableStruct),
       /* .typeExt */ &dynamicStructInfo.getStructInfo(),
   };
@@ -1285,7 +1289,7 @@ detail::TypeInfo createMutableStructTypeInfo(
       /* .type */ protocol::TType::T_STRUCT,
       /* .get */ getMutableStruct,
       /* .set */
-      reinterpret_cast<detail::VoidFuncPtr>(
+      reinterpret_cast<detail::VoidPtrFuncPtr>(
           dynamicStructInfo.isUnion() ? setMutableUnion : setMutableStruct),
       /* .typeExt */ &dynamicStructInfo.getStructInfo(),
   };
@@ -1676,21 +1680,21 @@ const detail::StringFieldType ioBufFieldType =
 const detail::TypeInfo stringTypeInfo{
     /* .type */ protocol::TType::T_STRING,
     /* .get */ getString,
-    /* .set */ reinterpret_cast<detail::VoidFuncPtr>(setString),
+    /* .set */ reinterpret_cast<detail::VoidPtrFuncPtr>(setString),
     /* .typeExt */ &stringFieldType,
 };
 
 const detail::TypeInfo binaryTypeInfo{
     /* .type */ protocol::TType::T_STRING,
     /* .get */ getString,
-    /* .set */ reinterpret_cast<detail::VoidFuncPtr>(setString),
+    /* .set */ reinterpret_cast<detail::VoidPtrFuncPtr>(setString),
     /* .typeExt */ &binaryFieldType,
 };
 
 const detail::TypeInfo iobufTypeInfo{
     /* .type */ protocol::TType::T_STRING,
     /* .get */ getIOBuf,
-    /* .set */ reinterpret_cast<detail::VoidFuncPtr>(setIOBuf),
+    /* .set */ reinterpret_cast<detail::VoidPtrFuncPtr>(setIOBuf),
     /* .typeExt */ &ioBufFieldType,
 };
 

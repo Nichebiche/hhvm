@@ -35,8 +35,16 @@
                                              (ET_Splice
                                                 { extract_client_type = false; 
                                                   contains_await = false; 
-                                                  macro_variables = None;
-                                                  spliced_expr = ((), [4:25-31], (Binop { bop = Plus; lhs = ((), [4:25-27], (Lvar ([4:25-27], $x))); rhs = ((), [4:30-31], (Int "2")) })) }))
+                                                  macro_variables = None; 
+                                                  temp_lid = $0splice0;
+                                                  spliced_expr =
+                                                  ((), [4:25-31],
+                                                   (Call
+                                                      { func = ((), [4:25-31], (Class_const (((), [4:25-31], (CI ([4:25-31], "\\ExampleDsl"))), ([4:25-31], "lift")))); 
+                                                        targs = [];
+                                                        args = [(Anormal ((), [4:25-31], (Binop { bop = Plus; lhs = ((), [4:25-27], (Lvar ([4:25-27], $x))); rhs = ((), [4:30-31], (Int "2")) })))];
+                                                        unpacked_arg = None }))
+                                                  }))
                                             )))));
                                      ([4:14-32],
                                       (Return
@@ -69,24 +77,8 @@
                                                                     f_readonly_this = None; 
                                                                     f_annotation = (); 
                                                                     f_readonly_ret = None; 
-                                                                    f_ret = ((), None);
-                                                                    f_params =
-                                                                    [{ param_annotation = ();
-                                                                    param_type_hint =
-                                                                    (
-                                                                    (),
-                                                                    (Some (
-                                                                    [4:14-32],
-                                                                    (
-                                                                    Happly (([4:14-32], "\\HH\\supportdyn"), [([4:14-32], (Hshape { nsi_allows_unknown_fields = true; nsi_field_map = [] }))])))));
-                                                                    param_pos = [4:14-32]; 
-                                                                    param_name = "$0fv_shape"; 
-                                                                    param_info = (Param_optional (Some ((), [4:14-32], (Shape [])))); 
-                                                                    param_readonly = None; 
-                                                                    param_splat = None; 
-                                                                    param_callconv = Pnormal; 
-                                                                    param_user_attributes = []; 
-                                                                    param_visibility = None }]; 
+                                                                    f_ret = ((), None); 
+                                                                    f_params = []; 
                                                                     f_ctxs = (Some ([4:14-32], [([4:14-32], (Happly (([4:14-32], "\\HH\\Contexts\\defaults"), [])))])); 
                                                                     f_unsafe_ctxs = None;
                                                                     f_body =
@@ -131,6 +123,7 @@
                                                                     { extract_client_type = true; 
                                                                     contains_await = false; 
                                                                     macro_variables = None; 
+                                                                    temp_lid = $0splice0; 
                                                                     spliced_expr = ((), [4:25-31], (Lvar ([4:25-31], $0splice0))) })))]; 
                                                                     unpacked_arg = None })))))] }; 
                                                                     f_fun_kind = FSync; 
@@ -138,7 +131,8 @@
                                                                     f_external = false; 
                                                                     f_doc_comment = None }; 
                                                                     ef_use = [((), ([4:3-13], $0splice0))]; 
-                                                                    ef_closure_class_name = None })))
+                                                                    ef_closure_class_name = None; 
+                                                                    ef_is_expr_tree_virtual_expr = false })))
                                                                 ])));
                                                        (Anormal
                                                           ((), [4:14-32],
@@ -272,8 +266,8 @@
                                  f_fun_kind = FSync; f_user_attributes = []; 
                                  f_external = false; f_doc_comment = None },
                                [((), ([4:25-27], $x)); ((), ([4:25-31], $0splice0))])));
-                           targs = []; args = []; unpacked_arg = None }))
-                     }))))
+                           targs = []; args = []; unpacked_arg = None }));
+                     et_free_vars = None }))))
             ]
           };
         f_fun_kind = FSync; f_user_attributes = [{ ua_name = ([3:10-14], "__SupportDynamicType"); ua_params = [] }]; 

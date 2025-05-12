@@ -15,6 +15,7 @@
  */
 
 #include <thrift/compiler/whisker/detail/string.h>
+#include <thrift/shared/detail/string.h>
 
 namespace whisker::detail {
 
@@ -35,35 +36,7 @@ bool is_digit(char c) {
 }
 
 std::string escape(std::string_view str) {
-  std::string result;
-  for (const char ch : str) {
-    switch (ch) {
-      case '\\':
-        result += "\\\\";
-        break;
-      case '\n':
-        result += "\\n";
-        break;
-      case '\r':
-        result += "\\r";
-        break;
-      case '\t':
-        result += "\\t";
-        break;
-      case '\v':
-        result += "\\v";
-        break;
-      case '\f':
-        result += "\\f";
-        break;
-      case '\'':
-        result += "\\'";
-        break;
-      default:
-        result += ch;
-    }
-  }
-  return result;
+  return apache::thrift::detail::escape(str);
 }
 
 } // namespace whisker::detail

@@ -209,7 +209,7 @@ let completion_reason_short_description = function
 
 type errors_file_item =
   | Errors of {
-      errors: Errors.finalized_error list Relative_path.Map.t;
+      errors: (Errors.finalized_error * int) list Relative_path.Map.t;
           (** we convert to finalized_error (i.e. turn paths absolute) before writing in the file,
             because consumers don't know hhi paths. As for the [Relative_path.Map.t], it
             is guaranteed to only have root-relative paths. (we don't have a type to indicate
@@ -261,8 +261,8 @@ module ErrorsFile = struct
         cmdline: string;
             (** the /proc/pid/cmdline of hh_server; clients check that the current /proc/pid/cmdline is the same (proving that the pid hasn't been recycled) *)
         timestamp: float;  (** the time at which the typecheck began *)
-        clock: Watchman.clock option;
-            (** the watchclock at which the typecheck began, i.e. reflecting all file-changes up to here *)
+        clock: ServerNotifierTypes.clock option;
+            (** the file watcher clock at which the typecheck began, i.e. reflecting all file-changes up to here *)
       }
     | Item of errors_file_item
     | End of {
@@ -400,7 +400,7 @@ module ErrorsWrite = struct
     result
 
   let new_empty_file
-      ~(clock : Watchman.clock option)
+      ~(clock : ServerNotifierTypes.clock option)
       ~(ignore_hh_version : bool)
       ~(cancel_reason : string * string) : unit =
     match errors_file_path () with
@@ -459,7 +459,10 @@ module ErrorsWrite = struct
               Hh_logger.log
                 "Errors-file: starting new %s at clock %s"
                 (Sys_utils.show_inode fd)
-                (Option.value clock ~default:"[none]");
+                (Option.value_map
+                   clock
+                   ~f:ServerNotifierTypes.show_clock
+                   ~default:"[none]");
               fd)
       in
       write_state := Reporting (fd, 0)
@@ -501,7 +504,11 @@ module ErrorsWrite = struct
                      ~path;
                  is_root)
           |> Relative_path.Map.map ~f:(fun errors ->
-                 errors |> Errors.sort |> List.map ~f:User_error.to_absolute)
+                 errors
+                 |> Errors.sort
+                 |> List.map ~f:(fun err ->
+                        ( User_error.to_absolute err,
+                          User_error.hash_error_for_saved_state err )))
         in
         ErrorsFile.write_message
           fd
@@ -585,7 +592,7 @@ module ErrorsRead = struct
   type open_success = {
     pid: int;
     timestamp: float;
-    clock: Watchman.clock option;
+    clock: ServerNotifierTypes.clock option;
   }
 
   type open_error =

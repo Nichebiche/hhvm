@@ -37,7 +37,7 @@ from thrift.py3.types cimport (
     make_const_shared,
     constant_shared_ptr,
 )
-from thrift.py3.types import _is_python_enum, _is_python_struct
+from thrift.py3.types cimport _ensure_py3_or_raise, _ensure_py3_container_or_raise
 cimport thrift.py3.serializer as serializer
 from thrift.python.protocol cimport Protocol as __Protocol
 import folly.iobuf as _fbthrift_iobuf
@@ -52,10 +52,12 @@ import builtins as _builtins
 import importlib
 
 import module.thrift_types as _fbthrift_python_types
-from module.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
+from module.thrift_enums import (
     AnEnum,
     AnEnumRenamed,
     Flags,
+)
+from module.types_impl_FBTHRIFT_ONLY_DO_NOT_USE import (
     __BinaryUnionType,
 )
 
@@ -101,6 +103,7 @@ cdef object get_types_reflection():
     )
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class SimpleException(thrift.py3.exceptions.GeneratedError):
     __module__ = _fbthrift__module_name__
 
@@ -143,10 +146,7 @@ cdef class SimpleException(thrift.py3.exceptions.GeneratedError):
 
 
     def __copy__(SimpleException self):
-        cdef shared_ptr[_module_cbindings.cSimpleException] cpp_obj = make_shared[_module_cbindings.cSimpleException](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return SimpleException._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -207,6 +207,7 @@ cdef class SimpleException(thrift.py3.exceptions.GeneratedError):
         return thrift.util.converter.to_py_struct(py_deprecated_types.SimpleException, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class OptionalRefStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -264,10 +265,7 @@ cdef class OptionalRefStruct(thrift.py3.types.Struct):
 
 
     def __copy__(OptionalRefStruct self):
-        cdef shared_ptr[_module_cbindings.cOptionalRefStruct] cpp_obj = make_shared[_module_cbindings.cOptionalRefStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return OptionalRefStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __richcmp__(self, other, int op):
         r = self._fbthrift_cmp_sametype(other, op)
@@ -328,6 +326,7 @@ cdef class OptionalRefStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.OptionalRefStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class SimpleStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -359,6 +358,9 @@ cdef class SimpleStruct(thrift.py3.types.Struct):
           "real": deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).real_ref().has_value(),
           "smaller_real": deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).smaller_real_ref().has_value(),
           "something": deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).something_ref().has_value(),
+          "opt_default_int": deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).opt_default_int_ref().has_value(),
+          "opt_default_str": deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).opt_default_str_ref().has_value(),
+          "opt_default_enum": deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).opt_default_enum_ref().has_value(),
         })
 
     @staticmethod
@@ -425,6 +427,29 @@ cdef class SimpleStruct(thrift.py3.types.Struct):
     def something(self):
         return self.something_impl()
 
+    cdef inline opt_default_int_impl(self):
+        return deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).opt_default_int_ref().value_unchecked()
+
+    @property
+    def opt_default_int(self):
+        return self.opt_default_int_impl()
+
+    cdef inline opt_default_str_impl(self):
+        return (<bytes>deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).opt_default_str_ref().value_unchecked()).decode('UTF-8')
+
+    @property
+    def opt_default_str(self):
+        return self.opt_default_str_impl()
+
+    cdef inline opt_default_enum_impl(self):
+        if self.__fbthrift_cached_opt_default_enum is None:
+            self.__fbthrift_cached_opt_default_enum = translate_cpp_enum_to_python(AnEnum, <int>(deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).opt_default_enum_ref().value_unchecked()))
+        return self.__fbthrift_cached_opt_default_enum
+
+    @property
+    def opt_default_enum(self):
+        return self.opt_default_enum_impl()
+
 
     def __hash__(SimpleStruct self):
         return super().__hash__()
@@ -437,10 +462,7 @@ cdef class SimpleStruct(thrift.py3.types.Struct):
 
 
     def __copy__(SimpleStruct self):
-        cdef shared_ptr[_module_cbindings.cSimpleStruct] cpp_obj = make_shared[_module_cbindings.cSimpleStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return SimpleStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(SimpleStruct self, other):
         if not isinstance(other, SimpleStruct):
@@ -475,6 +497,9 @@ cdef class SimpleStruct(thrift.py3.types.Struct):
         'real',
         'smaller_real',
         'something',
+        'opt_default_int',
+        'opt_default_str',
+        'opt_default_enum',
     ]
 
     @classmethod
@@ -483,7 +508,7 @@ cdef class SimpleStruct(thrift.py3.types.Struct):
 
     @classmethod
     def _fbthrift_get_struct_size(cls):
-        return 8
+        return 11
 
     cdef _fbthrift_iobuf.IOBuf _fbthrift_serialize(SimpleStruct self, __Protocol proto):
         cdef unique_ptr[_fbthrift_iobuf.cIOBuf] data
@@ -514,6 +539,7 @@ cdef class SimpleStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.SimpleStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class HiddenTypeFieldsStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -550,10 +576,7 @@ cdef class HiddenTypeFieldsStruct(thrift.py3.types.Struct):
 
 
     def __copy__(HiddenTypeFieldsStruct self):
-        cdef shared_ptr[_module_cbindings.cHiddenTypeFieldsStruct] cpp_obj = make_shared[_module_cbindings.cHiddenTypeFieldsStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return HiddenTypeFieldsStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(HiddenTypeFieldsStruct self, other):
         if not isinstance(other, HiddenTypeFieldsStruct):
@@ -619,6 +642,7 @@ cdef class HiddenTypeFieldsStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.HiddenTypeFieldsStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class ComplexStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -740,10 +764,7 @@ cdef class ComplexStruct(thrift.py3.types.Struct):
 
 
     def __copy__(ComplexStruct self):
-        cdef shared_ptr[_module_cbindings.cComplexStruct] cpp_obj = make_shared[_module_cbindings.cComplexStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return ComplexStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(ComplexStruct self, other):
         if not isinstance(other, ComplexStruct):
@@ -808,22 +829,15 @@ cdef class ComplexStruct(thrift.py3.types.Struct):
 
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class BinaryUnion(thrift.py3.types.Union):
     __module__ = _fbthrift__module_name__
     Type = __BinaryUnionType
 
     def __init__(
         self, *,
-        iobuf_val=None
+        _fbthrift_iobuf.IOBuf iobuf_val=None
     ):
-        if iobuf_val is not None:
-            if not isinstance(iobuf_val, _fbthrift_iobuf.IOBuf):
-                if _is_python_struct(iobuf_val) or _is_python_enum(iobuf_val):
-                    iobuf_val = iobuf_val._to_py3()
-                    if not isinstance(iobuf_val, _fbthrift_iobuf.IOBuf):
-                        raise TypeError(f'iobuf_val is a thrift-python type that can not be converted to { _fbthrift_iobuf.IOBuf !r}.')
-                else:
-                    raise TypeError(f'iobuf_val is not a { _fbthrift_iobuf.IOBuf !r}.')
         self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE = __to_shared_ptr(cmove(BinaryUnion._make_instance(
           NULL,
           iobuf_val,
@@ -887,14 +901,11 @@ cdef class BinaryUnion(thrift.py3.types.Union):
 
     cdef _initialize_py(BinaryUnion self):
         self.py_type = None
-        self.type_int = deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType()
+        self.type_int = int(deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE).getType())
         self.py_value = None
 
     def __copy__(BinaryUnion self):
-        cdef shared_ptr[_module_cbindings.cBinaryUnion] cpp_obj = make_shared[_module_cbindings.cBinaryUnion](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return BinaryUnion._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(BinaryUnion self, other):
         return isinstance(other, BinaryUnion) and self._fbthrift_noncomparable_eq(other)
@@ -952,6 +963,7 @@ cdef class BinaryUnion(thrift.py3.types.Union):
         return thrift.util.converter.to_py_struct(py_deprecated_types.BinaryUnion, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class BinaryUnionStruct(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1005,10 +1017,7 @@ cdef class BinaryUnionStruct(thrift.py3.types.Struct):
 
 
     def __copy__(BinaryUnionStruct self):
-        cdef shared_ptr[_module_cbindings.cBinaryUnionStruct] cpp_obj = make_shared[_module_cbindings.cBinaryUnionStruct](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return BinaryUnionStruct._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(BinaryUnionStruct self, other):
         return isinstance(other, BinaryUnionStruct) and self._fbthrift_noncomparable_eq(other)
@@ -1064,6 +1073,7 @@ cdef class BinaryUnionStruct(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.BinaryUnionStruct, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class CustomFields(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1187,10 +1197,7 @@ cdef class CustomFields(thrift.py3.types.Struct):
 
 
     def __copy__(CustomFields self):
-        cdef shared_ptr[_module_cbindings.cCustomFields] cpp_obj = make_shared[_module_cbindings.cCustomFields](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return CustomFields._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(CustomFields self, other):
         if not isinstance(other, CustomFields):
@@ -1253,6 +1260,7 @@ cdef class CustomFields(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.CustomFields, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class CustomTypedefFields(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1376,10 +1384,7 @@ cdef class CustomTypedefFields(thrift.py3.types.Struct):
 
 
     def __copy__(CustomTypedefFields self):
-        cdef shared_ptr[_module_cbindings.cCustomTypedefFields] cpp_obj = make_shared[_module_cbindings.cCustomTypedefFields](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return CustomTypedefFields._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(CustomTypedefFields self, other):
         if not isinstance(other, CustomTypedefFields):
@@ -1442,6 +1447,7 @@ cdef class CustomTypedefFields(thrift.py3.types.Struct):
         return thrift.util.converter.to_py_struct(py_deprecated_types.CustomTypedefFields, self)
 
 @__cython.auto_pickle(False)
+@__cython.final
 cdef class AdaptedTypedefFields(thrift.py3.types.Struct):
     __module__ = _fbthrift__module_name__
 
@@ -1565,10 +1571,7 @@ cdef class AdaptedTypedefFields(thrift.py3.types.Struct):
 
 
     def __copy__(AdaptedTypedefFields self):
-        cdef shared_ptr[_module_cbindings.cAdaptedTypedefFields] cpp_obj = make_shared[_module_cbindings.cAdaptedTypedefFields](
-            deref(self._cpp_obj_FBTHRIFT_ONLY_DO_NOT_USE)
-        )
-        return AdaptedTypedefFields._create_FBTHRIFT_ONLY_DO_NOT_USE(cmove(cpp_obj))
+        return self
 
     def __eq__(AdaptedTypedefFields self, other):
         if not isinstance(other, AdaptedTypedefFields):

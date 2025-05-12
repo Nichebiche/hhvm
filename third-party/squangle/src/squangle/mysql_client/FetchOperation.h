@@ -132,15 +132,13 @@ class FetchOperationImpl : virtual public OperationBase {
     use_checksum_ = useChecksum;
   }
 
-  void cancel() override {
-    // Free any allocated results before the connection is closed
-    current_row_stream_ = folly::none;
-    OperationBase::cancel();
-  }
+  void cancel() override;
 
   uint64_t currentLastInsertId() const;
   uint64_t currentAffectedRows() const;
   const std::string& currentRecvGtid() const;
+  const std::optional<std::string>& currentMysqlInfo() const;
+  const std::optional<uint64_t> currentRowsMatched() const;
   const RespAttrs& currentRespAttrs() const;
   unsigned int currentWarningsCount() const;
 
@@ -162,6 +160,18 @@ class FetchOperationImpl : virtual public OperationBase {
     CompleteOperation
   };
 
+  FetchAction getActiveFetchAction() const {
+    return active_fetch_action_.load(std::memory_order_relaxed);
+  }
+
+  void setActiveFetchAction(FetchAction action) {
+    active_fetch_action_.store(action, std::memory_order_relaxed);
+  }
+
+  FetchAction exchangeActiveFetchAction(FetchAction action) {
+    return active_fetch_action_.exchange(action);
+  }
+
   void setFetchAction(FetchAction action);
   static folly::StringPiece toString(FetchAction action);
 
@@ -182,6 +192,10 @@ class FetchOperationImpl : virtual public OperationBase {
 
   // Functions to deal with the connection
   [[nodiscard]] const InternalConnection& getInternalConnection() const;
+
+  [[nodiscard]] std::string generateTimeoutError(
+      std::string rowData,
+      Millis elapsed) const;
 
   std::shared_ptr<folly::fbstring> rendered_query_;
 
@@ -207,13 +221,17 @@ class FetchOperationImpl : virtual public OperationBase {
   uint64_t current_last_insert_id_ = 0;
   unsigned int current_warnings_count_ = 0;
   std::string current_recv_gtid_;
+  std::optional<std::string> current_mysql_info_;
+  std::optional<uint64_t> current_rows_matched_;
   RespAttrs current_resp_attrs_;
 
-  // When the Fetch gets paused, active fetch action moves to
-  // `WaitForConsumer` and the action that got paused gets saved so tat
-  // `resume` can set it properly afterwards.
-  FetchAction active_fetch_action_ = FetchAction::StartQuery;
+  // When the Fetch gets paused, active fetch action moves to `WaitForConsumer`
+  // and the action that got paused gets saved so that `resume` can set it
+  // properly afterwards.
   FetchAction paused_action_ = FetchAction::StartQuery;
+
+ private:
+  std::atomic<FetchAction> active_fetch_action_ = FetchAction::StartQuery;
 };
 
 // A fetching operation (query or multiple queries) use the same primary
@@ -231,8 +249,6 @@ class FetchOperationImpl : virtual public OperationBase {
 class FetchOperation : public Operation {
  public:
   using RespAttrs = AttributeMap;
-
-  void mustSucceed() override;
 
   // Number of queries that succeed to execute
   int numQueriesExecuted() const {
@@ -259,6 +275,12 @@ class FetchOperation : public Operation {
   }
   const std::string& currentRecvGtid() const {
     return impl_->currentRecvGtid();
+  }
+  const std::optional<std::string>& currentMysqlInfo() const {
+    return impl_->currentMysqlInfo();
+  }
+  const std::optional<uint64_t> currentRowsMatched() const {
+    return impl_->currentRowsMatched();
   }
   const RespAttrs& currentRespAttrs() const {
     return impl_->currentRespAttrs();
@@ -292,7 +314,9 @@ class FetchOperation : public Operation {
   // Resumes the operation to the action it was before `pause` was called.
   // Should only be called after pause.
   void resume() {
-    impl_->resume();
+    if (impl_) {
+      impl_->resume();
+    }
   }
 
   bool isPaused() const {

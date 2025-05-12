@@ -18,8 +18,6 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Result;
 
-use ir_core::instr::HasLoc;
-use ir_core::instr::Special;
 use ir_core::BareThisOp;
 use ir_core::CollectionType;
 use ir_core::DictEntry;
@@ -32,6 +30,8 @@ use ir_core::SetOpOp;
 use ir_core::SpecialClsRef;
 use ir_core::SrcLoc;
 use ir_core::UpperBound;
+use ir_core::instr::HasLoc;
+use ir_core::instr::Special;
 use ir_core::*;
 
 use crate::print::FuncContext;
@@ -205,6 +205,7 @@ impl Display for FmtClassGetCMode {
         let s = match self.0 {
             ClassGetCMode::Normal => "normal",
             ClassGetCMode::ExplicitConversion => "explicit_conversion",
+            ClassGetCMode::UnsafeBackdoor => "unsafe_backdoor",
             _ => panic!("bad ClassGetCMode value"),
         };
         f.write_str(s)
@@ -321,11 +322,12 @@ impl Display for FmtIdentifier<'_> {
         // Or if it contains non-ascii printable chars.
         // Or ':' (to disambiguate "Foo::Bar" from "Foo"::"Bar").
         // Or if it starts with a non-letter, number, backslash.
-        let needs_quote = id.first().map_or(true, |&c| {
-            !(c.is_ascii_alphabetic() || c == b'_' || c == b'\\' || c == b'$')
-        }) || id[1..]
-            .iter()
-            .any(|&c| !c.is_ascii_graphic() || c == b':' || c == b'#');
+        let needs_quote = id
+            .first()
+            .is_none_or(|&c| !(c.is_ascii_alphabetic() || c == b'_' || c == b'\\' || c == b'$'))
+            || id[1..]
+                .iter()
+                .any(|&c| !c.is_ascii_graphic() || c == b':' || c == b'#');
         if !needs_quote {
             if let Ok(string) = std::str::from_utf8(id) {
                 return f.write_str(string);
@@ -770,6 +772,7 @@ impl Display for FmtVisibility {
             Visibility::Public => "public",
             Visibility::Protected => "protected",
             Visibility::Internal => "internal",
+            Visibility::ProtectedInternal => "protected internal",
         };
         vis.fmt(f)
     }
