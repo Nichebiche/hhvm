@@ -7,7 +7,7 @@
     "email": "sami.vaarala@iki.fi"
   },
   "dependencies": {
-    "bluebird": "~2.6.4",
+    "bluebird": "~2.11.0",
     "body-parser": "~1.9.3",
     "byline": "~4.2.1",
     "events": "~1.0.2",
